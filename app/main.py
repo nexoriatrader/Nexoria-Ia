@@ -15,6 +15,7 @@ from pydantic import BaseModel
 from sqlalchemy import select, delete
 
 from . import db
+from .demo import DemoTradingError, demo_proposal
 from .engine import Engine, Settings
 from .market import MarketError, discover_symbols, discover_contracts, indicative_proposal
 from .security import CLIENT_ID, REDIRECT, TOKEN_URL, build_authorize_url, make_login, make_session_id, hashsecret, encrypt, decrypt, cookie_options
@@ -43,7 +44,7 @@ def rt_for(user):
         runtimes[user.id]=engine
     return engine
 
-def active_user(request:Request, sid):
+def active_session(request:Request, sid):
     if not sid: raise HTTPException(401,'Faça login com Deriv')
     with db.SessionLocal() as s:
         obj=s.get(db.Session,hashsecret(sid))
@@ -51,7 +52,10 @@ def active_user(request:Request, sid):
         if not obj or expiry<=db.utcnow(): raise HTTPException(401,'Sessão expirada; conecte novamente')
         user=s.get(db.User,obj.user_id)
         if not user: raise HTTPException(401,'Usuário não encontrado')
-        return user
+        return user, decrypt(obj.token_encrypted)
+
+def active_user(request:Request, sid):
+    return active_session(request, sid)[0]
 
 async def feed():
     global market_connected, last_market_reason, recent_prices
@@ -212,6 +216,9 @@ async def logout(request:Request,nexora_sid:str|None=Cookie(default=None)):
 class Config(BaseModel):
     stake:str='2.00';martingale:bool=False;multiplier:str='2.00';stop_win:str='20.00';stop_loss:str='10.00'
 
+class DemoProposal(BaseModel):
+    symbol:str='1HZ100V';direction:str='CALL';minutes:int=5
+
 @app.get('/api/status')
 async def status(request:Request,nexora_sid:str|None=Cookie(default=None)):
     u=active_user(request,nexora_sid)
@@ -286,3 +293,17 @@ async def quote(request:Request,symbol:str='1HZ100V',direction:str='CALL',minute
         if direction not in kinds:raise HTTPException(409,'Contrato indisponível')
         return await indicative_proposal(symbol,stake=u.stake,contract_type=direction,duration=minutes)
     except MarketError as e:raise HTTPException(502,str(e)) from None
+
+@app.post('/api/demo/proposal')
+async def demo_proposal_route(request:Request, payload:DemoProposal,
+                              nexora_sid:str|None=Cookie(default=None)):
+    """Read-only proposal from the authenticated demo account; never buys."""
+    user, token = active_session(request, nexora_sid)
+    if not re.fullmatch(r'[A-Za-z0-9_]{2,30}', payload.symbol):
+        raise HTTPException(422,'Ativo inválido')
+    try:
+        return await demo_proposal(token, user.deriv_account_id, symbol=payload.symbol,
+                                   contract_type=payload.direction, stake=user.stake,
+                                   duration=payload.minutes)
+    except DemoTradingError as e:
+        raise HTTPException(502,str(e)) from None
