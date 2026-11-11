@@ -15,7 +15,7 @@ from pydantic import BaseModel
 from sqlalchemy import select, delete
 
 from . import db
-from .demo import DemoTradingError, demo_proposal
+from .demo import DemoTradingError, demo_contract_status, demo_buy, demo_proposal
 from .engine import Engine, Settings
 from .market import MarketError, discover_symbols, discover_contracts, indicative_proposal
 from .security import CLIENT_ID, REDIRECT, TOKEN_URL, build_authorize_url, make_login, make_session_id, hashsecret, encrypt, decrypt, cookie_options
@@ -219,6 +219,9 @@ class Config(BaseModel):
 class DemoProposal(BaseModel):
     symbol:str='1HZ100V';direction:str='CALL';minutes:int=5
 
+class DemoBuy(DemoProposal):
+    confirm:str=''
+
 @app.get('/api/status')
 async def status(request:Request,nexora_sid:str|None=Cookie(default=None)):
     u=active_user(request,nexora_sid)
@@ -305,5 +308,28 @@ async def demo_proposal_route(request:Request, payload:DemoProposal,
         return await demo_proposal(token, user.deriv_account_id, symbol=payload.symbol,
                                    contract_type=payload.direction, stake=user.stake,
                                    duration=payload.minutes)
+    except DemoTradingError as e:
+        raise HTTPException(502,str(e)) from None
+
+@app.post('/api/demo/buy')
+async def demo_buy_route(request:Request, payload:DemoBuy,
+                         nexora_sid:str|None=Cookie(default=None)):
+    """Buy exactly one demo contract after an explicit demo-only confirmation."""
+    user, token = active_session(request, nexora_sid)
+    if not re.fullmatch(r'[A-Za-z0-9_]{2,30}', payload.symbol):
+        raise HTTPException(422,'Ativo inválido')
+    try:
+        return await demo_buy(token, user.deriv_account_id, symbol=payload.symbol,
+                              contract_type=payload.direction, stake=user.stake,
+                              duration=payload.minutes, confirm=payload.confirm)
+    except DemoTradingError as e:
+        raise HTTPException(502,str(e)) from None
+
+@app.get('/api/demo/contract/{contract_id}')
+async def demo_contract_route(request:Request, contract_id:str,
+                              nexora_sid:str|None=Cookie(default=None)):
+    user, token = active_session(request, nexora_sid)
+    try:
+        return await demo_contract_status(token, user.deriv_account_id, contract_id)
     except DemoTradingError as e:
         raise HTTPException(502,str(e)) from None
