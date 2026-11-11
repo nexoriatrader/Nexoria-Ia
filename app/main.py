@@ -145,6 +145,12 @@ async def brand_logo(): return FileResponse(Path(__file__).parent/'static'/'logo
 @app.get('/brand/logo-web.png')
 async def brand_logo_web(): return FileResponse(Path(__file__).parent/'static'/'logo-nexora-web.png', media_type='image/png')
 
+@app.get('/brand/logo-transparent.png')
+async def brand_logo_transparent(): return FileResponse(Path(__file__).parent/'static'/'logo-transparent.png', media_type='image/png')
+
+@app.get('/brand/reference-bg.png')
+async def brand_reference_bg(): return FileResponse(Path(__file__).parent/'static'/'reference-bg.png', media_type='image/png')
+
 @app.get('/healthz')
 async def health(): return {'ok':True,'version':'0.4','market_connected':market_connected,'execution':'PAPER_ONLY'}
 
