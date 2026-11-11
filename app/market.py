@@ -1,0 +1,105 @@
+"""Deriv public market research client. Read-only: no authenticated trading commands."""
+import asyncio
+import json
+from decimal import Decimal, InvalidOperation
+
+PUBLIC_WS = "wss://api.derivws.com/trading/v1/options/ws/public"
+
+
+class MarketError(Exception):
+    pass
+
+
+def parse_quote(message: dict) -> dict:
+    if message.get("error"):
+        error = message["error"]
+        raise MarketError(str(error.get("message", "Proposta não disponível")))
+    proposal = message.get("proposal")
+    if not isinstance(proposal, dict):
+        raise MarketError("Deriv não retornou uma proposta válida")
+    try:
+        ask = Decimal(str(proposal["ask_price"]))
+        payout = Decimal(str(proposal["payout"]))
+    except (KeyError, InvalidOperation, ValueError, TypeError):
+        raise MarketError("Cotação sem preço ou pagamento válido") from None
+    if not ask.is_finite() or not payout.is_finite() or ask <= 0 or payout < 0:
+        raise MarketError("Cotação com valores inválidos")
+    return {
+        'ask_price':str(ask), 'payout':str(payout),
+        'potential_net_profit':str(payout - ask),
+        'return_on_stake_pct':str(((payout - ask) / ask * 100).quantize(Decimal('0.01'))),
+        'currency':str(proposal.get('currency', 'USD')),
+        'indicative_only':True,
+        'source':'Deriv proposal',
+    }
+
+
+async def public_request(payload: dict, *, expected: str, timeout: float = 12.0) -> dict:
+    import websockets
+    # A separate short-lived connection isolates discovery from tick streaming.
+    try:
+        async with asyncio.timeout(timeout):
+            async with websockets.connect(PUBLIC_WS, ping_interval=20, ping_timeout=10, max_size=1_500_000) as ws:
+                await ws.send(json.dumps({**payload, 'req_id':419}))
+                while True:
+                    msg = json.loads(await ws.recv())
+                    if msg.get('req_id') != 419:
+                        continue
+                    if msg.get('error'):
+                        raise MarketError(str(msg['error'].get('message', 'Erro Deriv')))
+                    if msg.get('msg_type') == expected or expected in msg:
+                        return msg
+    except (TimeoutError, OSError, ConnectionError) as exc:
+        raise MarketError('Não foi possível consultar a Deriv agora') from exc
+
+
+def parse_symbols(message: dict) -> list[dict]:
+    items = message.get('active_symbols', [])
+    if not isinstance(items, list):
+        return []
+    result = []
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        symbol = item.get('symbol') or item.get('underlying_symbol')
+        if isinstance(symbol,str) and 2 <= len(symbol) <= 30:
+            result.append({'symbol':symbol,'display_name':str(item.get('display_name',symbol))[:100]})
+    return result
+
+
+def parse_contract_types(message: dict) -> list[str]:
+    raw=message.get('contracts_for')
+    if isinstance(raw,dict):
+        raw=raw.get('available',[])
+    if not isinstance(raw,list):
+        return []
+    return sorted(set(item['contract_type'] for item in raw if isinstance(item,dict) and isinstance(item.get('contract_type'),str)))
+
+
+async def discover_symbols() -> list[dict]:
+    return parse_symbols(await public_request({'active_symbols':'brief'},expected='active_symbols'))
+
+
+async def discover_contracts(symbol: str) -> list[str]:
+    return parse_contract_types(await public_request({'contracts_for':symbol},expected='contracts_for'))
+
+
+async def indicative_proposal(symbol: str, *, stake: str, contract_type: str = 'CALL', duration: int = 5,
+                              currency: str = 'USD') -> dict:
+    if contract_type not in ('CALL','PUT'):
+        raise MarketError('Contrato não autorizado para pesquisa')
+    try:
+        amount=Decimal(stake)
+        if not amount.is_finite() or amount < Decimal('2') or amount > Decimal('1000'):
+            raise ValueError()
+    except (InvalidOperation,ValueError):
+        raise MarketError('Valor fora dos limites de pesquisa') from None
+    if duration not in (1,3,5):
+        raise MarketError('Duração não permitida para pesquisa')
+    message=await public_request({
+        'proposal':1, 'amount':float(amount), 'basis':'stake',
+        'contract_type':contract_type, 'currency':currency,
+        'duration':duration, 'duration_unit':'m',
+        'underlying_symbol':symbol,
+    },expected='proposal')
+    return {**parse_quote(message),'symbol':symbol,'contract_type':contract_type,'duration_minutes':duration}

@@ -1,0 +1,23 @@
+services:
+  - type: web
+    name: nexora-ia
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT --workers 1
+    healthCheckPath: /healthz
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.8
+      - key: DATABASE_URL
+        sync: false
+      - key: NEXORA_FERNET_KEY
+        sync: false
+      - key: NEXORA_PUBLIC_URL
+        value: https://nexoria-ia.onrender.com
+      - key: DERIV_CLIENT_ID
+        value: 34VU8L3LDiaENrDGVjqQP
+      - key: DERIV_REDIRECT_URI
+        sync: false
+      - key: NEXORA_SYMBOL
+        value: 1HZ100V
