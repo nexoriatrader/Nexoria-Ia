@@ -139,6 +139,9 @@ async def headers(request:Request, call_next):
 @app.get('/')
 async def index(): return FileResponse(Path(__file__).parent/'index.html')
 
+@app.get('/brand/logo.png')
+async def brand_logo(): return FileResponse(Path(__file__).parent/'static'/'logo-nexora.png', media_type='image/png')
+
 @app.get('/healthz')
 async def health(): return {'ok':True,'version':'0.4','market_connected':market_connected,'execution':'PAPER_ONLY'}
 
