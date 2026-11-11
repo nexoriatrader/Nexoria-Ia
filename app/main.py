@@ -157,6 +157,18 @@ async def brand_logo_top(): return FileResponse(Path(__file__).parent/'static'/'
 @app.get('/brand/logo-top.jpg')
 async def brand_logo_top_jpg(): return FileResponse(Path(__file__).parent/'static'/'logo-top.jpg', media_type='image/jpeg')
 
+@app.get('/brand/logo-top-1.jpg')
+async def brand_logo_top_1(): return FileResponse(Path(__file__).parent/'static'/'logo-top-1.jpg', media_type='image/jpeg')
+
+@app.get('/brand/logo-top-2.jpg')
+async def brand_logo_top_2(): return FileResponse(Path(__file__).parent/'static'/'logo-top-2.jpg', media_type='image/jpeg')
+
+@app.get('/brand/logo-top-3.jpg')
+async def brand_logo_top_3(): return FileResponse(Path(__file__).parent/'static'/'logo-top-3.jpg', media_type='image/jpeg')
+
+@app.get('/brand/logo-top-4.jpg')
+async def brand_logo_top_4(): return FileResponse(Path(__file__).parent/'static'/'logo-top-4.jpg', media_type='image/jpeg')
+
 @app.get('/brand/reference-bg.png')
 async def brand_reference_bg(): return FileResponse(Path(__file__).parent/'static'/'reference-bg.png', media_type='image/png')
 
