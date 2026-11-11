@@ -154,6 +154,9 @@ async def brand_logo_transparent_web(): return FileResponse(Path(__file__).paren
 @app.get('/brand/logo-top.png')
 async def brand_logo_top(): return FileResponse(Path(__file__).parent/'static'/'logo-top.png', media_type='image/png')
 
+@app.get('/brand/logo-top.jpg')
+async def brand_logo_top_jpg(): return FileResponse(Path(__file__).parent/'static'/'logo-top.jpg', media_type='image/jpeg')
+
 @app.get('/brand/reference-bg.png')
 async def brand_reference_bg(): return FileResponse(Path(__file__).parent/'static'/'reference-bg.png', media_type='image/png')
 
