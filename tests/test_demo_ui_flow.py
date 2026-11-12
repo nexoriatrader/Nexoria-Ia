@@ -47,7 +47,7 @@ def test_continuity_prompt_clarifies_demo_not_real():
 
 def test_real_mode_is_explicitly_unavailable_for_purchases():
     html=load_ui()
-    assert "Verificando se existe conta real vinculada" in html
+    assert "Verificando conta real vinculada à Deriv" in html
     assert 'id="chooseReal" aria-pressed="false"' in html
 
 def test_inline_javascript_syntax_is_valid(tmp_path):
@@ -125,7 +125,7 @@ def test_real_account_card_is_informational_and_cannot_trigger_orders():
     assert 'onclick="selectDemoAccount()"' in choose
     assert '/api/demo/buy' not in choose
     assert '/api/autopilot/start' not in choose
-    assert 'Escolher uma conta não inicia o robô' in choose
+    assert 'Modo de treinamento selecionado' in choose
     assert 'choose-accounts' in choose
     assert 'A um passo do' in choose
     assert 'Recomendamos utilizar o treinamento por algumas horas' in choose
