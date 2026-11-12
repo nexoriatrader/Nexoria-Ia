@@ -37,6 +37,8 @@ def test_onboarding_saves_limits_and_future_preferences_without_enabling_progres
         before=client.get('/api/onboarding/config')
         assert before.status_code==200
         assert before.json()['mode']=='demo'
+        assert before.json()['stop_win']=='0.00'
+        assert before.json()['stop_loss']=='0.00'
         assert before.json()['martingale_execution_enabled'] is False
         response=client.post('/api/onboarding/config',json=payload)
         assert response.status_code==200,response.text
