@@ -20,3 +20,20 @@ def demo_id(accounts):
             x=a.get(k)
             if isinstance(x,(str,int)) and str(x):return str(x)
     return None
+
+
+def real_accounts(accounts):
+    """Return only explicitly real Options accounts; never guess classification."""
+    found=[]
+    for a in accounts:
+        if not isinstance(a,dict):continue
+        fields=(a.get(k) for k in ('account_type','type','account_category','account_kind','environment'))
+        recognized=any(str(x).lower()=='real' for x in fields if x is not None)
+        if not recognized or a.get('is_virtual') is True or a.get('is_demo') is True:
+            continue
+        account_id=next((str(a[k]) for k in ('account_id','loginid','id') if isinstance(a.get(k),(str,int)) and str(a[k])),None)
+        if account_id:
+            found.append({'account_id':account_id,'account_type':'real',
+                          'currency':str(a.get('currency') or ''),
+                          'status':str(a.get('status') or 'unknown')})
+    return found
