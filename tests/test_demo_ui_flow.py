@@ -148,3 +148,14 @@ def test_autopilot_activation_confirmation_is_clear_and_multiline():
     assert 'clique em "Cancelar"' in html
     assert 'ATIVAR AUTOPILOT NA CONTA DERIV DEMO?' not in html
     assert 'START_DEMO_AUTOPILOT' in html
+
+
+def test_network_failure_does_not_claim_autopilot_start_failed():
+    html=load_ui()
+    assert "button.dataset.commandPending='true'" in html
+    assert "const networkError=e instanceof TypeError" in html
+    assert "sem repetir o comando" in html
+    assert "for(let attempt=0;attempt<4;attempt++)" in html
+    assert "status.running!==wasRunning" in html
+    assert "Não foi possível confirmar a " in html
+    assert "await req(wasRunning?'/api/autopilot/stop':'/api/autopilot/start'" in html
