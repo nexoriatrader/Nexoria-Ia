@@ -25,12 +25,13 @@ def public_order(o):
             'buy_price':o.buy_price,'pnl':o.pnl,'broker_status':o.broker_status,
             'created_at':o.created_at.isoformat() if o.created_at else None}
 
-def order_guard(user, orders, stake):
+def order_guard(user, orders, stake, *, after_order_id=0):
     """Use only settled demo broker PnL; reject negative-edge and exposed entries."""
     if any(o.state in ACTIVE for o in orders):
         raise OrderGuardError('Contrato demo em andamento ou pendente de reconciliação')
-    # Cumulative demo ledger, conservatively never reset just by reconnecting.
-    pnl=sum((money(o.pnl) for o in orders if o.state=='SETTLED' and o.pnl is not None),Decimal('0'))
+    # Explicit user-confirmed risk session boundary; older official records remain intact.
+    pnl=sum((money(o.pnl) for o in orders if o.state=='SETTLED' and o.pnl is not None
+             and (getattr(o, 'id', None) or 0)>after_order_id),Decimal('0'))
     stake=money(stake)
     if stake < Decimal('2') or stake > Decimal('1000'):
         raise OrderGuardError('Valor da entrada fora dos limites de treinamento')
@@ -62,7 +63,9 @@ def reserve(session, user, *, request_key, symbol, direction, minutes, stake_ove
         return previous, False
     entries=session.scalars(select(db.DemoOrder).where(db.DemoOrder.user_id==user.id)).all()
     chosen_stake=user.stake if stake_override is None else str(stake_override)
-    order_guard(user,entries,chosen_stake)
+    boundary=session.scalars(select(db.RiskSession).where(
+        db.RiskSession.user_id==user.id).order_by(db.RiskSession.id.desc()).limit(1)).first()
+    order_guard(user,entries,chosen_stake,after_order_id=boundary.after_order_id if boundary else 0)
     order=db.DemoOrder(user_id=user.id,request_key=request_key,active_slot=user.id,
         state='PENDING',symbol=symbol,direction=direction,duration_minutes=minutes,stake=chosen_stake)
     session.add(order)
