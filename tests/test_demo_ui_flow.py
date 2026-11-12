@@ -5,13 +5,12 @@ def load_ui():
     return (Path(__file__).resolve().parents[1]/"app"/"index.html").read_text(encoding="utf-8")
 
 
-def test_demo_interface_has_confirmed_manual_test_and_official_balance():
+def test_demo_interface_keeps_official_balance_without_manual_buy_button():
     html=load_ui()
-    assert "TESTAR UMA ENTRADA DEMO" in html
-    assert "window.confirm(" in html
-    assert "confirm:'DEMO_ONLY'" in html
-    assert "request_key:key" in html
-    assert "/api/demo/buy" in html
+    assert "TESTAR UMA ENTRADA DEMO" not in html
+    assert "Teste controlado de integração" not in html
+    assert "testDemoBuy()" not in html
+    assert "demoTestInfo" not in html
     assert "/api/demo/balance" in html
     assert "Saldo Treinamento" in html
     assert "Saldo Conta Real" in html
