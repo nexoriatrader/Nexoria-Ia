@@ -216,46 +216,6 @@ async def autopilot_loop():
         await asyncio.sleep(10)
 
 
-class AutoPilotSwitch(BaseModel):
-    confirm:str=''
-
-
-@app.post('/api/autopilot/start')
-async def autopilot_start(request:Request,payload:AutoPilotSwitch,
-                          nexora_sid:str|None=Cookie(default=None)):
-    user,_=active_session(request,nexora_sid)
-    if payload.confirm!='START_DEMO_AUTOPILOT':
-        raise HTTPException(403,'Confirme o modo automático de treinamento')
-    if not autopilot_allowed():
-        raise HTTPException(503,'AutoPilot DEMO não habilitado no servidor')
-    if user.selected_mode!='demo':
-        raise HTTPException(403,'Somente conta demonstrativa')
-    if user.martingale:
-        raise HTTPException(409,'Desative Martingale para ativar o AutoPilot')
-    with db.SessionLocal() as sess:
-        orders=sess.scalars(select(db.DemoOrder).where(db.DemoOrder.user_id==user.id)).all()
-        from .demo_ledger import order_guard
-        try:
-            order_guard(user,orders,user.stake)
-        except OrderGuardError as e:
-            if 'Contrato demo em andamento' not in str(e):
-                raise HTTPException(409,str(e)) from None
-            # Permit arming during a previously confirmed contract; no new order until settled.
-            if any(o.state in ('PENDING','UNKNOWN') for o in orders):
-                raise HTTPException(409,'Contrato pendente ou incerto: reconciliação necessária')
-    autopilot_enabled.add(user.id)
-    autopilot_reasons[user.id]='AutoPilot ligado; aguardando oportunidade oficial na Deriv Demo'
-    return {'running':True,'execution':'DERIV_DEMO_ONLY','real_orders_enabled':False}
-
-
-@app.post('/api/autopilot/stop')
-async def autopilot_stop(request:Request,nexora_sid:str|None=Cookie(default=None)):
-    user=active_user(request,nexora_sid)
-    autopilot_enabled.discard(user.id)
-    autopilot_reasons[user.id]='Desligado: novas entradas bloqueadas; contratos abertos permanecem na Deriv'
-    return {'running':False,'execution':'DERIV_DEMO_ONLY','real_orders_enabled':False}
-
-
 async def reconcile_confirmed_orders_once():
     """Refresh only already-confirmed demo contracts; this task never sends buys."""
     with db.SessionLocal() as s:
@@ -526,6 +486,46 @@ async def current_config(request:Request,nexora_sid:str|None=Cookie(default=None
     return {'stake':u.stake,'stop_win':u.stop_win,'stop_loss':u.stop_loss,
             'martingale':bool(u.martingale),'multiplier':u.multiplier,
             'execution':'DERIV_DEMO_ONLY','real_orders_enabled':False}
+
+
+class AutoPilotSwitch(BaseModel):
+    confirm:str=''
+
+
+@app.post('/api/autopilot/start')
+async def autopilot_start(request:Request,payload:AutoPilotSwitch,
+                          nexora_sid:str|None=Cookie(default=None)):
+    user,_=active_session(request,nexora_sid)
+    if payload.confirm!='START_DEMO_AUTOPILOT':
+        raise HTTPException(403,'Confirme o modo automático de treinamento')
+    if not autopilot_allowed():
+        raise HTTPException(503,'AutoPilot DEMO não habilitado no servidor')
+    if user.selected_mode!='demo':
+        raise HTTPException(403,'Somente conta demonstrativa')
+    if user.martingale:
+        raise HTTPException(409,'Desative Martingale para ativar o AutoPilot')
+    with db.SessionLocal() as sess:
+        orders=sess.scalars(select(db.DemoOrder).where(db.DemoOrder.user_id==user.id)).all()
+        from .demo_ledger import order_guard
+        try:
+            order_guard(user,orders,user.stake)
+        except OrderGuardError as e:
+            if 'Contrato demo em andamento' not in str(e):
+                raise HTTPException(409,str(e)) from None
+            # Permit arming during a previously confirmed contract; no new order until settled.
+            if any(o.state in ('PENDING','UNKNOWN') for o in orders):
+                raise HTTPException(409,'Contrato pendente ou incerto: reconciliação necessária')
+    autopilot_enabled.add(user.id)
+    autopilot_reasons[user.id]='AutoPilot ligado; aguardando oportunidade oficial na Deriv Demo'
+    return {'running':True,'execution':'DERIV_DEMO_ONLY','real_orders_enabled':False}
+
+
+@app.post('/api/autopilot/stop')
+async def autopilot_stop(request:Request,nexora_sid:str|None=Cookie(default=None)):
+    user=active_user(request,nexora_sid)
+    autopilot_enabled.discard(user.id)
+    autopilot_reasons[user.id]='Desligado: novas entradas bloqueadas; contratos abertos permanecem na Deriv'
+    return {'running':False,'execution':'DERIV_DEMO_ONLY','real_orders_enabled':False}
 
 
 @app.get('/api/status')
