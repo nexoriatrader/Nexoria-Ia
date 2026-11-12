@@ -772,37 +772,40 @@ async def save_onboarding_config(request:Request,payload:OnboardingConfig,
     from .progression import CAP_PER_TRADE
     if settings.stake>CAP_PER_TRADE:
         raise HTTPException(422,'Entrada inicial excede o limite de US$ 100 da sequência')
-    async with lock:
-        engine=rt_for(u)
-        try:engine.configure(settings)
-        except ValueError as e:raise HTTPException(409,str(e)) from None
-        with db.SessionLocal() as sess:
-            pending=sess.scalars(select(db.DemoOrder).where(
-                db.DemoOrder.user_id==u.id, db.DemoOrder.state.in_(('PENDING','CONFIRMED','UNKNOWN')))).all()
-            if pending:
-                raise HTTPException(409,'Aguarde o encerramento e a reconciliação do contrato antes de editar')
-            stored=sess.get(db.User,u.id)
-            stored.stake=str(settings.stake)
-            stored.stop_win=str(settings.stop_win)
-            stored.stop_loss=str(settings.stop_loss)
-            stored.martingale=False
-            stored.multiplier='2.00'
-            plan=sess.get(db.RobotPlan,u.id)
-            if not plan:
-                plan=db.RobotPlan(user_id=u.id);sess.add(plan)
-            plan.requested_martingale=payload.martingale
-            plan.gale_count=payload.gale_count
-            plan.requested_multiplier=str(gale_factor)
-            plan.cycles_limit=int(payload.cycles)
-            cp=sess.get(db.RobotCycleParams,u.id)
-            if not cp:
-                cp=db.RobotCycleParams(user_id=u.id);sess.add(cp)
-            cp.multiplier=str(cycle_factor)
-            # Changing configuration invalidates any previously armed sequence.
-            run=sess.get(db.RobotRun,u.id)
-            if run:
-                sess.delete(run)
-            sess.commit()
+    async with autopilot_lock:
+        if u.id in autopilot_enabled:
+            raise HTTPException(409,'Desligue o robô antes de salvar uma nova progressão')
+        async with lock:
+            engine=rt_for(u)
+            try:engine.configure(settings)
+            except ValueError as e:raise HTTPException(409,str(e)) from None
+            with db.SessionLocal() as sess:
+                pending=sess.scalars(select(db.DemoOrder).where(
+                    db.DemoOrder.user_id==u.id, db.DemoOrder.state.in_(('PENDING','CONFIRMED','UNKNOWN')))).all()
+                if pending:
+                    raise HTTPException(409,'Aguarde o encerramento e a reconciliação do contrato antes de editar')
+                stored=sess.get(db.User,u.id)
+                stored.stake=str(settings.stake)
+                stored.stop_win=str(settings.stop_win)
+                stored.stop_loss=str(settings.stop_loss)
+                stored.martingale=False
+                stored.multiplier='2.00'
+                plan=sess.get(db.RobotPlan,u.id)
+                if not plan:
+                    plan=db.RobotPlan(user_id=u.id);sess.add(plan)
+                plan.requested_martingale=payload.martingale
+                plan.gale_count=payload.gale_count
+                plan.requested_multiplier=str(gale_factor)
+                plan.cycles_limit=int(payload.cycles)
+                cp=sess.get(db.RobotCycleParams,u.id)
+                if not cp:
+                    cp=db.RobotCycleParams(user_id=u.id);sess.add(cp)
+                cp.multiplier=str(cycle_factor)
+                # Changing configuration invalidates any previously armed sequence.
+                run=sess.get(db.RobotRun,u.id)
+                if run:
+                    sess.delete(run)
+                sess.commit()
     return {'ok':True,'execution_mode':'DERIV_DEMO_ONLY',
             'martingale_execution_enabled':True,'cycles_execution_enabled':True,
             'message':'Configuração salva. Ative o AutoPilot separadamente no painel.'}
