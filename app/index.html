@@ -44,6 +44,14 @@ header{display:flex;align-items:center;justify-content:space-between;gap:14px;pa
 .hero-copy{color:#aac1d2;margin:18px 0 20px;font-size:13px;max-width:500px}
 .hero-action{width:100%;max-width:450px;border:0;border-radius:16px;min-height:65px;background:linear-gradient(135deg,#ffdf8d,#f0b339);color:#2a1b05;font-size:18px;font-weight:950;letter-spacing:.045em;box-shadow:0 11px 30px #e8ae3b22;position:relative}
 .hero-action:disabled{opacity:1;background:#8b7550;color:#f5e6c9;box-shadow:none}
+.robot-notice{max-width:640px;margin-top:14px;padding:16px 18px;border:1px solid #ba8742;border-radius:15px;background:#402c1b;color:#fff0d5;line-height:1.55;overflow-wrap:anywhere}
+.robot-notice[hidden]{display:none}
+.robot-notice strong{display:block;font-size:14px;margin-bottom:6px}
+.robot-notice p{font-size:13px;margin:7px 0}
+.robot-notice .actions{margin-top:12px}
+.robot-notice .outline{flex:0 1 auto;background:#20384b}
+.robot-notice .helper{color:#f2cda4}
+.robot-notice button:disabled{opacity:.65}
 .helper{font-size:12px;color:#92b0c6;margin-top:10px}
 .info{background:#13283a;border:1px solid #2f536b;border-radius:12px;padding:11px 14px;font-size:12px;color:#bbd4e5;margin-top:18px}
 .metric-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:13px}
@@ -403,7 +411,15 @@ button.choose-account:focus-visible{outline:3px solid #71d2ff;outline-offset:4px
     <div class="hero-top"><div class="hero-title">NEXORA AutoPilot</div><span id="robotState" class="hero-state">DESLIGADO</span></div>
     <p id="robotMessage" class="hero-copy">Preparando AutoPilot DEMO experimental. Uma posição por vez, com limites de risco configurados.</p>
     <button id="robotButton" class="hero-action" disabled aria-disabled="true" onclick="toggleRobot()">LIGAR ROBÔ</button>
-    <p id="robotStartNotice" class="helper" role="status" aria-live="polite"></p>
+    <div id="robotStartNotice" class="robot-notice" role="alert" aria-live="polite" hidden>
+      <strong id="robotNoticeTitle"></strong>
+      <p id="robotNoticeText"></p>
+      <div id="robotNoticeOptions" hidden>
+        <p>Para continuar, você pode ajustar seu Stop Loss nas configurações ou desativar esse limite (não recomendado: aumenta o risco). Limpar resultados anteriores ainda não está disponível.</p>
+        <div class="actions"><button class="outline" type="button" onclick="go('settings')">AJUSTAR STOP LOSS</button><button class="outline" type="button" disabled title="Disponível em uma futura atualização">REINICIAR SESSÃO · EM BREVE</button></div>
+        <p class="helper">O histórico oficial e o saldo Deriv não podem ser apagados pelo painel. Os limites de segurança permanecem ativos.</p>
+      </div>
+    </div>
     <div class="helper">Apenas Deriv Demo. Estratégias em teste, sem garantia de acerto. Desligar bloqueia novas entradas, sem cancelar contratos já abertos.</div>
     <div class="info" id="feedState">Conferindo conexão de cotações...</div>
   </div>
@@ -596,17 +612,22 @@ function go(v){toggleMenu(false);page(v);updateResultsPolling();window.scrollTo(
 function fail(msg){$('error').textContent=msg||''}
 async function req(path,opts={}){const r=await fetch(path,{credentials:'same-origin',...opts});let data;try{data=await r.json()}catch{throw Error('Resposta inválida do servidor')}if(!r.ok)throw Error(data.detail||'Falha na conexão');return data}
 async function init(){try{const s=await req('/api/session');if(!s.authenticated){page('welcome');return}const justConnected=new URLSearchParams(window.location.search).get('login')==='ok';if(justConnected){window.history.replaceState({},'',window.location.pathname);const account=s.demo_accounts&&s.demo_accounts[0];$('demoInfo').textContent=account?'Conectada à Deriv · '+safe(account.account_id):'Conta conectada à Deriv';page('choose');applyAccountSelection();loadVerifiedAccounts()}else{page('dashboard');refreshDashboard()}refreshTimer=setInterval(()=>{if(activePage==='dashboard'||activePage==='results')refreshDashboard()},30000)}catch(e){fail(e.message);page('welcome')}}
+function showRobotNotice(reason){
+ const box=$('robotStartNotice'),title=$('robotNoticeTitle'),body=$('robotNoticeText'),options=$('robotNoticeOptions');
+ if(!reason){box.hidden=true;title.textContent='';body.textContent='';options.hidden=true;return}
+ const stopLoss=/stop\\s*loss/i.test(reason);
+ const stopWin=/stop\\s*win/i.test(reason);
+ title.textContent=stopLoss?'⚠️ Robô não iniciado — proteção Stop Loss':stopWin?'⚠️ Robô não iniciado — Stop Win':'⚠️ Não foi possível iniciar o robô';
+ body.textContent=stopLoss?'O NEXORA bloqueou a ativação porque a próxima entrada poderia ultrapassar seu limite de perdas. Motivo: '+reason:reason;
+ options.hidden=!stopLoss;
+ box.hidden=false;
+}
 async function loadAutopilotReadiness(){
- const notice=$('robotStartNotice');
- if(!notice)return;
  try{
    const info=await req('/api/autopilot/readiness');
-   notice.textContent=info.ready?'':('Para ligar o robô: '+info.reason);
-   notice.style.color=info.ready?'':'#ffcf89';
- }catch(e){
-   notice.textContent='Não foi possível verificar o motivo do bloqueio: '+e.message;
-   notice.style.color='#ffcf89';
- }
+   if(robotRunning){showRobotNotice('');return}
+   showRobotNotice(info.ready?'':info.reason);
+ }catch(e){showRobotNotice('Não foi possível verificar o motivo do bloqueio: '+e.message)}
 }
 async function refreshDashboard(){try{const [status]=await Promise.all([req('/api/status'),loadDemoBalance(),loadDemoOrders(),loadRealBalance(),loadDailyResult(),loadAutopilotReadiness()]);$('feedState').textContent=(status.connected?'● Cotações conectadas':'○ Reconectando cotações')+' · '+safe(status.symbol);robotRunning=Boolean(status.running);const available=Boolean(status.auto_buy_enabled);$('robotState').textContent=robotRunning?'ATIVO':status.interrupted_after_restart?'INTERROMPIDO':available?'PRONTO':'INDISPONÍVEL';$('robotMessage').textContent=status.reason||'Aguardando oportunidades no mercado DEMO';$('robotButton').textContent=robotRunning?'DESLIGAR ROBÔ':'LIGAR ROBÔ';$('robotButton').disabled=!robotRunning&&!available;$('robotButton').setAttribute('aria-disabled',String($('robotButton').disabled));$('robotButton').style.background=robotRunning?'linear-gradient(135deg,#fa9b9d,#dc5269)':'';fail('')}catch(e){fail('Painel: '+e.message)}}
 async function toggleRobot(){
@@ -624,9 +645,8 @@ async function toggleRobot(){
   }catch(e){
     const reason='Não foi possível ligar o robô: '+e.message;
     await refreshDashboard().catch(()=>{});
-    $('robotStartNotice').textContent=reason;
-    $('robotStartNotice').style.color='#ffcf89';
-    fail(reason);
+    showRobotNotice(reason);
+    fail('');
   }
 }
 async function loadRealBalance(){
