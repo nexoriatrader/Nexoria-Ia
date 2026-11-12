@@ -676,39 +676,50 @@ async function refreshDashboard(){
 }
 async function toggleRobot(){
  const button=$('robotButton');
+ if(button.dataset.commandPending==='true')return;
  const wasRunning=robotRunning;
- button.disabled=true;
- try{
-   if(wasRunning){
-     await req('/api/autopilot/stop',{method:'POST'});
-   }else{
-     if(!window.confirm(`Você está prestes a iniciar o robô.
+ if(!wasRunning){
+   if(!window.confirm(`Você está prestes a iniciar o robô.
 
 Confirme apenas se já revisou as configurações e está tudo certo para operar.
 
-Se quiser conferir ou ajustar algo antes, clique em "Cancelar" e revise as configurações antes de ligar novamente.`)){
-       await refreshDashboard();return;
-     }
-     await req('/api/autopilot/start',{method:'POST',headers:{'Content-Type':'application/json'},
-       body:JSON.stringify({confirm:'START_DEMO_AUTOPILOT'})});
-   }
-   await refreshDashboard();
+Se quiser conferir ou ajustar algo antes, clique em "Cancelar" e revise as configurações antes de ligar novamente.`))return;
+ }
+ button.dataset.commandPending='true';
+ button.disabled=true;
+ let confirmed=false;
+ try{
+   await req(wasRunning?'/api/autopilot/stop':'/api/autopilot/start',
+     wasRunning?{method:'POST'}:{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({confirm:'START_DEMO_AUTOPILOT'})});
+   confirmed=true;
  }catch(e){
-   // A failed HTTP response or broken mobile connection cannot establish
-   // whether the broker-facing AutoPilot was switched. Verify first.
-   const status=await refreshDashboard();
-   if(status && status.running){
-     showRobotNotice('');
-   }else if(status && !status.running){
-     showRobotNotice((wasRunning?'Não foi possível confirmar o desligamento: ':'Não foi possível ligar o robô: ')+e.message);
+   // An HTTP refusal (e.g. 409 Stop Loss) is explicit. An interrupted fetch
+   // is ambiguous: the server might have accepted the command already.
+   const networkError=e instanceof TypeError || /failed to fetch|networkerror|load failed/i.test(e.message||'');
+   if(!networkError){
+     const status=await refreshDashboard();
+     if(status && status.running!==wasRunning){showRobotNotice('')}
+     else showRobotNotice((wasRunning?'Não foi possível desligar o robô: ':'Não foi possível ligar o robô: ')+e.message);
    }else{
-     // Never claim the bot stopped or failed to start on a network-only error.
-     $('feedState').textContent='○ Conexão instável. Não repita o comando antes de atualizar o painel e conferir o estado do robô.';
+     $('feedState').textContent='○ Conexão instável. Conferindo o estado do AutoPilot, sem repetir o comando...';
+     // Read-only checks. Never retry the POST, which could change trading state.
+     for(let attempt=0;attempt<4;attempt++){
+       const status=await refreshDashboard();
+       if(status && status.running!==wasRunning){confirmed=true;break}
+       if(attempt<3)await new Promise(resolve=>setTimeout(resolve,1500));
+     }
+     if(!confirmed){
+       showRobotNotice('Não foi possível confirmar a '+(wasRunning?'desativação':'ativação')+
+         ' devido a uma falha temporária de comunicação. Confira o estado do AutoPilot antes de tentar novamente.');
+     }
    }
-   fail('');
  }finally{
-   // A communication failure must not enable a normally unavailable service.
-   if(!button.disabled)button.removeAttribute('aria-busy');
+   button.dataset.commandPending='false';
+   const status=await refreshDashboard();
+   if(confirmed || (status && status.running!==wasRunning))showRobotNotice('');
+   if(status)button.disabled=!status.running&&!status.auto_buy_enabled;
+   else button.disabled=true;
  }
 }
 async function loadRealBalance(){
