@@ -23,8 +23,8 @@ class User(Base):
     stake = Column(String(20), default='2.00', nullable=False)
     martingale = Column(Boolean, default=False, nullable=False)
     multiplier = Column(String(20), default='2.00', nullable=False)
-    stop_win = Column(String(20), default='20.00', nullable=False)
-    stop_loss = Column(String(20), default='10.00', nullable=False)
+    stop_win = Column(String(20), default='0.00', nullable=False)
+    stop_loss = Column(String(20), default='0.00', nullable=False)
     selected_mode = Column(String(16), default='demo', nullable=False)
     # User switch is intentionally NOT persisted: all bots start OFF after restart.
 
