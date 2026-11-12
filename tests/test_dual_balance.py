@@ -51,3 +51,33 @@ def test_readonly_real_module_never_sends_buy_or_sell():
     assert "'buy':" not in source
     assert "'sell':" not in source
     assert "'proposal':" not in source
+
+
+def test_daily_card_shows_separate_demo_and_real_results():
+    html=(Path(__file__).resolve().parents[1]/'app'/'index.html').read_text()
+    dashboard=html.split('<section id="dashboard"',1)[1].split('<section id="results"',1)[0]
+    assert 'id="profitMetric"' in dashboard
+    assert 'id="realProfitMetric"' in dashboard
+    assert 'id="realProfitReason"' in dashboard
+    assert 'TREINAMENTO · DEMO' in dashboard
+    assert 'CONTA REAL · DERIV' in dashboard
+    assert '/api/demo/results/today' in html
+    assert '/api/real/results/today' in html
+    assert "value.textContent='—';" in html
+
+
+def test_real_profit_table_uses_only_official_settled_trades_in_brasilia_window():
+    from decimal import Decimal
+    from app.real_readonly import parse_real_profit_transactions, RealBalanceError
+    import pytest
+    start=1794452400
+    transactions=[
+        {'sell_time':start-1,'buy_price':'2.00','sell_price':'90.00'},
+        {'sell_time':start,'buy_price':'2.00','sell_price':'3.80'},
+        {'sell_time':start+40,'buy_price':'5','sell_price':'0'},
+        {'sell_time':start+100,'buy_price':'2.00','sell_price':'10.00'}]
+    assert parse_real_profit_transactions(transactions,start,start+60)==Decimal('-3.20')
+    with pytest.raises(RealBalanceError):
+        parse_real_profit_transactions([{'buy_price':2,'sell_price':3}],start,start+60)
+    with pytest.raises(RealBalanceError):
+        parse_real_profit_transactions([{'sell_time':start,'buy_price':'NaN','sell_price':'1'}],start,start+60)
