@@ -6,6 +6,7 @@ The live AutoPilot is deliberately unchanged by these experiments.
 """
 from __future__ import annotations
 from datetime import datetime, timezone
+from time import time
 from math import isfinite
 from statistics import mean
 from .market import MarketError, public_request, discover_symbols, discover_contracts
@@ -58,7 +59,8 @@ def parse_candles(payload: dict) -> list[dict]:
     candles.sort(key=lambda x:x['epoch'])
     if len({x['epoch'] for x in candles})!=len(candles):
         raise MarketError('Dados históricos com timestamps duplicados')
-    return candles
+    # Exclude the still-forming current minute from all calculations.
+    return [bar for bar in candles if bar['epoch']+60<=int(time())]
 
 
 async def fetch_candles(symbol: str, *, count: int=MAX_BARS) -> list[dict]:
@@ -108,6 +110,12 @@ def score(data: list[dict], strategy: str, minutes: int, *,
     i=max(start,26)
     # Evaluate only signals whose ENTIRE duration stays inside the partition.
     while i+minutes<=end:
+        # A 5-minute expiry means 5 contiguous minute intervals, not 5
+        # arbitrarily distant candles across a feed/market gap.
+        segment=data[i-26:i+minutes+1]
+        if any(b['epoch']-a['epoch']!=60 for a,b in zip(segment,segment[1:])):
+            i+=1
+            continue
         direction=direction_at(data,i,strategy)
         if direction:
             # The next completed minute is the first evaluation point.
