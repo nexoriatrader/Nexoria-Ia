@@ -37,3 +37,32 @@ def real_accounts(accounts):
                           'currency':str(a.get('currency') or ''),
                           'status':str(a.get('status') or 'unknown')})
     return found
+
+
+def real_balance(accounts):
+    """Read a real balance only when directly supplied for a proven-real account.
+
+    No inference from another account, and no synthetic zero. Missing data is null.
+    """
+    from decimal import Decimal, InvalidOperation
+    for account in accounts:
+        if not isinstance(account,dict):
+            continue
+        identified=real_accounts([account])
+        if not identified:
+            continue
+        found=identified[0]
+        raw=account.get('balance')
+        if raw is None:
+            return {**found,'balance':None,'available':False}
+        try:
+            amount=Decimal(str(raw))
+        except (InvalidOperation,ValueError,TypeError):
+            return {**found,'balance':None,'available':False}
+        if not amount.is_finite() or amount<0:
+            return {**found,'balance':None,'available':False}
+        currency=found['currency']
+        if not currency or not currency.isalnum() or len(currency)>20:
+            return {**found,'balance':None,'available':False}
+        return {**found,'balance':str(amount),'available':True}
+    return None
