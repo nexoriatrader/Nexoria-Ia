@@ -49,7 +49,7 @@ def test_dashboard_shows_persistent_stop_notice_below_start_button():
     assert 'robot-notice' in html
     assert 'showRobotNotice(reason)' in html
     assert "/api/autopilot/readiness" in html
-    assert 'await refreshDashboard().catch(()=>{});' in html
+    assert 'const status=await refreshDashboard();' in html
     assert "NÃO apaga perdas, resultados" in html
     assert 'onclick="resetRiskSession()"' in html
     assert 'onclick="go(\'settings\')"' in html
