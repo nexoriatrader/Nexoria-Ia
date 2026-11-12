@@ -210,8 +210,15 @@ async def autopilot_once():
                 try:
                     entry,last=autopilot_entry_plan(sess,user,orders)
                 except ProgressionHalt as exc:
+                    reason=str(exc)
+                    # An unliquidated broker contract is normal during the
+                    # contract lifetime. Stay armed, but NEVER send another buy
+                    # until the reconciliation worker confirms settlement.
+                    if reason=='Contrato anterior não liquidado; aguardando reconciliação':
+                        autopilot_reasons[uid]='Aguardando liquidação oficial do contrato anterior na Deriv'
+                        continue
                     autopilot_enabled.discard(uid)
-                    autopilot_reasons[uid]=str(exc)
+                    autopilot_reasons[uid]=reason
                     continue
                 if entry.retry:
                     # Allow one full M1 candle boundary after confirmed settlement.
