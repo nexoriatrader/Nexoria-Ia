@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock
 from sqlalchemy import select,update
 from app import main,db
 from app.demo_ledger import settle
-from tests.test_demopilot import prepare,cleanup
+from test_demopilot import prepare,cleanup
 
 
 def test_end_to_end_demo_progression_executes_2_4_8_16_then_stops(tmp_path,monkeypatch):
