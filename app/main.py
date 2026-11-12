@@ -17,6 +17,7 @@ from sqlalchemy import select, delete
 from . import db
 from .demo import DemoTradingError, demo_account_balance, demo_contract_status, demo_buy, demo_proposal
 from .demo_ledger import OrderGuardError, reserve, public_order, confirmed, unknown, settle
+from .autopilot import analyze
 from .engine import Engine, Settings
 from .market import MarketError, discover_symbols, discover_contracts, indicative_proposal
 from .security import CLIENT_ID, REDIRECT, TOKEN_URL, build_authorize_url, make_login, make_session_id, hashsecret, encrypt, decrypt, cookie_options
@@ -378,6 +379,18 @@ async def status(request:Request,nexora_sid:str|None=Cookie(default=None)):
     async with lock:
         engine=rt_for(u)
         return {**engine.status(),'execution':'LOCAL_SIMULATION_ONLY','real_orders_enabled':False}
+
+@app.get('/api/autopilot/research')
+async def autopilot_research(request:Request,nexora_sid:str|None=Cookie(default=None)):
+    """Read-only experimental signal analysis. Never places orders."""
+    user=active_user(request,nexora_sid)
+    async with lock:
+        engine=rt_for(user)
+        prices=list(engine.prices)
+        connected=engine.connected
+    result=analyze(prices)
+    return {**result,'connected':connected,'symbol':SYMBOL,
+            'execution':'RESEARCH_ONLY','auto_buy_enabled':False}
 
 @app.post('/api/config')
 async def config(request:Request, config:Config,nexora_sid:str|None=Cookie(default=None)):
