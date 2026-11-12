@@ -21,13 +21,20 @@ from .market import MarketError, discover_symbols, discover_contracts, indicativ
 from .security import CLIENT_ID, REDIRECT, TOKEN_URL, build_authorize_url, make_login, make_session_id, hashsecret, encrypt, decrypt, cookie_options
 
 log=logging.getLogger('nexora')
-VERSION='0.5.2'
+VERSION='0.8.0'
 PUBLIC_WS='wss://api.derivws.com/trading/v1/options/ws/public'
 SYMBOL=os.getenv('NEXORA_SYMBOL','1HZ100V')
 # Per-user runtime states are separate and intentionally temporary.
 runtimes: dict[int, Engine] = {}
 market_task = None
 reconcile_task = None
+autopilot_task = None
+# User opt-in is intentionally volatile: service restarts always turn bots OFF.
+autopilot_enabled: set[int] = set()
+autopilot_last_attempt: dict[int,float] = {}
+autopilot_reasons: dict[int,str] = {}
+autopilot_lock = asyncio.Lock()
+market_last_tick = 0.0
 market_connected = False
 recent_prices=[]
 last_market_reason='Aguardando conexão'
@@ -61,7 +68,7 @@ def active_user(request:Request, sid):
     return active_session(request, sid)[0]
 
 async def feed():
-    global market_connected, last_market_reason, recent_prices
+    global market_connected, last_market_reason, recent_prices, market_last_tick
     delay=2
     while True:
         try:
@@ -85,6 +92,7 @@ async def feed():
                             for engine in runtimes.values():engine.prices.extend(ps)
                     elif m.get('msg_type')=='tick':
                         p=float(m['tick']['quote'])
+                        market_last_tick=asyncio.get_running_loop().time()
                         async with lock:
                             recent_prices=(recent_prices+[p])[-200:]
                             for uid,engine in list(runtimes.items()):
@@ -100,6 +108,152 @@ async def feed():
                     engine.last_reason='Conexão de cotações interrompida'
             await asyncio.sleep(delay)
             delay=min(delay*2,30)
+
+
+def autopilot_allowed():
+    return (os.getenv('NEXORA_AUTOPILOT_DEMO_ENABLED','false').lower()=='true'
+            and os.getenv('NEXORA_DEMO_BUY_ENABLED','false').lower()=='true')
+
+
+async def autopilot_once():
+    """Continuously discover experimental candidates; broker enforces one active order."""
+    if not autopilot_enabled:
+        return
+    now=asyncio.get_running_loop().time()
+    async with lock:
+        connected=market_connected and market_last_tick>0 and now-market_last_tick<35
+        prices=list(recent_prices)
+    if not connected:
+        for uid in tuple(autopilot_enabled):
+            autopilot_reasons[uid]='Aguardando cotações recentes da Deriv'
+        return
+    research=analyze(prices)
+    if not research['candidates']:
+        for uid in tuple(autopilot_enabled):
+            autopilot_reasons[uid]='Buscando oportunidade: '+research['reason']
+        return
+    candidate=research['candidates'][0]
+    for uid in tuple(autopilot_enabled):
+        if uid not in autopilot_enabled:
+            continue
+        # Throttle checks; order_guard independently prevents overlapping orders.
+        if now-autopilot_last_attempt.get(uid,-1e12)<60:
+            continue
+        async with autopilot_lock:
+            if uid not in autopilot_enabled or not autopilot_allowed():
+                continue
+            with db.SessionLocal() as sess:
+                user=sess.get(db.User,uid)
+                if not user or user.selected_mode!='demo':
+                    autopilot_enabled.discard(uid)
+                    autopilot_reasons[uid]='Conta demonstrativa indisponível; robô desligado'
+                    continue
+                if user.martingale:
+                    autopilot_enabled.discard(uid)
+                    autopilot_reasons[uid]='Desative Martingale nas configurações para usar o AutoPilot'
+                    continue
+                auths=sess.scalars(select(db.Session).where(db.Session.user_id==uid)
+                                 .order_by(db.Session.created_at.desc())).all()
+                token=None
+                for auth in auths:
+                    expiry=auth.expires_at
+                    if expiry.tzinfo is None:
+                        expiry=expiry.replace(tzinfo=timezone.utc)
+                    if expiry>db.utcnow():
+                        try:
+                            token=decrypt(auth.token_encrypted)
+                            break
+                        except Exception:
+                            continue
+                if not token:
+                    autopilot_enabled.discard(uid)
+                    autopilot_reasons[uid]='Sessão Deriv expirada; conecte novamente'
+                    continue
+                orders=sess.scalars(select(db.DemoOrder).where(db.DemoOrder.user_id==uid)).all()
+                from .demo_ledger import order_guard
+                try:
+                    order_guard(user,orders,user.stake)
+                except OrderGuardError as e:
+                    message=str(e)
+                    if 'Stop' in message or 'Martingale' in message:
+                        autopilot_enabled.discard(uid)
+                    autopilot_reasons[uid]=message
+                    continue
+                # Detached user snapshot survives session scope (expire_on_commit=False).
+                account=user.deriv_account_id
+            # Repeat authorization and feed checks before broker call.
+            if uid not in autopilot_enabled:
+                continue
+            autopilot_last_attempt[uid]=now
+            key='auto-'+secrets.token_hex(16)
+            autopilot_reasons[uid]='Enviando contrato oficial DEMO: '+candidate['strategy']
+            try:
+                result=await perform_demo_buy(user,token,
+                     DemoBuy(symbol=SYMBOL,direction=candidate['direction'],minutes=5,
+                             confirm='DEMO_ONLY',request_key=key),
+                     attribution={'strategy':candidate['strategy'],'reason':candidate['reason']})
+                autopilot_reasons[uid]='Contrato DEMO #'+str(result['id'])+' confirmado; aguardando liquidação'
+            except HTTPException as e:
+                # An unknown or pending buy remains blocked in the durable order ledger.
+                message=str(e.detail)
+                autopilot_reasons[uid]=message
+                if e.status_code in (401,403,502,503) or 'Stop' in message:
+                    autopilot_enabled.discard(uid)
+            except Exception as e:
+                autopilot_enabled.discard(uid)
+                autopilot_reasons[uid]='Falha na execução; robô desligado para segurança'
+                log.warning('AutoPilot execution halted: user=%s error=%s',uid,type(e).__name__)
+
+
+async def autopilot_loop():
+    while True:
+        try:
+            await autopilot_once()
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            log.warning('AutoPilot loop error: %s',type(exc).__name__)
+        await asyncio.sleep(10)
+
+
+class AutoPilotSwitch(BaseModel):
+    confirm:str=''
+
+
+@app.post('/api/autopilot/start')
+async def autopilot_start(request:Request,payload:AutoPilotSwitch,
+                          nexora_sid:str|None=Cookie(default=None)):
+    user,_=active_session(request,nexora_sid)
+    if payload.confirm!='START_DEMO_AUTOPILOT':
+        raise HTTPException(403,'Confirme o modo automático de treinamento')
+    if not autopilot_allowed():
+        raise HTTPException(503,'AutoPilot DEMO não habilitado no servidor')
+    if user.selected_mode!='demo':
+        raise HTTPException(403,'Somente conta demonstrativa')
+    if user.martingale:
+        raise HTTPException(409,'Desative Martingale para ativar o AutoPilot')
+    with db.SessionLocal() as sess:
+        orders=sess.scalars(select(db.DemoOrder).where(db.DemoOrder.user_id==user.id)).all()
+        from .demo_ledger import order_guard
+        try:
+            order_guard(user,orders,user.stake)
+        except OrderGuardError as e:
+            if 'Contrato demo em andamento' not in str(e):
+                raise HTTPException(409,str(e)) from None
+            # Permit arming during a previously confirmed contract; no new order until settled.
+            if any(o.state in ('PENDING','UNKNOWN') for o in orders):
+                raise HTTPException(409,'Contrato pendente ou incerto: reconciliação necessária')
+    autopilot_enabled.add(user.id)
+    autopilot_reasons[user.id]='AutoPilot ligado; aguardando oportunidade oficial na Deriv Demo'
+    return {'running':True,'execution':'DERIV_DEMO_ONLY','real_orders_enabled':False}
+
+
+@app.post('/api/autopilot/stop')
+async def autopilot_stop(request:Request,nexora_sid:str|None=Cookie(default=None)):
+    user=active_user(request,nexora_sid)
+    autopilot_enabled.discard(user.id)
+    autopilot_reasons[user.id]='Desligado: novas entradas bloqueadas; contratos abertos permanecem na Deriv'
+    return {'running':False,'execution':'DERIV_DEMO_ONLY','real_orders_enabled':False}
 
 
 async def reconcile_confirmed_orders_once():
@@ -164,14 +318,16 @@ async def reconcile_confirmed_loop():
 
 @asynccontextmanager
 async def lifespan(app):
-    global market_task, reconcile_task
+    global market_task, reconcile_task, autopilot_task
     if os.getenv('NEXORA_PUBLIC_URL','').startswith('https://') and db.DB_URL.startswith('sqlite:'):
         raise RuntimeError('Não usar SQLite efêmero em implantação pública: configure DATABASE_URL de Postgres')
     db.init_db()
     market_task=asyncio.create_task(feed())
     reconcile_task=asyncio.create_task(reconcile_confirmed_loop())
+    autopilot_task=asyncio.create_task(autopilot_loop())
     yield
-    tasks=[task for task in (market_task,reconcile_task) if task]
+    autopilot_enabled.clear()
+    tasks=[task for task in (market_task,reconcile_task,autopilot_task) if task]
     for task in tasks:
         task.cancel()
     await asyncio.gather(*tasks,return_exceptions=True)
@@ -349,6 +505,13 @@ async def logout(request:Request,nexora_sid:str|None=Cookie(default=None)):
                     engine=runtimes.get(session.user_id)
                     if engine:engine.running=False
                 s.delete(session);s.commit()
+    if nexora_sid:
+        # Logging out must never leave an active unattended trading permission.
+        try:
+            active=active_user(request,nexora_sid)
+            autopilot_enabled.discard(active.id)
+        except HTTPException:
+            pass
     response=JSONResponse({'ok':True});response.delete_cookie('nexora_sid',path='/');return response
 
 class Config(BaseModel):
@@ -378,8 +541,9 @@ async def status(request:Request,nexora_sid:str|None=Cookie(default=None)):
         return {'connected':engine.connected,'symbol':engine.symbol,
                 'latest_price':engine.prices[-1] if engine.prices else None,
                 'ticks':len(engine.prices),'execution':'DERIV_DEMO_ONLY',
-                'running':False,'real_orders_enabled':False,
-                'reason':'Aguardando validação da execução automática Deriv Demo'}
+                'running':user.id in autopilot_enabled,'auto_buy_enabled':autopilot_allowed(),
+                'real_orders_enabled':False,
+                'reason':autopilot_reasons.get(user.id,'Robô desligado')}
 
 @app.get('/api/autopilot/research')
 async def autopilot_research(request:Request,nexora_sid:str|None=Cookie(default=None)):
@@ -471,8 +635,8 @@ async def demo_capabilities(request:Request,nexora_sid:str|None=Cookie(default=N
     return {'demo_account_selected':user.selected_mode=='demo',
             'manual_demo_purchase_enabled':os.getenv('NEXORA_DEMO_BUY_ENABLED','false').lower()=='true',
             'real_orders_enabled':False,
-            'automatic_demo_orders_enabled':False,
-            'explanation':'Compra demonstrativa supervisionada disponível quando habilitada no servidor; execução real indisponível.'}
+            'automatic_demo_orders_enabled':autopilot_allowed(),
+            'explanation':'AutoPilot DEMO experimental com consentimento e stops; operação REAL indisponível.'}
 
 @app.get('/api/demo/balance')
 async def demo_balance_route(request:Request,nexora_sid:str|None=Cookie(default=None)):
@@ -500,34 +664,33 @@ async def demo_proposal_route(request:Request, payload:DemoProposal,
     except DemoTradingError as e:
         raise HTTPException(502,str(e)) from None
 
-@app.post('/api/demo/buy')
-async def demo_buy_route(request:Request, payload:DemoBuy,
-                         nexora_sid:str|None=Cookie(default=None)):
-    """One manually confirmed DEMO order, permanently reserved before network I/O.
-
-    UNKNOWN deliberately blocks future orders until independent broker reconciliation.
-    """
-    user, token = active_session(request, nexora_sid)
+async def perform_demo_buy(user, token, payload:DemoBuy, *, attribution:dict|None=None):
+    """Single guarded broker purchase path for both manual and AutoPilot DEMO orders."""
     if payload.confirm != 'DEMO_ONLY':
         raise HTTPException(403,'Confirmação de conta demo obrigatória')
     if os.getenv('NEXORA_DEMO_BUY_ENABLED','false').lower() != 'true':
-        raise HTTPException(503,'Compra demonstrativa desabilitada até validação da integração')
-    # Demo mode is not inferred from frontend selection.
-    if user.selected_mode != 'demo':
+        raise HTTPException(503,'Compra demonstrativa desabilitada')
+    if user.selected_mode!='demo':
         raise HTTPException(403,'Somente conta demonstrativa')
     if not re.fullmatch(r'[A-Za-z0-9]{2,30}',payload.symbol):
         raise HTTPException(422,'Ativo inválido')
     with db.SessionLocal() as s:
         stored=s.get(db.User,user.id)
         try:
-            order, created=reserve(s,stored,request_key=payload.request_key,
-                                   symbol=payload.symbol,direction=payload.direction,
-                                   minutes=payload.minutes)
+            order,created=reserve(s,stored,request_key=payload.request_key,
+                                  symbol=payload.symbol,direction=payload.direction,
+                                  minutes=payload.minutes)
         except OrderGuardError as e:
             raise HTTPException(409,str(e)) from None
         order_id=order.id
         if not created:
             return {**public_order(order),'replayed':True,'no_new_buy':True}
+        if attribution:
+            # Commit strategy before network I/O. If attribution fails, do NOT buy.
+            s.add(db.AutoPilotAttribution(order_id=order_id,user_id=user.id,
+                   strategy=attribution['strategy'],direction=payload.direction,
+                   reason=str(attribution['reason'])[:255]))
+            s.commit()
     # Never hold DB transaction across remote Deriv call.
     try:
         receipt=await demo_buy(token, user.deriv_account_id, symbol=payload.symbol,
@@ -560,6 +723,14 @@ async def demo_buy_route(request:Request, payload:DemoBuy,
                             order_id,type(persist_exc).__name__)
             raise HTTPException(503,'Contrato comprado; falha ao registrar confirmação. Não repetir compra.') from None
         return {**public_order(order),'replayed':False,'demo_only':True}
+
+
+@app.post('/api/demo/buy')
+async def demo_buy_route(request:Request,payload:DemoBuy,
+                         nexora_sid:str|None=Cookie(default=None)):
+    """One manually confirmed official DEMO purchase."""
+    user,token=active_session(request,nexora_sid)
+    return await perform_demo_buy(user,token,payload)
 
 @app.get('/api/demo/orders')
 async def demo_orders_route(request:Request,nexora_sid:str|None=Cookie(default=None)):
