@@ -31,7 +31,7 @@ def order_guard(user, orders, stake, *, after_order_id=0):
         raise OrderGuardError('Contrato demo em andamento ou pendente de reconciliação')
     # Explicit user-confirmed risk session boundary; older official records remain intact.
     pnl=sum((money(o.pnl) for o in orders if o.state=='SETTLED' and o.pnl is not None
-             and (getattr(o, 'id', None) or 0)>after_order_id),Decimal('0'))
+             and (after_order_id==0 or (getattr(o, 'id', None) or 0)>after_order_id)),Decimal('0'))
     stake=money(stake)
     if stake < Decimal('2') or stake > Decimal('1000'):
         raise OrderGuardError('Valor da entrada fora dos limites de treinamento')
