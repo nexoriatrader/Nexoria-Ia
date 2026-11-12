@@ -32,8 +32,8 @@ def decimal(value):
         d=Decimal(str(value))
     except (InvalidOperation,TypeError,ValueError) as exc:
         raise ProgressionHalt('Progressão com valor inválido') from exc
-    if not d.is_finite() or d<=0:
-        raise ProgressionHalt('Progressão com valor inválido')
+    if not d.is_finite() or d<1 or d.as_tuple().exponent<-2:
+        raise ProgressionHalt('Multiplicador deve ser número a partir de 1,00 e ter no máximo duas casas decimais')
     return d
 
 
@@ -46,16 +46,17 @@ def next_entry(*, base, gale_enabled, gales, gale_multiplier, cycles, cycle_mult
     base=decimal(base)
     gale_multiplier=decimal(gale_multiplier)
     cycle_multiplier=decimal(cycle_multiplier)
-    if gale_multiplier not in (2,3,4) or cycle_multiplier not in (2,3,4):
-        raise ProgressionHalt('Multiplicador indisponível')
-    if gales not in (0,1,2,3) or (not gale_enabled and gales!=0):
+    if gale_multiplier<1 or cycle_multiplier<1:
+        raise ProgressionHalt('Multiplicador inválido')
+    if gales not in (0,1,2,3,4,5) or (not gale_enabled and gales!=0):
         raise ProgressionHalt('Quantidade de Martingale inválida')
-    if cycles_enabled and cycles is not None and cycles not in (1,3,5,10):
+    if cycles_enabled and cycles is not None and cycles not in (1,2,3,4,5):
         raise ProgressionHalt('Quantidade de ciclos inválida')
     cycle=gale=0
     total=Decimal('0')
     previous=None
     last_id=-1
+    initial=base
     for row in orders:
         oid=int(row['id'])
         if oid<=last_id:
