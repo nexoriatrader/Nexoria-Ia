@@ -47,8 +47,8 @@ def test_continuity_prompt_clarifies_demo_not_real():
 
 def test_real_mode_is_explicitly_unavailable_for_purchases():
     html=load_ui()
-    assert "Indisponível para compras nesta fase" in html
-    assert "A aplicação não envia ordens em conta real" in html
+    assert "Seleção disponível quando a integração for habilitada" in html
+    assert 'aria-disabled="true"' in html
 
 def test_inline_javascript_syntax_is_valid(tmp_path):
     """Catch malformed inline JavaScript before it blocks OAuth login initialization."""
@@ -101,3 +101,36 @@ def test_premium_landing_mobile_and_accessibility():
     assert '@media(prefers-reduced-motion:reduce)' in html
     assert '.landing-cta:focus-visible' in html
     assert 'id="lab"' in html  # Existing strategy laboratory preserved.
+
+
+def test_account_selection_after_successful_deriv_oauth():
+    html=load_ui()
+    assert 'id="chooseHeading"' in html
+    assert 'id="chooseDemo"' in html
+    assert 'selectDemoAccount()' in html
+    assert "new URLSearchParams(window.location.search).get('login')==='ok'" in html
+    assert "page('choose')" in html
+    assert "page('dashboard')" in html
+    assert "history.replaceState" in html
+    assert 'id="demoInfo"' in html
+
+
+def test_real_account_card_is_informational_and_cannot_trigger_orders():
+    html=load_ui()
+    choose=html.split('<section id="choose"',1)[1].split('<section id="dashboard"',1)[0]
+    assert 'role="group"' in choose
+    assert 'aria-disabled="true"' in choose
+    assert 'SALDO REAL' in choose
+    assert 'Seleção disponível quando a integração for habilitada' in choose
+    assert 'onclick="selectDemoAccount()"' in choose
+    assert '/api/demo/buy' not in choose
+    assert '/api/autopilot/start' not in choose
+    assert 'Escolher uma conta não inicia o robô' in choose
+    assert 'choose-accounts' in choose
+    assert 'A um passo do' in choose
+    assert 'Recomendamos utilizar o treinamento por algumas horas' in choose
+    assert 'id="chooseContinue"' in choose
+    assert 'onclick="continueAccount()"' in choose
+    assert 'aria-pressed="true"' in choose
+    assert 'disabled aria-disabled="true"' in choose
+    assert '@media(max-width:700px)' in html
