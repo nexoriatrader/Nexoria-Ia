@@ -31,7 +31,7 @@ def test_mobile_navigation_and_single_primary_robot_control():
     assert 'id="drawer"' in html
     assert 'id="menuButton"' in html
     assert 'id="robotButton"' in html
-    assert 'disabled aria-disabled="true"' in html
+    assert 'id="chooseReal" aria-pressed="false"' in html
     assert "AutoPilot" in html
     assert "loadDemoOrders()" in html
     assert "/api/onboarding/config" in html
@@ -48,7 +48,7 @@ def test_continuity_prompt_clarifies_demo_not_real():
 def test_real_mode_is_explicitly_unavailable_for_purchases():
     html=load_ui()
     assert "Verificando se existe conta real vinculada" in html
-    assert 'aria-disabled="true"' in html
+    assert 'id="chooseReal" aria-pressed="false"' in html
 
 def test_inline_javascript_syntax_is_valid(tmp_path):
     """Catch malformed inline JavaScript before it blocks OAuth login initialization."""
@@ -130,7 +130,11 @@ def test_real_account_card_is_informational_and_cannot_trigger_orders():
     assert 'A um passo do' in choose
     assert 'Recomendamos utilizar o treinamento por algumas horas' in choose
     assert 'id="chooseContinue"' in choose
+    assert 'onclick="selectRealAccount()"' in choose
+    assert 'id="realPreview"' in html
+    assert 'Nenhum contrato com saldo real será comprado' in html
+    assert "if(selectedAccountMode==='real'){go('realPreview');return;}" in html
     assert 'onclick="continueAccount()"' in choose
     assert 'aria-pressed="true"' in choose
-    assert 'disabled aria-disabled="true"' in choose
+    assert 'id="chooseReal" aria-pressed="false"' in choose
     assert '@media(max-width:700px)' in html
