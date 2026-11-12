@@ -501,17 +501,12 @@ async def logout(request:Request,nexora_sid:str|None=Cookie(default=None)):
         with db.SessionLocal() as s:
             session=s.get(db.Session,hashsecret(nexora_sid))
             if session:
+                autopilot_enabled.discard(session.user_id)
+                autopilot_reasons[session.user_id]='Sessão encerrada; AutoPilot desligado'
                 async with lock:
                     engine=runtimes.get(session.user_id)
                     if engine:engine.running=False
                 s.delete(session);s.commit()
-    if nexora_sid:
-        # Logging out must never leave an active unattended trading permission.
-        try:
-            active=active_user(request,nexora_sid)
-            autopilot_enabled.discard(active.id)
-        except HTTPException:
-            pass
     response=JSONResponse({'ok':True});response.delete_cookie('nexora_sid',path='/');return response
 
 class Config(BaseModel):
