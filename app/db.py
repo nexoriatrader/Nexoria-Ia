@@ -85,3 +85,14 @@ class DemoOrder(Base):
     created_at = Column(DateTime(timezone=True), default=utcnow, nullable=False)
     updated_at = Column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
     __table_args__ = (UniqueConstraint('user_id', 'request_key', name='uq_demo_order_request'),)
+
+class AutoPilotAttribution(Base):
+    """Strategy attribution for verified broker orders (no simulated fills)."""
+    __tablename__ = 'autopilot_attributions'
+    id = Column(Integer, primary_key=True)
+    order_id = Column(Integer, ForeignKey('demo_orders.id'), unique=True, nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey('users.id'), nullable=False, index=True)
+    strategy = Column(String(32), nullable=False)
+    direction = Column(String(10), nullable=False)
+    reason = Column(String(255), nullable=False)
+    created_at = Column(DateTime(timezone=True), default=utcnow, nullable=False)

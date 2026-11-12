@@ -122,9 +122,9 @@ td{padding:13px 12px;border-bottom:1px solid #273d51;white-space:nowrap}
   <div class="section-heading"><div><div class="eyebrow">VISÃO GERAL</div><h1>Meu robô</h1><p>O essencial para acompanhar suas operações.</p></div></div>
   <div class="card hero">
     <div class="hero-top"><div class="hero-title">NEXORA AutoPilot</div><span id="robotState" class="hero-state">DESLIGADO</span></div>
-    <p id="robotMessage" class="hero-copy">O modo automático ainda não foi liberado. Suas operações manuais de treinamento continuam disponíveis.</p>
-    <button id="robotButton" class="hero-action" disabled aria-disabled="true">LIGAR ROBÔ</button>
-    <div class="helper">O botão será habilitado após a validação do executor automático na Deriv Demo.</div>
+    <p id="robotMessage" class="hero-copy">Preparando AutoPilot DEMO experimental. Uma posição por vez, com limites de risco configurados.</p>
+    <button id="robotButton" class="hero-action" disabled aria-disabled="true" onclick="toggleRobot()">LIGAR ROBÔ</button>
+    <div class="helper">Apenas Deriv Demo. Estratégias em teste, sem garantia de acerto. Desligar bloqueia novas entradas, sem cancelar contratos já abertos.</div>
     <div class="info" id="feedState">Conferindo conexão de cotações...</div>
   </div>
   <div class="metric-grid">
@@ -143,6 +143,12 @@ td{padding:13px 12px;border-bottom:1px solid #273d51;white-space:nowrap}
   <div class="card"><div class="surface-heading">Histórico oficial — Deriv Demo</div>
     <div class="actions"><button class="outline" onclick="loadDemoOrders()">ATUALIZAR CONTRATOS</button></div>
     <div class="table-wrap"><table><thead><tr><th>Ativo</th><th>Direção</th><th>Entrada</th><th>Situação</th><th>Resultado</th><th>Ação</th></tr></thead><tbody id="ordersBody"><tr><td colspan="6" class="empty">Carregando contratos...</td></tr></tbody></table></div>
+  </div>
+  <div class="card"><div class="surface-heading">Desempenho das estratégias</div>
+    <p class="muted">Entradas automáticas oficiais na Deriv Demo, agrupadas pela estratégia de origem. Não são previsões de resultados futuros.</p>
+    <div class="actions"><button class="outline" onclick="loadStrategyStats()">ATUALIZAR ESTRATÉGIAS</button></div>
+    <div class="table-wrap"><table><thead><tr><th>Estratégia</th><th>Operações</th><th>Vitórias</th><th>Derrotas</th><th>Acerto</th><th>P/L</th></tr></thead>
+    <tbody id="strategyStats"><tr><td colspan="6" class="empty">Sem entradas automáticas registradas.</td></tr></tbody></table></div>
   </div>
 </section>
 <section id="settings" class="hidden">
@@ -179,20 +185,54 @@ td{padding:13px 12px;border-bottom:1px solid #273d51;white-space:nowrap}
 </div>
 <script>
 const $=id=>document.getElementById(id);
-let activePage='welcome',demoOrders=[],demoBalance=null,refreshTimer=null,lastRequestKey=null;
+let activePage='welcome',demoOrders=[],demoBalance=null,refreshTimer=null,lastRequestKey=null,robotRunning=false;
 const money=(n,currency='USD')=>{const value=Number(n);return Number.isFinite(value)?value.toLocaleString('pt-BR',{style:'currency',currency:currency||'USD'}):'—'};
 const safe=(v)=>v===null||v===undefined?'—':String(v);
 function page(v){for(const name of ['welcome','choose','dashboard','results','settings','account'])$(name).classList.toggle('hidden',name!==v);activePage=v;const logged=!['welcome','choose'].includes(v);$('accountBadge').classList.toggle('hidden',!logged);$('menuButton').classList.toggle('hidden',!logged);document.querySelectorAll('.nav[data-view]').forEach(b=>b.classList.toggle('active',b.dataset.view===v))}
 function toggleMenu(open){$('drawer').classList.toggle('hidden',!open);$('menuOverlay').classList.toggle('hidden',!open);$('menuButton').setAttribute('aria-expanded',String(open))}
-function go(v){toggleMenu(false);page(v);window.scrollTo({top:0,behavior:'smooth'});if(v==='dashboard')refreshDashboard();if(v==='results')loadDemoOrders();if(v==='account')loadDemoBalance();if(v==='settings')loadSettings()}
+function go(v){toggleMenu(false);page(v);window.scrollTo({top:0,behavior:'smooth'});if(v==='dashboard')refreshDashboard();if(v==='results'){loadDemoOrders();loadStrategyStats()}if(v==='account')loadDemoBalance();if(v==='settings')loadSettings()}
 function fail(msg){$('error').textContent=msg||''}
 async function req(path,opts={}){const r=await fetch(path,{credentials:'same-origin',...opts});let data;try{data=await r.json()}catch{throw Error('Resposta inválida do servidor')}if(!r.ok)throw Error(data.detail||'Falha na conexão');return data}
 async function init(){try{const s=await req('/api/session');if(!s.authenticated){page('welcome');return}page('dashboard');refreshDashboard();refreshTimer=setInterval(()=>{if(activePage==='dashboard'||activePage==='results')refreshDashboard()},30000)}catch(e){fail(e.message);page('welcome')}}
-async function refreshDashboard(){try{const [status]=await Promise.all([req('/api/status'),loadDemoBalance(),loadDemoOrders()]);$('feedState').textContent=(status.connected?'● Cotações conectadas':'○ Reconectando cotações')+' · '+safe(status.symbol);const eligible=Boolean(status.auto_buy_enabled&&status.running);$('robotState').textContent=eligible?'ATIVO':'DESLIGADO';$('robotMessage').textContent='Execução automática ainda não liberada. Acompanhamento e testes oficiais da Deriv Demo disponíveis.';$('robotButton').disabled=true;fail('')}catch(e){fail('Painel: '+e.message)}}
+async function refreshDashboard(){try{const [status]=await Promise.all([req('/api/status'),loadDemoBalance(),loadDemoOrders()]);$('feedState').textContent=(status.connected?'● Cotações conectadas':'○ Reconectando cotações')+' · '+safe(status.symbol);robotRunning=Boolean(status.running);const available=Boolean(status.auto_buy_enabled);$('robotState').textContent=robotRunning?'ATIVO':available?'PRONTO':'INDISPONÍVEL';$('robotMessage').textContent=status.reason||'Aguardando oportunidades no mercado DEMO';$('robotButton').textContent=robotRunning?'DESLIGAR ROBÔ':'LIGAR ROBÔ';$('robotButton').disabled=!robotRunning&&!available;$('robotButton').setAttribute('aria-disabled',String($('robotButton').disabled));$('robotButton').style.background=robotRunning?'linear-gradient(135deg,#fa9b9d,#dc5269)':'';fail('')}catch(e){fail('Painel: '+e.message)}}
+async function toggleRobot(){
+  try{
+    $('robotButton').disabled=true;
+    if(robotRunning){
+      await req('/api/autopilot/stop',{method:'POST'});
+    }else{
+      if(!window.confirm('ATIVAR AUTOPILOT NA CONTA DERIV DEMO?\\n\\nO robô enviará operações com saldo virtual conforme as oportunidades experimentais, uma por vez, continuamente até você desligar ou atingir os limites de risco. Não existe garantia de lucro. A conta REAL não será utilizada.\\n\\nConfirmar?')){
+        await refreshDashboard();return;
+      }
+      await req('/api/autopilot/start',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({confirm:'START_DEMO_AUTOPILOT'})});
+    }
+    await refreshDashboard();
+  }catch(e){fail('AutoPilot: '+e.message);await refreshDashboard().catch(()=>{});}
+}
 async function loadDemoBalance(){try{const b=await req('/api/demo/balance');demoBalance=b;$('balanceMetric').textContent=money(b.balance,b.currency);$('accountBalance').textContent=money(b.balance,b.currency);return b}catch(e){$('balanceMetric').textContent='Indisponível';$('accountBalance').textContent='Indisponível';throw e}}
 function summarizeOrders(items){const settled=items.filter(o=>o.state==='SETTLED'&&Number.isFinite(Number(o.pnl)));const pnl=settled.reduce((sum,o)=>sum+Number(o.pnl),0);const won=settled.filter(o=>Number(o.pnl)>0).length;const lost=settled.filter(o=>Number(o.pnl)<=0).length;return {pnl,won,lost}}
 async function loadDemoOrders(){try{const data=await req('/api/demo/orders');demoOrders=data.items||[];const summary=summarizeOrders(demoOrders);const p=$('profitMetric');p.textContent=money(summary.pnl);p.className='metric-value '+(summary.pnl>0?'positive':summary.pnl<0?'negative':'');$('scoreMetric').textContent=summary.won+' / '+summary.lost;const last=demoOrders[0];$('lastOrder').textContent=last?last.symbol+' · '+last.direction+' · Entrada '+money(last.stake)+' · '+last.state+(last.pnl===null?' · Aguardando resultado':' · P/L '+money(last.pnl)):'Nenhum contrato oficial ainda.';renderOrders();return data}catch(e){$('ordersBody').innerHTML='<tr><td colspan="6" class="empty">Não foi possível carregar o histórico.</td></tr>';throw e}}
 function renderOrders(){const tbody=$('ordersBody');tbody.replaceChildren();if(!demoOrders.length){const tr=document.createElement('tr'),td=document.createElement('td');td.colSpan=6;td.className='empty';td.textContent='Nenhum contrato oficial registrado.';tr.append(td);tbody.append(tr);return}for(const o of demoOrders){const row=document.createElement('tr');for(const text of [o.symbol,o.direction,money(o.stake),o.state,o.pnl===null?'Pendente':money(o.pnl)]){const td=document.createElement('td');td.textContent=text;row.append(td)}const action=document.createElement('td');if(o.state==='CONFIRMED'&&o.contract_id){const b=document.createElement('button');b.className='outline';b.textContent='Conferir';b.onclick=()=>reconcile(o.id);action.append(b)}else if(o.state==='UNKNOWN'){action.textContent='Verificar na Deriv'}else action.textContent='—';row.append(action);tbody.append(row)}}
+async function loadStrategyStats(){
+  const tbody=$('strategyStats');
+  try{
+    const result=await req('/api/autopilot/strategy-stats');
+    tbody.replaceChildren();
+    if(!result.items.length){
+      const tr=document.createElement('tr'),td=document.createElement('td');
+      td.colSpan=6;td.className='empty';td.textContent='Nenhuma entrada automática registrada até agora.';
+      tr.append(td);tbody.append(tr);return;
+    }
+    for(const item of result.items){
+      const row=document.createElement('tr');
+      const rate=item.win_rate===null?'—':(100*item.win_rate).toFixed(1)+'%';
+      for(const value of [item.strategy,item.settled,item.wins,item.losses,rate,money(item.net_pnl)]){
+        const td=document.createElement('td');td.textContent=String(value);row.append(td);
+      }
+      tbody.append(row);
+    }
+  }catch(e){tbody.replaceChildren();const tr=document.createElement('tr'),td=document.createElement('td');td.colSpan=6;td.className='empty';td.textContent='Estratégias indisponíveis: '+e.message;tr.append(td);tbody.append(tr)}
+}
 async function reconcile(id){try{await req('/api/demo/orders/'+encodeURIComponent(id)+'/reconcile',{method:'POST'});await loadDemoOrders();await loadDemoBalance();fail('')}catch(e){fail('Liquidação: '+e.message)}}
 async function loadSettings(){try{const s=await req('/api/config/current');$('stake').value=s.stake;$('sw').value=s.stop_win;$('sl').value=s.stop_loss;$('mg').checked=s.martingale;$('mult').value=String(Number(s.multiplier))}catch(e){$('configFeedback').textContent='Configurações não carregadas: '+e.message}}
 async function save(){try{await req('/api/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({stake:$('stake').value,martingale:$('mg').checked,multiplier:$('mult').value,stop_win:$('sw').value,stop_loss:$('sl').value})});$('configFeedback').textContent='Configurações salvas com sucesso.';fail('')}catch(e){fail('Configurações: '+e.message)}}
