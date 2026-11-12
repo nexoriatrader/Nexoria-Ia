@@ -47,8 +47,8 @@ def test_continuity_prompt_clarifies_demo_not_real():
 
 def test_real_mode_is_explicitly_unavailable_for_purchases():
     html=load_ui()
-    assert "Indisponível para compras nesta fase" in html
-    assert "A aplicação não envia ordens em conta real" in html
+    assert "O envio de ordens reais ainda não está disponível" in html
+    assert 'aria-disabled="true"' in html
 
 def test_inline_javascript_syntax_is_valid(tmp_path):
     """Catch malformed inline JavaScript before it blocks OAuth login initialization."""
