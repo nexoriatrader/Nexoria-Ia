@@ -608,6 +608,81 @@ async def config(request:Request, config:Config,nexora_sid:str|None=Cookie(defau
             s.commit()
     return {'ok':True}
 
+# Account onboarding config uses the same safe demo risk settings as /api/config.
+# Martingale and cycle controls are PLANNED preferences only: execution stays single-stake.
+class OnboardingConfig(BaseModel):
+    stake:str='2.00'
+    stop_win:str='20.00'
+    stop_loss:str='10.00'
+    martingale:bool=False
+    gale_count:int=0
+    multiplier:str='2.00'
+    cycles:str='unlimited'
+
+
+@app.get('/api/onboarding/config')
+async def get_onboarding_config(request:Request,nexora_sid:str|None=Cookie(default=None)):
+    u=active_user(request,nexora_sid)
+    with db.SessionLocal() as sess:
+        plan=sess.get(db.RobotPlan,u.id)
+        return {'mode':'demo','real_enabled':False,
+                'stake':u.stake,'stop_win':u.stop_win,'stop_loss':u.stop_loss,
+                'martingale':bool(plan.requested_martingale) if plan else False,
+                'gale_count':plan.gale_count if plan else 0,
+                'multiplier':plan.requested_multiplier if plan else '2.00',
+                'cycles':str(plan.cycles_limit) if plan and plan.cycles_limit is not None else 'unlimited',
+                'martingale_execution_enabled':False,'cycles_execution_enabled':False}
+
+
+@app.post('/api/onboarding/config')
+async def save_onboarding_config(request:Request,payload:OnboardingConfig,
+                                 nexora_sid:str|None=Cookie(default=None)):
+    u=active_user(request,nexora_sid)
+    if not isinstance(payload.martingale,bool):
+        raise HTTPException(422,'Valor de Martingale inválido')
+    if payload.gale_count not in (0,1,2,3):
+        raise HTTPException(422,'Quantidade de martingales inválida')
+    if payload.cycles not in ('1','3','5','10','unlimited'):
+        raise HTTPException(422,'Quantidade de ciclos inválida')
+    if payload.martingale and payload.gale_count==0:
+        raise HTTPException(422,'Escolha pelo menos uma tentativa de Martingale')
+    if not payload.martingale and payload.gale_count!=0:
+        raise HTTPException(422,'Desative as tentativas de Martingale')
+    # For current official orders the only enabled progression is flat stake.
+    try:
+        settings=Settings.parse({'stake':payload.stake,'stop_win':payload.stop_win,
+                                 'stop_loss':payload.stop_loss,
+                                 'martingale':False,'multiplier':'2'})
+        selected_multiplier=Settings.parse({'stake':payload.stake,
+                                            'stop_win':payload.stop_win,'stop_loss':payload.stop_loss,
+                                            'martingale':False,'multiplier':payload.multiplier}).multiplier
+    except ValueError as e:
+        raise HTTPException(422,str(e)) from None
+    async with lock:
+        engine=rt_for(u)
+        try:engine.configure(settings)
+        except ValueError as e:raise HTTPException(409,str(e)) from None
+        with db.SessionLocal() as sess:
+            stored=sess.get(db.User,u.id)
+            stored.stake=str(settings.stake)
+            stored.stop_win=str(settings.stop_win)
+            stored.stop_loss=str(settings.stop_loss)
+            stored.martingale=False
+            stored.multiplier='2.00'
+            plan=sess.get(db.RobotPlan,u.id)
+            if not plan:
+                plan=db.RobotPlan(user_id=u.id)
+                sess.add(plan)
+            plan.requested_martingale=payload.martingale
+            plan.gale_count=payload.gale_count
+            plan.requested_multiplier=str(selected_multiplier)
+            plan.cycles_limit=None if payload.cycles=='unlimited' else int(payload.cycles)
+            sess.commit()
+    return {'ok':True,'execution_mode':'DEMO_FLAT_STAKE',
+            'martingale_execution_enabled':False,'cycles_execution_enabled':False,
+            'message':'Limites salvos. Martingale e ciclos guardados como preferências futuras, ainda sem execução.'}
+
+
 # Explicit, read-only research endpoint; never touches AutoPilot execution settings.
 _strategy_lab_lock=asyncio.Lock()
 _strategy_lab_cache=None
