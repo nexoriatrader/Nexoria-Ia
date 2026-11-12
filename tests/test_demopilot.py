@@ -202,3 +202,58 @@ def test_strategy_stats_uses_only_verified_settled_contracts(tmp_path,monkeypatc
         assert stats['rompimento']['settled']==0
         assert stats['rompimento']['win_rate'] is None
     finally: cleanup(engine)
+
+
+def test_reconcile_unknown_with_official_id_but_never_without_id(tmp_path,monkeypatch):
+    client,factory,engine,uid=prepare(tmp_path,monkeypatch)
+    broker=AsyncMock(return_value={'contract':{
+        'contract_id':'77001','is_sold':True,'profit':'1.50','status':'won'}})
+    monkeypatch.setattr(main,'demo_contract_status',broker)
+    try:
+        with factory() as s:
+            s.add_all([
+                db.DemoOrder(user_id=uid,request_key='known-unknown',
+                    active_slot=uid,state='UNKNOWN',contract_id='77001',
+                    symbol='1HZ100V',direction='CALL',duration_minutes=5,stake='2.00'),
+                db.DemoOrder(user_id=uid,request_key='unknown-without-id',
+                    active_slot=uid,state='UNKNOWN',contract_id=None,
+                    symbol='1HZ100V',direction='PUT',duration_minutes=5,stake='2.00')
+            ])
+            s.commit()
+        asyncio.run(main.reconcile_confirmed_orders_once())
+        assert broker.await_count==1
+        with factory() as s:
+            known=s.scalar(select(db.DemoOrder).where(db.DemoOrder.request_key=='known-unknown'))
+            unresolved=s.scalar(select(db.DemoOrder).where(db.DemoOrder.request_key=='unknown-without-id'))
+            assert known.state=='SETTLED'
+            assert known.pnl=='1.50'
+            assert known.active_slot is None
+            assert unresolved.state=='UNKNOWN'
+            assert unresolved.active_slot==uid
+            assert unresolved.pnl is None
+    finally:
+        cleanup(engine)
+
+
+def test_reconciliation_prioritizes_recent_contracts(tmp_path,monkeypatch):
+    client,factory,engine,uid=prepare(tmp_path,monkeypatch)
+    broker=AsyncMock(return_value={'contract':{
+        'contract_id':'99999','is_sold':False,'status':'open'}})
+    monkeypatch.setattr(main,'demo_contract_status',broker)
+    try:
+        with factory() as s:
+            s.add_all([
+                db.DemoOrder(user_id=uid,request_key=f'pending-{i:03d}',
+                    active_slot=None,state='CONFIRMED',contract_id=str(100000+i),
+                    symbol='1HZ100V',direction='CALL',duration_minutes=5,stake='2.00')
+                for i in range(105)
+            ])
+            s.commit()
+        asyncio.run(main.reconcile_confirmed_orders_once())
+        assert broker.await_count==100
+        contract_ids=[call.args[2] for call in broker.await_args_list]
+        assert contract_ids[0]=='100104'
+        assert contract_ids[-1]=='100005'
+        assert '100000' not in contract_ids
+    finally:
+        cleanup(engine)
