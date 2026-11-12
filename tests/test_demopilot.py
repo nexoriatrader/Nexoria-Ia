@@ -108,6 +108,41 @@ def test_continuous_demo_orders_one_at_a_time_and_attributed(tmp_path,monkeypatc
     finally: cleanup(engine)
 
 
+
+def test_confirmed_contract_keeps_autopilot_armed_without_duplicate_buy(tmp_path,monkeypatch):
+    client,factory,engine,uid=prepare(tmp_path,monkeypatch,stop_loss='0.00')
+    broker=AsyncMock(return_value={'contract_id':'880001','buy_price':'2.00'})
+    monkeypatch.setattr(main,'demo_buy',broker)
+    monkeypatch.setattr(main,'market_connected',True)
+    monkeypatch.setattr(main,'recent_prices',[100+i*.05 for i in range(100)])
+    try:
+        assert client.post('/api/autopilot/start',
+            json={'confirm':'START_DEMO_AUTOPILOT'}).status_code==200
+        async def attempt():
+            main.market_last_tick=asyncio.get_running_loop().time()
+            await main.autopilot_once()
+        asyncio.run(attempt())
+        assert broker.await_count==1
+        # Explicitly bypass rate limiting to exercise the progression guard.
+        main.autopilot_last_attempt[uid]=-1e12
+        asyncio.run(attempt())
+        assert uid in main.autopilot_enabled
+        assert broker.await_count==1
+        status=client.get('/api/status').json()
+        assert status['running'] is True
+        assert 'Aguardando liquidação oficial' in status['reason']
+        with factory() as sess:
+            order=sess.scalar(select(db.DemoOrder))
+            assert order.state=='CONFIRMED'
+            settle(sess,order,{'contract_id':'880001',
+                'is_sold':True,'profit':'-2.00','status':'lost'})
+        main.autopilot_last_attempt[uid]=-1e12
+        asyncio.run(attempt())
+        assert broker.await_count==2
+    finally:
+        cleanup(engine)
+
+
 def test_stop_loss_ends_automatic_session(tmp_path,monkeypatch):
     client,factory,engine,uid=prepare(tmp_path,monkeypatch,stop_loss='2.00')
     broker=AsyncMock(side_effect=AssertionError('broker must not receive buy'))
