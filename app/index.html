@@ -415,11 +415,12 @@ button.choose-account:focus-visible{outline:3px solid #71d2ff;outline-offset:4px
       <strong id="robotNoticeTitle"></strong>
       <p id="robotNoticeText"></p>
       <div id="robotNoticeOptions" hidden>
-        <p>Para continuar, você pode ajustar seu Stop Loss nas configurações ou desativar esse limite (não recomendado: aumenta o risco). Limpar resultados anteriores ainda não está disponível.</p>
-        <div class="actions"><button class="outline" type="button" onclick="go('settings')">AJUSTAR STOP LOSS</button><button class="outline" type="button" disabled title="Disponível em uma futura atualização">REINICIAR SESSÃO · EM BREVE</button></div>
+        <p>Para continuar, você pode ajustar seu Stop Loss nas configurações ou desativar esse limite (não recomendado: aumenta o risco). Você também pode iniciar uma nova sessão de risco DEMO. Isso reinicia o cálculo dos stops da sessão, mas NÃO apaga perdas, resultados nem altera o saldo da Deriv.</p>
+        <div class="actions"><button class="outline" type="button" onclick="go('settings')">AJUSTAR STOP LOSS</button><button class="outline" type="button" onclick="resetRiskSession()">REINICIAR SESSÃO</button></div>
         <p class="helper">O histórico oficial e o saldo Deriv não podem ser apagados pelo painel. Os limites de segurança permanecem ativos.</p>
       </div>
     </div>
+    <p class="helper" id="riskSessionMetric">Sessão de risco DEMO: consultando resultado...</p>
     <div class="helper">Apenas Deriv Demo. Estratégias em teste, sem garantia de acerto. Desligar bloqueia novas entradas, sem cancelar contratos já abertos.</div>
     <div class="info" id="feedState">Conferindo conexão de cotações...</div>
   </div>
@@ -622,6 +623,25 @@ function showRobotNotice(reason){
  options.hidden=!stopLoss;
  box.hidden=false;
 }
+async function loadRiskSession(){
+ const element=$('riskSessionMetric');
+ try{
+   const result=await req('/api/demo/risk-session');
+   const n=Number(result.pnl);
+   element.textContent='Resultado da sessão de risco DEMO: '+(Number.isFinite(n)?money(n,'USD'):'indisponível')+' · Histórico geral preservado';
+ }catch(e){element.textContent='Sessão de risco DEMO: informação indisponível'}
+}
+async function resetRiskSession(){
+ if(robotRunning){showRobotNotice('Desligue o robô antes de reiniciar a sessão.');return}
+ const message='REINICIAR SESSÃO DE RISCO DEMO?\\n\\nIsso zerará o resultado usado pelos Stop Win e Stop Loss da nova sessão. NÃO apaga o histórico, NÃO recupera perdas e NÃO altera o saldo da Deriv. Reiniciar repetidamente aumenta o risco de perda.\\n\\nSó é permitido sem contratos pendentes. Deseja continuar?';
+ if(!window.confirm(message))return;
+ try{
+   await req('/api/demo/risk-session/reset',{method:'POST',headers:{'Content-Type':'application/json'},
+     body:JSON.stringify({confirm:'RESET_DEMO_RISK_SESSION'})});
+   await refreshDashboard();
+   showRobotNotice('Sessão de risco DEMO reiniciada. Histórico e saldo preservados. Configure os limites antes de ligar o robô.');
+ }catch(e){showRobotNotice('Não foi possível reiniciar a sessão: '+e.message)}
+}
 async function loadAutopilotReadiness(){
  try{
    const info=await req('/api/autopilot/readiness');
@@ -629,7 +649,7 @@ async function loadAutopilotReadiness(){
    showRobotNotice(info.ready?'':info.reason);
  }catch(e){showRobotNotice('Não foi possível verificar o motivo do bloqueio: '+e.message)}
 }
-async function refreshDashboard(){try{const [status]=await Promise.all([req('/api/status'),loadDemoBalance(),loadDemoOrders(),loadRealBalance(),loadDailyResult(),loadAutopilotReadiness()]);$('feedState').textContent=(status.connected?'● Cotações conectadas':'○ Reconectando cotações')+' · '+safe(status.symbol);robotRunning=Boolean(status.running);const available=Boolean(status.auto_buy_enabled);$('robotState').textContent=robotRunning?'ATIVO':status.interrupted_after_restart?'INTERROMPIDO':available?'PRONTO':'INDISPONÍVEL';$('robotMessage').textContent=status.reason||'Aguardando oportunidades no mercado DEMO';$('robotButton').textContent=robotRunning?'DESLIGAR ROBÔ':'LIGAR ROBÔ';$('robotButton').disabled=!robotRunning&&!available;$('robotButton').setAttribute('aria-disabled',String($('robotButton').disabled));$('robotButton').style.background=robotRunning?'linear-gradient(135deg,#fa9b9d,#dc5269)':'';fail('')}catch(e){fail('Painel: '+e.message)}}
+async function refreshDashboard(){try{const [status]=await Promise.all([req('/api/status'),loadDemoBalance(),loadDemoOrders(),loadRealBalance(),loadDailyResult(),loadAutopilotReadiness(),loadRiskSession()]);$('feedState').textContent=(status.connected?'● Cotações conectadas':'○ Reconectando cotações')+' · '+safe(status.symbol);robotRunning=Boolean(status.running);const available=Boolean(status.auto_buy_enabled);$('robotState').textContent=robotRunning?'ATIVO':status.interrupted_after_restart?'INTERROMPIDO':available?'PRONTO':'INDISPONÍVEL';$('robotMessage').textContent=status.reason||'Aguardando oportunidades no mercado DEMO';$('robotButton').textContent=robotRunning?'DESLIGAR ROBÔ':'LIGAR ROBÔ';$('robotButton').disabled=!robotRunning&&!available;$('robotButton').setAttribute('aria-disabled',String($('robotButton').disabled));$('robotButton').style.background=robotRunning?'linear-gradient(135deg,#fa9b9d,#dc5269)':'';fail('')}catch(e){fail('Painel: '+e.message)}}
 async function toggleRobot(){
   try{
     $('robotButton').disabled=true;
