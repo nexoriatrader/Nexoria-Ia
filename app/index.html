@@ -419,10 +419,10 @@ button.choose-account:focus-visible{outline:3px solid #71d2ff;outline-offset:4px
   </div>
 </section>
 <section id="results" class="hidden">
-  <div class="section-heading"><div><div class="eyebrow">DADOS OFICIAIS</div><h1>Resultados</h1><p>Somente contratos enviados e registrados na Deriv Demo.</p></div></div>
-  <div class="card"><div class="surface-heading">Histórico oficial — Deriv Demo</div>
-    <div class="actions"><button class="outline" onclick="loadDemoOrders()">ATUALIZAR CONTRATOS</button></div>
-    <div class="table-wrap"><table><thead><tr><th>Ativo</th><th>Direção</th><th>Entrada</th><th>Situação</th><th>Resultado</th><th>Ação</th></tr></thead><tbody id="ordersBody"><tr><td colspan="6" class="empty">Carregando contratos...</td></tr></tbody></table></div>
+  <div class="section-heading"><div><div class="eyebrow">DADOS OFICIAIS</div><h1>Resultados NEXORA IA</h1><p>Acompanhe o histórico do robô dos últimos 3 dias. Horários de Brasília e resultados oficiais da Deriv.</p></div></div>
+  <div class="card"><div class="surface-heading">Histórico oficial — últimos 3 dias</div>
+    <div class="actions"><button class="outline" onclick="loadDemoOrders()">ATUALIZAR CONTRATOS</button><span class="helper" id="resultsLiveStatus" role="status">● Atualização automática a cada 3 segundos</span></div>
+    <div class="table-wrap"><table><thead><tr><th>Data (Brasília)</th><th>Horário</th><th>Conta</th><th>Ativo</th><th>Direção</th><th>Entrada</th><th>Etapa</th><th>Situação</th><th>WIN / LOSS</th><th>Resultado</th><th>Ação</th></tr></thead><tbody id="ordersBody"><tr><td colspan="11" class="empty">Carregando contratos...</td></tr></tbody></table></div>
   </div>
   <div class="card"><div class="surface-heading">Desempenho das estratégias</div>
     <p class="muted">Entradas automáticas oficiais na Deriv Demo, agrupadas pela estratégia de origem. Não são previsões de resultados futuros.</p>
@@ -491,7 +491,7 @@ button.choose-account:focus-visible{outline:3px solid #71d2ff;outline-offset:4px
 </div>
 <script>
 const $=id=>document.getElementById(id);
-let activePage='welcome',demoOrders=[],demoBalance=null,refreshTimer=null,lastRequestKey=null,robotRunning=false;
+let activePage='welcome',demoOrders=[],demoBalance=null,refreshTimer=null,resultsRefreshTimer=null,resultsRequestBusy=false,lastRequestKey=null,robotRunning=false;
 const money=(n,currency='USD')=>{const value=Number(n);return Number.isFinite(value)?value.toLocaleString('pt-BR',{style:'currency',currency:currency||'USD'}):'—'};
 const safe=(v)=>v===null||v===undefined?'—':String(v);
 let selectedAccountMode='demo';
@@ -577,7 +577,22 @@ async function saveOnboarding(event){
 }
 function page(v){for(const name of ['welcome','choose','realPreview','setup','dashboard','results','lab','settings','account'])$(name).classList.toggle('hidden',name!==v);activePage=v;const logged=!['welcome','choose'].includes(v);$('accountBadge').classList.toggle('hidden',!logged);$('menuButton').classList.toggle('hidden',!logged);document.querySelectorAll('.nav[data-view]').forEach(b=>b.classList.toggle('active',b.dataset.view===v))}
 function toggleMenu(open){$('drawer').classList.toggle('hidden',!open);$('menuOverlay').classList.toggle('hidden',!open);$('menuButton').setAttribute('aria-expanded',String(open))}
-function go(v){toggleMenu(false);page(v);window.scrollTo({top:0,behavior:'smooth'});if(v==='choose')loadVerifiedAccounts();if(v==='realPreview'){$('realPreviewStatus').textContent=detectedRealAccounts.length?'A Deriv identificou '+detectedRealAccounts.length+' conta(s) real(is) vinculada(s).':'Não foi possível confirmar uma conta real nesta autorização.';}if(v==='setup')loadOnboarding();if(v==='dashboard')refreshDashboard();if(v==='results'){loadDemoOrders();loadStrategyStats()}if(v==='lab')loadStrategyLab();if(v==='account')loadDemoBalance();if(v==='settings')loadSettings()}
+function updateResultsPolling(){
+ if(resultsRefreshTimer){clearInterval(resultsRefreshTimer);resultsRefreshTimer=null;}
+ if(activePage==='results'){
+   resultsRefreshTimer=setInterval(async()=>{
+     if(resultsRequestBusy)return;
+     resultsRequestBusy=true;
+     try{
+       await loadDemoOrders();
+       $('resultsLiveStatus').textContent='● Sincronização automática · 3 s · Deriv DEMO';
+     }catch(e){
+       $('resultsLiveStatus').textContent='○ Tentando sincronizar com a Deriv...';
+     }finally{resultsRequestBusy=false;}
+   },3000);
+ }
+}
+function go(v){toggleMenu(false);page(v);updateResultsPolling();window.scrollTo({top:0,behavior:'smooth'});if(v==='choose')loadVerifiedAccounts();if(v==='realPreview'){$('realPreviewStatus').textContent=detectedRealAccounts.length?'A Deriv identificou '+detectedRealAccounts.length+' conta(s) real(is) vinculada(s).':'Não foi possível confirmar uma conta real nesta autorização.';}if(v==='setup')loadOnboarding();if(v==='dashboard')refreshDashboard();if(v==='results'){loadDemoOrders();loadStrategyStats()}if(v==='lab')loadStrategyLab();if(v==='account')loadDemoBalance();if(v==='settings')loadSettings()}
 function fail(msg){$('error').textContent=msg||''}
 async function req(path,opts={}){const r=await fetch(path,{credentials:'same-origin',...opts});let data;try{data=await r.json()}catch{throw Error('Resposta inválida do servidor')}if(!r.ok)throw Error(data.detail||'Falha na conexão');return data}
 async function init(){try{const s=await req('/api/session');if(!s.authenticated){page('welcome');return}const justConnected=new URLSearchParams(window.location.search).get('login')==='ok';if(justConnected){window.history.replaceState({},'',window.location.pathname);const account=s.demo_accounts&&s.demo_accounts[0];$('demoInfo').textContent=account?'Conectada à Deriv · '+safe(account.account_id):'Conta conectada à Deriv';page('choose');applyAccountSelection();loadVerifiedAccounts()}else{page('dashboard');refreshDashboard()}refreshTimer=setInterval(()=>{if(activePage==='dashboard'||activePage==='results')refreshDashboard()},30000)}catch(e){fail(e.message);page('welcome')}}
@@ -653,8 +668,55 @@ async function loadDailyResult(){
    el.className='metric-value';
  }
 }
-async function loadDemoOrders(){try{const data=await req('/api/demo/orders');demoOrders=data.items||[];const last=demoOrders[0];$('lastOrder').textContent=last?last.symbol+' · '+last.direction+' · Entrada '+money(last.stake)+' · '+last.state+(last.pnl===null?' · Aguardando resultado':' · P/L '+money(last.pnl)):'Nenhum contrato oficial ainda.';renderOrders();return data}catch(e){$('ordersBody').innerHTML='<tr><td colspan="6" class="empty">Não foi possível carregar o histórico.</td></tr>';throw e}}
-function renderOrders(){const tbody=$('ordersBody');tbody.replaceChildren();if(!demoOrders.length){const tr=document.createElement('tr'),td=document.createElement('td');td.colSpan=6;td.className='empty';td.textContent='Nenhum contrato oficial registrado.';tr.append(td);tbody.append(tr);return}for(const o of demoOrders){const row=document.createElement('tr');for(const text of [o.symbol,o.direction,money(o.stake),o.state,o.pnl===null?'Pendente':money(o.pnl)]){const td=document.createElement('td');td.textContent=text;row.append(td)}const action=document.createElement('td');if(o.state==='CONFIRMED'&&o.contract_id){const b=document.createElement('button');b.className='outline';b.textContent='Conferir';b.onclick=()=>reconcile(o.id);action.append(b)}else if(o.state==='UNKNOWN'){action.textContent='Verificar na Deriv'}else action.textContent='—';row.append(action);tbody.append(row)}}
+async function loadDemoOrders(){try{const data=await req('/api/demo/orders');demoOrders=data.items||[];const last=demoOrders[0];$('lastOrder').textContent=last?last.symbol+' · '+last.direction+' · Entrada '+money(last.stake)+' · '+last.state+(last.pnl===null?' · Aguardando resultado':' · P/L '+money(last.pnl)):'Nenhum contrato oficial ainda.';renderOrders();return data}catch(e){$('ordersBody').innerHTML='<tr><td colspan="11" class="empty">Não foi possível carregar o histórico.</td></tr>';throw e}}
+const brasilDateTime=(iso)=>{
+ if(!iso)return ['—','—'];
+ const d=new Date(iso);
+ if(Number.isNaN(d.getTime()))return ['—','—'];
+ const date=new Intl.DateTimeFormat('pt-BR',{timeZone:'America/Sao_Paulo',day:'2-digit',month:'2-digit',year:'numeric'}).format(d);
+ const time=new Intl.DateTimeFormat('pt-BR',{timeZone:'America/Sao_Paulo',hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false}).format(d);
+ return [date,time];
+};
+function tradeStage(o){
+ const p=o.progression||{};
+ if(p.source==='manual')return 'Manual';
+ if(p.source!=='autopilot')return 'Não registrado';
+ if(p.cycle===null||p.cycle===undefined||p.martingale===null||p.martingale===undefined)return 'Não registrado';
+ const cycle=Number(p.cycle),gale=Number(p.martingale);
+ if(!Number.isInteger(cycle)||cycle<0||!Number.isInteger(gale)||gale<0)return 'Não registrado';
+ const prefix=cycle>0?'Ciclo '+cycle:'Ciclo inicial';
+ return prefix+' · '+(gale>0?'Martingale '+gale:'Entrada inicial');
+}
+function renderOrders(){
+ const tbody=$('ordersBody');tbody.replaceChildren();
+ if(!demoOrders.length){
+   const tr=document.createElement('tr'),td=document.createElement('td');
+   td.colSpan=11;td.className='empty';td.textContent='Nenhum contrato nos últimos 3 dias.';
+   tr.append(td);tbody.append(tr);return;
+ }
+ for(const o of demoOrders){
+   const row=document.createElement('tr');
+   const [date,time]=brasilDateTime(o.started_at_brasilia||o.created_at);
+   const result=o.outcome||'PENDING';
+   const outcome=result==='WIN'?'WIN':result==='LOSS'?'LOSS':result==='DRAW'?'EMPATE':result==='UNKNOWN'?'INDEFINIDO':'PENDENTE';
+   const columns=[date,time,o.account_mode==='demo'?'Treinamento':o.account_mode==='real'?'Real':'Não registrada',
+      o.symbol,o.direction,money(o.stake),tradeStage(o),o.state,outcome,
+      o.pnl===null?'Pendente':money(o.pnl)];
+   for(let i=0;i<columns.length;i++){
+     const td=document.createElement('td');td.textContent=columns[i];
+     if(i===8&&result==='WIN')td.className='positive';
+     if(i===8&&result==='LOSS')td.className='negative';
+     row.append(td);
+   }
+   const action=document.createElement('td');
+   if(o.state==='CONFIRMED'&&o.contract_id){
+     const b=document.createElement('button');b.className='outline';b.textContent='Conferir';
+     b.onclick=()=>reconcile(o.id);action.append(b);
+   }else if(o.state==='UNKNOWN')action.textContent='Verificar na Deriv';
+   else action.textContent='—';
+   row.append(action);tbody.append(row);
+ }
+}
 async function loadStrategyStats(){
   const tbody=$('strategyStats');
   try{
@@ -733,7 +795,7 @@ async function save(){
 async function testDemoBuy(){try{const s=await req('/api/status');if(!window.confirm('ATENÇÃO: COMPRA OFICIAL NA DERIV DEMO\n\nEsta ação enviará uma ordem CALL fixa de 5 minutos usando o saldo virtual e o valor definido nas configurações. Não é um sinal escolhido pelo AutoPilot. Você pode perder todo o valor da entrada.\n\nDeseja confirmar?'))return;const key='demo-'+Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,12);lastRequestKey=key;const order=await req('/api/demo/buy',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({symbol:s.symbol,direction:'CALL',minutes:5,confirm:'DEMO_ONLY',request_key:key})});$('demoTestInfo').textContent='Ordem #'+order.id+' · '+order.state+' · acompanhe em Resultados.';await loadDemoOrders();await loadDemoBalance();fail('')}catch(e){fail('Compra DEMO: '+e.message)}}
 async function loadAutopilotResearch(){try{const a=await req('/api/autopilot/research');const entries=a.candidates.map(c=>c.strategy.toUpperCase()+' '+c.direction+' — '+c.reason);$('autopilotResearch').textContent=a.symbol+' · '+a.samples+' cotações · '+(entries.join(' | ')||a.reason);fail('')}catch(e){$('autopilotResearch').textContent='Análise indisponível: '+e.message}}
 async function loadAutopilotDemoPreview(){try{const a=await req('/api/autopilot/demo-preview');if(!a.proposal){$('autopilotResearch').textContent=a.reason;return}const q=a.proposal;$('autopilotResearch').textContent=a.candidate.direction+' · proposta Deriv Demo '+money(q.ask_price,q.currency)+' · pagamento '+money(q.payout,q.currency)+' · cotação somente leitura';fail('')}catch(e){$('autopilotResearch').textContent='Proposta indisponível: '+e.message}}
-async function logout(){try{await req('/api/logout',{method:'POST'});if(refreshTimer)clearInterval(refreshTimer);toggleMenu(false);page('welcome');demoOrders=[];demoBalance=null;fail('')}catch(e){fail(e.message)}}
+async function logout(){try{await req('/api/logout',{method:'POST'});if(refreshTimer)clearInterval(refreshTimer);if(resultsRefreshTimer)clearInterval(resultsRefreshTimer);toggleMenu(false);page('welcome');demoOrders=[];demoBalance=null;fail('')}catch(e){fail(e.message)}}
 document.addEventListener('keydown',e=>{if(e.key==='Escape')toggleMenu(false)});
 init();
 </script>
