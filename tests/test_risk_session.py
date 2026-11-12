@@ -1,0 +1,74 @@
+"""Risk-session reset preserves official ledger and requires an idle, authenticated bot."""
+from app import db,main
+from test_demopilot import prepare,cleanup
+
+
+def _loss(session,uid,key):
+    session.add(db.DemoOrder(user_id=uid,request_key=key,
+        state='SETTLED',active_slot=None,symbol='1HZ100V',
+        direction='CALL',duration_minutes=5,stake='2.00',pnl='-2.00'))
+    session.commit()
+
+
+def test_reset_keeps_history_and_reopens_session_stop(tmp_path,monkeypatch):
+    client,factory,engine,uid=prepare(tmp_path,monkeypatch,stop_loss='2.00')
+    try:
+        with factory() as s:
+            _loss(s,uid,'loss-previous')
+        assert client.get('/api/autopilot/readiness').json()['ready'] is False
+        assert client.post('/api/demo/risk-session/reset',json={'confirm':'wrong'}).status_code==403
+        reset=client.post('/api/demo/risk-session/reset',
+            json={'confirm':'RESET_DEMO_RISK_SESSION'})
+        assert reset.status_code==200,reset.text
+        info=client.get('/api/demo/risk-session').json()
+        assert info['pnl']=='0.00'
+        assert info['after_order_id']==1
+        assert client.get('/api/autopilot/readiness').json()['ready'] is True
+        assert client.get('/api/demo/results/today').status_code==200
+        with factory() as s:
+            assert len(s.query(db.DemoOrder).all())==1
+            assert s.query(db.DemoOrder).first().pnl=='-2.00'
+            assert len(s.query(db.RiskSession).all())==1
+            _loss(s,uid,'loss-new-session')
+        assert client.get('/api/demo/risk-session').json()['pnl']=='-2.00'
+        assert client.get('/api/autopilot/readiness').json()['ready'] is False
+    finally:
+        cleanup(engine)
+
+
+def test_reset_refuses_open_contract_and_active_robot(tmp_path,monkeypatch):
+    client,factory,engine,uid=prepare(tmp_path,monkeypatch,stop_loss='2.00')
+    try:
+        with factory() as s:
+            s.add(db.DemoOrder(user_id=uid,request_key='waiting',
+                state='UNKNOWN',active_slot=uid,symbol='1HZ100V',
+                direction='PUT',duration_minutes=5,stake='2.00'))
+            s.commit()
+        blocked=client.post('/api/demo/risk-session/reset',
+            json={'confirm':'RESET_DEMO_RISK_SESSION'})
+        assert blocked.status_code==409
+        with factory() as s:
+            assert s.query(db.RiskSession).count()==0
+            pending=s.query(db.DemoOrder).first()
+            pending.state='SETTLED'
+            pending.pnl='-2.00'
+            pending.active_slot=None
+            s.commit()
+        main.autopilot_enabled.add(uid)
+        blocked=client.post('/api/demo/risk-session/reset',
+            json={'confirm':'RESET_DEMO_RISK_SESSION'})
+        assert blocked.status_code==409
+        main.autopilot_enabled.discard(uid)
+    finally:
+        cleanup(engine)
+
+
+def test_reset_requires_authentication(tmp_path,monkeypatch):
+    client,factory,engine,uid=prepare(tmp_path,monkeypatch)
+    try:
+        client.cookies.clear()
+        assert client.get('/api/demo/risk-session').status_code==401
+        assert client.post('/api/demo/risk-session/reset',
+            json={'confirm':'RESET_DEMO_RISK_SESSION'}).status_code==401
+    finally:
+        cleanup(engine)
