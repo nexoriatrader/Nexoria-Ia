@@ -120,11 +120,17 @@ def test_real_account_card_is_informational_and_cannot_trigger_orders():
     choose=html.split('<section id="choose"',1)[1].split('<section id="dashboard"',1)[0]
     assert 'role="group"' in choose
     assert 'aria-disabled="true"' in choose
-    assert 'EM PREPARAÇÃO' in choose
-    assert 'O envio de ordens reais ainda não está disponível' in choose
+    assert 'SALDO REAL' in choose
+    assert 'Seleção disponível quando a integração for habilitada' in choose
     assert 'onclick="selectDemoAccount()"' in choose
     assert '/api/demo/buy' not in choose
     assert '/api/autopilot/start' not in choose
-    assert 'A escolha da conta não liga o robô' in choose
+    assert 'Escolher uma conta não inicia o robô' in choose
     assert 'choose-accounts' in choose
+    assert 'A um passo do' in choose
+    assert 'Recomendamos utilizar o treinamento por algumas horas' in choose
+    assert 'id="chooseContinue"' in choose
+    assert 'onclick="continueAccount()"' in choose
+    assert 'aria-pressed="true"' in choose
+    assert 'disabled aria-disabled="true"' in choose
     assert '@media(max-width:700px)' in html
