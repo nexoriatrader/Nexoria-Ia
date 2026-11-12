@@ -403,6 +403,7 @@ button.choose-account:focus-visible{outline:3px solid #71d2ff;outline-offset:4px
     <div class="hero-top"><div class="hero-title">NEXORA AutoPilot</div><span id="robotState" class="hero-state">DESLIGADO</span></div>
     <p id="robotMessage" class="hero-copy">Preparando AutoPilot DEMO experimental. Uma posição por vez, com limites de risco configurados.</p>
     <button id="robotButton" class="hero-action" disabled aria-disabled="true" onclick="toggleRobot()">LIGAR ROBÔ</button>
+    <p id="robotStartNotice" class="helper" role="status" aria-live="polite"></p>
     <div class="helper">Apenas Deriv Demo. Estratégias em teste, sem garantia de acerto. Desligar bloqueia novas entradas, sem cancelar contratos já abertos.</div>
     <div class="info" id="feedState">Conferindo conexão de cotações...</div>
   </div>
@@ -580,7 +581,19 @@ function go(v){toggleMenu(false);page(v);window.scrollTo({top:0,behavior:'smooth
 function fail(msg){$('error').textContent=msg||''}
 async function req(path,opts={}){const r=await fetch(path,{credentials:'same-origin',...opts});let data;try{data=await r.json()}catch{throw Error('Resposta inválida do servidor')}if(!r.ok)throw Error(data.detail||'Falha na conexão');return data}
 async function init(){try{const s=await req('/api/session');if(!s.authenticated){page('welcome');return}const justConnected=new URLSearchParams(window.location.search).get('login')==='ok';if(justConnected){window.history.replaceState({},'',window.location.pathname);const account=s.demo_accounts&&s.demo_accounts[0];$('demoInfo').textContent=account?'Conectada à Deriv · '+safe(account.account_id):'Conta conectada à Deriv';page('choose');applyAccountSelection();loadVerifiedAccounts()}else{page('dashboard');refreshDashboard()}refreshTimer=setInterval(()=>{if(activePage==='dashboard'||activePage==='results')refreshDashboard()},30000)}catch(e){fail(e.message);page('welcome')}}
-async function refreshDashboard(){try{const [status]=await Promise.all([req('/api/status'),loadDemoBalance(),loadDemoOrders(),loadRealBalance(),loadDailyResult()]);$('feedState').textContent=(status.connected?'● Cotações conectadas':'○ Reconectando cotações')+' · '+safe(status.symbol);robotRunning=Boolean(status.running);const available=Boolean(status.auto_buy_enabled);$('robotState').textContent=robotRunning?'ATIVO':status.interrupted_after_restart?'INTERROMPIDO':available?'PRONTO':'INDISPONÍVEL';$('robotMessage').textContent=status.reason||'Aguardando oportunidades no mercado DEMO';$('robotButton').textContent=robotRunning?'DESLIGAR ROBÔ':'LIGAR ROBÔ';$('robotButton').disabled=!robotRunning&&!available;$('robotButton').setAttribute('aria-disabled',String($('robotButton').disabled));$('robotButton').style.background=robotRunning?'linear-gradient(135deg,#fa9b9d,#dc5269)':'';fail('')}catch(e){fail('Painel: '+e.message)}}
+async function loadAutopilotReadiness(){
+ const notice=$('robotStartNotice');
+ if(!notice)return;
+ try{
+   const info=await req('/api/autopilot/readiness');
+   notice.textContent=info.ready?'':('Para ligar o robô: '+info.reason);
+   notice.style.color=info.ready?'':'#ffcf89';
+ }catch(e){
+   notice.textContent='Não foi possível verificar o motivo do bloqueio: '+e.message;
+   notice.style.color='#ffcf89';
+ }
+}
+async function refreshDashboard(){try{const [status]=await Promise.all([req('/api/status'),loadDemoBalance(),loadDemoOrders(),loadRealBalance(),loadDailyResult(),loadAutopilotReadiness()]);$('feedState').textContent=(status.connected?'● Cotações conectadas':'○ Reconectando cotações')+' · '+safe(status.symbol);robotRunning=Boolean(status.running);const available=Boolean(status.auto_buy_enabled);$('robotState').textContent=robotRunning?'ATIVO':status.interrupted_after_restart?'INTERROMPIDO':available?'PRONTO':'INDISPONÍVEL';$('robotMessage').textContent=status.reason||'Aguardando oportunidades no mercado DEMO';$('robotButton').textContent=robotRunning?'DESLIGAR ROBÔ':'LIGAR ROBÔ';$('robotButton').disabled=!robotRunning&&!available;$('robotButton').setAttribute('aria-disabled',String($('robotButton').disabled));$('robotButton').style.background=robotRunning?'linear-gradient(135deg,#fa9b9d,#dc5269)':'';fail('')}catch(e){fail('Painel: '+e.message)}}
 async function toggleRobot(){
   try{
     $('robotButton').disabled=true;
@@ -593,7 +606,13 @@ async function toggleRobot(){
       await req('/api/autopilot/start',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({confirm:'START_DEMO_AUTOPILOT'})});
     }
     await refreshDashboard();
-  }catch(e){fail('AutoPilot: '+e.message);await refreshDashboard().catch(()=>{});}
+  }catch(e){
+    const reason='Não foi possível ligar o robô: '+e.message;
+    await refreshDashboard().catch(()=>{});
+    $('robotStartNotice').textContent=reason;
+    $('robotStartNotice').style.color='#ffcf89';
+    fail(reason);
+  }
 }
 async function loadRealBalance(){
  const value=$('realBalanceMetric'),reason=$('realBalanceReason');
