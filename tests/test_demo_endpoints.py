@@ -237,6 +237,6 @@ def test_health_reports_current_version_and_real_orders_disabled(api, monkeypatc
     response=client.get("/healthz")
 
     assert response.status_code==200
-    assert response.json()["version"]=="0.5.2"
-    assert response.json()["execution"]=="PAPER_ONLY"
+    assert response.json()["version"]==main.VERSION
+    assert response.json()["execution"]=="DERIV_DEMO_ONLY"
     assert response.json()["real_orders_enabled"] is False
