@@ -138,6 +138,7 @@ button.choose-account:focus-visible{outline:3px solid #71d2ff;outline-offset:4px
 .setup-numeric,.setup-panel input[type=text]{width:100%;height:50px;border:1px solid #42617a;background:#081a2b;color:#f3f8ff;border-radius:12px;padding:0 13px;font-weight:750}
 .setup-panel input[type=text]:focus-visible{outline:2px solid #73d0e9}
 .setup-fieldhelp{display:block;font-size:11px;color:#91adc0;margin:6px 0 0;line-height:1.4}
+.balance-real{border-color:#5c4e34;background:linear-gradient(145deg,#1a2936,#141c2b)}.balance-real .metric-label{color:#f1d499}.balance-real .metric-sub{line-height:1.5}
 /* Third onboarding screen: same NEXORA premium navy/gold design. */
 .robot-setup{position:relative;isolation:isolate;max-width:1040px;margin:0 auto;padding:39px 0 16px}
 .setup-aura{position:absolute;z-index:-1;pointer-events:none;inset:0 0 auto;height:390px;background:radial-gradient(ellipse at 55% 0%,#2783ae26,transparent 69%)}
@@ -406,7 +407,8 @@ button.choose-account:focus-visible{outline:3px solid #71d2ff;outline-offset:4px
     <div class="info" id="feedState">Conferindo conexão de cotações...</div>
   </div>
   <div class="metric-grid">
-    <div class="card metric"><div class="metric-label">Saldo Deriv Demo</div><div class="metric-value" id="balanceMetric">—</div><div class="metric-sub">Saldo oficial</div></div>
+    <div class="card metric"><div class="metric-label">Saldo Treinamento</div><div class="metric-value" id="balanceMetric">—</div><div class="metric-sub">Saldo virtual oficial · Deriv</div></div>
+    <div class="card metric balance-real"><div class="metric-label">Saldo Conta Real</div><div class="metric-value" id="realBalanceMetric">—</div><div class="metric-sub" id="realBalanceReason">Verificando saldo oficial · Deriv</div></div>
     <div class="card metric"><div class="metric-label">Resultado acumulado</div><div class="metric-value" id="profitMetric">—</div><div class="metric-sub">Somente contratos liquidados</div></div>
     <div class="card metric"><div class="metric-label">Vitórias / Derrotas</div><div class="metric-value" id="scoreMetric">— / —</div><div class="metric-sub">Histórico Deriv Demo</div></div>
   </div>
@@ -579,7 +581,7 @@ function go(v){toggleMenu(false);page(v);window.scrollTo({top:0,behavior:'smooth
 function fail(msg){$('error').textContent=msg||''}
 async function req(path,opts={}){const r=await fetch(path,{credentials:'same-origin',...opts});let data;try{data=await r.json()}catch{throw Error('Resposta inválida do servidor')}if(!r.ok)throw Error(data.detail||'Falha na conexão');return data}
 async function init(){try{const s=await req('/api/session');if(!s.authenticated){page('welcome');return}const justConnected=new URLSearchParams(window.location.search).get('login')==='ok';if(justConnected){window.history.replaceState({},'',window.location.pathname);const account=s.demo_accounts&&s.demo_accounts[0];$('demoInfo').textContent=account?'Conectada à Deriv · '+safe(account.account_id):'Conta conectada à Deriv';page('choose');applyAccountSelection();loadVerifiedAccounts()}else{page('dashboard');refreshDashboard()}refreshTimer=setInterval(()=>{if(activePage==='dashboard'||activePage==='results')refreshDashboard()},30000)}catch(e){fail(e.message);page('welcome')}}
-async function refreshDashboard(){try{const [status]=await Promise.all([req('/api/status'),loadDemoBalance(),loadDemoOrders()]);$('feedState').textContent=(status.connected?'● Cotações conectadas':'○ Reconectando cotações')+' · '+safe(status.symbol);robotRunning=Boolean(status.running);const available=Boolean(status.auto_buy_enabled);$('robotState').textContent=robotRunning?'ATIVO':status.interrupted_after_restart?'INTERROMPIDO':available?'PRONTO':'INDISPONÍVEL';$('robotMessage').textContent=status.reason||'Aguardando oportunidades no mercado DEMO';$('robotButton').textContent=robotRunning?'DESLIGAR ROBÔ':'LIGAR ROBÔ';$('robotButton').disabled=!robotRunning&&!available;$('robotButton').setAttribute('aria-disabled',String($('robotButton').disabled));$('robotButton').style.background=robotRunning?'linear-gradient(135deg,#fa9b9d,#dc5269)':'';fail('')}catch(e){fail('Painel: '+e.message)}}
+async function refreshDashboard(){try{const [status]=await Promise.all([req('/api/status'),loadDemoBalance(),loadDemoOrders(),loadRealBalance()]);$('feedState').textContent=(status.connected?'● Cotações conectadas':'○ Reconectando cotações')+' · '+safe(status.symbol);robotRunning=Boolean(status.running);const available=Boolean(status.auto_buy_enabled);$('robotState').textContent=robotRunning?'ATIVO':status.interrupted_after_restart?'INTERROMPIDO':available?'PRONTO':'INDISPONÍVEL';$('robotMessage').textContent=status.reason||'Aguardando oportunidades no mercado DEMO';$('robotButton').textContent=robotRunning?'DESLIGAR ROBÔ':'LIGAR ROBÔ';$('robotButton').disabled=!robotRunning&&!available;$('robotButton').setAttribute('aria-disabled',String($('robotButton').disabled));$('robotButton').style.background=robotRunning?'linear-gradient(135deg,#fa9b9d,#dc5269)':'';fail('')}catch(e){fail('Painel: '+e.message)}}
 async function toggleRobot(){
   try{
     $('robotButton').disabled=true;
@@ -593,6 +595,23 @@ async function toggleRobot(){
     }
     await refreshDashboard();
   }catch(e){fail('AutoPilot: '+e.message);await refreshDashboard().catch(()=>{});}
+}
+async function loadRealBalance(){
+ const value=$('realBalanceMetric'),reason=$('realBalanceReason');
+ if(!value||!reason)return;
+ try{
+   const result=await req('/api/real/balance');
+   if(result.available&&result.balance!==null&&result.currency){
+      value.textContent=money(result.balance,result.currency);
+      reason.textContent='Saldo oficial · Deriv · '+safe(result.account_id);
+   }else{
+      value.textContent='—';
+      reason.textContent=result.reason||'Saldo real não disponível';
+   }
+ }catch(e){
+   value.textContent='—';
+   reason.textContent='Não foi possível atualizar o saldo real';
+ }
 }
 async function loadDemoBalance(){try{const b=await req('/api/demo/balance');demoBalance=b;$('balanceMetric').textContent=money(b.balance,b.currency);$('accountBalance').textContent=money(b.balance,b.currency);return b}catch(e){$('balanceMetric').textContent='Indisponível';$('accountBalance').textContent='Indisponível';throw e}}
 function summarizeOrders(items){const settled=items.filter(o=>o.state==='SETTLED'&&Number.isFinite(Number(o.pnl)));const pnl=settled.reduce((sum,o)=>sum+Number(o.pnl),0);const won=settled.filter(o=>Number(o.pnl)>0).length;const lost=settled.filter(o=>Number(o.pnl)<=0).length;return {pnl,won,lost}}

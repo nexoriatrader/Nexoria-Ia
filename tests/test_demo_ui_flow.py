@@ -13,7 +13,8 @@ def test_demo_interface_has_confirmed_manual_test_and_official_balance():
     assert "request_key:key" in html
     assert "/api/demo/buy" in html
     assert "/api/demo/balance" in html
-    assert "Saldo Deriv Demo" in html
+    assert "Saldo Treinamento" in html
+    assert "Saldo Conta Real" in html
 
 
 def test_official_contract_history_replaces_local_simulator():

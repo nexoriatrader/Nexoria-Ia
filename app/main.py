@@ -528,6 +528,41 @@ async def available_accounts(request:Request,nexora_sid:str|None=Cookie(default=
             'execution':'DERIV_DEMO_ONLY'}
 
 
+@app.get('/api/real/balance')
+async def real_balance_route(request:Request,nexora_sid:str|None=Cookie(default=None)):
+    """Read-only real Options account balance, never authorizes purchases.
+
+    A balance is shown only if the Deriv account-list response itself contains
+    a validated monetary amount for an explicitly real-typed account.
+    """
+    user,token=active_session(request,nexora_sid)
+    try:
+        async with httpx.AsyncClient(timeout=15) as client:
+            response=await client.get('https://api.derivws.com/trading/v1/options/accounts',
+                headers={'Authorization':f'Bearer {token}'})
+            response.raise_for_status()
+            payload=response.json()
+    except (httpx.HTTPError,ValueError):
+        raise HTTPException(502,'Não foi possível consultar as contas reais na Deriv') from None
+    from .auth_helpers import extract_accounts,real_balance
+    entry=real_balance(extract_accounts(payload))
+    if entry is None:
+        return {'available':False,'balance':None,'currency':None,'account_id':None,
+                'reason':'Nenhuma conta real vinculada foi identificada'}
+    if not entry['available']:
+        # Account discovery does not always include a balance. Ask the
+        # authenticated real Options channel for READ-ONLY balance only.
+        from .real_readonly import RealBalanceError,fetch_real_balance
+        try:
+            return await fetch_real_balance(token,entry['account_id'])
+        except RealBalanceError:
+            return {'available':False,'balance':None,'currency':entry['currency'] or None,
+                    'account_id':entry['account_id'],
+                    'reason':'Conta real identificada; não foi possível consultar o saldo'}
+    return {'available':True,'balance':entry['balance'],'currency':entry['currency'],
+            'account_id':entry['account_id'],'reason':None}
+
+
 @app.post('/api/logout')
 async def logout(request:Request,nexora_sid:str|None=Cookie(default=None)):
     if nexora_sid:
