@@ -1,0 +1,13 @@
+{
+  "github_repository": "https://github.com/nexoriatrader/Nexoria-Ia",
+  "supabase_dashboard": "https://supabase.com/dashboard/project/xpkulrzwkecnwvxzymyq",
+  "supabase_project_ref": "xpkulrzwkecnwvxzymyq",
+  "render_service_dashboard": "https://dashboard.render.com/web/srv-dbqd9rdg1s2s73e0difg",
+  "render_service_id": "srv-dbqd9rdg1s2s73e0difg",
+  "render_public_url": "https://nexoria-ia.onrender.com",
+  "deriv_developer_portal": "https://developers.deriv.com/",
+  "deriv_client_id": "34VU8L3LDiaENrDGVjqQP",
+  "deriv_redirect_local": "http://localhost:8000/auth/deriv/callback",
+  "deriv_redirect_public": "https://nexoria-ia.onrender.com/auth/deriv/callback",
+  "deriv_affiliate_url": "OMITIDO_NO_BACKUP_PUBLICO"
+}

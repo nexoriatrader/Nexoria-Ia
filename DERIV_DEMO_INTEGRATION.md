@@ -1,36 +1,51 @@
-# Integração Deriv Demo — Fase 2
+# Integração Deriv Demo — v0.5.2
 
-## Escopo desta fase
+## Escopo
 
-A aplicação obtém o canal autenticado da conta demonstrativa por OTP, consulta uma `proposal` oficial e já possui compra demo protegida por confirmação explícita. Nenhuma operação real é aceita.
+A integração autentica somente uma conta identificada como demo/virtual. Ela consulta saldo e moeda oficiais, faz proposal read-only e permite uma compra manual na conta demonstrativa quando `NEXORA_DEMO_BUY_ENABLED=true`. Nenhum caminho de compra real existe. O botão `LIGAR SIMULAÇÃO` é paper trading local; AutoPilot Deriv Demo permanece desabilitado.
 
-O cliente rejeita qualquer OTP que não contenha explicitamente `/trading/v1/options/ws/demo`. URLs do canal real são bloqueadas antes da abertura do WebSocket.
+## Fluxos implementados
 
-## Fluxo implementado
+1. O usuário entra por OAuth 2.0 + PKCE. A aplicação não cria sessão se não identificar explicitamente uma conta demo.
+2. O servidor obtém OTP para a conta associada à sessão e aceita apenas `wss://api.derivws.com/trading/v1/options/ws/demo` com um único parâmetro OTP não vazio.
+3. Pelo canal demo, o backend consulta saldo/moeda; proposal usa a moeda retornada pelo saldo oficial.
+4. A compra requer modo demo, flag habilitada, confirmação da interface e uma reserva idempotente persistida antes da chamada à Deriv.
+5. O ledger permite no máximo um contrato pendente/ativo por conta. P/L é gravado apenas depois que a Deriv informa contrato vendido/liquidado e lucro/prejuízo finito.
+6. Um reconciliador em background consulta contratos já confirmados. A rotina é somente leitura e nunca compra.
+7. Ordem em estado `UNKNOWN` não é repetida. Se não houver `contract_id`, a aplicação não consegue identificar com segurança qual contrato da conta corresponde à tentativa; o slot fica bloqueado para revisão manual com a Deriv.
 
-1. O usuário autentica por OAuth no NEXORA IA.
-2. O servidor recupera o token OAuth criptografado da sessão e a conta demo identificada.
-3. O servidor chama `POST /trading/v1/options/accounts/{account_id}/otp`.
-4. O servidor valida que o OTP aponta para o endpoint WebSocket demo.
-5. O servidor consulta `proposal` no WebSocket autenticado.
-6. A consulta informa `demo_only: true` e `bought: false`.
-7. A compra demo exige o marcador explícito `DEMO_ONLY` e retorna o identificador do contrato.
-8. O status do contrato é consultado por `proposal_open_contract`, sem alterar a posição.
+## Rotas internas
 
-## Endpoint interno
+- `GET /api/demo/capabilities`: estado da flag e indicação explícita de que compras reais e AutoPilot estão desabilitados.
+- `GET /api/demo/balance`: consulta read-only de saldo/moeda no canal autenticado demo.
+- `POST /api/demo/proposal`: proposta oficial, sem compra.
+- `POST /api/demo/buy`: tentativa manual demo com stake configurado, chave idempotente e reserva antes da chamada externa.
+- `GET /api/demo/orders`: ledger de pedidos oficiais demo.
+- `POST /api/demo/orders/{id}/reconcile`: consulta status/liquidação de contrato confirmado.
+- `GET /api/demo/contract/{contract_id}`: status read-only de contrato pertencente à conta autenticada.
 
-`POST /api/demo/proposal` exige sessão autenticada e aceita `symbol`, `direction` (`CALL` ou `PUT`) e `minutes` (`1`, `3` ou `5`). O stake é obtido da configuração do usuário, não de um valor arbitrário do navegador.
+A confirmação por `window.confirm()` é uma barreira de interface. O marcador do endpoint não prova, por si só, que uma pessoa clicou no diálogo; portanto, proteja a sessão autenticada e não exponha o serviço a usuários externos antes de uma revisão de CSRF/autorização.
 
-`POST /api/demo/buy` exige a confirmação literal `DEMO_ONLY` e só pode abrir contrato no WebSocket `/ws/demo`. `GET /api/demo/contract/{contract_id}` consulta o status mais recente do contrato demo.
+## Configuração
 
-## Segurança
+- `NEXORA_DEMO_BUY_ENABLED` permanece `false` por padrão.
+- Defina `true` apenas no ambiente de validação depois de conferir conta Demo autenticada, PostgreSQL persistente, sessão criptografada e limites.
+- Martingale está bloqueado para compras demo.
+- Nunca configure compra real. O endpoint OTP e o cliente WebSocket validam que o canal retornado é o demo.
 
-O módulo rejeita qualquer canal que não seja demo. Os testes verificam a confirmação obrigatória, a mensagem `proposal: 1`, a compra somente no canal demo e a ausência de execução quando a confirmação não é fornecida. Não existe endpoint equivalente para conta real; o modo real continua bloqueado pela aplicação.
+## Validação automatizada e pendências
 
-## Referências oficiais
+A suíte local usa mocks; não prova conectividade Deriv. O teste supervisionado ainda precisa demonstrar, na conta demo autenticada, saldo, proposal, confirmação manual, buy, contrato confirmado, liquidação e P/L oficial no painel/histórico. AutoPilot não deve ser ligado antes desse ciclo.
 
-- [Deriv Workflows](https://developers.deriv.com/docs/workflows/): OTP, WebSocket autenticado demo e fluxo proposal/buy/open contract.
-- [WebSocket Demo Endpoint](https://developers.deriv.com/docs/options/ws-demo/): endpoint `/trading/v1/options/ws/demo` e autenticação por OTP.
-- [Price Proposal](https://developers.deriv.com/docs/trading/proposal/): parâmetros oficiais de `proposal`.
-- [Buy Contract](https://developers.deriv.com/docs/trading/buy/): parâmetros oficiais usados no fluxo demo protegido.
-- [Open Contract Status](https://developers.deriv.com/docs/trading/proposal-open-contract/): acompanhamento oficial do contrato demo.
+Casos `UNKNOWN` sem `contract_id` ficam fail-closed e precisam de procedimento manual; não existe recuperação automatizada segura para eles nesta versão. A URL Render pública consultada ainda respondia v0.4 e não expunha as rotas novas; publique e verifique o artefato v0.5.2 antes do teste demo.
+
+## Documentação oficial
+
+- [OAuth 2.0](https://developers.deriv.com/docs/intro/oauth/)
+- [Options Setup e endpoints de contas/OTP](https://developers.deriv.com/docs/options/)
+- [WebSocket Demo](https://developers.deriv.com/docs/options/ws-demo/)
+- [WebSockets/OTP](https://developers.deriv.com/docs/options/websocket/)
+- [Workflow completo](https://developers.deriv.com/docs/workflows/)
+- [Proposal](https://developers.deriv.com/docs/trading/proposal/)
+- [Buy](https://developers.deriv.com/docs/trading/buy/)
+- [Open Contract Status](https://developers.deriv.com/docs/trading/proposal-open-contract/)

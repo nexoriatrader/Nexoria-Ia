@@ -59,3 +59,29 @@ class PaperTrade(Base):
 
 
 def init_db(): Base.metadata.create_all(engine)
+
+
+class DemoOrder(Base):
+    """Durable demo-only order ledger. An active slot is unique per user, even across workers.
+
+    Never reuse an unknown slot without broker reconciliation. NULL active_slot allows
+    multiple settled orders on Postgres and SQLite.
+    """
+    __tablename__ = 'demo_orders'
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey('users.id'), nullable=False, index=True)
+    request_key = Column(String(64), nullable=False)
+    active_slot = Column(Integer, unique=True, nullable=True)
+    state = Column(String(16), nullable=False, default='PENDING')
+    contract_id = Column(String(100), nullable=True, unique=True)
+    symbol = Column(String(50), nullable=False)
+    direction = Column(String(10), nullable=False)
+    duration_minutes = Column(Integer, nullable=False)
+    stake = Column(String(20), nullable=False)
+    buy_price = Column(String(20), nullable=True)
+    pnl = Column(String(30), nullable=True)
+    broker_status = Column(String(40), nullable=True)
+    error_summary = Column(String(255), nullable=True)
+    created_at = Column(DateTime(timezone=True), default=utcnow, nullable=False)
+    updated_at = Column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
+    __table_args__ = (UniqueConstraint('user_id', 'request_key', name='uq_demo_order_request'),)

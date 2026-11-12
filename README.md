@@ -1,85 +1,56 @@
-# NEXORA IA v0.4 — fundação para GitHub, Render e Supabase
+# NEXORA IA v0.5.2 — validação supervisionada Deriv Demo
 
-Este projeto evolui a v0.3 para um **ambiente de desenvolvimento/testes multiusuário**.
+NEXORA IA é um protótipo de teste com dois fluxos separados: simulação local baseada em cotações públicas e contratos supervisionados exclusivamente na conta Deriv Demo. Não há compra, rota WebSocket ou credencial de conta real no executor.
 
-## Estado real das funcionalidades
+## Estado do pacote
 
-- ✅ OAuth 2.0 + PKCE, login via Deriv e cookies HttpOnly; App ID público parametrizado.
-- ✅ Tabela de usuários vinculados a conta **explicitamente identificada como demo** (falha fechado caso estrutura não seja reconhecida).
-- ✅ Configurações individuais persistidas em PostgreSQL (Supabase) ou SQLite (apenas desenvolvimento local).
-- ✅ Histórico de **operações virtuais** persistido e segregado por usuário.
-- ✅ Leitura pública de cotações e pesquisa read-only de contratos e propostas via Deriv.
-- ✅ Botão ligar/desligar com motor de simulação isolado por conta; robôs voltam **desligados** após reinício.
-- ✅ Sem endpoints `buy`, `sell`, `proposal_open_contract` nem acesso a dinheiro real.
-- ⚠️ OAuth e integração de dados ainda não foram testados com uma conta Deriv real neste ambiente.
-- ⚠️ O simulador NÃO usa payout oficial: continua com pagamento **hipotético de 80%**, e não simula spread/latência/execução. Não representa resultados em conta demo Deriv.
-- ⚠️ O login persiste, mas quando o token Deriv expira é preciso reconectar. Não há refresh token na OAuth Deriv.
-- ⚠️ Em `Render Free`, processos hibernam e reiniciam. Este protótipo NÃO é infraestrutura adequada para negociar dinheiro real ou controlar ordens reais.
+- OAuth 2.0 + PKCE; a aplicação só abre sessão quando identifica uma conta demonstrativa/virtual.
+- Saldo/moeda oficiais podem ser consultados no canal autenticado demo. Propostas oficiais são read-only.
+- O botão `TESTAR COMPRA DEMO` pede confirmação na interface. O backend exige a flag do servidor, modo demo e reserva persistente/idempotente antes da chamada remota.
+- Há no máximo um contrato pendente/ativo por usuário. Stop Win/Stop Loss bloqueiam novas entradas de acordo com o P/L liquidado da Deriv. Martingale está bloqueado.
+- Contratos confirmados são consultados novamente em background e o P/L só é persistido quando a Deriv informa a liquidação.
+- O botão `LIGAR SIMULAÇÃO` controla somente o simulador local; não inicia AutoPilot na Deriv. AutoPilot demo permanece desabilitado até a validação manual ponta a ponta.
+- A compra demo fica desligada por padrão (`NEXORA_DEMO_BUY_ENABLED=false`). A flag pode ser habilitada apenas no ambiente de teste, depois de confirmar conta demo, banco persistente e guardas.
+- Um resultado `UNKNOWN` sem `contract_id` bloqueia novas compras. A recuperação automática desse caso ainda depende de reconciliação manual com a Deriv; nunca repetir a compra às cegas.
 
-## Execução local
+A confirmação visual é apresentada a cada compra manual, mas é uma proteção de interface, não uma prova criptográfica de gesto humano: uma chamada direta autenticada à API pode contornar o diálogo do navegador. Mantenha o acesso à sessão restrito e use somente a conta virtual.
 
-Python 3.11+:
+## Testes locais
+
+Python 3.11 ou superior:
 
 ```bash
 python -m venv .venv
-# Linux/macOS: source .venv/bin/activate
-# Windows: .venv\\Scripts\\activate
-pip install -r requirements.txt
-```
-
-**Configure as variáveis de ambiente** copiando `.env.example` para `.env` e carregando-as no shell/ambiente de desenvolvimento (a aplicação não carrega `.env` automaticamente). Gere a chave:
-
-```bash
-python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
-```
-
-Coloque o resultado em `NEXORA_FERNET_KEY` como variável secreta. Não envie nem publique essa chave.
-
-```bash
-uvicorn app.main:app --host 127.0.0.1 --port 8000
-```
-
-Abra `http://localhost:8000` no mesmo computador que roda o servidor. O callback cadastrado na Deriv é `http://localhost:8000/auth/deriv/callback`.
-
-## Publicar na Render com Supabase (quando estiver preparado)
-
-1. Crie projeto **privado** GitHub e envie o conteúdo desta pasta, nunca `.env` nem credenciais.
-2. Crie Supabase Postgres e obtenha a URI de conexão PostgreSQL **do servidor**, mantendo credenciais secretas. Para Render, use o endpoint compatível com a conectividade disponível (pooler/session, conforme o painel Supabase). O código usa driver `psycopg`.
-3. Use o `render.yaml` (Blueprint). Configure `DATABASE_URL`, `NEXORA_FERNET_KEY`, `NEXORA_PUBLIC_URL=https://SEU-SERVICO.onrender.com` e `DERIV_REDIRECT_URI=https://SEU-SERVICO.onrender.com/auth/deriv/callback` no painel Render.
-4. **Antes de testar o OAuth publicado**, adicione exatamente essa URL HTTPS de callback às Redirect URLs do app registrado na Deriv. Não é suficiente manter o antigo `localhost`.
-5. Instância única (`--workers 1`) e modo de teste. Migrações de esquema ainda não estão implementadas; `create_all` apenas cria tabelas ausentes.
-6. Banco Supabase deve ter projeto ativo: limites e políticas de suspensão do plano grátis podem mudar.
-
-### Importante sobre os dados e segurança
-
-- Tokens OAuth são criptografados com Fernet antes de persistidos; chaves de criptografia ficam somente em variável secreta do servidor. Não rotacione a chave sem plano de migração.
-- Cookies são `Secure` em `NEXORA_PUBLIC_URL` HTTPS e HttpOnly. POSTs feitos pelo navegador são validados quanto à origem quando houver cabeçalho `Origin`; endurecer proteção CSRF e autenticação antes de produção.
-- A aplicação identifica usuários pela conta demo retornada. É preciso validar o esquema exato das respostas da Deriv em uma integração efetiva; **não presumir que contas de mesma pessoa têm o mesmo ID**.
-- A simulação opera exclusivamente sobre preços públicos de **um símbolo**, não é um AutoPilot multiativo validado. A estratégia de médias móveis é experimental e sem vantagem comprovada.
-- Sem engine durável de tarefas: um restart interrompe/cancela operações virtuais abertas; histórico só registra operações virtuais concluídas. É um protótipo, não um executor resiliente de contratos.
-- `GET /healthz` é apenas health-check; não ping para garantir operação contínua. Um plano gratuito pode dormir ou reiniciar independentemente do monitoramento.
-- **Não habilite modo real**, tráfego comercial ou captação de clientes brasileiros da Deriv sem avaliação de compatibilidade com as regras da corretora e restrições da CVM.
-
-## Testes
-
-```bash
+source .venv/bin/activate  # Windows: .venv\\Scripts\\activate
+pip install -r requirements.txt pytest
 python -m pytest -q
 ```
 
-## Próximas etapas para o Manus
+Os testes usam mocks e não enviam ordens à Deriv. Para executar localmente, configure as variáveis de ambiente copiando `.env.example` e gere uma chave Fernet:
 
-1. Validar OAuth no Render e formato da API atual, com mocks e conta de teste autorizada.
-2. Implementar migrações Alembic, sessão anti-CSRF robusta, logging/auditoria e rate limits.
-3. Implementar executor **exclusivamente demo**, segregado por conta: obter URL OTP demo, `proposal`, `buy`, `proposal_open_contract`, reconciliação pós-restart, limites por conta, idempotência, monitoramento e alarmes. **Jamais usar endpoint real**.
-4. Substituir resultados hipotéticos por preços e liquidações oficiais, testar em conta demo e fazer backtest correto (dados fora da amostra, custos, payout, horários).
-5. Só então avaliar versão comercial e assinaturas com análise regulatória.
+```bash
+python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+uvicorn app.main:app --host 127.0.0.1 --port 8000
+```
 
-## Links
-- OAuth/PKCE: https://developers.deriv.com/docs/intro/oauth/
-- API REST e WebSocket: https://developers.deriv.com/docs/intro/api-overview/
-- Render grátis: https://render.com/docs/free
+Não coloque `.env`, tokens OAuth, URI de banco ou chave Fernet no Git. O SQLite só é permitido para desenvolvimento local; uma implantação pública requer PostgreSQL persistente.
 
+## Implantação e configuração demo
 
-## Endereços confirmados para implantação com Manus
+Use o serviço Render já existente e a base Postgres do Supabase. Configure `DATABASE_URL`, `NEXORA_FERNET_KEY`, `NEXORA_PUBLIC_URL`, `DERIV_REDIRECT_URI` e `DERIV_CLIENT_ID` exclusivamente nos campos de segredo/configuração do Render. O callback HTTPS precisa corresponder exatamente à URL registrada na Deriv. Mantenha uma única instância/worker.
 
-Consulte `INFRAESTRUTURA_MANUS.md` e `PROJECT_ENDPOINTS.json` para o GitHub, Supabase, Render e Deriv já criados pelo responsável. Não confunda URL do dashboard Render com URL pública da aplicação.
+Só habilite `NEXORA_DEMO_BUY_ENABLED=true` no ambiente de validação depois de confirmar que o serviço está usando banco persistente, conta demo autenticada e controles ativos. Nenhum segredo deve ser colocado no repositório. Não habilite conta real.
+
+A URL pública indicada ainda respondia como versão 0.4 durante a inspeção. O artefato local atualizado é v0.5.2 e ainda precisa ser publicado antes da validação ponta a ponta. O pacote não comprova OAuth, compra, liquidação ou histórico oficial até que isso seja observado na conta Demo autenticada.
+
+## Limitações
+
+A simulação local e o histórico Deriv Demo são fontes distintas. A simulação usa regras experimentais e não demonstra rentabilidade. O serviço de teste não é infraestrutura para dinheiro real; planos que hibernam/reiniciam podem atrasar as consultas de liquidação. Tokens Deriv expiram e exigem reconexão. Não existe AutoPilot demo habilitado neste pacote.
+
+## Documentação oficial consultada
+
+- [OAuth 2.0 Deriv](https://developers.deriv.com/docs/intro/oauth/)
+- [Options Setup e OTP](https://developers.deriv.com/docs/options/)
+- [WebSocket Demo](https://developers.deriv.com/docs/options/ws-demo/)
+- [Fluxo completo](https://developers.deriv.com/docs/workflows/)
+- [Proposal](https://developers.deriv.com/docs/trading/proposal/), [Buy](https://developers.deriv.com/docs/trading/buy/) e [Open Contract Status](https://developers.deriv.com/docs/trading/proposal-open-contract/)

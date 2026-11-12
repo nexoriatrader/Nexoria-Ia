@@ -1,3 +1,5 @@
+> **ATUALIZAÇÃO DE PRIORIDADE (v0.5.1):** Leia `PROMPT_MANUS_DEMO_SEM_BLOQUEIOS_DESNECESSARIOS.md` antes de executar este documento. A conta Deriv DEMO pode e deve ser usada para compras supervisionadas com dinheiro virtual, habilitando `NEXORA_DEMO_BUY_ENABLED=true` no ambiente de teste após revisar controles. Isso NÃO autoriza dinheiro real.
+
 # INSTRUÇÕES PARA O MANUS — NEXORA IA
 
 ## Contexto
