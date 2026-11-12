@@ -159,3 +159,12 @@ def test_network_failure_does_not_claim_autopilot_start_failed():
     assert "status.running!==wasRunning" in html
     assert "Não foi possível confirmar a " in html
     assert "await req(wasRunning?'/api/autopilot/stop':'/api/autopilot/start'" in html
+
+
+def test_dashboard_drops_stale_status_responses_and_locks_pending_command():
+    html=load_ui()
+    assert "let dashboardStatusSequence=0;" in html
+    assert "const sequence=++dashboardStatusSequence;" in html
+    assert "if(sequence!==dashboardStatusSequence)return null;" in html
+    assert "dataset.commandPending==='true'" in html
+    assert "button.dataset.commandPending='false'" in html
