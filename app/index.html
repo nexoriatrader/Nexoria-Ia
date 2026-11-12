@@ -319,7 +319,7 @@ button.choose-account:focus-visible{outline:3px solid #71d2ff;outline-offset:4px
       <span class="choose-account-top"><span class="choose-symbol choose-symbol-real" aria-hidden="true">◇</span><span class="choose-account-tag choose-account-tag-muted">SALDO REAL</span></span>
       <span class="choose-account-name">Conta real</span>
       <span class="choose-account-desc">Ambiente para operações com seu próprio capital.</span>
-      <span class="choose-account-meta">Seleção disponível quando a integração for habilitada.</span>
+      <span class="choose-account-meta" id="realInfo">Verificando se existe conta real vinculada à Deriv...</span>
       <span class="choose-account-check choose-account-check-off" aria-hidden="true">—</span>
     </button>
   </div>
@@ -479,6 +479,17 @@ const $=id=>document.getElementById(id);
 let activePage='welcome',demoOrders=[],demoBalance=null,refreshTimer=null,lastRequestKey=null,robotRunning=false;
 const money=(n,currency='USD')=>{const value=Number(n);return Number.isFinite(value)?value.toLocaleString('pt-BR',{style:'currency',currency:currency||'USD'}):'—'};
 const safe=(v)=>v===null||v===undefined?'—':String(v);
+async function loadVerifiedAccounts(){
+ try{
+   const accounts=await req('/api/accounts/available');
+   const real=accounts.real_accounts||[];
+   $('realInfo').textContent=real.length
+      ?'Conta real encontrada e validada na Deriv. Operações reais ainda não habilitadas.'
+      :'Nenhuma conta real identificada nesta autorização. A opção permanece indisponível.';
+ }catch(e){
+   $('realInfo').textContent='Não foi possível verificar a conta real nesta sessão.';
+ }
+}
 function selectDemoAccount(){const button=$('chooseDemo');button.classList.add('chosen');button.setAttribute('aria-pressed','true')}
 function continueAccount(){if($('chooseDemo').getAttribute('aria-pressed')==='true')go('setup')}
 function toggleSetupMartingale(){
@@ -531,11 +542,11 @@ async function saveOnboarding(event){
 }
 function page(v){for(const name of ['welcome','choose','setup','dashboard','results','lab','settings','account'])$(name).classList.toggle('hidden',name!==v);activePage=v;const logged=!['welcome','choose'].includes(v);$('accountBadge').classList.toggle('hidden',!logged);$('menuButton').classList.toggle('hidden',!logged);document.querySelectorAll('.nav[data-view]').forEach(b=>b.classList.toggle('active',b.dataset.view===v))}
 function toggleMenu(open){$('drawer').classList.toggle('hidden',!open);$('menuOverlay').classList.toggle('hidden',!open);$('menuButton').setAttribute('aria-expanded',String(open))}
-function go(v){toggleMenu(false);page(v);window.scrollTo({top:0,behavior:'smooth'});if(v==='setup')loadOnboarding();if(v==='dashboard')refreshDashboard();if(v==='results'){loadDemoOrders();loadStrategyStats()}if(v==='lab')loadStrategyLab();if(v==='account')loadDemoBalance();if(v==='settings')loadSettings()}
+function go(v){toggleMenu(false);page(v);window.scrollTo({top:0,behavior:'smooth'});if(v==='choose')loadVerifiedAccounts();if(v==='setup')loadOnboarding();if(v==='dashboard')refreshDashboard();if(v==='results'){loadDemoOrders();loadStrategyStats()}if(v==='lab')loadStrategyLab();if(v==='account')loadDemoBalance();if(v==='settings')loadSettings()}
 function fail(msg){$('error').textContent=msg||''}
 async function req(path,opts={}){const r=await fetch(path,{credentials:'same-origin',...opts});let data;try{data=await r.json()}catch{throw Error('Resposta inválida do servidor')}if(!r.ok)throw Error(data.detail||'Falha na conexão');return data}
-async function init(){try{const s=await req('/api/session');if(!s.authenticated){page('welcome');return}const justConnected=new URLSearchParams(window.location.search).get('login')==='ok';if(justConnected){window.history.replaceState({},'',window.location.pathname);const account=s.demo_accounts&&s.demo_accounts[0];$('demoInfo').textContent=account?'Conectada à Deriv · '+safe(account.account_id):'Conta conectada à Deriv';page('choose')}else{page('dashboard');refreshDashboard()}refreshTimer=setInterval(()=>{if(activePage==='dashboard'||activePage==='results')refreshDashboard()},30000)}catch(e){fail(e.message);page('welcome')}}
-async function refreshDashboard(){try{const [status]=await Promise.all([req('/api/status'),loadDemoBalance(),loadDemoOrders()]);$('feedState').textContent=(status.connected?'● Cotações conectadas':'○ Reconectando cotações')+' · '+safe(status.symbol);robotRunning=Boolean(status.running);const available=Boolean(status.auto_buy_enabled);$('robotState').textContent=robotRunning?'ATIVO':available?'PRONTO':'INDISPONÍVEL';$('robotMessage').textContent=status.reason||'Aguardando oportunidades no mercado DEMO';$('robotButton').textContent=robotRunning?'DESLIGAR ROBÔ':'LIGAR ROBÔ';$('robotButton').disabled=!robotRunning&&!available;$('robotButton').setAttribute('aria-disabled',String($('robotButton').disabled));$('robotButton').style.background=robotRunning?'linear-gradient(135deg,#fa9b9d,#dc5269)':'';fail('')}catch(e){fail('Painel: '+e.message)}}
+async function init(){try{const s=await req('/api/session');if(!s.authenticated){page('welcome');return}const justConnected=new URLSearchParams(window.location.search).get('login')==='ok';if(justConnected){window.history.replaceState({},'',window.location.pathname);const account=s.demo_accounts&&s.demo_accounts[0];$('demoInfo').textContent=account?'Conectada à Deriv · '+safe(account.account_id):'Conta conectada à Deriv';page('choose');loadVerifiedAccounts()}else{page('dashboard');refreshDashboard()}refreshTimer=setInterval(()=>{if(activePage==='dashboard'||activePage==='results')refreshDashboard()},30000)}catch(e){fail(e.message);page('welcome')}}
+async function refreshDashboard(){try{const [status]=await Promise.all([req('/api/status'),loadDemoBalance(),loadDemoOrders()]);$('feedState').textContent=(status.connected?'● Cotações conectadas':'○ Reconectando cotações')+' · '+safe(status.symbol);robotRunning=Boolean(status.running);const available=Boolean(status.auto_buy_enabled);$('robotState').textContent=robotRunning?'ATIVO':status.interrupted_after_restart?'INTERROMPIDO':available?'PRONTO':'INDISPONÍVEL';$('robotMessage').textContent=status.reason||'Aguardando oportunidades no mercado DEMO';$('robotButton').textContent=robotRunning?'DESLIGAR ROBÔ':'LIGAR ROBÔ';$('robotButton').disabled=!robotRunning&&!available;$('robotButton').setAttribute('aria-disabled',String($('robotButton').disabled));$('robotButton').style.background=robotRunning?'linear-gradient(135deg,#fa9b9d,#dc5269)':'';fail('')}catch(e){fail('Painel: '+e.message)}}
 async function toggleRobot(){
   try{
     $('robotButton').disabled=true;
