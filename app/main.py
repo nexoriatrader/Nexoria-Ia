@@ -393,8 +393,8 @@ async def brand_reference_bg(): return FileResponse(Path(__file__).parent/'stati
 async def health():
     enabled=os.getenv('NEXORA_DEMO_BUY_ENABLED','false').lower()=='true'
     return {'ok':True,'version':VERSION,'market_connected':market_connected,
-            'execution':'PAPER_AND_DEMO_ONLY' if enabled else 'PAPER_ONLY',
-            'real_orders_enabled':False}
+            'execution':'DERIV_DEMO_ONLY','automatic_demo_orders_enabled':autopilot_allowed(),
+            'manual_demo_purchase_enabled':enabled,'real_orders_enabled':False}
 
 @app.get('/auth/deriv/start')
 async def login_start():
