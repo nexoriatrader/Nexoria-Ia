@@ -84,6 +84,40 @@ td{padding:13px 12px;border-bottom:1px solid #273d51;white-space:nowrap}
 .choice p{margin-top:6px}
 .sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0)}
 
+/* Premium account selection, isolated from running AutoPilot UI. */
+.account-choose{position:relative;isolation:isolate;max-width:1010px;margin:0 auto;padding:43px 0 20px}
+.choose-glow{position:absolute;z-index:-1;pointer-events:none;top:0;left:10%;right:10%;height:320px;background:radial-gradient(ellipse at 50% 20%,#247daf27,transparent 65%)}
+.choose-intro{text-align:center;max-width:680px;margin:0 auto 33px}
+.choose-overline{display:inline-flex;align-items:center;gap:8px;padding:8px 14px;font-weight:850;letter-spacing:.15em;font-size:10px;border-radius:100px;border:1px solid #356a75;background:#173e3c60;color:#a6ead6}
+.choose-overline-dot{width:7px;height:7px;flex:none;background:#5ee6b9;border-radius:50%;box-shadow:0 0 12px #5ee6b977}
+.choose-intro h1{font-size:clamp(33px,5vw,49px);letter-spacing:-.05em;line-height:1.08;margin:19px 0 13px}
+.choose-intro h1 span{color:#f2c778}
+.choose-intro p{color:#a7bccd;line-height:1.7;font-size:15px;max-width:490px;margin:auto}
+.choose-accounts{display:grid;grid-template-columns:1fr 1fr;gap:19px}
+.choose-account{position:relative;display:flex;flex-direction:column;align-items:stretch;text-align:left;min-width:0;min-height:360px;padding:27px 27px 24px;border:1px solid #36586d;border-radius:23px;background:radial-gradient(circle at 80% 0%,#2871a536,transparent 47%),linear-gradient(145deg,#153047,#0b1a2b 84%);box-shadow:0 20px 45px #0005;color:#eef8ff}
+button.choose-account{width:100%;cursor:pointer;transition:transform .18s,box-shadow .18s,border-color .18s}
+button.choose-account:hover{border-color:#55bcdd;box-shadow:0 22px 53px #06273d91;transform:translateY(-2px)}
+button.choose-account:focus-visible{outline:3px solid #71d2ff;outline-offset:4px}
+.choose-account-demo{border-color:#58a6b9;box-shadow:inset 0 1px #ffffff11,0 19px 51px #0006}
+.choose-account-real{background:linear-gradient(150deg,#132336,#0c192a 90%);border-color:#2b4054}
+.choose-account-top{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:27px}
+.choose-symbol{display:grid;place-items:center;flex:none;width:58px;height:58px;border:1px solid #326c76;border-radius:18px;font-size:29px;color:#a1f0dc;background:#1c4c5166}
+.choose-symbol-real{background:#27344366;border-color:#455668;color:#c4b7d2}
+.choose-account-tag{border:1px solid #447a69;border-radius:100px;padding:7px 10px;font-size:10px;font-weight:900;color:#96e8b6;background:#173a31;white-space:nowrap;letter-spacing:.06em}
+.choose-account-tag-muted{color:#b4adbf;background:#292d3b;border-color:#505264}
+.choose-account-name{font-size:23px;font-weight:900;letter-spacing:-.025em;line-height:1.2;margin-bottom:10px}
+.choose-account-desc{color:#abc1d0;line-height:1.65;font-size:13px;min-height:64px}
+.choose-account-meta{font-size:11px;color:#95b4c9;margin-top:13px;overflow-wrap:anywhere}
+.choose-account-action{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:auto;padding:16px 18px;background:linear-gradient(110deg,#ffe5a0,#f4bd52);color:#231b0a;border-radius:13px;font-size:13px;font-weight:950;letter-spacing:.04em;min-height:55px}
+.choose-account-action span:last-child{font-size:21px}
+.choose-action-disabled{background:#29384a;color:#8c9cac;border:1px solid #3a4c61}
+.choose-footnote{display:flex;gap:8px;justify-content:center;align-items:flex-start;text-align:center;color:#9bb2c3;font-size:12px;line-height:1.6;margin:24px auto 0}
+.choose-footnote>span{color:#f4c978;font-size:19px;line-height:1}
+.choose-signout{display:block;margin:21px auto 0;border:0;background:none;color:#8caec4;font-size:12px;text-decoration:underline;text-underline-offset:4px;padding:8px 12px}
+.choose-signout:hover{color:#f3d292}
+@media(max-width:700px){.account-choose{padding:26px 0 15px}.choose-intro{margin-bottom:25px}.choose-intro h1{font-size:clamp(31px,8.3vw,42px)}.choose-accounts{grid-template-columns:1fr;gap:14px;max-width:490px;margin:auto}.choose-account{min-height:0;padding:22px}.choose-account-top{margin-bottom:17px}.choose-account-desc{min-height:0;margin-bottom:10px}.choose-account-meta{margin-bottom:23px}.choose-footnote{max-width:420px}.choose-overline{font-size:9px}}
+@media(prefers-reduced-motion:reduce){button.choose-account{transition:none}button.choose-account:hover{transform:none}}
+
 /* Premium welcome page: isolated selectors to preserve the authenticated dashboard. */
 .login.landing{position:relative;isolation:isolate;max-width:1050px;margin:35px auto 14px;text-align:left}
 .landing-backdrop{position:absolute;inset:-50px -5vw auto;height:520px;z-index:-1;overflow:hidden;pointer-events:none}
@@ -199,13 +233,31 @@ td{padding:13px 12px;border-bottom:1px solid #273d51;white-space:nowrap}
   <div class="landing-steps"><span>COMO FUNCIONA</span><div><b>01</b> Conecte sua conta <i>→</i> <b>02</b> Confira os limites <i>→</i> <b>03</b> Ative o AutoPilot</div></div>
   
 </section>
-<section id="choose" class="hidden">
-  <div class="section-heading"><div><div class="eyebrow">PASSO 1 DE 2</div><h1>Escolha sua conta</h1><p>Treinamento agora. Conta real somente após liberação.</p></div></div>
-  <div class="choice-grid">
-    <div class="choice"><strong>●　Deriv Demo</strong><p id="demoInfo" class="muted">Conferindo sua conta de treinamento...</p></div>
-    <div class="choice off"><strong>○　Deriv Real</strong><p class="muted">Indisponível para compras nesta fase. A aplicação não envia ordens em conta real.</p></div>
+<section id="choose" class="account-choose hidden" aria-labelledby="chooseHeading">
+  <div class="choose-glow" aria-hidden="true"></div>
+  <div class="choose-intro">
+    <div class="choose-overline"><span class="choose-overline-dot"></span> CONEXÃO ESTABELECIDA</div>
+    <h1 id="chooseHeading">Escolha sua <span>experiência.</span></h1>
+    <p>Sua conta foi conectada à Deriv. Selecione como deseja acessar o NEXORA AutoPilot.</p>
   </div>
-  <button class="gold" style="width:100%" onclick="go('dashboard')">ENTRAR NO PAINEL</button>
+  <div class="choose-accounts" role="group" aria-label="Tipos de conta disponíveis">
+    <button type="button" class="choose-account choose-account-demo" id="chooseDemo" onclick="selectDemoAccount()">
+      <span class="choose-account-top"><span class="choose-symbol choose-symbol-demo" aria-hidden="true">◉</span><span class="choose-account-tag">DISPONÍVEL</span></span>
+      <span class="choose-account-name">Conta de treinamento</span>
+      <span class="choose-account-desc">Explore o NEXORA, acompanhe análises e teste a automação usando seu saldo virtual.</span>
+      <span class="choose-account-meta" id="demoInfo">Verificando conta conectada...</span>
+      <span class="choose-account-action">ACESSAR PAINEL <span aria-hidden="true">→</span></span>
+    </button>
+    <div class="choose-account choose-account-real" aria-disabled="true">
+      <span class="choose-account-top"><span class="choose-symbol choose-symbol-real" aria-hidden="true">◇</span><span class="choose-account-tag choose-account-tag-muted">EM PREPARAÇÃO</span></span>
+      <span class="choose-account-name">Conta real</span>
+      <span class="choose-account-desc">Experiência planejada para gerenciamento de operações com saldo real.</span>
+      <span class="choose-account-meta">O envio de ordens reais ainda não está disponível.</span>
+      <span class="choose-account-action choose-action-disabled">ACESSO EM BREVE <span aria-hidden="true">↗</span></span>
+    </div>
+  </div>
+  <div class="choose-footnote"><span aria-hidden="true">⌑</span> A escolha da conta não liga o robô. Você decide quando ativá-lo no painel.</div>
+  <button type="button" class="choose-signout" onclick="logout()">Sair desta conta</button>
 </section>
 <section id="dashboard" class="hidden">
   <div class="section-heading"><div><div class="eyebrow">VISÃO GERAL</div><h1>Meu robô</h1><p>O essencial para acompanhar suas operações.</p></div></div>
@@ -292,6 +344,7 @@ const $=id=>document.getElementById(id);
 let activePage='welcome',demoOrders=[],demoBalance=null,refreshTimer=null,lastRequestKey=null,robotRunning=false;
 const money=(n,currency='USD')=>{const value=Number(n);return Number.isFinite(value)?value.toLocaleString('pt-BR',{style:'currency',currency:currency||'USD'}):'—'};
 const safe=(v)=>v===null||v===undefined?'—':String(v);
+function selectDemoAccount(){go('dashboard')}
 function page(v){for(const name of ['welcome','choose','dashboard','results','lab','settings','account'])$(name).classList.toggle('hidden',name!==v);activePage=v;const logged=!['welcome','choose'].includes(v);$('accountBadge').classList.toggle('hidden',!logged);$('menuButton').classList.toggle('hidden',!logged);document.querySelectorAll('.nav[data-view]').forEach(b=>b.classList.toggle('active',b.dataset.view===v))}
 function toggleMenu(open){$('drawer').classList.toggle('hidden',!open);$('menuOverlay').classList.toggle('hidden',!open);$('menuButton').setAttribute('aria-expanded',String(open))}
 function go(v){toggleMenu(false);page(v);window.scrollTo({top:0,behavior:'smooth'});if(v==='dashboard')refreshDashboard();if(v==='results'){loadDemoOrders();loadStrategyStats()}if(v==='lab')loadStrategyLab();if(v==='account')loadDemoBalance();if(v==='settings')loadSettings()}
