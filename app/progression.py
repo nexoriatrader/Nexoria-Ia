@@ -1,6 +1,7 @@
 """Broker-confirmed DEMO progression. Never predicts or simulates settled contracts.
 
-A cycle = initial attempt + configured Martingales. After all lose, advance
+A cycle = initial attempt + configured Martingales. After all lose, the final
+loss stake is multiplied by the cycle multiplier to seed the next cycle; advance
 the *next* cycle's base by the cycle multiplier. Any win resets both levels.
 A selected number of cycles means ADDITIONAL cycles after the initial cycle.
 Orders remain one-at-a-time and unknown outcomes must block all progression.
@@ -67,7 +68,7 @@ def next_entry(*, base, gale_enabled, gales, gale_multiplier, cycles, cycle_mult
             raise ProgressionHalt('Dados de progressão incompletos')
         if row.get('stake') is None:
             raise ProgressionHalt('Valor anterior desconhecido')
-        expected=(base*(cycle_multiplier**cycle)*(gale_multiplier**gale)).quantize(
+        expected=(base*((cycle_multiplier*(gale_multiplier**gales))**cycle)*(gale_multiplier**gale)).quantize(
             Decimal('0.01'),rounding=ROUND_HALF_UP)
         actual=decimal(row['stake'])
         if actual!=expected:
@@ -98,7 +99,7 @@ def next_entry(*, base, gale_enabled, gales, gale_multiplier, cycles, cycle_mult
             previous=row
             if cycles is not None and cycle>cycles:
                 raise ProgressionHalt('Quantidade de ciclos concluída; robô pausado')
-    stake=(base*(cycle_multiplier**cycle)*(gale_multiplier**gale)).quantize(
+    stake=(base*((cycle_multiplier*(gale_multiplier**gales))**cycle)*(gale_multiplier**gale)).quantize(
         Decimal('0.01'),rounding=ROUND_HALF_UP)
     if stake>CAP_PER_TRADE or total+stake>CAP_SEQUENCE:
         raise ProgressionHalt('Progressão ultrapassaria o limite máximo de US$ 100 por sequência')
