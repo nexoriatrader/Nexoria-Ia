@@ -295,15 +295,22 @@ async def autopilot_loop():
 
 
 async def reconcile_confirmed_orders_once():
-    """Refresh only already-confirmed demo contracts; this task never sends buys."""
+    """Read official settlement for known contract IDs; never send broker buys.
+
+    Include UNKNOWN only when Deriv's contract ID is already durably known.
+    A contract without ID cannot be automatically reconciled safely.
+    Prioritize recent contracts so older unresolved records cannot starve them.
+    """
     with db.SessionLocal() as s:
-        order_ids=s.scalars(select(db.DemoOrder.id).where(db.DemoOrder.state=='CONFIRMED')
-                            .order_by(db.DemoOrder.id).limit(100)).all()
+        order_ids=s.scalars(select(db.DemoOrder.id).where(
+            db.DemoOrder.state.in_(('CONFIRMED','UNKNOWN')),
+            db.DemoOrder.contract_id.is_not(None))
+            .order_by(db.DemoOrder.id.desc()).limit(100)).all()
     for order_id in order_ids:
         async with reconcile_lock:
             with db.SessionLocal() as s:
                 order=s.get(db.DemoOrder,order_id)
-                if not order or order.state!='CONFIRMED' or not order.contract_id:
+                if not order or order.state not in ('CONFIRMED','UNKNOWN') or not order.contract_id:
                     continue
                 user=s.get(db.User,order.user_id)
                 if not user:
@@ -331,7 +338,7 @@ async def reconcile_confirmed_orders_once():
                 receipt=await demo_contract_status(token,account_id,contract_id)
                 with db.SessionLocal() as s:
                     order=s.get(db.DemoOrder,order_id)
-                    if not order or order.state!='CONFIRMED':
+                    if not order or order.state not in ('CONFIRMED','UNKNOWN'):
                         continue
                     try:
                         settled=settle(s,order,receipt.get('contract',{}))
