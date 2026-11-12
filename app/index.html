@@ -707,8 +707,8 @@ Se quiser conferir ou ajustar algo antes, clique em "Cancelar" e revise as confi
    }
    fail('');
  }finally{
-   // Refresh normally sets the button state; a failed refresh must not strand it.
-   if(button.disabled && !robotRunning)button.disabled=false;
+   // A communication failure must not enable a normally unavailable service.
+   if(!button.disabled)button.removeAttribute('aria-busy');
  }
 }
 async function loadRealBalance(){
