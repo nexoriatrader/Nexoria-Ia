@@ -102,3 +102,74 @@ def test_authenticated_endpoint_and_cached_research(tmp_path,monkeypatch):
     finally:
         main._strategy_lab_cache=None
         engine.dispose()
+
+
+def test_scanner_discovers_multiple_index_families_without_invented_symbols():
+    from app import asset_scanner
+    catalogue=[
+        {'symbol':'R_10','display_name':'Volatility 10 Index'},
+        {'symbol':'R_25','display_name':'Volatility 25 Index'},
+        {'symbol':'R_50','display_name':'Volatility 50 Index'},
+        {'symbol':'R_75','display_name':'Volatility 75 Index'},
+        {'symbol':'R_100','display_name':'Volatility 100 Index'},
+        {'symbol':'STP','display_name':'Step Index'},
+        {'symbol':'RANGE','display_name':'Range Break 100 Index'},
+        {'symbol':'BAD','display_name':'Skew Step Index'},
+        {'symbol':'BAD2','display_name':'Forex EUR/USD'},
+    ]
+    selected=asset_scanner.choose_assets(catalogue)
+    assert len(selected)==7
+    assert {x['symbol'] for x in selected}=={'R_10','R_25','R_50','R_75','R_100','STP','RANGE'}
+
+
+def test_scanner_only_reads_broker_and_rejects_gapped_candles(monkeypatch):
+    import asyncio
+    from app import asset_scanner
+    monkeypatch.setattr(asset_scanner,'discover_symbols',AsyncMock(return_value=[
+        {'symbol':'R_10','display_name':'Volatility 10 Index'},
+        {'symbol':'STP','display_name':'Step Index'}]))
+    monkeypatch.setattr(asset_scanner,'discover_contracts',AsyncMock(return_value=['CALL','PUT']))
+    bars=candles(190)
+    async def records(symbol, count=240):
+        if symbol=='STP':
+            return bars[:90]+bars[91:]
+        return bars
+    monkeypatch.setattr(asset_scanner,'fetch_candles',AsyncMock(side_effect=records))
+    monkeypatch.setattr(main,'demo_buy',AsyncMock(side_effect=AssertionError('buy forbidden')))
+    report=asyncio.run(asset_scanner.scan_assets())
+    assert report['state']=='RESEARCH_ONLY'
+    assert len(report['items'])==1
+    assert report['items'][0]['symbol']=='R_10'
+    assert report['items'][0]['execution_allowed'] is False
+    assert report['orders_sent']==0
+    assert len(report['errors'])==1
+    assert report['errors'][0]['symbol']=='STP'
+    main.demo_buy.assert_not_awaited()
+
+
+def test_scanner_requires_auth_and_caches(monkeypatch,tmp_path):
+    engine=create_engine(f'sqlite:///{tmp_path}/scanner.sqlite')
+    db.Base.metadata.create_all(engine)
+    factory=sessionmaker(bind=engine,expire_on_commit=False)
+    monkeypatch.setattr(db,'SessionLocal',factory)
+    main._asset_scanner_cache=None
+    with factory() as session:
+        user=db.User(deriv_account_id='VSCANNER',selected_mode='demo')
+        session.add(user);session.flush()
+        session.add(db.Session(session_hash=hashsecret('scanner_sid'),user_id=user.id,
+                               token_encrypted=encrypt('mock-demo'),
+                               expires_at=db.utcnow()+timedelta(hours=1)))
+        session.commit()
+    mocked=AsyncMock(return_value={'state':'RESEARCH_ONLY','items':[],
+                                   'errors':[],'orders_sent':0})
+    monkeypatch.setattr(main,'scan_assets',mocked)
+    client=TestClient(main.app)
+    try:
+        assert client.get('/api/research/asset-scanner').status_code==401
+        client.cookies.set('nexora_sid','scanner_sid')
+        assert client.get('/api/research/asset-scanner').json()['cached'] is False
+        assert client.get('/api/research/asset-scanner').json()['cached'] is True
+        assert mocked.await_count==1
+    finally:
+        main._asset_scanner_cache=None
+        engine.dispose()
