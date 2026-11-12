@@ -69,3 +69,29 @@ def test_inline_javascript_syntax_is_valid(tmp_path):
         result = subprocess.run([node, "--check", str(path)],
                                 capture_output=True, text=True, timeout=15)
         assert result.returncode == 0, result.stderr
+
+
+def test_premium_landing_preserves_explicit_deriv_oauth_and_no_auto_start():
+    html=load_ui()
+    welcome=html.split('<section id="welcome"',1)[1].split('<section id="choose"',1)[0]
+    assert 'CONECTAR E COMEÇAR' in welcome
+    assert 'href="/auth/deriv/start"' in welcome
+    assert 'Nenhuma operação começa ao conectar' in welcome
+    assert 'Ative o robô na DEMO' in welcome
+    assert 'Compras em conta REAL não estão disponíveis' in welcome
+    assert 'landing-benefits' in welcome
+    assert 'landing-showcase' in welcome
+    assert 'landing-headline' in welcome
+    assert '/api/autopilot/start' not in welcome
+    assert 'landing-disclaimer' in welcome
+    assert 'id="robotButton"' in html  # Trading remains opt-in in the existing dashboard.
+
+
+def test_premium_landing_mobile_and_accessibility():
+    html=load_ui()
+    assert 'aria-labelledby="landingHeading"' in html
+    assert 'landing-backdrop" aria-hidden="true"' in html
+    assert '@media(max-width:680px)' in html
+    assert '@media(prefers-reduced-motion:reduce)' in html
+    assert '.landing-cta:focus-visible' in html
+    assert 'id="lab"' in html  # Existing strategy laboratory preserved.
