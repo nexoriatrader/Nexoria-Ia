@@ -638,35 +638,78 @@ async function resetRiskSession(){
  }catch(e){showRobotNotice('Não foi possível reiniciar a sessão: '+e.message)}
 }
 async function loadAutopilotReadiness(){
+ if(robotRunning){showRobotNotice('');return}
  try{
    const info=await req('/api/autopilot/readiness');
+   // Status may have changed while readiness was loading.
    if(robotRunning){showRobotNotice('');return}
    showRobotNotice(info.ready?'':info.reason);
- }catch(e){showRobotNotice('Não foi possível verificar o motivo do bloqueio: '+e.message)}
+ }catch(e){
+   // A temporary transport error is not evidence that starting was refused.
+   if(!robotRunning)showRobotNotice('Não foi possível verificar a disponibilidade do robô. Atualize os dados para tentar novamente.');
+ }
 }
-async function refreshDashboard(){try{const [status]=await Promise.all([req('/api/status'),loadDemoBalance(),loadDemoOrders(),loadRealBalance(),loadDailyResult(),loadAutopilotReadiness(),loadRiskSession()]);$('feedState').textContent=(status.connected?'● Cotações conectadas':'○ Reconectando cotações')+' · '+safe(status.symbol);robotRunning=Boolean(status.running);const available=Boolean(status.auto_buy_enabled);$('robotState').textContent=robotRunning?'ATIVO':status.interrupted_after_restart?'INTERROMPIDO':available?'PRONTO':'INDISPONÍVEL';$('robotMessage').textContent=status.reason||'Aguardando oportunidades no mercado DEMO';$('robotButton').textContent=robotRunning?'DESLIGAR ROBÔ':'LIGAR ROBÔ';$('robotButton').disabled=!robotRunning&&!available;$('robotButton').setAttribute('aria-disabled',String($('robotButton').disabled));$('robotButton').style.background=robotRunning?'linear-gradient(135deg,#fa9b9d,#dc5269)':'';fail('')}catch(e){fail('Painel: '+e.message)}}
+async function refreshDashboard(){
+ try{
+   // Fetch authoritative robot state FIRST. Other panel requests may fail
+   // independently and must never make an active robot look stopped.
+   const status=await req('/api/status');
+   robotRunning=Boolean(status.running);
+   const available=Boolean(status.auto_buy_enabled);
+   $('robotState').textContent=robotRunning?'ATIVO':status.interrupted_after_restart?'INTERROMPIDO':available?'PRONTO':'INDISPONÍVEL';
+   $('robotMessage').textContent=status.reason||'Aguardando oportunidades no mercado DEMO';
+   $('robotButton').textContent=robotRunning?'DESLIGAR ROBÔ':'LIGAR ROBÔ';
+   $('robotButton').disabled=!robotRunning&&!available;
+   $('robotButton').setAttribute('aria-disabled',String($('robotButton').disabled));
+   $('robotButton').style.background=robotRunning?'linear-gradient(135deg,#fa9b9d,#dc5269)':'';
+   $('feedState').textContent=(status.connected?'● Cotações conectadas':'○ Reconectando cotações')+' · '+safe(status.symbol);
+   if(robotRunning)showRobotNotice('');
+   await Promise.allSettled([loadDemoBalance(),loadDemoOrders(),loadRealBalance(),
+                             loadDailyResult(),loadRiskSession(),loadAutopilotReadiness()]);
+   fail('');
+   return status;
+ }catch(e){
+   $('feedState').textContent='○ Comunicação temporariamente indisponível. Último estado do robô preservado.';
+   // Keep the last known status; do not imply that the server stopped trading.
+   return null;
+ }
+}
 async function toggleRobot(){
-  try{
-    $('robotButton').disabled=true;
-    if(robotRunning){
-      await req('/api/autopilot/stop',{method:'POST'});
-    }else{
-      if(!window.confirm(`Você está prestes a iniciar o robô.
+ const button=$('robotButton');
+ const wasRunning=robotRunning;
+ button.disabled=true;
+ try{
+   if(wasRunning){
+     await req('/api/autopilot/stop',{method:'POST'});
+   }else{
+     if(!window.confirm(`Você está prestes a iniciar o robô.
 
 Confirme apenas se já revisou as configurações e está tudo certo para operar.
 
 Se quiser conferir ou ajustar algo antes, clique em "Cancelar" e revise as configurações antes de ligar novamente.`)){
-        await refreshDashboard();return;
-      }
-      await req('/api/autopilot/start',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({confirm:'START_DEMO_AUTOPILOT'})});
-    }
-    await refreshDashboard();
-  }catch(e){
-    const reason='Não foi possível ligar o robô: '+e.message;
-    await refreshDashboard().catch(()=>{});
-    showRobotNotice(reason);
-    fail('');
-  }
+       await refreshDashboard();return;
+     }
+     await req('/api/autopilot/start',{method:'POST',headers:{'Content-Type':'application/json'},
+       body:JSON.stringify({confirm:'START_DEMO_AUTOPILOT'})});
+   }
+   await refreshDashboard();
+ }catch(e){
+   // A failed HTTP response or broken mobile connection cannot establish
+   // whether the broker-facing AutoPilot was switched. Verify first.
+   const status=await refreshDashboard();
+   if(status && status.running){
+     showRobotNotice('');
+   }else if(status && !status.running){
+     showRobotNotice((wasRunning?'Não foi possível confirmar o desligamento: ':'Não foi possível ligar o robô: ')+e.message);
+   }else{
+     // Never claim the bot stopped or failed to start on a network-only error.
+     $('feedState').textContent='○ Conexão instável. Não repita o comando antes de atualizar o painel e conferir o estado do robô.';
+   }
+   fail('');
+ }finally{
+   // Refresh normally sets the button state; a failed refresh must not strand it.
+   if(button.disabled && !robotRunning)button.disabled=false;
+ }
 }
 async function loadRealBalance(){
  const value=$('realBalanceMetric'),reason=$('realBalanceReason');
