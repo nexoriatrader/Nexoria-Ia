@@ -28,6 +28,17 @@ class User(Base):
     selected_mode = Column(String(16), default='demo', nullable=False)
     # User switch is intentionally NOT persisted: all bots start OFF after restart.
 
+class RobotPlan(Base):
+    """Saved onboarding preferences; experimental progressions are NOT execution rules."""
+    __tablename__ = 'robot_plans'
+    user_id = Column(Integer, ForeignKey('users.id'), primary_key=True)
+    gale_count = Column(Integer, nullable=False, default=0)
+    requested_martingale = Column(Boolean, nullable=False, default=False)
+    requested_multiplier = Column(String(20), nullable=False, default='2.00')
+    cycles_limit = Column(Integer, nullable=True)  # NULL means no user-selected cycle cap
+    updated_at = Column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
+
+
 class LoginFlow(Base):
     __tablename__ = 'login_flows'
     state_hash = Column(String(64), primary_key=True)
