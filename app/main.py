@@ -372,6 +372,49 @@ async def status(request:Request,nexora_sid:str|None=Cookie(default=None)):
                 'running':False,'real_orders_enabled':False,
                 'reason':'Aguardando validação da execução automática Deriv Demo'}
 
+@app.get('/api/autopilot/research')
+async def autopilot_research(request:Request,nexora_sid:str|None=Cookie(default=None)):
+    """Read-only market research; does not submit any trading order."""
+    user=active_user(request,nexora_sid)
+    async with lock:
+        engine=rt_for(user)
+        prices=list(engine.prices)
+        connected=engine.connected
+    return {**analyze(prices),'connected':connected,'symbol':SYMBOL,
+            'execution':'RESEARCH_ONLY','auto_buy_enabled':False}
+
+
+@app.get('/api/autopilot/demo-preview')
+async def autopilot_demo_preview(request:Request,nexora_sid:str|None=Cookie(default=None)):
+    """Read-only bridge from hypotheses to Deriv DEMO proposals."""
+    user,token=active_session(request,nexora_sid)
+    if user.selected_mode!='demo':
+        raise HTTPException(403,'Selecione a conta de treinamento')
+    async with lock:
+        engine=rt_for(user)
+        prices=list(engine.prices)
+        connected=engine.connected
+    if not connected:
+        raise HTTPException(409,'Cotações desconectadas')
+    research=analyze(prices)
+    if not research['candidates']:
+        return {'state':research['state'],'symbol':SYMBOL,'samples':research['samples'],
+                'candidate':None,'proposal':None,'bought':False,'reason':research['reason']}
+    candidate=research['candidates'][0]
+    try:
+        quote=await demo_proposal(token,user.deriv_account_id,symbol=SYMBOL,
+                                  contract_type=candidate['direction'],stake=user.stake,
+                                  duration=5)
+        evaluation=quote_assessment(quote['ask_price'],quote['payout'])
+    except DemoTradingError as e:
+        raise HTTPException(502,str(e)) from None
+    except (ValueError,KeyError):
+        raise HTTPException(502,'Proposta demonstrativa retornou valores inválidos') from None
+    return {'state':'DEMO_QUOTE_RESEARCH','symbol':SYMBOL,'samples':research['samples'],
+            'candidate':candidate,'proposal':quote,'evaluation':evaluation,'bought':False,
+            'reason':'Proposta oficial de treinamento para análise, sem compra'}
+
+
 @app.post('/api/config')
 async def config(request:Request, config:Config,nexora_sid:str|None=Cookie(default=None)):
     u=active_user(request,nexora_sid)
