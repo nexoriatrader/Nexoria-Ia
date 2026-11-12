@@ -209,8 +209,14 @@ async def autopilot_once():
                     if settlement.tzinfo is None:
                         settlement=settlement.replace(tzinfo=timezone.utc)
                     next_boundary=(int(settlement.timestamp())//60+1)*60
-                    if datetime.now(timezone.utc).timestamp()<next_boundary:
-                        autopilot_reasons[uid]='Aguardando próxima vela de 1 minuto'
+                    now_utc=datetime.now(timezone.utc).timestamp()
+                    # Do not enter a recovery late in an already-open candle.
+                    # The newest usable M1 boundary is the first one AFTER official
+                    # settlement, or a later boundary if polling missed the opening.
+                    current_boundary=int(now_utc)//60*60
+                    if (now_utc<next_boundary or current_boundary<next_boundary
+                        or now_utc-current_boundary>8):
+                        autopilot_reasons[uid]='Aguardando abertura de vela M1 para recuperação'
                         continue
                     candidate={'strategy':entry.strategy or 'recuperacao',
                         'direction':entry.direction,
@@ -270,7 +276,7 @@ async def autopilot_loop():
             raise
         except Exception as exc:
             log.warning('AutoPilot loop error: %s',type(exc).__name__)
-        await asyncio.sleep(10)
+        await asyncio.sleep(1)
 
 
 async def reconcile_confirmed_orders_once():
@@ -331,7 +337,7 @@ async def reconcile_confirmed_loop():
             raise
         except Exception as exc:
             log.warning('Demo reconciliation loop failed: %s',type(exc).__name__)
-        await asyncio.sleep(15)
+        await asyncio.sleep(3)
 
 @asynccontextmanager
 async def lifespan(app):
