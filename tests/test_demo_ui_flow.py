@@ -74,11 +74,17 @@ def test_inline_javascript_syntax_is_valid(tmp_path):
 def test_premium_landing_preserves_explicit_deriv_oauth_and_no_auto_start():
     html=load_ui()
     welcome=html.split('<section id="welcome"',1)[1].split('<section id="choose"',1)[0]
-    assert 'CONECTAR E COMEÇAR' in welcome
+    assert 'CONECTAR E ACESSAR O ROBÔ' in welcome
     assert 'href="/auth/deriv/start"' in welcome
-    assert 'Nenhuma operação começa ao conectar' in welcome
-    assert 'Ative o robô na DEMO' in welcome
-    assert 'Compras em conta REAL não estão disponíveis' in welcome
+    assert 'A conexão à corretora não inicia operações automaticamente' in welcome
+    assert 'Ative o AutoPilot' in welcome
+    assert 'Conta real não habilitada para compras' in welcome
+    assert 'somente na conta de demonstração' in welcome
+    assert 'operações automáticas.' in welcome
+    assert 'Execução automática' in welcome
+    assert 'Análise automática' in welcome
+    assert 'AMBIENTE DEMO' not in welcome
+    assert 'DEMO SOMENTE' not in welcome
     assert 'landing-benefits' in welcome
     assert 'landing-showcase' in welcome
     assert 'landing-headline' in welcome
