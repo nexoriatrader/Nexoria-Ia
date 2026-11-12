@@ -56,7 +56,6 @@ def next_entry(*, base, gale_enabled, gales, gale_multiplier, cycles, cycle_mult
     total=Decimal('0')
     previous=None
     last_id=-1
-    initial=base
     for row in orders:
         oid=int(row['id'])
         if oid<=last_id:
