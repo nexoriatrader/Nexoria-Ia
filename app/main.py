@@ -1,6 +1,4 @@
-"""NEXORA IA v0.5.2.
-Local paper simulation plus supervised demo-only orders; no real account execution path.
-"""
+"""NEXORA IA. Official Deriv DEMO orders and read-only AutoPilot research."""
 import asyncio, json, logging, os, secrets, re
 from datetime import datetime, timedelta, timezone
 from contextlib import asynccontextmanager
@@ -17,6 +15,7 @@ from sqlalchemy import select, delete
 from . import db
 from .demo import DemoTradingError, demo_account_balance, demo_contract_status, demo_buy, demo_proposal
 from .demo_ledger import OrderGuardError, reserve, public_order, confirmed, unknown, settle
+from .autopilot import analyze, quote_assessment
 from .engine import Engine, Settings
 from .market import MarketError, discover_symbols, discover_contracts, indicative_proposal
 from .security import CLIENT_ID, REDIRECT, TOKEN_URL, build_authorize_url, make_login, make_session_id, hashsecret, encrypt, decrypt, cookie_options
@@ -44,7 +43,7 @@ def rt_for(user):
             'stop_win':user.stop_win,'stop_loss':user.stop_loss})
         engine.connected=market_connected
         engine.prices.extend(recent_prices[-200:])
-        engine.source='Deriv público (simulação local)'
+        engine.source='Deriv público (análise de mercado)'
         runtimes[user.id]=engine
     return engine
 
@@ -73,7 +72,7 @@ async def feed():
                     market_connected=True
                     last_market_reason='Cotações públicas conectadas'
                     for engine in runtimes.values():
-                        engine.connected=True;engine.prices.clear();engine.running=False
+                        engine.connected=True;engine.prices.clear()
                     recent_prices=[]
                 delay=2
                 async for raw in ws:
@@ -89,26 +88,16 @@ async def feed():
                         async with lock:
                             recent_prices=(recent_prices+[p])[-200:]
                             for uid,engine in list(runtimes.items()):
-                                before=len(engine.closed)
-                                engine.push_tick(p)
-                                if len(engine.closed)>before:
-                                    event=engine.closed[0]
-                                    # Persist completed paper trades independently of the browser.
-                                    with db.SessionLocal() as s:
-                                        s.add(db.PaperTrade(user_id=uid,symbol=event['symbol'],direction=event['direction'],
-                                            stake=event['stake'], entry=str(event['entry']),exit=str(event['exit']),
-                                            pnl=event['pnl'],result=event['result']))
-                                        s.commit()
+                                engine.prices.append(p)
+                                # Public ticks are used for research only; no local trades.
         except asyncio.CancelledError: raise
         except Exception as e:
             log.warning('Public feed unavailable: %s',type(e).__name__)
             async with lock:
                 market_connected=False;last_market_reason='Conexão interrompida'
                 for engine in runtimes.values():
-                    engine.running=False;engine.connected=False
-                    # Active virtual positions are cancelled on interruption, not settled with guessed prices.
-                    engine.position=None
-                    engine.last_reason='Conexão interrompida: simulação pausada; operação virtual aberta cancelada'
+                    engine.connected=False
+                    engine.last_reason='Conexão de cotações interrompida'
             await asyncio.sleep(delay)
             delay=min(delay*2,30)
 
@@ -374,10 +363,57 @@ class DemoBuy(DemoProposal):
 
 @app.get('/api/status')
 async def status(request:Request,nexora_sid:str|None=Cookie(default=None)):
-    u=active_user(request,nexora_sid)
+    user=active_user(request,nexora_sid)
     async with lock:
-        engine=rt_for(u)
-        return {**engine.status(),'execution':'LOCAL_SIMULATION_ONLY','real_orders_enabled':False}
+        engine=rt_for(user)
+        return {'connected':engine.connected,'symbol':engine.symbol,
+                'latest_price':engine.prices[-1] if engine.prices else None,
+                'ticks':len(engine.prices),'execution':'DERIV_DEMO_ONLY',
+                'running':False,'real_orders_enabled':False,
+                'reason':'Aguardando validação da execução automática Deriv Demo'}
+
+@app.get('/api/autopilot/research')
+async def autopilot_research(request:Request,nexora_sid:str|None=Cookie(default=None)):
+    """Read-only market research; does not submit any trading order."""
+    user=active_user(request,nexora_sid)
+    async with lock:
+        engine=rt_for(user)
+        prices=list(engine.prices)
+        connected=engine.connected
+    return {**analyze(prices),'connected':connected,'symbol':SYMBOL,
+            'execution':'RESEARCH_ONLY','auto_buy_enabled':False}
+
+
+@app.get('/api/autopilot/demo-preview')
+async def autopilot_demo_preview(request:Request,nexora_sid:str|None=Cookie(default=None)):
+    """Read-only bridge from hypotheses to Deriv DEMO proposals."""
+    user,token=active_session(request,nexora_sid)
+    if user.selected_mode!='demo':
+        raise HTTPException(403,'Selecione a conta de treinamento')
+    async with lock:
+        engine=rt_for(user)
+        prices=list(engine.prices)
+        connected=engine.connected
+    if not connected:
+        raise HTTPException(409,'Cotações desconectadas')
+    research=analyze(prices)
+    if not research['candidates']:
+        return {'state':research['state'],'symbol':SYMBOL,'samples':research['samples'],
+                'candidate':None,'proposal':None,'bought':False,'reason':research['reason']}
+    candidate=research['candidates'][0]
+    try:
+        quote=await demo_proposal(token,user.deriv_account_id,symbol=SYMBOL,
+                                  contract_type=candidate['direction'],stake=user.stake,
+                                  duration=5)
+        evaluation=quote_assessment(quote['ask_price'],quote['payout'])
+    except DemoTradingError as e:
+        raise HTTPException(502,str(e)) from None
+    except (ValueError,KeyError):
+        raise HTTPException(502,'Proposta demonstrativa retornou valores inválidos') from None
+    return {'state':'DEMO_QUOTE_RESEARCH','symbol':SYMBOL,'samples':research['samples'],
+            'candidate':candidate,'proposal':quote,'evaluation':evaluation,'bought':False,
+            'reason':'Proposta oficial de treinamento para análise, sem compra'}
+
 
 @app.post('/api/config')
 async def config(request:Request, config:Config,nexora_sid:str|None=Cookie(default=None)):
@@ -394,33 +430,6 @@ async def config(request:Request, config:Config,nexora_sid:str|None=Cookie(defau
             stored.multiplier=str(settings.multiplier);stored.martingale=settings.martingale
             s.commit()
     return {'ok':True}
-
-@app.post('/api/start')
-async def start(request:Request,nexora_sid:str|None=Cookie(default=None)):
-    u=active_user(request,nexora_sid)
-    async with lock:
-        engine=rt_for(u)
-        if not market_connected:raise HTTPException(409,'Mercado desconectado')
-        if engine.position:raise HTTPException(409,'Existe operação virtual aberta')
-        reason=engine.guard_reason(engine.next_stake())
-        if reason:raise HTTPException(409,reason)
-        engine.running=True;engine.last_reason='Simulação virtual ativada; NÃO opera na Deriv'
-    return {'ok':True}
-
-@app.post('/api/stop')
-async def stop(request:Request,nexora_sid:str|None=Cookie(default=None)):
-    u=active_user(request,nexora_sid)
-    async with lock:
-        engine=rt_for(u);engine.running=False;engine.last_reason='Simulação desligada'
-    return {'ok':True}
-
-@app.get('/api/history')
-async def history(request:Request,nexora_sid:str|None=Cookie(default=None)):
-    u=active_user(request,nexora_sid)
-    with db.SessionLocal() as s:
-        items=s.execute(select(db.PaperTrade).where(db.PaperTrade.user_id==u.id).order_by(db.PaperTrade.id.desc()).limit(50)).scalars().all()
-        return {'items':[{'time':x.settled_at.isoformat(),'symbol':x.symbol,'direction':x.direction,
-                          'stake':x.stake,'entry':x.entry,'exit':x.exit,'pnl':x.pnl,'result':x.result} for x in items]}
 
 @app.get('/api/market/symbols')
 async def symbols(request:Request,nexora_sid:str|None=Cookie(default=None)):
