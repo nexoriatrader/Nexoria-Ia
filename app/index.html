@@ -135,6 +135,9 @@ button.choose-account:focus-visible{outline:3px solid #71d2ff;outline-offset:4px
 .choose-continue:focus-visible{outline:3px solid #72d1ff;outline-offset:3px}
 @media(max-width:700px){.choose-account{min-height:225px}.choose-account-meta{margin-bottom:28px}.choose-advice{padding:18px 16px;gap:10px}.choose-continue{min-height:60px}}
 .setup-zero-note{border-left:3px solid #f2c778;background:#2b2b295a;padding:12px;border-radius:0 11px 11px 0;color:#d9d1bf;font-size:12px}.setup-zero-note strong{color:#ffe19a}
+.setup-numeric,.setup-panel input[type=text]{width:100%;height:50px;border:1px solid #42617a;background:#081a2b;color:#f3f8ff;border-radius:12px;padding:0 13px;font-weight:750}
+.setup-panel input[type=text]:focus-visible{outline:2px solid #73d0e9}
+.setup-fieldhelp{display:block;font-size:11px;color:#91adc0;margin:6px 0 0;line-height:1.4}
 /* Third onboarding screen: same NEXORA premium navy/gold design. */
 .robot-setup{position:relative;isolation:isolate;max-width:1040px;margin:0 auto;padding:39px 0 16px}
 .setup-aura{position:absolute;z-index:-1;pointer-events:none;inset:0 0 auto;height:390px;background:radial-gradient(ellipse at 55% 0%,#2783ae26,transparent 69%)}
@@ -316,7 +319,7 @@ button.choose-account:focus-visible{outline:3px solid #71d2ff;outline-offset:4px
       <span class="choose-account-top"><span class="choose-symbol choose-symbol-real" aria-hidden="true">◇</span><span class="choose-account-tag choose-account-tag-muted">SALDO REAL</span></span>
       <span class="choose-account-name">Conta real</span>
       <span class="choose-account-desc">Ambiente para operações com seu próprio capital.</span>
-      <span class="choose-account-meta">Seleção disponível quando a integração for habilitada.</span>
+      <span class="choose-account-meta" id="realInfo">Verificando se existe conta real vinculada à Deriv...</span>
       <span class="choose-account-check choose-account-check-off" aria-hidden="true">—</span>
     </button>
   </div>
@@ -359,19 +362,19 @@ button.choose-account:focus-visible{outline:3px solid #71d2ff;outline-offset:4px
         <p class="setup-hint setup-zero-note"><strong>Stops em US$ 0,00:</strong> significam que esse limite fica desativado. Com ambos em zero, o robô não pausa por Stop Win ou Stop Loss e pode continuar operando até você desligá-lo manualmente ou outra proteção interromper a execução. Isso aumenta a exposição a perdas.</p>
       </div>
       <div class="setup-panel">
-        <div class="setup-panel-title"><span class="setup-icon" aria-hidden="true">↗</span><div><h2>Martingale</h2><p>Configure a progressão para uma futura modalidade.</p></div></div>
-        <label class="setup-toggle"><span><strong>Planejar Martingale</strong><small>Salvar a preferência sem ativar novas entradas.</small></span><input id="setupMg" type="checkbox" onchange="toggleSetupMartingale()"><span class="setup-toggle-track" aria-hidden="true"></span></label>
+        <div class="setup-panel-title"><span class="setup-icon" aria-hidden="true">↗</span><div><h2>Martingale</h2><p>Configure até 5 tentativas após uma derrota.</p></div></div>
+        <label class="setup-toggle"><span><strong>Ativar Martingale</strong><small>Novas entradas após perdas liquidadas.</small></span><input id="setupMg" type="checkbox" onchange="toggleSetupMartingale()"><span class="setup-toggle-track" aria-hidden="true"></span></label>
         <div class="setup-fields-two hidden" id="setupGaleFields">
-          <div><label for="setupGales">Tentativas adicionais</label><select id="setupGales"><option value="1">1 tentativa</option><option value="2">2 tentativas</option><option value="3">3 tentativas</option></select></div>
-          <div><label for="setupMultiplier">Multiplicador</label><select id="setupMultiplier"><option value="2">2×</option><option value="3">3×</option><option value="4">4×</option></select></div>
+          <div><label for="setupGales">Tentativas adicionais</label><select id="setupGales"><option value="1">1 tentativa</option><option value="2">2 tentativas</option><option value="3">3 tentativas</option><option value="4">4 tentativas</option><option value="5">5 tentativas</option></select></div>
+          <div><label for="setupMultiplier">Multiplicador</label><input id="setupMultiplier" type="text" inputmode="decimal" value="2.0" maxlength="12" placeholder="Ex.: 2.3" aria-describedby="setupMultiplierHelp"><small class="setup-fieldhelp" id="setupMultiplierHelp">Digite um fator ≥ 1.0, com até 2 casas decimais</small></div>
         </div>
-        <p class="setup-hint">Martingale ainda não executa operações no AutoPilot. Aumentar entradas após perdas eleva rapidamente o risco.</p>
+        <p class="setup-hint">A cada perda confirmada, a entrada pode aumentar segundo seu multiplicador, respeitando o limite da sequência.</p>
       </div>
       <div class="setup-panel setup-panel-full">
-        <div class="setup-panel-title"><span class="setup-icon" aria-hidden="true">∞</span><div><h2>Ciclos operacionais</h2><p>Planeje quantas sequências o robô deverá realizar.</p></div></div>
-        <label for="setupCycles">Quantidade de ciclos planejada</label>
-        <select id="setupCycles"><option value="1">1 ciclo</option><option value="3">3 ciclos</option><option value="5">5 ciclos</option><option value="10">10 ciclos</option><option value="unlimited">Sem limite de ciclos</option></select>
-        <p class="setup-hint">Ciclo planejado: entrada principal mais eventuais tentativas adicionais. O controle automático por ciclos ainda não está habilitado; os limites de risco atuais continuam valendo.</p>
+        <div class="setup-panel-title"><span class="setup-icon" aria-hidden="true">∞</span><div><h2>Ciclos operacionais</h2><p>Progressão entre ciclos completos perdidos.</p></div></div>
+        <label for="setupCycles">Ciclos adicionais após uma sequência de perdas (máximo 5)</label>
+        <select id="setupCycles"><option value="0">Desativado (0)</option><option value="1">1 ciclo adicional</option><option value="2">2 ciclos adicionais</option><option value="3">3 ciclos adicionais</option><option value="4">4 ciclos adicionais</option><option value="5">5 ciclos adicionais</option></select><label for="setupCycleMultiplier" style="margin-top:13px">Multiplicador dos ciclos</label><input id="setupCycleMultiplier" class="setup-numeric" type="text" inputmode="decimal" value="2.0" maxlength="12" placeholder="Ex.: 2.5"><small class="setup-fieldhelp">Digite livremente o fator de ciclo, como 1.0, 2.3 ou 2.5</small>
+        <p class="setup-hint">Ex.: entrada US$ 2, gale 2× (US$ 4), próximo ciclo 2× (US$ 8), gale (US$ 16). Uma vitória reinicia no valor inicial; após esgotar os ciclos, o robô pausa. Limite de US$ 100 por operação ou sequência.</p>
       </div>
     </div>
     <div class="setup-note"><span aria-hidden="true">✧</span><div><strong>Configure com atenção.</strong><p>Você poderá revisar esses parâmetros depois. Salvar configurações não inicia o robô: a ativação continua sob seu controle no painel.</p></div></div>
@@ -429,17 +432,27 @@ button.choose-account:focus-visible{outline:3px solid #71d2ff;outline-offset:4px
   </div>
 </section>
 <section id="settings" class="hidden">
-  <div class="section-heading"><div><div class="eyebrow">SEU CONTROLE</div><h1>Configurações</h1><p>Defina valores e limites antes de operar.</p></div></div>
-  <div class="card"><div class="surface-heading">Gestão de risco</div>
+  <div class="section-heading"><div><div class="eyebrow">SEU CONTROLE</div><h1>Configurações</h1><p>Personalize entradas, stop e progressões. O AutoPilot deve estar desligado para salvar.</p></div></div>
+  <div class="card">
+    <div class="surface-heading">Entrada e limites de risco</div>
     <div class="settings-grid">
-      <div class="field"><label for="stake">Valor da entrada (USD)</label><input id="stake" inputmode="decimal" type="number" value="2" min="2" step=".01"></div>
+      <div class="field"><label for="stake">Entrada inicial (USD)</label><input id="stake" inputmode="decimal" type="number" value="2" min="2" step=".01"></div>
       <div class="field"><label for="sw">Stop Win (USD)</label><input id="sw" inputmode="decimal" type="number" value="0" min="0" step=".01"></div>
       <div class="field"><label for="sl">Stop Loss (USD)</label><input id="sl" inputmode="decimal" type="number" value="0" min="0" step=".01"></div>
-      <div class="field"><label for="mult">Multiplicador</label><select id="mult"><option value="2">2×</option><option value="3">3×</option><option value="4">4×</option></select></div>
     </div>
-    <p class="muted">Stop Win ou Stop Loss em US$ 0,00 desativa aquele limite. Sem ambos os stops, a execução só termina por desligamento manual ou outras proteções do sistema.</p>
-    <label class="checkrow"><input type="checkbox" id="mg"> Ativar Martingale</label>
-    <p class="muted">Martingale não está habilitado no executor oficial de compras. Este controle registra apenas sua preferência.</p>
+    <p class="muted">Um Stop Win ou Stop Loss em US$ 0,00 desativa esse limite. Outros bloqueios de segurança continuam valendo.</p>
+    <div class="divider" style="height:1px;background:#35536a;margin:21px 0"></div>
+    <div class="surface-heading">Martingale e ciclos</div>
+    <label class="checkrow"><input type="checkbox" id="mg" onchange="toggleSettingsMartingale()"> Ativar Martingale</label>
+    <div class="settings-grid" id="settingsGaleFields">
+      <div class="field"><label for="mgCount">Quantidade de Martingales</label><select id="mgCount"><option value="1">1 tentativa</option><option value="2">2 tentativas</option><option value="3">3 tentativas</option><option value="4">4 tentativas</option><option value="5">5 tentativas</option></select></div>
+      <div class="field"><label for="mult">Multiplicador Martingale</label><input id="mult" inputmode="decimal" type="text" placeholder="Ex.: 2.3" value="2.0"><small class="setup-fieldhelp">Número ≥ 1.0, até 2 casas decimais</small></div>
+    </div>
+    <div class="settings-grid" style="margin-top:16px">
+      <div class="field"><label for="cycles">Ciclos adicionais (máximo 5)</label><select id="cycles"><option value="0">Desativado (0)</option><option value="1">1 ciclo</option><option value="2">2 ciclos</option><option value="3">3 ciclos</option><option value="4">4 ciclos</option><option value="5">5 ciclos</option></select></div>
+      <div class="field"><label for="cycleMultiplier">Multiplicador dos ciclos</label><input id="cycleMultiplier" inputmode="decimal" type="text" placeholder="Ex.: 2.5" value="2.0"><small class="setup-fieldhelp">Digite seu fator livremente</small></div>
+    </div>
+    <p class="muted" style="margin-top:15px">Uma vitória reinicia a sequência. A progressão usa apenas resultados liquidados oficialmente na Deriv DEMO; cada operação e sequência têm limite de US$ 100. Evite progressões agressivas.</p>
     <div class="actions"><button class="gold" onclick="save()">SALVAR CONFIGURAÇÕES</button></div>
     <p class="helper" id="configFeedback" role="status"></p>
   </div>
@@ -466,6 +479,17 @@ const $=id=>document.getElementById(id);
 let activePage='welcome',demoOrders=[],demoBalance=null,refreshTimer=null,lastRequestKey=null,robotRunning=false;
 const money=(n,currency='USD')=>{const value=Number(n);return Number.isFinite(value)?value.toLocaleString('pt-BR',{style:'currency',currency:currency||'USD'}):'—'};
 const safe=(v)=>v===null||v===undefined?'—':String(v);
+async function loadVerifiedAccounts(){
+ try{
+   const accounts=await req('/api/accounts/available');
+   const real=accounts.real_accounts||[];
+   $('realInfo').textContent=real.length
+      ?'Conta real encontrada e validada na Deriv. Operações reais ainda não habilitadas.'
+      :'Nenhuma conta real identificada nesta autorização. A opção permanece indisponível.';
+ }catch(e){
+   $('realInfo').textContent='Não foi possível verificar a conta real nesta sessão.';
+ }
+}
 function selectDemoAccount(){const button=$('chooseDemo');button.classList.add('chosen');button.setAttribute('aria-pressed','true')}
 function continueAccount(){if($('chooseDemo').getAttribute('aria-pressed')==='true')go('setup')}
 function toggleSetupMartingale(){
@@ -474,6 +498,23 @@ function toggleSetupMartingale(){
  $('setupGales').disabled=!enabled;
  $('setupMultiplier').disabled=!enabled;
 }
+function toggleSettingsMartingale(){
+ const enabled=$('mg').checked;
+ $('settingsGaleFields').classList.toggle('hidden',!enabled);
+ $('mgCount').disabled=!enabled;
+ $('mult').disabled=!enabled;
+}
+function setupPayload(prefix){
+ const initial=prefix==='setup';
+ const el=(a,b)=>$(initial?a:b);
+ const mg=el('setupMg','mg').checked;
+ return {stake:el('setupStake','stake').value,
+   stop_win:el('setupWin','sw').value,stop_loss:el('setupLoss','sl').value,
+   martingale:mg,gale_count:mg?Number(el('setupGales','mgCount').value):0,
+   multiplier:el('setupMultiplier','mult').value,
+   cycles:el('setupCycles','cycles').value,
+   cycle_multiplier:el('setupCycleMultiplier','cycleMultiplier').value};
+}
 async function loadOnboarding(){
  $('setupFeedback').textContent='';
  try{
@@ -481,35 +522,31 @@ async function loadOnboarding(){
    $('setupStake').value=s.stake;$('setupWin').value=s.stop_win;$('setupLoss').value=s.stop_loss;
    $('setupMg').checked=Boolean(s.martingale);
    $('setupGales').value=String(s.gale_count||1);
-   $('setupMultiplier').value=String(Number(s.multiplier||2));
-   $('setupCycles').value=s.cycles||'unlimited';
+   $('setupMultiplier').value=s.multiplier||'2.0';
+   $('setupCycles').value=s.cycles||'0';
+   $('setupCycleMultiplier').value=s.cycle_multiplier||'2.0';
    toggleSetupMartingale();
  }catch(e){$('setupFeedback').textContent='Não foi possível carregar as configurações: '+e.message}
 }
 async function saveOnboarding(event){
  event.preventDefault();
  const btn=$('setupSubmit');btn.disabled=true;
- $('setupFeedback').textContent='Salvando suas configurações...';
+ $('setupFeedback').textContent='Validando e salvando sua configuração...';
  try{
-   const mg=$('setupMg').checked;
-   const data={stake:$('setupStake').value,stop_win:$('setupWin').value,
-      stop_loss:$('setupLoss').value,martingale:mg,
-      gale_count:mg?Number($('setupGales').value):0,
-      multiplier:$('setupMultiplier').value,cycles:$('setupCycles').value};
    const response=await req('/api/onboarding/config',{method:'POST',
-        headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});
+        headers:{'Content-Type':'application/json'},body:JSON.stringify(setupPayload('setup'))});
    if(!response.ok)throw Error('Configuração não confirmada');
    go('dashboard');
- }catch(e){$('setupFeedback').textContent='Configuração: '+e.message;fail('')}
+ }catch(e){$('setupFeedback').textContent='Não foi possível salvar: '+e.message;fail('')}
  finally{btn.disabled=false}
 }
 function page(v){for(const name of ['welcome','choose','setup','dashboard','results','lab','settings','account'])$(name).classList.toggle('hidden',name!==v);activePage=v;const logged=!['welcome','choose'].includes(v);$('accountBadge').classList.toggle('hidden',!logged);$('menuButton').classList.toggle('hidden',!logged);document.querySelectorAll('.nav[data-view]').forEach(b=>b.classList.toggle('active',b.dataset.view===v))}
 function toggleMenu(open){$('drawer').classList.toggle('hidden',!open);$('menuOverlay').classList.toggle('hidden',!open);$('menuButton').setAttribute('aria-expanded',String(open))}
-function go(v){toggleMenu(false);page(v);window.scrollTo({top:0,behavior:'smooth'});if(v==='setup')loadOnboarding();if(v==='dashboard')refreshDashboard();if(v==='results'){loadDemoOrders();loadStrategyStats()}if(v==='lab')loadStrategyLab();if(v==='account')loadDemoBalance();if(v==='settings')loadSettings()}
+function go(v){toggleMenu(false);page(v);window.scrollTo({top:0,behavior:'smooth'});if(v==='choose')loadVerifiedAccounts();if(v==='setup')loadOnboarding();if(v==='dashboard')refreshDashboard();if(v==='results'){loadDemoOrders();loadStrategyStats()}if(v==='lab')loadStrategyLab();if(v==='account')loadDemoBalance();if(v==='settings')loadSettings()}
 function fail(msg){$('error').textContent=msg||''}
 async function req(path,opts={}){const r=await fetch(path,{credentials:'same-origin',...opts});let data;try{data=await r.json()}catch{throw Error('Resposta inválida do servidor')}if(!r.ok)throw Error(data.detail||'Falha na conexão');return data}
-async function init(){try{const s=await req('/api/session');if(!s.authenticated){page('welcome');return}const justConnected=new URLSearchParams(window.location.search).get('login')==='ok';if(justConnected){window.history.replaceState({},'',window.location.pathname);const account=s.demo_accounts&&s.demo_accounts[0];$('demoInfo').textContent=account?'Conectada à Deriv · '+safe(account.account_id):'Conta conectada à Deriv';page('choose')}else{page('dashboard');refreshDashboard()}refreshTimer=setInterval(()=>{if(activePage==='dashboard'||activePage==='results')refreshDashboard()},30000)}catch(e){fail(e.message);page('welcome')}}
-async function refreshDashboard(){try{const [status]=await Promise.all([req('/api/status'),loadDemoBalance(),loadDemoOrders()]);$('feedState').textContent=(status.connected?'● Cotações conectadas':'○ Reconectando cotações')+' · '+safe(status.symbol);robotRunning=Boolean(status.running);const available=Boolean(status.auto_buy_enabled);$('robotState').textContent=robotRunning?'ATIVO':available?'PRONTO':'INDISPONÍVEL';$('robotMessage').textContent=status.reason||'Aguardando oportunidades no mercado DEMO';$('robotButton').textContent=robotRunning?'DESLIGAR ROBÔ':'LIGAR ROBÔ';$('robotButton').disabled=!robotRunning&&!available;$('robotButton').setAttribute('aria-disabled',String($('robotButton').disabled));$('robotButton').style.background=robotRunning?'linear-gradient(135deg,#fa9b9d,#dc5269)':'';fail('')}catch(e){fail('Painel: '+e.message)}}
+async function init(){try{const s=await req('/api/session');if(!s.authenticated){page('welcome');return}const justConnected=new URLSearchParams(window.location.search).get('login')==='ok';if(justConnected){window.history.replaceState({},'',window.location.pathname);const account=s.demo_accounts&&s.demo_accounts[0];$('demoInfo').textContent=account?'Conectada à Deriv · '+safe(account.account_id):'Conta conectada à Deriv';page('choose');loadVerifiedAccounts()}else{page('dashboard');refreshDashboard()}refreshTimer=setInterval(()=>{if(activePage==='dashboard'||activePage==='results')refreshDashboard()},30000)}catch(e){fail(e.message);page('welcome')}}
+async function refreshDashboard(){try{const [status]=await Promise.all([req('/api/status'),loadDemoBalance(),loadDemoOrders()]);$('feedState').textContent=(status.connected?'● Cotações conectadas':'○ Reconectando cotações')+' · '+safe(status.symbol);robotRunning=Boolean(status.running);const available=Boolean(status.auto_buy_enabled);$('robotState').textContent=robotRunning?'ATIVO':status.interrupted_after_restart?'INTERROMPIDO':available?'PRONTO':'INDISPONÍVEL';$('robotMessage').textContent=status.reason||'Aguardando oportunidades no mercado DEMO';$('robotButton').textContent=robotRunning?'DESLIGAR ROBÔ':'LIGAR ROBÔ';$('robotButton').disabled=!robotRunning&&!available;$('robotButton').setAttribute('aria-disabled',String($('robotButton').disabled));$('robotButton').style.background=robotRunning?'linear-gradient(135deg,#fa9b9d,#dc5269)':'';fail('')}catch(e){fail('Painel: '+e.message)}}
 async function toggleRobot(){
   try{
     $('robotButton').disabled=true;
@@ -580,8 +617,29 @@ async function loadStrategyLab(){
  finally{button.disabled=false}
 }
 async function reconcile(id){try{await req('/api/demo/orders/'+encodeURIComponent(id)+'/reconcile',{method:'POST'});await loadDemoOrders();await loadDemoBalance();fail('')}catch(e){fail('Liquidação: '+e.message)}}
-async function loadSettings(){try{const s=await req('/api/config/current');$('stake').value=s.stake;$('sw').value=s.stop_win;$('sl').value=s.stop_loss;$('mg').checked=s.martingale;$('mult').value=String(Number(s.multiplier))}catch(e){$('configFeedback').textContent='Configurações não carregadas: '+e.message}}
-async function save(){try{await req('/api/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({stake:$('stake').value,martingale:$('mg').checked,multiplier:$('mult').value,stop_win:$('sw').value,stop_loss:$('sl').value})});$('configFeedback').textContent='Configurações salvas com sucesso.';fail('')}catch(e){fail('Configurações: '+e.message)}}
+async function loadSettings(){
+ $('configFeedback').textContent='';
+ try{
+   const s=await req('/api/onboarding/config');
+   $('stake').value=s.stake;$('sw').value=s.stop_win;$('sl').value=s.stop_loss;
+   $('mg').checked=Boolean(s.martingale);
+   $('mgCount').value=String(s.gale_count||1);
+   $('mult').value=s.multiplier||'2.0';
+   $('cycles').value=s.cycles||'0';
+   $('cycleMultiplier').value=s.cycle_multiplier||'2.0';
+   toggleSettingsMartingale();
+ }catch(e){$('configFeedback').textContent='Configurações não carregadas: '+e.message}
+}
+async function save(){
+ $('configFeedback').textContent='Validando...';
+ try{
+  const response=await req('/api/onboarding/config',{method:'POST',
+     headers:{'Content-Type':'application/json'},body:JSON.stringify(setupPayload('settings'))});
+  if(!response.ok)throw Error('Resposta não confirmada');
+  $('configFeedback').textContent='Configurações validadas e salvas. Alterações valerão na próxima ativação do robô.';
+  fail('');
+ }catch(e){$('configFeedback').textContent='Não foi possível salvar: '+e.message;fail('')}
+}
 async function testDemoBuy(){try{const s=await req('/api/status');if(!window.confirm('ATENÇÃO: COMPRA OFICIAL NA DERIV DEMO\n\nEsta ação enviará uma ordem CALL fixa de 5 minutos usando o saldo virtual e o valor definido nas configurações. Não é um sinal escolhido pelo AutoPilot. Você pode perder todo o valor da entrada.\n\nDeseja confirmar?'))return;const key='demo-'+Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,12);lastRequestKey=key;const order=await req('/api/demo/buy',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({symbol:s.symbol,direction:'CALL',minutes:5,confirm:'DEMO_ONLY',request_key:key})});$('demoTestInfo').textContent='Ordem #'+order.id+' · '+order.state+' · acompanhe em Resultados.';await loadDemoOrders();await loadDemoBalance();fail('')}catch(e){fail('Compra DEMO: '+e.message)}}
 async function loadAutopilotResearch(){try{const a=await req('/api/autopilot/research');const entries=a.candidates.map(c=>c.strategy.toUpperCase()+' '+c.direction+' — '+c.reason);$('autopilotResearch').textContent=a.symbol+' · '+a.samples+' cotações · '+(entries.join(' | ')||a.reason);fail('')}catch(e){$('autopilotResearch').textContent='Análise indisponível: '+e.message}}
 async function loadAutopilotDemoPreview(){try{const a=await req('/api/autopilot/demo-preview');if(!a.proposal){$('autopilotResearch').textContent=a.reason;return}const q=a.proposal;$('autopilotResearch').textContent=a.candidate.direction+' · proposta Deriv Demo '+money(q.ask_price,q.currency)+' · pagamento '+money(q.payout,q.currency)+' · cotação somente leitura';fail('')}catch(e){$('autopilotResearch').textContent='Proposta indisponível: '+e.message}}

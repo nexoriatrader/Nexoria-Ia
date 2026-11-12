@@ -39,6 +39,21 @@ class RobotPlan(Base):
     updated_at = Column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
 
 
+class RobotCycleParams(Base):
+    """Separate extension avoids altering existing production Postgres tables."""
+    __tablename__ = 'robot_cycle_params'
+    user_id = Column(Integer, ForeignKey('users.id'), primary_key=True)
+    multiplier = Column(String(20), nullable=False, default='2.00')
+
+
+class RobotRun(Base):
+    """One opt-in run boundary; sequence reconstructed from official settled orders."""
+    __tablename__ = 'robot_runs'
+    user_id = Column(Integer, ForeignKey('users.id'), primary_key=True)
+    after_order_id = Column(Integer, nullable=False, default=0)
+    started_at = Column(DateTime(timezone=True), default=utcnow, nullable=False)
+
+
 class LoginFlow(Base):
     __tablename__ = 'login_flows'
     state_hash = Column(String(64), primary_key=True)
