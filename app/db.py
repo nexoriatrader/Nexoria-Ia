@@ -122,3 +122,20 @@ class AutoPilotAttribution(Base):
     direction = Column(String(10), nullable=False)
     reason = Column(String(255), nullable=False)
     created_at = Column(DateTime(timezone=True), default=utcnow, nullable=False)
+
+class DemoOrderProgression(Base):
+    """Snapshot of how an automatic DEMO order was generated, saved before broker I/O.
+
+    A new separate table avoids altering existing Render Postgres tables.
+    Historical trades without a snapshot are explicitly classified as unknown.
+    """
+    __tablename__ = 'demo_order_progressions'
+    order_id = Column(Integer, ForeignKey('demo_orders.id'), primary_key=True)
+    user_id = Column(Integer, ForeignKey('users.id'), nullable=False, index=True)
+    cycle_index = Column(Integer, nullable=False)
+    gale_index = Column(Integer, nullable=False)
+    gale_multiplier = Column(String(20), nullable=False)
+    cycle_multiplier = Column(String(20), nullable=False)
+    source = Column(String(20), nullable=False, default='autopilot')
+    account_mode = Column(String(16), nullable=False, default='demo')
+    created_at = Column(DateTime(timezone=True), default=utcnow, nullable=False)

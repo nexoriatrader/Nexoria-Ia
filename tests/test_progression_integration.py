@@ -17,6 +17,7 @@ def test_end_to_end_demo_progression_executes_2_4_8_16_then_stops(tmp_path,monke
         {'contract_id':'6604','buy_price':'16.00'}]))
     monkeypatch.setattr(main,'market_connected',True)
     monkeypatch.setattr(main,'recent_prices',[100+i*0.05 for i in range(100)])
+    monkeypatch.setattr(main,'m1_recovery_window_open',lambda settled_at: True)
     try:
         with factory() as sess:
             user=sess.get(db.User,uid)
