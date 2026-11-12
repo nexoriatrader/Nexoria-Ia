@@ -1,44 +1,206 @@
 <!doctype html>
 <html lang="pt-BR">
 <head>
-<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>NEXORA IA — Inteligência em Opções Binárias</title>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#07111e">
+<meta name="description" content="NEXORA IA — operações oficiais na Deriv e inteligência de mercado em um painel simples.">
+<title>NEXORA IA | Meu robô</title>
 <style>
-.feature-icon-img{display:block;width:42px;height:42px;margin:0 auto 8px;object-fit:contain;filter:drop-shadow(0 0 8px rgba(69,229,208,.18))}
-:root{--bg:#050b16;--surface:#0a1728;--surface2:#0e2138;--line:#21425f;--blue:#21b9ff;--cyan:#45e5d0;--gold:#f5b936;--gold2:#ffdf80;--text:#f5f8ff;--muted:#9bb3c8;--shadow:0 18px 48px rgba(0,0,0,.35)}
-*{box-sizing:border-box}html{min-height:100%;background:var(--bg)}body{margin:0;min-height:100vh;color:var(--text);font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",Arial,sans-serif;background:radial-gradient(ellipse at 50% -20%,#12365a 0,#081426 42%,#040912 100%);position:relative}body:before{content:"";position:fixed;inset:0;z-index:-2;background:linear-gradient(180deg,rgba(4,10,20,.78),rgba(4,9,17,.96)),url('/brand/reference-bg.png') center top/cover no-repeat;opacity:.28;pointer-events:none}body:after{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;opacity:.12;background-image:linear-gradient(rgba(61,148,192,.16) 1px,transparent 1px),linear-gradient(90deg,rgba(61,148,192,.16) 1px,transparent 1px);background-size:44px 44px;mask-image:linear-gradient(to bottom,black,transparent 72%)}.app{width:min(100%,1120px);margin:0 auto;padding:24px 22px 60px}.brand-stage{display:flex;justify-content:center;align-items:center;margin:0 auto 12px}.logo-display{display:block;width:min(280px,65vw);height:auto;filter:drop-shadow(0 10px 28px rgba(33,185,255,.22))}.site-header{display:none;/* menu removido da landing */} .legacy-site-header{display:flex;align-items:center;justify-content:center;gap:24px;position:relative;padding:0 0 18px;border-bottom:1px solid rgba(76,135,172,.22);margin-bottom:32px}.site-header:after{content:"";position:absolute;bottom:-1px;left:18%;right:18%;height:1px;background:linear-gradient(90deg,transparent,var(--blue),var(--gold),transparent);box-shadow:0 0 14px rgba(33,185,255,.45)}.top-logo{display:block;width:min(420px,82vw);height:190px;max-height:none;object-fit:contain;display:block;filter:drop-shadow(0 8px 24px rgba(33,185,255,.16));object-fit:contain;object-position:left center}.header-meta{display:flex;align-items:center;gap:12px;color:var(--muted);font-size:12px;text-align:right}.header-meta strong{display:block;color:var(--gold2);font-size:13px}.tag{padding:8px 11px;border:1px solid #42607a;border-radius:999px;color:var(--gold2);font-size:10px;letter-spacing:.1em;text-transform:uppercase;background:rgba(11,30,49,.7)}h1,h2,h3,p{margin-top:0}h2{font-size:27px;line-height:1.12;margin-bottom:10px}h3{font-size:16px;margin-bottom:8px}.eyebrow{font-size:11px;letter-spacing:.18em;text-transform:uppercase;color:var(--gold2);font-weight:850;margin-bottom:10px}.muted{color:var(--muted);font-size:14px;line-height:1.6}.layout{display:grid;grid-template-columns:minmax(0,760px);justify-content:center;gap:18px;align-items:stretch}.intro-card,.panel{background:linear-gradient(145deg,rgba(14,33,56,.94),rgba(7,19,34,.94));border:1px solid var(--line);border-radius:20px;box-shadow:var(--shadow);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);transition:transform .2s,border-color .2s,box-shadow .2s}.intro-card{padding:35px 28px 30px;isolation:isolate;position:relative;overflow:hidden;text-align:center;border-color:#2e6b8b}.intro-card:after{content:"";position:absolute;width:290px;height:290px;right:-130px;top:-125px;border-radius:50%;border:1px solid rgba(39,186,255,.24);box-shadow:0 0 0 18px rgba(39,186,255,.035),0 0 0 40px rgba(245,185,54,.025);pointer-events:none}.intro-card p{max-width:620px;margin-left:auto;margin-right:auto}.actions{display:flex;justify-content:center;gap:12px;flex-wrap:wrap;margin-top:26px}.feature-row{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:25px 0 6px}.feature{padding:13px 7px;text-align:center;background:linear-gradient(145deg,rgba(21,64,90,.78),rgba(7,24,42,.82));border:1px solid #3d84a8;border-radius:999px;box-shadow:inset 0 0 18px rgba(33,185,255,.08),0 6px 18px rgba(0,0,0,.2)}.feature strong{display:block;color:#fff;font-size:12px;margin-bottom:3px}.feature span{font-size:10px;color:#bad5e5}.feature-icon{display:block;color:var(--gold2);font-size:20px;line-height:1;margin-bottom:5px;text-shadow:0 0 12px rgba(245,185,54,.45)}.actions>*{width:auto;min-width:270px;padding:16px 22px}.insight-card{padding:25px;border:1px solid #4d4d34;background:linear-gradient(145deg,rgba(50,42,24,.86),rgba(14,28,42,.94));border-radius:20px;box-shadow:var(--shadow)}.insight-card h3{color:var(--gold2);font-size:18px}.metric{display:flex;align-items:center;justify-content:space-between;border-top:1px solid rgba(245,185,54,.22);padding:15px 0 0;margin-top:16px}.metric strong{font-size:24px;color:#fff}.metric span{color:var(--muted);font-size:12px;text-align:right}.feature-row{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:18px}.feature{padding:16px 12px;text-align:center;background:rgba(8,22,38,.8);border:1px solid #254866;border-radius:14px}.feature strong{display:block;color:var(--gold2);font-size:13px;margin-bottom:4px}.feature span{font-size:11px;color:var(--muted)}.panel{padding:22px;margin:15px 0;backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);transition:border-color .2s,transform .2s,box-shadow .2s}.panel:hover{border-color:#3d7393;transform:translateY(-2px);box-shadow:0 22px 54px rgba(0,0,0,.4)}.panel.accent{border-color:#277ea4;box-shadow:0 0 0 1px rgba(33,185,255,.08),var(--shadow)}.panel.gold{border-color:#765a27}.statusbar{display:flex;justify-content:space-between;align-items:end;gap:16px;margin-bottom:8px}.statuspill{display:inline-flex;align-items:center;gap:7px;padding:8px 12px;border-radius:999px;background:rgba(40,120,106,.24);border:1px solid #2b836f;color:#7ff2d8;font-weight:800;font-size:11px}.statuspill:before{content:"";width:7px;height:7px;border-radius:50%;background:var(--cyan);box-shadow:0 0 12px var(--cyan)}button,.button{border:1px solid transparent;border-radius:12px;background:linear-gradient(135deg,var(--cyan),#21b8e6);color:#041721;box-shadow:0 8px 22px rgba(33,185,230,.16);display:block;text-align:center;width:100%;padding:14px 17px;margin-top:12px;font-size:14px;font-weight:850;letter-spacing:.03em;cursor:pointer;text-decoration:none;transition:.18s}button:hover,.button:hover{transform:translateY(-1px);filter:brightness(1.08);box-shadow:0 9px 26px rgba(33,185,255,.2)}.goldbutton{background:linear-gradient(135deg,var(--gold2),var(--gold))!important;color:#1c1304!important}.secondary{background:linear-gradient(135deg,#1d456b,#142f4e)!important;color:#e0f1ff!important;border-color:#37688c!important}.danger{background:linear-gradient(135deg,#ffb3a1,#ff8e7b)!important;color:#2a0d09!important}.ghost{background:transparent!important;color:#a9c2d5!important;border-color:#35546e!important}.hidden{display:none!important}.row{display:flex;gap:12px;align-items:center}.grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}.grid>*{min-width:0}.choice{border:1px solid #31546f;border-radius:14px;padding:16px;margin-top:11px;background:rgba(7,20,35,.6)}.selected{border-color:var(--cyan);background:linear-gradient(145deg,rgba(23,75,83,.58),rgba(7,30,47,.72))}label{display:block;font-size:12px;color:#b9cde0;margin:14px 0 7px}input,select{width:100%;font-size:16px;padding:12px;color:#fff;background:#081a2d;border:1px solid #3b607c;border-radius:10px;outline:none}input:focus,select:focus{border-color:var(--blue);box-shadow:0 0 0 3px rgba(33,185,255,.12)}input[type=checkbox]{width:auto;accent-color:var(--cyan)}.stats{font-size:24px;font-weight:850;margin-top:6px}.center{text-align:center}.status{font-size:13px;color:#afc6d9;line-height:1.5}.note{background:rgba(96,66,24,.24);border:1px solid #755b2d;color:#f6d994;border-radius:12px;padding:13px 14px;font-size:12px;line-height:1.5;margin:14px 0}table{width:100%;border-collapse:collapse;font-size:12px}td,th{text-align:left;border-bottom:1px solid #294963;padding:10px 3px}th{color:#81a7c2;font-weight:700}small{color:#93abc0;line-height:1.5}#error{color:#ffc7ad;font-size:13px;white-space:pre-wrap}.footer{text-align:center;color:#7894aa;font-size:11px;line-height:1.5;margin:28px 4px 0}.quickline{display:flex;gap:9px;flex-wrap:wrap;margin-top:20px}.quickline span{border:1px solid #28516f;border-radius:999px;padding:7px 10px;color:#a9c9de;font-size:11px;background:rgba(9,26,44,.65)}@media(max-width:760px){.app{padding:18px 14px 45px}.site-header{align-items:flex-start;margin-bottom:8px}.brand-stage{display:flex;justify-content:center;align-items:center;margin:0 auto 12px}.logo-display{display:block;width:min(260px,70vw);height:auto;filter:drop-shadow(0 10px 28px rgba(33,185,255,.22))}.header-meta{font-size:10px}.header-meta strong{font-size:11px}.layout{grid-template-columns:1fr}.intro-card{padding:25px 21px}.feature-row{gap:8px}.feature{padding:13px 7px}}@media(max-width:430px){.site-header{gap:9px}.logo-display{width:min(250px,76vw)}.feature-row{gap:6px}.feature{padding:11px 4px}.tag{font-size:9px;padding:7px}.intro-card h2{font-size:31px;line-height:1.05}.intro-card h2 span{display:block;color:var(--gold2);font-style:italic;text-shadow:0 0 18px rgba(245,185,54,.25)}.actions>*{width:100%}.grid{gap:8px}}
+:root{color-scheme:dark;--bg:#060c15;--panel:#101d2b;--panel2:#132436;--line:#223b50;--ink:#eff8ff;--muted:#94abc1;--blue:#39b9f5;--gold:#f4be52;--gold2:#ffdd8b;--green:#48d6ad;--red:#fa7d88}
+*{box-sizing:border-box}
+html{background:var(--bg);scroll-behavior:smooth}
+body{margin:0;min-height:100vh;font:15px/1.5 system-ui,-apple-system,"Segoe UI",Arial,sans-serif;color:var(--ink);background:radial-gradient(ellipse at 75% -15%,#17324a 0,transparent 55%),linear-gradient(165deg,#071321,#060c15 65%);}
+button,input,select{font:inherit}button{cursor:pointer}button:disabled{cursor:not-allowed;opacity:.6}
+h1,h2,h3,p{margin:0}a{color:inherit}
+.hidden{display:none!important}
+.shell{max-width:1140px;margin:auto;padding:20px 20px 44px}
+header{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:8px 0 22px;border-bottom:1px solid #223446}
+.brand{display:flex;align-items:center;gap:12px;min-width:0}
+.brand img{display:block;width:74px;height:58px;object-fit:contain;filter:drop-shadow(0 3px 13px #33b8ef40)}
+.brand-title{font-size:20px;font-weight:900;letter-spacing:.04em}
+.brand-tag{font-size:10px;color:var(--gold2);font-weight:800;letter-spacing:.16em}
+.header-actions{display:flex;gap:9px;align-items:center}
+.pill{display:inline-flex;align-items:center;gap:7px;border:1px solid #34695e;border-radius:999px;padding:7px 11px;background:#0e2b2c;color:#9cf5d2;font-size:11px;font-weight:900;white-space:nowrap}
+.dot{width:7px;height:7px;border-radius:50%;background:var(--green);box-shadow:0 0 10px #48d6ad66}
+.iconbutton{width:46px;height:44px;display:grid;place-items:center;border-radius:13px;border:1px solid var(--line);background:#122335;color:var(--ink);font-size:22px}
+.menu-overlay{position:fixed;inset:0;z-index:18;background:#01050bbf}
+.drawer{position:fixed;right:0;top:0;bottom:0;z-index:20;width:min(330px,86vw);background:#0c1928;border-left:1px solid #32516b;box-shadow:-18px 0 65px #0008;display:flex;flex-direction:column;padding:24px;gap:12px}
+.drawer-head{display:flex;align-items:center;justify-content:space-between;padding-bottom:14px;border-bottom:1px solid var(--line)}
+.drawer-head strong{font-size:19px}
+.drawer button.nav{width:100%;text-align:left;border:1px solid transparent;border-radius:13px;padding:14px;background:transparent;color:#d2e4f2;font-weight:750}
+.drawer button.nav.active,.drawer button.nav:hover{background:#17344b;border-color:#305875;color:white}
+.drawer .signout{margin-top:auto}
+.section-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:28px 0 17px}
+.eyebrow{font-size:10px;letter-spacing:.2em;font-weight:900;text-transform:uppercase;color:var(--gold2);margin-bottom:4px}
+.section-heading h1{font-size:clamp(23px,4vw,31px);line-height:1.17;letter-spacing:-.025em}
+.section-heading p{font-size:13px;color:var(--muted);margin-top:6px}
+.card{background:linear-gradient(145deg,#112438,#0b1a2b 75%);border:1px solid #244158;border-radius:22px;padding:24px;box-shadow:0 14px 34px #0004;margin-bottom:14px}
+.hero{position:relative;overflow:hidden;padding:27px;border-color:#466179;background:radial-gradient(circle at 86% 2%,#27466865,transparent 46%),linear-gradient(145deg,#142c43,#0d1c2d 75%)}
+.hero:before{content:"";position:absolute;width:230px;height:230px;border:1px solid #5dd1ff20;border-radius:50%;top:-140px;right:-70px;box-shadow:0 0 0 27px #5dd1ff09,0 0 0 54px #5dd1ff05;pointer-events:none}
+.hero-top{display:flex;align-items:center;justify-content:space-between;gap:12px;position:relative}
+.hero-title{font-size:15px;font-weight:850}
+.hero-state{font-size:11px;padding:7px 11px;border-radius:999px;background:#273449;border:1px solid #506075;color:#dbe8f5;font-weight:850}
+.hero-copy{color:#aac1d2;margin:18px 0 20px;font-size:13px;max-width:500px}
+.hero-action{width:100%;max-width:450px;border:0;border-radius:16px;min-height:65px;background:linear-gradient(135deg,#ffdf8d,#f0b339);color:#2a1b05;font-size:18px;font-weight:950;letter-spacing:.045em;box-shadow:0 11px 30px #e8ae3b22;position:relative}
+.hero-action:disabled{opacity:1;background:#8b7550;color:#f5e6c9;box-shadow:none}
+.helper{font-size:12px;color:#92b0c6;margin-top:10px}
+.info{background:#13283a;border:1px solid #2f536b;border-radius:12px;padding:11px 14px;font-size:12px;color:#bbd4e5;margin-top:18px}
+.metric-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:13px}
+.metric{padding:20px;min-height:120px}
+.metric-label{color:#b3c6d6;font-size:12px;font-weight:700}
+.metric-value{font-size:clamp(20px,3vw,27px);font-weight:900;letter-spacing:-.04em;margin-top:12px;line-height:1.2;overflow-wrap:anywhere}
+.metric-sub{font-size:11px;color:var(--muted);margin-top:7px}
+.positive{color:var(--green)}.negative{color:var(--red)}
+.surface-heading{font-size:17px;font-weight:850;margin-bottom:8px}
+.muted{font-size:13px;color:var(--muted)}
+.outline{background:#152e45;border:1px solid #376080;border-radius:12px;color:#dfedfa;padding:12px 16px;font-weight:800}
+.outline:hover{background:#1c3b57}
+.gold{background:linear-gradient(135deg,#ffdd85,#f0b83d);color:#231a0c;border:0;border-radius:12px;padding:13px 16px;font-weight:900}
+.actions{display:flex;flex-wrap:wrap;gap:10px;margin-top:17px}
+.actions button{flex:1 1 180px}
+.table-wrap{overflow-x:auto}
+table{border-collapse:collapse;width:100%;min-width:510px;text-align:left;font-size:13px}
+th{color:var(--muted);font-weight:750;padding:12px;border-bottom:1px solid #36516b}
+td{padding:13px 12px;border-bottom:1px solid #273d51;white-space:nowrap}
+.status-tag{display:inline-block;border:1px solid #3b5870;padding:4px 8px;border-radius:99px;font-size:10px}
+.empty{color:var(--muted);padding:24px 0;text-align:center}
+.settings-grid{display:grid;grid-template-columns:1fr 1fr;gap:17px}
+.field label{display:block;color:#b9cede;font-size:12px;font-weight:800;margin-bottom:7px}
+.field input,.field select{width:100%;height:47px;padding:10px 12px;border:1px solid #38556b;border-radius:12px;background:#0a1a2b;color:#fff;outline:none}
+.field input:focus,.field select:focus{border-color:#47b6e4}
+.checkrow{display:flex;align-items:center;gap:10px;font-weight:700;color:#cee3f0;padding:10px 0}
+.checkrow input{accent-color:var(--gold);width:19px;height:19px}
+.section-foot{margin:24px 0;text-align:center;font-size:11px;color:#648098}
+.alert{color:#ffc3c3;white-space:pre-wrap;margin:10px 0;font-size:13px}
+.login{max-width:540px;margin:55px auto 25px;text-align:center}
+.login .hero-title{font-size:30px}
+.login p{margin:12px auto 20px;color:var(--muted)}
+.login .gold{width:100%;min-height:52px}
+.choice-grid{display:grid;grid-template-columns:1fr 1fr;gap:13px;margin:20px 0}
+.choice{border:1px solid #377969;background:#10302d;padding:19px;border-radius:16px;text-align:left}
+.choice.off{opacity:.65;border-color:#3b4b5b;background:#152232}
+.choice strong{display:block;font-size:16px}
+.choice p{margin-top:6px}
+.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0)}
+@media(max-width:650px){.shell{padding:12px 15px 36px}header{padding-bottom:12px}.brand img{width:66px;height:52px}.brand-title{font-size:18px}.brand-tag{font-size:9px}.section-heading{margin-top:22px}.card{padding:18px;border-radius:19px}.hero{padding:22px 19px}.hero-action{max-width:none}.metric-grid{grid-template-columns:1fr 1fr;gap:9px}.metric{min-height:104px;padding:16px}.metric:last-child{grid-column:1 / -1}.metric-value{font-size:23px}.choice-grid{grid-template-columns:1fr}.settings-grid{grid-template-columns:1fr 1fr}.login{margin:40px auto}.header-actions{gap:7px}}
+@media(prefers-reduced-motion:no-preference){button{transition:transform .15s,filter .15s}button:not(:disabled):active{transform:scale(.985)}}
 </style>
 </head>
-<body><main class="app">
-<section id="welcome"><div class="brand-stage"><img class="logo-display" src="/brand/logo-nexora-clean.png" alt="NEXORA IA — Inteligência em Opções Binárias"></div><div class="layout"><div class="intro-card"><div class="eyebrow">NEXORA IA</div><h2>Inteligência artificial para o <span>mercado</span></h2><p class="muted">O NEXORA IA analisa o mercado e integra contratos na Deriv. Conecte sua conta para consultar saldo e operações oficiais no treinamento. O modo real será habilitado após as verificações necessárias.<br><br>Para começar, conecte sua conta:</p><div class="feature-row"><div class="feature"><img class="feature-icon-img" src="/brand/icon-market.svg" alt=""><strong>Leitura de</strong><span>mercado</span></div><div class="feature"><img class="feature-icon-img" src="/brand/icon-ai.svg" alt=""><strong>Motor</strong><span>inteligente</span></div><div class="feature"><img class="feature-icon-img" src="/brand/icon-risk.svg" alt=""><strong>Gestão de</strong><span>risco</span></div></div><div class="actions"><a class="button goldbutton" href="/auth/deriv/start">CONECTAR COM A DERIV&nbsp; →</a></div><p style="margin:16px 0 0"><small>▣ &nbsp; Login oficial OAuth. As credenciais não passam pelo NEXORA IA.</small></p></div></div></section>
-<section id="choose" class="hidden"><div class="eyebrow">Ambiente protegido</div><h2>Escolha sua conta</h2><p class="muted">Selecione o ambiente de operação da sua conta.</p><div class="choice selected"><strong>Modo treinamento</strong><p class="muted" id="demoInfo">Procurando conta demo...</p></div><div class="choice" style="opacity:.62"><strong>Modo real</strong><p class="muted">Indisponível para compras nesta fase. A aplicação não envia ordens em conta real.</p></div><button onclick="showConfig()">CONTINUAR →</button><button class="ghost" onclick="logout()">SAIR</button></section>
-<section id="setup" class="hidden"><div class="eyebrow">Configuração</div><h2>Personalize seu robô</h2><p class="muted">Defina os limites que aparecerão no painel.</p><div class="panel"><label>Valor da entrada (mínimo US$ 2,00)</label><input id="stake" type="number" value="2" min="2" step="0.01"><label><input type="checkbox" id="mg"> Ativar Martingale</label><div id="mgOptions" class="hidden"><label>Multiplicador</label><select id="mult"><option value="2">2.0x</option><option value="3">3.0x</option><option value="4">4.0x</option></select></div><div class="grid"><div><label>Stop Win (US$)</label><input id="sw" type="number" min="0.01" step="0.01" value="20"></div><div><label>Stop Loss (US$)</label><input id="sl" type="number" min="0.01" step="0.01" value="10"></div></div></div><p class="note">O modo selecionado e o estado da conta ficam visíveis no painel.</p><button onclick="save()">ABRIR PAINEL →</button></section>
+<body>
+<div class="shell">
+<header>
+  <div class="brand"><img src="/brand/logo-nexora-clean.png" alt="NEXORA IA"><div><div class="brand-title">NEXORA IA</div><div class="brand-tag">SEU ROBÔ INTELIGENTE</div></div></div>
+  <div class="header-actions"><span id="accountBadge" class="pill hidden"><span class="dot"></span>DERIV DEMO</span><button id="menuButton" class="iconbutton hidden" aria-label="Abrir menu" aria-expanded="false" onclick="toggleMenu(true)">☰</button></div>
+</header>
+<div id="menuOverlay" class="menu-overlay hidden" onclick="toggleMenu(false)"></div>
+<nav id="drawer" class="drawer hidden" aria-label="Menu principal">
+  <div class="drawer-head"><strong>Menu NEXORA</strong><button class="iconbutton" aria-label="Fechar menu" onclick="toggleMenu(false)">×</button></div>
+  <button class="nav active" data-view="dashboard" onclick="go('dashboard')">⌂　Painel principal</button>
+  <button class="nav" data-view="results" onclick="go('results')">▤　Resultados</button>
+  <button class="nav" data-view="settings" onclick="go('settings')">⚙　Configurações</button>
+  <button class="nav" data-view="account" onclick="go('account')">◉　Minha conta</button>
+  <button class="nav signout" onclick="logout()">↪　Desconectar</button>
+</nav>
+<main>
+<section id="welcome" class="login">
+  <div class="eyebrow">BEM-VINDO AO NEXORA</div>
+  <div class="hero-title">Seu robô. Seu controle.</div>
+  <p>Conecte sua conta Deriv para acompanhar saldo, operações e análises em um só lugar.</p>
+  <a class="gold" href="/auth/deriv/start" style="display:block;text-decoration:none">CONECTAR COM A DERIV</a>
+  <p style="font-size:12px">Login OAuth oficial da Deriv. Não solicitamos sua senha.</p>
+</section>
+<section id="choose" class="hidden">
+  <div class="section-heading"><div><div class="eyebrow">PASSO 1 DE 2</div><h1>Escolha sua conta</h1><p>Treinamento agora. Conta real somente após liberação.</p></div></div>
+  <div class="choice-grid">
+    <div class="choice"><strong>●　Deriv Demo</strong><p id="demoInfo" class="muted">Conferindo sua conta de treinamento...</p></div>
+    <div class="choice off"><strong>○　Deriv Real</strong><p class="muted">Indisponível para compras nesta fase. A aplicação não envia ordens em conta real.</p></div>
+  </div>
+  <button class="gold" style="width:100%" onclick="go('dashboard')">ENTRAR NO PAINEL</button>
+</section>
 <section id="dashboard" class="hidden">
-<div class="statusbar"><div><div class="eyebrow">Painel NEXORA</div><h2>Minha conta Deriv</h2></div><span class="statuspill">DERIV DEMO</span></div>
-<div class="panel center accent"><h3>Conexão com a corretora</h3><p class="status" id="connection">Conectando...</p><p class="muted" id="reason">Consultando dados oficiais.</p><button class="secondary" onclick="refreshDashboard()">ATUALIZAR PAINEL</button></div>
-<div class="panel gold"><h3>Saldo oficial da Deriv Demo</h3><p id="demoBalance" class="stats">Aguardando consulta</p><button class="secondary" onclick="loadDemoBalance()">CONSULTAR SALDO</button></div>
-<div class="panel gold"><h3>NEXORA AutoPilot</h3><p class="muted">Análise de tendências, reversões e rompimentos. Consulta de propostas oficiais. Execução automática em desenvolvimento.</p><button class="secondary" onclick="loadAutopilotResearch()">ANALISAR MERCADO</button><button class="secondary" onclick="loadAutopilotDemoPreview()">CONSULTAR PROPOSTA DEMO</button><p id="autopilotResearch" class="status">Aguardando análise.</p></div>
-<div class="panel"><h3>Operação oficial na Deriv Demo</h3><p class="muted">Primeiro teste supervisionado com saldo virtual. É necessário habilitar a compra demonstrativa no servidor.</p><button class="goldbutton" onclick="testDemoBuy()">CONFIRMAR UMA COMPRA DEMO</button><p id="demoTestInfo" class="status">Nenhuma compra solicitada nesta sessão.</p></div>
-<div class="panel"><h3>Histórico oficial — Deriv Demo</h3><button class="secondary" onclick="loadDemoOrders()">ATUALIZAR CONTRATOS</button><div id="demoOrders" class="status">Aguardando consulta.</div></div>
-<button class="secondary" onclick="edit()">ALTERAR CONFIGURAÇÕES</button><button class="ghost" onclick="logout()">DESCONECTAR</button></section>
-<p id="error" role="alert"></p></main>
+  <div class="section-heading"><div><div class="eyebrow">VISÃO GERAL</div><h1>Meu robô</h1><p>O essencial para acompanhar suas operações.</p></div></div>
+  <div class="card hero">
+    <div class="hero-top"><div class="hero-title">NEXORA AutoPilot</div><span id="robotState" class="hero-state">DESLIGADO</span></div>
+    <p id="robotMessage" class="hero-copy">O modo automático ainda não foi liberado. Suas operações manuais de treinamento continuam disponíveis.</p>
+    <button id="robotButton" class="hero-action" disabled aria-disabled="true">LIGAR ROBÔ</button>
+    <div class="helper">O botão será habilitado após a validação do executor automático na Deriv Demo.</div>
+    <div class="info" id="feedState">Conferindo conexão de cotações...</div>
+  </div>
+  <div class="metric-grid">
+    <div class="card metric"><div class="metric-label">Saldo Deriv Demo</div><div class="metric-value" id="balanceMetric">—</div><div class="metric-sub">Saldo oficial</div></div>
+    <div class="card metric"><div class="metric-label">Resultado acumulado</div><div class="metric-value" id="profitMetric">—</div><div class="metric-sub">Somente contratos liquidados</div></div>
+    <div class="card metric"><div class="metric-label">Vitórias / Derrotas</div><div class="metric-value" id="scoreMetric">— / —</div><div class="metric-sub">Histórico Deriv Demo</div></div>
+  </div>
+  <div class="card">
+    <div class="surface-heading">Última operação</div>
+    <p id="lastOrder" class="muted">Buscando contrato mais recente...</p>
+    <div class="actions"><button class="outline" onclick="go('results')">VER RESULTADOS</button><button class="outline" onclick="refreshDashboard()">ATUALIZAR DADOS</button></div>
+  </div>
+</section>
+<section id="results" class="hidden">
+  <div class="section-heading"><div><div class="eyebrow">DADOS OFICIAIS</div><h1>Resultados</h1><p>Somente contratos enviados e registrados na Deriv Demo.</p></div></div>
+  <div class="card"><div class="surface-heading">Histórico oficial — Deriv Demo</div>
+    <div class="actions"><button class="outline" onclick="loadDemoOrders()">ATUALIZAR CONTRATOS</button></div>
+    <div class="table-wrap"><table><thead><tr><th>Ativo</th><th>Direção</th><th>Entrada</th><th>Situação</th><th>Resultado</th><th>Ação</th></tr></thead><tbody id="ordersBody"><tr><td colspan="6" class="empty">Carregando contratos...</td></tr></tbody></table></div>
+  </div>
+</section>
+<section id="settings" class="hidden">
+  <div class="section-heading"><div><div class="eyebrow">SEU CONTROLE</div><h1>Configurações</h1><p>Defina valores e limites antes de operar.</p></div></div>
+  <div class="card"><div class="surface-heading">Gestão de risco</div>
+    <div class="settings-grid">
+      <div class="field"><label for="stake">Valor da entrada (USD)</label><input id="stake" inputmode="decimal" type="number" value="2" min="2" step=".01"></div>
+      <div class="field"><label for="sw">Stop Win (USD)</label><input id="sw" inputmode="decimal" type="number" value="20" min=".01" step=".01"></div>
+      <div class="field"><label for="sl">Stop Loss (USD)</label><input id="sl" inputmode="decimal" type="number" value="10" min=".01" step=".01"></div>
+      <div class="field"><label for="mult">Multiplicador</label><select id="mult"><option value="2">2×</option><option value="3">3×</option><option value="4">4×</option></select></div>
+    </div>
+    <label class="checkrow"><input type="checkbox" id="mg"> Ativar Martingale</label>
+    <p class="muted">Martingale não está habilitado no executor oficial de compras. Este controle registra apenas sua preferência.</p>
+    <div class="actions"><button class="gold" onclick="save()">SALVAR CONFIGURAÇÕES</button></div>
+    <p class="helper" id="configFeedback" role="status"></p>
+  </div>
+  <div class="card"><div class="surface-heading">Teste controlado de integração</div>
+    <p class="muted">Enviar UMA ordem oficial na conta Deriv Demo para testar a conexão com a corretora. Esta operação não é escolhida pelo AutoPilot, usa direção CALL fixa e pode perder o valor da entrada.</p>
+    <div class="actions"><button class="outline" onclick="testDemoBuy()">TESTAR UMA ENTRADA DEMO</button></div>
+    <p class="helper" id="demoTestInfo">Nenhuma compra solicitada nesta sessão.</p>
+  </div>
+</section>
+<section id="account" class="hidden">
+  <div class="section-heading"><div><div class="eyebrow">SUA CONTA</div><h1>Conta Deriv</h1><p>Conexão e dados da corretora.</p></div></div>
+  <div class="card"><div class="surface-heading">Deriv Demo <span class="pill"><span class="dot"></span>CONECTADA</span></div>
+    <p class="muted">Saldo oficial da Deriv Demo</p><div class="metric-value" id="accountBalance">—</div>
+    <div class="actions"><button class="outline" onclick="loadDemoBalance()">ATUALIZAR SALDO</button><button class="outline" onclick="logout()">DESCONECTAR</button></div>
+  </div>
+  <div class="card"><div class="surface-heading">Leitura de mercado</div><p id="autopilotResearch" class="muted">Aguardando consulta.</p><div class="actions"><button class="outline" onclick="loadAutopilotResearch()">ANALISAR MERCADO</button><button class="outline" onclick="loadAutopilotDemoPreview()">CONSULTAR PROPOSTA DEMO</button></div></div>
+</section>
+<p id="error" class="alert" role="alert"></p>
+</main>
+<footer class="section-foot">NEXORA IA · Deriv Demo · Resultados de contratos oficiais, sem simulação local.</footer>
+</div>
 <script>
 const $=id=>document.getElementById(id);
-let activePage='welcome';
-function page(v){['welcome','choose','setup','dashboard'].forEach(p=>$(p).classList.toggle('hidden',p!==v));activePage=v}
-function fail(m){$('error').textContent=m||''}
-async function req(path,opts={}){const r=await fetch(path,{credentials:'same-origin',...opts});const data=await r.json();if(!r.ok)throw Error(data.detail||'Falha de conexão');return data}
-$('mg').onchange=()=>$('mgOptions').classList.toggle('hidden',!$('mg').checked);
-async function init(){try{const s=await req('/api/session');if(!s.authenticated){page('welcome');return}page('choose');$('demoInfo').textContent=s.demo_accounts.length+' conta(s) demonstrativa(s) identificada(s) na Deriv.'}catch(e){fail(e.message)}}
-function showConfig(){page('setup')}
-async function save(){try{await req('/api/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({stake:$('stake').value,martingale:$('mg').checked,multiplier:$('mult').value,stop_win:$('sw').value,stop_loss:$('sl').value})});page('dashboard');fail('');await refreshDashboard()}catch(e){fail(e.message)}}
-async function refreshDashboard(){if(activePage!=='dashboard')return;try{const s=await req('/api/status');$('connection').textContent=(s.connected?'Cotações conectadas':'Aguardando cotações')+' • '+s.symbol;$('reason').textContent=s.reason;await Promise.all([loadDemoBalance(),loadDemoOrders()])}catch(e){fail(e.message)}}
-async function loadDemoBalance(){try{const b=await req('/api/demo/balance');$('demoBalance').textContent=b.balance+' '+b.currency+' (Deriv Demo)'}catch(e){$('demoBalance').textContent='Saldo indisponível: '+e.message}}
-async function loadAutopilotResearch(){try{const a=await req('/api/autopilot/research');const entries=a.candidates.map(c=>c.strategy.toUpperCase()+' • '+c.direction+' — '+c.reason);$('autopilotResearch').textContent=a.symbol+' • '+a.samples+' cotações • '+(entries.join(' | ')||a.reason);fail('')}catch(e){$('autopilotResearch').textContent='Análise indisponível: '+e.message}}
-async function loadAutopilotDemoPreview(){try{const data=await req('/api/autopilot/demo-preview');if(!data.proposal){$('autopilotResearch').textContent=data.reason;return}const c=data.candidate,q=data.proposal,e=data.evaluation;$('autopilotResearch').textContent=c.strategy.toUpperCase()+' • '+c.direction+' • proposta oficial '+q.ask_price+' '+q.currency+' • pagamento '+q.payout+' '+q.currency+' • taxa de equilíbrio '+(100*e.break_even_probability).toFixed(1)+'%';fail('')}catch(e){$('autopilotResearch').textContent='Proposta indisponível: '+e.message}}
-async function testDemoBuy(){try{const s=await req('/api/status');if(!window.confirm('CONFIRMAR UMA COMPRA DERIV DEMO\n\nSerá enviada UMA ordem de treinamento com saldo VIRTUAL. Continuar?'))return;const key='demo-'+Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,12);const order=await req('/api/demo/buy',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({symbol:s.symbol,direction:'CALL',minutes:5,confirm:'DEMO_ONLY',request_key:key})});$('demoTestInfo').textContent='Ordem #'+order.id+' • '+order.state+' • confira o histórico oficial.';await loadDemoOrders();fail('')}catch(e){fail('Compra DEMO: '+e.message)}}
-async function loadDemoOrders(){try{const data=await req('/api/demo/orders');const n=$('demoOrders');n.replaceChildren();if(!data.items.length){n.textContent='Nenhum contrato oficial registrado.';return}for(const o of data.items){const p=document.createElement('p');p.className='status';p.textContent=o.symbol+' • '+o.direction+' • Entrada '+o.stake+' • '+o.state+' • '+(o.pnl===null?'Resultado pendente':'P/L '+o.pnl);n.append(p);if(o.state==='CONFIRMED'&&o.contract_id){const b=document.createElement('button');b.className='secondary';b.textContent='CONSULTAR LIQUIDAÇÃO';b.onclick=async()=>{try{await req('/api/demo/orders/'+encodeURIComponent(o.id)+'/reconcile',{method:'POST'});await loadDemoOrders()}catch(e){fail(e.message)}};n.append(b)}if(o.state==='UNKNOWN'){const note=document.createElement('p');note.className='muted';note.textContent='Resultado incerto: reconciliar com a Deriv antes de novas compras.';n.append(note)}}}catch(e){$('demoOrders').textContent='Histórico indisponível: '+e.message}}
-function edit(){page('setup')}
-async function logout(){try{await req('/api/logout',{method:'POST'});page('welcome');fail('')}catch(e){fail(e.message)}}
+let activePage='welcome',demoOrders=[],demoBalance=null,refreshTimer=null,lastRequestKey=null;
+const money=(n,currency='USD')=>{const value=Number(n);return Number.isFinite(value)?value.toLocaleString('pt-BR',{style:'currency',currency:currency||'USD'}):'—'};
+const safe=(v)=>v===null||v===undefined?'—':String(v);
+function page(v){for(const name of ['welcome','choose','dashboard','results','settings','account'])$(name).classList.toggle('hidden',name!==v);activePage=v;const logged=!['welcome','choose'].includes(v);$('accountBadge').classList.toggle('hidden',!logged);$('menuButton').classList.toggle('hidden',!logged);document.querySelectorAll('.nav[data-view]').forEach(b=>b.classList.toggle('active',b.dataset.view===v))}
+function toggleMenu(open){$('drawer').classList.toggle('hidden',!open);$('menuOverlay').classList.toggle('hidden',!open);$('menuButton').setAttribute('aria-expanded',String(open))}
+function go(v){toggleMenu(false);page(v);window.scrollTo({top:0,behavior:'smooth'});if(v==='dashboard')refreshDashboard();if(v==='results')loadDemoOrders();if(v==='account')loadDemoBalance();if(v==='settings')loadSettings()}
+function fail(msg){$('error').textContent=msg||''}
+async function req(path,opts={}){const r=await fetch(path,{credentials:'same-origin',...opts});let data;try{data=await r.json()}catch{throw Error('Resposta inválida do servidor')}if(!r.ok)throw Error(data.detail||'Falha na conexão');return data}
+async function init(){try{const s=await req('/api/session');if(!s.authenticated){page('welcome');return}page('dashboard');refreshDashboard();refreshTimer=setInterval(()=>{if(activePage==='dashboard'||activePage==='results')refreshDashboard()},30000)}catch(e){fail(e.message);page('welcome')}}
+async function refreshDashboard(){try{const [status]=await Promise.all([req('/api/status'),loadDemoBalance(),loadDemoOrders()]);$('feedState').textContent=(status.connected?'● Cotações conectadas':'○ Reconectando cotações')+' · '+safe(status.symbol);const eligible=Boolean(status.auto_buy_enabled&&status.running);$('robotState').textContent=eligible?'ATIVO':'DESLIGADO';$('robotMessage').textContent='Execução automática ainda não liberada. Acompanhamento e testes oficiais da Deriv Demo disponíveis.';$('robotButton').disabled=true;fail('')}catch(e){fail('Painel: '+e.message)}}
+async function loadDemoBalance(){try{const b=await req('/api/demo/balance');demoBalance=b;$('balanceMetric').textContent=money(b.balance,b.currency);$('accountBalance').textContent=money(b.balance,b.currency);return b}catch(e){$('balanceMetric').textContent='Indisponível';$('accountBalance').textContent='Indisponível';throw e}}
+function summarizeOrders(items){const settled=items.filter(o=>o.state==='SETTLED'&&Number.isFinite(Number(o.pnl)));const pnl=settled.reduce((sum,o)=>sum+Number(o.pnl),0);const won=settled.filter(o=>Number(o.pnl)>0).length;const lost=settled.filter(o=>Number(o.pnl)<=0).length;return {pnl,won,lost}}
+async function loadDemoOrders(){try{const data=await req('/api/demo/orders');demoOrders=data.items||[];const summary=summarizeOrders(demoOrders);const p=$('profitMetric');p.textContent=money(summary.pnl);p.className='metric-value '+(summary.pnl>0?'positive':summary.pnl<0?'negative':'');$('scoreMetric').textContent=summary.won+' / '+summary.lost;const last=demoOrders[0];$('lastOrder').textContent=last?last.symbol+' · '+last.direction+' · Entrada '+money(last.stake)+' · '+last.state+(last.pnl===null?' · Aguardando resultado':' · P/L '+money(last.pnl)):'Nenhum contrato oficial ainda.';renderOrders();return data}catch(e){$('ordersBody').innerHTML='<tr><td colspan="6" class="empty">Não foi possível carregar o histórico.</td></tr>';throw e}}
+function renderOrders(){const tbody=$('ordersBody');tbody.replaceChildren();if(!demoOrders.length){const tr=document.createElement('tr'),td=document.createElement('td');td.colSpan=6;td.className='empty';td.textContent='Nenhum contrato oficial registrado.';tr.append(td);tbody.append(tr);return}for(const o of demoOrders){const row=document.createElement('tr');for(const text of [o.symbol,o.direction,money(o.stake),o.state,o.pnl===null?'Pendente':money(o.pnl)]){const td=document.createElement('td');td.textContent=text;row.append(td)}const action=document.createElement('td');if(o.state==='CONFIRMED'&&o.contract_id){const b=document.createElement('button');b.className='outline';b.textContent='Conferir';b.onclick=()=>reconcile(o.id);action.append(b)}else if(o.state==='UNKNOWN'){action.textContent='Verificar na Deriv'}else action.textContent='—';row.append(action);tbody.append(row)}}
+async function reconcile(id){try{await req('/api/demo/orders/'+encodeURIComponent(id)+'/reconcile',{method:'POST'});await loadDemoOrders();await loadDemoBalance();fail('')}catch(e){fail('Liquidação: '+e.message)}}
+async function loadSettings(){try{const s=await req('/api/config/current');$('stake').value=s.stake;$('sw').value=s.stop_win;$('sl').value=s.stop_loss;$('mg').checked=s.martingale;$('mult').value=String(Number(s.multiplier))}catch(e){$('configFeedback').textContent='Configurações não carregadas: '+e.message}}
+async function save(){try{await req('/api/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({stake:$('stake').value,martingale:$('mg').checked,multiplier:$('mult').value,stop_win:$('sw').value,stop_loss:$('sl').value})});$('configFeedback').textContent='Configurações salvas com sucesso.';fail('')}catch(e){fail('Configurações: '+e.message)}}
+async function testDemoBuy(){try{const s=await req('/api/status');if(!window.confirm('ATENÇÃO: COMPRA OFICIAL NA DERIV DEMO\n\nEsta ação enviará uma ordem CALL fixa de 5 minutos usando o saldo virtual e o valor definido nas configurações. Não é um sinal escolhido pelo AutoPilot. Você pode perder todo o valor da entrada.\n\nDeseja confirmar?'))return;const key='demo-'+Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,12);lastRequestKey=key;const order=await req('/api/demo/buy',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({symbol:s.symbol,direction:'CALL',minutes:5,confirm:'DEMO_ONLY',request_key:key})});$('demoTestInfo').textContent='Ordem #'+order.id+' · '+order.state+' · acompanhe em Resultados.';await loadDemoOrders();await loadDemoBalance();fail('')}catch(e){fail('Compra DEMO: '+e.message)}}
+async function loadAutopilotResearch(){try{const a=await req('/api/autopilot/research');const entries=a.candidates.map(c=>c.strategy.toUpperCase()+' '+c.direction+' — '+c.reason);$('autopilotResearch').textContent=a.symbol+' · '+a.samples+' cotações · '+(entries.join(' | ')||a.reason);fail('')}catch(e){$('autopilotResearch').textContent='Análise indisponível: '+e.message}}
+async function loadAutopilotDemoPreview(){try{const a=await req('/api/autopilot/demo-preview');if(!a.proposal){$('autopilotResearch').textContent=a.reason;return}const q=a.proposal;$('autopilotResearch').textContent=a.candidate.direction+' · proposta Deriv Demo '+money(q.ask_price,q.currency)+' · pagamento '+money(q.payout,q.currency)+' · cotação somente leitura';fail('')}catch(e){$('autopilotResearch').textContent='Proposta indisponível: '+e.message}}
+async function logout(){try{await req('/api/logout',{method:'POST'});if(refreshTimer)clearInterval(refreshTimer);toggleMenu(false);page('welcome');demoOrders=[];demoBalance=null;fail('')}catch(e){fail(e.message)}}
+document.addEventListener('keydown',e=>{if(e.key==='Escape')toggleMenu(false)});
 init();
-</script></body></html>
+</script>
+</body></html>

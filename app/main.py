@@ -361,6 +361,15 @@ class DemoBuy(DemoProposal):
     confirm:str=''
     request_key:str=''
 
+@app.get('/api/config/current')
+async def current_config(request:Request,nexora_sid:str|None=Cookie(default=None)):
+    """Return saved risk preferences for the authenticated Deriv user."""
+    u=active_user(request,nexora_sid)
+    return {'stake':u.stake,'stop_win':u.stop_win,'stop_loss':u.stop_loss,
+            'martingale':bool(u.martingale),'multiplier':u.multiplier,
+            'execution':'DERIV_DEMO_ONLY','real_orders_enabled':False}
+
+
 @app.get('/api/status')
 async def status(request:Request,nexora_sid:str|None=Cookie(default=None)):
     user=active_user(request,nexora_sid)
