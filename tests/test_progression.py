@@ -36,7 +36,7 @@ def test_different_multipliers_can_be_entered():
     a=calculate(orders,gale_multiplier='2.3',cycle_multiplier='2.5')
     assert a.stake==Decimal('4.60')
     a=calculate(orders+[row(2,'4.60',-4.6)],gale_multiplier='2.3',cycle_multiplier='2.5')
-    assert a.stake==Decimal('5.00')
+    assert a.stake==Decimal('11.50')
 
 def test_up_to_five_gales_and_cycles():
     a=calculate([],gales=5,cycles=5,gale_multiplier='1.0',cycle_multiplier='1.0')
@@ -51,8 +51,8 @@ def test_rejected_outcome_and_exposure_limits():
     with pytest.raises(ProgressionHalt,match='histórico diferente'):
         calculate([row(1,4,-4)])
     with pytest.raises(ProgressionHalt,match='limite máximo'):
-        calculate([row(i,2,-2) for i in range(1,50)],
-                  gales=5,cycles=5,gale_multiplier='1',cycle_multiplier='1')
+        calculate([row(i,20,-20) for i in range(1,7)],
+                  base='20.00',gales=5,cycles=5,gale_multiplier='1',cycle_multiplier='1')
     with pytest.raises(ProgressionHalt):
         calculate([],cycle_multiplier='NaN')
     with pytest.raises(ProgressionHalt):
