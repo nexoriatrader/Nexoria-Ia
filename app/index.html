@@ -134,6 +134,54 @@ button.choose-account:focus-visible{outline:3px solid #71d2ff;outline-offset:4px
 .choose-continue:hover{filter:brightness(1.06)}
 .choose-continue:focus-visible{outline:3px solid #72d1ff;outline-offset:3px}
 @media(max-width:700px){.choose-account{min-height:225px}.choose-account-meta{margin-bottom:28px}.choose-advice{padding:18px 16px;gap:10px}.choose-continue{min-height:60px}}
+.setup-zero-note{border-left:3px solid #f2c778;background:#2b2b295a;padding:12px;border-radius:0 11px 11px 0;color:#d9d1bf;font-size:12px}.setup-zero-note strong{color:#ffe19a}
+/* Third onboarding screen: same NEXORA premium navy/gold design. */
+.robot-setup{position:relative;isolation:isolate;max-width:1040px;margin:0 auto;padding:39px 0 16px}
+.setup-aura{position:absolute;z-index:-1;pointer-events:none;inset:0 0 auto;height:390px;background:radial-gradient(ellipse at 55% 0%,#2783ae26,transparent 69%)}
+.setup-heading{text-align:center;max-width:710px;margin:0 auto 27px}
+.setup-heading h1{margin:19px 0 12px;font-size:clamp(33px,5vw,49px);line-height:1.1;letter-spacing:-.048em}
+.setup-heading h1 span{color:#f2c778}
+.setup-heading>p{color:#adc4d4;font-size:15px;line-height:1.65}
+.setup-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:15px}
+.setup-panel{background:radial-gradient(circle at 95% 0%,#267bb025,transparent 50%),linear-gradient(145deg,#142c41,#0c1b2c 82%);border:1px solid #35556b;border-radius:21px;padding:23px;min-width:0;box-shadow:0 12px 32px #0004}
+.setup-panel-full{grid-column:1/-1}
+.setup-panel-title{display:flex;align-items:center;gap:12px;margin-bottom:19px}
+.setup-icon{display:grid;place-items:center;flex:none;width:43px;height:43px;border:1px solid #39697a;background:#1b4153;border-radius:12px;color:#f3cb80;font-weight:900;font-size:24px}
+.setup-panel h2{font-size:17px;color:#f3f8ff;line-height:1.25;letter-spacing:-.02em}
+.setup-panel-title p{font-size:12px;color:#a7bacd;line-height:1.5;margin-top:3px}
+.setup-panel label:not(.setup-toggle){display:block;font-size:12px;font-weight:800;color:#c5d9e5;margin-bottom:8px}
+.setup-money{display:flex;align-items:center;border:1px solid #42617a;background:#081a2b;border-radius:12px;overflow:hidden;height:50px}
+.setup-money:focus-within{border-color:#73d0e9;box-shadow:0 0 0 2px #44b3d926}
+.setup-money span{font-size:13px;font-weight:900;color:#e9c77f;white-space:nowrap;padding:0 11px 0 14px}
+.setup-money input{background:transparent;color:#f6faff;border:0;min-width:0;flex:1;width:100%;outline:0;padding:12px 10px;font-size:18px;font-weight:800}
+.setup-fields-two{display:grid;grid-template-columns:1fr 1fr;gap:13px}
+.setup-panel select{display:block;width:100%;height:50px;border:1px solid #42617a;background:#081a2b;color:#f3f8ff;border-radius:12px;padding:0 12px;font-weight:750}
+.setup-panel select:focus-visible{outline:2px solid #73d0e9}
+.setup-hint{color:#92afc4;font-size:11px;line-height:1.6;margin-top:12px}
+.setup-mode-row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.setup-mode{display:flex;flex-direction:column;gap:2px;position:relative;border:1px solid #5cbaa5;background:#13413d;border-radius:13px;min-height:100px;justify-content:center;padding:13px}
+.setup-mode span{color:#f4d48c;font-size:21px}.setup-mode strong{font-size:13px}.setup-mode small{font-size:10px;color:#a6ddcb}
+.setup-mode.disabled{border-color:#344b60;background:#162638;opacity:.68}.setup-mode.disabled small{color:#aebac5}
+.setup-toggle{display:flex;align-items:center;justify-content:space-between;gap:12px;cursor:pointer;margin-bottom:15px}
+.setup-toggle strong{display:block;font-size:14px;color:#f3faff}.setup-toggle small{display:block;font-size:11px;color:#a2b5c7;margin-top:4px;line-height:1.5}
+.setup-toggle input{position:absolute;opacity:0;width:1px;height:1px}
+.setup-toggle-track{width:49px;height:28px;flex:none;border-radius:100px;border:1px solid #587081;background:#293c4f;position:relative;transition:background .18s}
+.setup-toggle-track:before{content:"";position:absolute;width:20px;height:20px;border-radius:50%;background:#d7e5ee;left:3px;top:3px;transition:transform .18s}
+.setup-toggle input:checked+.setup-toggle-track{background:#397b70;border-color:#66c5af}
+.setup-toggle input:checked+.setup-toggle-track:before{transform:translateX(21px);background:#e8fff7}
+.setup-toggle input:focus-visible+.setup-toggle-track{outline:3px solid #75c5e7;outline-offset:3px}
+.setup-note{display:flex;gap:15px;align-items:flex-start;border:1px solid #4b6070;background:linear-gradient(120deg,#172f40,#101e2c);border-radius:17px;padding:19px 21px;margin:18px 0}
+.setup-note>span{flex:none;display:grid;place-items:center;color:#f2c575;background:#463b2a;border-radius:12px;font-size:25px;width:39px;height:39px}
+.setup-note strong{color:#f5d695;font-size:15px}.setup-note p{color:#b8cbd9;font-size:12px;line-height:1.6;margin-top:6px}
+.setup-feedback{font-size:12px;color:#ffd1a2;min-height:18px;margin:8px 0 12px}
+.setup-submit{width:100%;min-height:63px;padding:13px 45px;position:relative;border:1px solid #ffe3a3;border-radius:16px;background:linear-gradient(115deg,#ffe49c,#f1b946);color:#211b10;font-size:15px;font-weight:950;letter-spacing:.035em;box-shadow:0 11px 32px #e4a23940}
+.setup-submit span{font-size:22px;position:absolute;right:20px;top:50%;transform:translateY(-50%)}
+.setup-submit:focus-visible{outline:3px solid #6dc9ff;outline-offset:3px}
+.setup-back{display:block;margin:16px auto;background:none;border:0;color:#95b1c5;text-decoration:underline;text-underline-offset:4px;padding:8px}
+@media(max-width:700px){.robot-setup{padding:23px 0 12px}.setup-heading h1{font-size:clamp(32px,8vw,41px)}.setup-grid{grid-template-columns:1fr;gap:12px}.setup-panel{padding:19px;border-radius:18px}.setup-panel-full{grid-column:auto}.setup-submit{font-size:13px;padding-left:15px;padding-right:43px}.setup-heading>p{font-size:14px}.setup-fields-two{gap:9px}.setup-note{padding:16px}}
+@media(max-width:365px){.setup-panel{padding:15px}.setup-fields-two{grid-template-columns:1fr}.setup-mode{padding:10px}}
+@media(prefers-reduced-motion:reduce){.setup-toggle-track,.setup-toggle-track:before{transition:none}}
+
 /* Premium welcome page: isolated selectors to preserve the authenticated dashboard. */
 .login.landing{position:relative;isolation:isolate;max-width:1050px;margin:35px auto 14px;text-align:left}
 .landing-backdrop{position:absolute;inset:-50px -5vw auto;height:520px;z-index:-1;overflow:hidden;pointer-events:none}
@@ -281,6 +329,57 @@ button.choose-account:focus-visible{outline:3px solid #71d2ff;outline-offset:4px
   <div class="choose-footnote"><span aria-hidden="true">⌑</span> Escolher uma conta não inicia o robô automaticamente.</div>
   <button type="button" class="choose-signout" onclick="logout()">Sair desta conta</button>
 </section>
+<section id="setup" class="robot-setup hidden" aria-labelledby="setupTitle">
+  <div class="setup-aura" aria-hidden="true"></div>
+  <div class="setup-heading">
+    <div class="choose-overline"><span class="choose-overline-dot"></span> CONFIGURAÇÃO INICIAL · ETAPA 3</div>
+    <h1 id="setupTitle">É hora de <span>configurar seu robô.</span></h1>
+    <p>Defina os valores de entrada e os limites que orientarão as operações do NEXORA AutoPilot.</p>
+  </div>
+  <form id="setupForm" onsubmit="saveOnboarding(event)">
+    <div class="setup-grid">
+      <div class="setup-panel">
+        <div class="setup-panel-title"><span class="setup-icon" aria-hidden="true">◉</span><div><h2>Modo de operação</h2><p>Selecione o ambiente do robô.</p></div></div>
+        <div class="setup-mode-row" role="group" aria-label="Modo de conta">
+          <div class="setup-mode selected"><span>◉</span><strong>Treinamento</strong><small>Selecionado</small></div>
+          <div class="setup-mode disabled" aria-disabled="true"><span>◇</span><strong>Conta real</strong><small>Indisponível</small></div>
+        </div>
+      </div>
+      <div class="setup-panel">
+        <div class="setup-panel-title"><span class="setup-icon" aria-hidden="true">＄</span><div><h2>Valor de entrada</h2><p>Valor base por operação (USD).</p></div></div>
+        <label for="setupStake">Valor inicial em dólar</label>
+        <div class="setup-money"><span>US$</span><input id="setupStake" name="stake" inputmode="decimal" type="number" min="2" step=".01" value="2.00" required></div>
+      </div>
+      <div class="setup-panel">
+        <div class="setup-panel-title"><span class="setup-icon" aria-hidden="true">◇</span><div><h2>Gestão de risco</h2><p>Defina os limites de lucro e perda.</p></div></div>
+        <div class="setup-fields-two">
+          <div><label for="setupWin">Stop Win (USD)</label><div class="setup-money"><span>US$</span><input id="setupWin" inputmode="decimal" type="number" min="0" step=".01" value="0.00" required></div></div>
+          <div><label for="setupLoss">Stop Loss (USD)</label><div class="setup-money"><span>US$</span><input id="setupLoss" inputmode="decimal" type="number" min="0" step=".01" value="0.00" required></div></div>
+        </div>
+        <p class="setup-hint setup-zero-note"><strong>Stops em US$ 0,00:</strong> significam que esse limite fica desativado. Com ambos em zero, o robô não pausa por Stop Win ou Stop Loss e pode continuar operando até você desligá-lo manualmente ou outra proteção interromper a execução. Isso aumenta a exposição a perdas.</p>
+      </div>
+      <div class="setup-panel">
+        <div class="setup-panel-title"><span class="setup-icon" aria-hidden="true">↗</span><div><h2>Martingale</h2><p>Configure a progressão para uma futura modalidade.</p></div></div>
+        <label class="setup-toggle"><span><strong>Planejar Martingale</strong><small>Salvar a preferência sem ativar novas entradas.</small></span><input id="setupMg" type="checkbox" onchange="toggleSetupMartingale()"><span class="setup-toggle-track" aria-hidden="true"></span></label>
+        <div class="setup-fields-two hidden" id="setupGaleFields">
+          <div><label for="setupGales">Tentativas adicionais</label><select id="setupGales"><option value="1">1 tentativa</option><option value="2">2 tentativas</option><option value="3">3 tentativas</option></select></div>
+          <div><label for="setupMultiplier">Multiplicador</label><select id="setupMultiplier"><option value="2">2×</option><option value="3">3×</option><option value="4">4×</option></select></div>
+        </div>
+        <p class="setup-hint">Martingale ainda não executa operações no AutoPilot. Aumentar entradas após perdas eleva rapidamente o risco.</p>
+      </div>
+      <div class="setup-panel setup-panel-full">
+        <div class="setup-panel-title"><span class="setup-icon" aria-hidden="true">∞</span><div><h2>Ciclos operacionais</h2><p>Planeje quantas sequências o robô deverá realizar.</p></div></div>
+        <label for="setupCycles">Quantidade de ciclos planejada</label>
+        <select id="setupCycles"><option value="1">1 ciclo</option><option value="3">3 ciclos</option><option value="5">5 ciclos</option><option value="10">10 ciclos</option><option value="unlimited">Sem limite de ciclos</option></select>
+        <p class="setup-hint">Ciclo planejado: entrada principal mais eventuais tentativas adicionais. O controle automático por ciclos ainda não está habilitado; os limites de risco atuais continuam valendo.</p>
+      </div>
+    </div>
+    <div class="setup-note"><span aria-hidden="true">✧</span><div><strong>Configure com atenção.</strong><p>Você poderá revisar esses parâmetros depois. Salvar configurações não inicia o robô: a ativação continua sob seu controle no painel.</p></div></div>
+    <p class="setup-feedback" id="setupFeedback" role="status"></p>
+    <button class="setup-submit" id="setupSubmit" type="submit">FINALIZAR CONFIGURAÇÃO E IR PARA O PAINEL <span aria-hidden="true">→</span></button>
+    <button class="setup-back" type="button" onclick="go('choose')">Voltar à seleção de conta</button>
+  </form>
+</section>
 <section id="dashboard" class="hidden">
   <div class="section-heading"><div><div class="eyebrow">VISÃO GERAL</div><h1>Meu robô</h1><p>O essencial para acompanhar suas operações.</p></div></div>
   <div class="card hero">
@@ -334,10 +433,11 @@ button.choose-account:focus-visible{outline:3px solid #71d2ff;outline-offset:4px
   <div class="card"><div class="surface-heading">Gestão de risco</div>
     <div class="settings-grid">
       <div class="field"><label for="stake">Valor da entrada (USD)</label><input id="stake" inputmode="decimal" type="number" value="2" min="2" step=".01"></div>
-      <div class="field"><label for="sw">Stop Win (USD)</label><input id="sw" inputmode="decimal" type="number" value="20" min=".01" step=".01"></div>
-      <div class="field"><label for="sl">Stop Loss (USD)</label><input id="sl" inputmode="decimal" type="number" value="10" min=".01" step=".01"></div>
+      <div class="field"><label for="sw">Stop Win (USD)</label><input id="sw" inputmode="decimal" type="number" value="0" min="0" step=".01"></div>
+      <div class="field"><label for="sl">Stop Loss (USD)</label><input id="sl" inputmode="decimal" type="number" value="0" min="0" step=".01"></div>
       <div class="field"><label for="mult">Multiplicador</label><select id="mult"><option value="2">2×</option><option value="3">3×</option><option value="4">4×</option></select></div>
     </div>
+    <p class="muted">Stop Win ou Stop Loss em US$ 0,00 desativa aquele limite. Sem ambos os stops, a execução só termina por desligamento manual ou outras proteções do sistema.</p>
     <label class="checkrow"><input type="checkbox" id="mg"> Ativar Martingale</label>
     <p class="muted">Martingale não está habilitado no executor oficial de compras. Este controle registra apenas sua preferência.</p>
     <div class="actions"><button class="gold" onclick="save()">SALVAR CONFIGURAÇÕES</button></div>
@@ -367,10 +467,45 @@ let activePage='welcome',demoOrders=[],demoBalance=null,refreshTimer=null,lastRe
 const money=(n,currency='USD')=>{const value=Number(n);return Number.isFinite(value)?value.toLocaleString('pt-BR',{style:'currency',currency:currency||'USD'}):'—'};
 const safe=(v)=>v===null||v===undefined?'—':String(v);
 function selectDemoAccount(){const button=$('chooseDemo');button.classList.add('chosen');button.setAttribute('aria-pressed','true')}
-function continueAccount(){if($('chooseDemo').getAttribute('aria-pressed')==='true')go('dashboard')}
-function page(v){for(const name of ['welcome','choose','dashboard','results','lab','settings','account'])$(name).classList.toggle('hidden',name!==v);activePage=v;const logged=!['welcome','choose'].includes(v);$('accountBadge').classList.toggle('hidden',!logged);$('menuButton').classList.toggle('hidden',!logged);document.querySelectorAll('.nav[data-view]').forEach(b=>b.classList.toggle('active',b.dataset.view===v))}
+function continueAccount(){if($('chooseDemo').getAttribute('aria-pressed')==='true')go('setup')}
+function toggleSetupMartingale(){
+ const enabled=$('setupMg').checked;
+ $('setupGaleFields').classList.toggle('hidden',!enabled);
+ $('setupGales').disabled=!enabled;
+ $('setupMultiplier').disabled=!enabled;
+}
+async function loadOnboarding(){
+ $('setupFeedback').textContent='';
+ try{
+   const s=await req('/api/onboarding/config');
+   $('setupStake').value=s.stake;$('setupWin').value=s.stop_win;$('setupLoss').value=s.stop_loss;
+   $('setupMg').checked=Boolean(s.martingale);
+   $('setupGales').value=String(s.gale_count||1);
+   $('setupMultiplier').value=String(Number(s.multiplier||2));
+   $('setupCycles').value=s.cycles||'unlimited';
+   toggleSetupMartingale();
+ }catch(e){$('setupFeedback').textContent='Não foi possível carregar as configurações: '+e.message}
+}
+async function saveOnboarding(event){
+ event.preventDefault();
+ const btn=$('setupSubmit');btn.disabled=true;
+ $('setupFeedback').textContent='Salvando suas configurações...';
+ try{
+   const mg=$('setupMg').checked;
+   const data={stake:$('setupStake').value,stop_win:$('setupWin').value,
+      stop_loss:$('setupLoss').value,martingale:mg,
+      gale_count:mg?Number($('setupGales').value):0,
+      multiplier:$('setupMultiplier').value,cycles:$('setupCycles').value};
+   const response=await req('/api/onboarding/config',{method:'POST',
+        headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});
+   if(!response.ok)throw Error('Configuração não confirmada');
+   go('dashboard');
+ }catch(e){$('setupFeedback').textContent='Configuração: '+e.message;fail('')}
+ finally{btn.disabled=false}
+}
+function page(v){for(const name of ['welcome','choose','setup','dashboard','results','lab','settings','account'])$(name).classList.toggle('hidden',name!==v);activePage=v;const logged=!['welcome','choose'].includes(v);$('accountBadge').classList.toggle('hidden',!logged);$('menuButton').classList.toggle('hidden',!logged);document.querySelectorAll('.nav[data-view]').forEach(b=>b.classList.toggle('active',b.dataset.view===v))}
 function toggleMenu(open){$('drawer').classList.toggle('hidden',!open);$('menuOverlay').classList.toggle('hidden',!open);$('menuButton').setAttribute('aria-expanded',String(open))}
-function go(v){toggleMenu(false);page(v);window.scrollTo({top:0,behavior:'smooth'});if(v==='dashboard')refreshDashboard();if(v==='results'){loadDemoOrders();loadStrategyStats()}if(v==='lab')loadStrategyLab();if(v==='account')loadDemoBalance();if(v==='settings')loadSettings()}
+function go(v){toggleMenu(false);page(v);window.scrollTo({top:0,behavior:'smooth'});if(v==='setup')loadOnboarding();if(v==='dashboard')refreshDashboard();if(v==='results'){loadDemoOrders();loadStrategyStats()}if(v==='lab')loadStrategyLab();if(v==='account')loadDemoBalance();if(v==='settings')loadSettings()}
 function fail(msg){$('error').textContent=msg||''}
 async function req(path,opts={}){const r=await fetch(path,{credentials:'same-origin',...opts});let data;try{data=await r.json()}catch{throw Error('Resposta inválida do servidor')}if(!r.ok)throw Error(data.detail||'Falha na conexão');return data}
 async function init(){try{const s=await req('/api/session');if(!s.authenticated){page('welcome');return}const justConnected=new URLSearchParams(window.location.search).get('login')==='ok';if(justConnected){window.history.replaceState({},'',window.location.pathname);const account=s.demo_accounts&&s.demo_accounts[0];$('demoInfo').textContent=account?'Conectada à Deriv · '+safe(account.account_id):'Conta conectada à Deriv';page('choose')}else{page('dashboard');refreshDashboard()}refreshTimer=setInterval(()=>{if(activePage==='dashboard'||activePage==='results')refreshDashboard()},30000)}catch(e){fail(e.message);page('welcome')}}

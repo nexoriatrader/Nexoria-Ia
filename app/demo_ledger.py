@@ -36,11 +36,12 @@ def order_guard(user, orders, stake):
         raise OrderGuardError('Valor da entrada fora dos limites de treinamento')
     stop_win=money(user.stop_win)
     stop_loss=money(user.stop_loss)
-    if stop_loss <= 0 or stop_win <= 0:
-        raise OrderGuardError('Stops inválidos')
-    if pnl >= stop_win:
+    if stop_loss < 0 or stop_win < 0:
+        raise OrderGuardError('Stops não podem ser negativos')
+    # Zero explicitly disables this specific cumulative stop for DEMO only.
+    if stop_win > 0 and pnl >= stop_win:
         raise OrderGuardError('Stop Win atingido')
-    if pnl <= -stop_loss or pnl-stake < -stop_loss:
+    if stop_loss > 0 and (pnl <= -stop_loss or pnl-stake < -stop_loss):
         raise OrderGuardError('A próxima entrada excederia o Stop Loss')
     # Execution with Martingale progression is deliberately not supported in v0.5.
     if user.martingale:
