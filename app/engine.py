@@ -20,8 +20,8 @@ def money(value):
 @dataclass
 class Settings:
     stake: Decimal = Decimal('2.00')
-    stop_win: Decimal = Decimal('20.00')
-    stop_loss: Decimal = Decimal('10.00')
+    stop_win: Decimal = Decimal('0.00')
+    stop_loss: Decimal = Decimal('0.00')
     martingale: bool = False
     multiplier: Decimal = Decimal('2.00')
     max_gales: int = 2
@@ -30,12 +30,12 @@ class Settings:
 
     @classmethod
     def parse(cls, payload: dict):
-        stake, sw, sl = map(money, (payload.get('stake', 2), payload.get('stop_win', 20), payload.get('stop_loss', 10)))
+        stake, sw, sl = map(money, (payload.get('stake', 2), payload.get('stop_win', 0), payload.get('stop_loss', 0)))
         mg = payload.get('martingale', False)
         if not isinstance(mg, bool):
             raise ValueError('Martingale deve ser verdadeiro ou falso')
         mult = money(payload.get('multiplier', 2))
-        if stake < 2 or sw <= 0 or sl <= 0 or mult not in (Decimal('2'), Decimal('3'), Decimal('4')):
+        if stake < 2 or sw < 0 or sl < 0 or mult not in (Decimal('2'), Decimal('3'), Decimal('4')):
             raise ValueError('Valores fora dos limites aceitos')
         return cls(stake=stake, stop_win=sw, stop_loss=sl, martingale=mg, multiplier=mult)
 
@@ -85,12 +85,12 @@ class Engine:
     def guard_reason(self, next_stake: Decimal):
         if not self.connected:
             return 'Sem conexão com dados de mercado'
-        if self.pnl >= self.settings.stop_win:
+        if self.settings.stop_win > 0 and self.pnl >= self.settings.stop_win:
             return 'Stop Win atingido'
-        if -self.pnl >= self.settings.stop_loss:
+        if self.settings.stop_loss > 0 and -self.pnl >= self.settings.stop_loss:
             return 'Stop Loss atingido'
         # Limita perda potencial total antes da próxima entrada, sem presumir payout.
-        if next_stake > self.settings.stop_loss + self.pnl:
+        if self.settings.stop_loss > 0 and next_stake > self.settings.stop_loss + self.pnl:
             return 'Entrada ultrapassaria o Stop Loss'
         if self.position:
             return 'Já existe uma operação aberta'
@@ -159,7 +159,7 @@ class Engine:
         else:
             self.gale += 1
         self.last_reason = 'Última operação encerrada'
-        if self.pnl >= self.settings.stop_win or -self.pnl >= self.settings.stop_loss:
+        if (self.settings.stop_win > 0 and self.pnl >= self.settings.stop_win) or (self.settings.stop_loss > 0 and -self.pnl >= self.settings.stop_loss):
             self.running = False
             self.last_reason = 'Limite da sessão atingido'
 
