@@ -18,6 +18,7 @@ from .demo_ledger import OrderGuardError, reserve, public_order, confirmed, unkn
 from .autopilot import analyze, quote_assessment
 from .engine import Engine, Settings
 from .market import MarketError, discover_symbols, discover_contracts, indicative_proposal
+from .strategy_lab import run_lab
 from .security import CLIENT_ID, REDIRECT, TOKEN_URL, build_authorize_url, make_login, make_session_id, hashsecret, encrypt, decrypt, cookie_options
 
 log=logging.getLogger('nexora')
@@ -606,6 +607,28 @@ async def config(request:Request, config:Config,nexora_sid:str|None=Cookie(defau
             stored.multiplier=str(settings.multiplier);stored.martingale=settings.martingale
             s.commit()
     return {'ok':True}
+
+# Explicit, read-only research endpoint; never touches AutoPilot execution settings.
+_strategy_lab_lock=asyncio.Lock()
+_strategy_lab_cache=None
+_strategy_lab_cache_time=0.0
+
+@app.get('/api/research/strategy-lab')
+async def strategy_lab_route(request:Request,nexora_sid:str|None=Cookie(default=None)):
+    active_user(request,nexora_sid)
+    global _strategy_lab_cache, _strategy_lab_cache_time
+    async with _strategy_lab_lock:
+        now=asyncio.get_running_loop().time()
+        if _strategy_lab_cache is not None and now-_strategy_lab_cache_time<300:
+            return {**_strategy_lab_cache,'cached':True}
+        try:
+            report=await run_lab()
+        except MarketError as exc:
+            raise HTTPException(502,str(exc)) from None
+        _strategy_lab_cache=report
+        _strategy_lab_cache_time=now
+        return {**report,'cached':False}
+
 
 @app.get('/api/market/symbols')
 async def symbols(request:Request,nexora_sid:str|None=Cookie(default=None)):
