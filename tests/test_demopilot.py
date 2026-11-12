@@ -111,7 +111,8 @@ def test_continuous_demo_orders_one_at_a_time_and_attributed(tmp_path,monkeypatc
 
 def test_confirmed_contract_keeps_autopilot_armed_without_duplicate_buy(tmp_path,monkeypatch):
     client,factory,engine,uid=prepare(tmp_path,monkeypatch,stop_loss='0.00')
-    broker=AsyncMock(return_value={'contract_id':'880001','buy_price':'2.00'})
+    broker=AsyncMock(side_effect=[{'contract_id':'880001','buy_price':'2.00'},
+                                  {'contract_id':'880002','buy_price':'2.00'}])
     monkeypatch.setattr(main,'demo_buy',broker)
     monkeypatch.setattr(main,'market_connected',True)
     monkeypatch.setattr(main,'recent_prices',[100+i*.05 for i in range(100)])
