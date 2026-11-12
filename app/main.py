@@ -238,7 +238,8 @@ async def autopilot_once():
                     candidate=candidates[len(previous)%len(candidates)]
                 from .demo_ledger import order_guard
                 try:
-                    order_guard(user,orders,entry.stake)
+                    boundary=latest_risk_session(sess,uid)
+                    order_guard(user,orders,entry.stake,after_order_id=boundary.after_order_id if boundary else 0)
                 except OrderGuardError as exc:
                     msg=str(exc)
                     if 'Stop' in msg or 'Loss' in msg or 'Win' in msg or 'ultrapass' in msg:
@@ -623,7 +624,70 @@ class AutoPilotSwitch(BaseModel):
     confirm:str=''
 
 
-def autopilot_start_blocker(user,orders):
+def latest_risk_session(sess,user_id):
+    return sess.scalars(select(db.RiskSession).where(
+        db.RiskSession.user_id==user_id).order_by(db.RiskSession.id.desc()).limit(1)).first()
+
+
+def risk_session_summary(sess,user_id):
+    from .demo_ledger import money
+    boundary=latest_risk_session(sess,user_id)
+    orders=sess.scalars(select(db.DemoOrder).where(
+        db.DemoOrder.user_id==user_id)).all()
+    after_id=boundary.after_order_id if boundary else 0
+    pnl=sum((money(o.pnl) for o in orders
+             if o.state=='SETTLED' and o.pnl is not None and o.id>after_id),
+            Decimal('0'))
+    return {'session_id':boundary.id if boundary else None,
+            'started_at':boundary.created_at.isoformat() if boundary else None,
+            'after_order_id':after_id,'pnl':str(pnl.quantize(Decimal('0.01'))),
+            'execution':'DERIV_DEMO_ONLY'}
+
+
+class RiskResetRequest(BaseModel):
+    confirm:str
+
+
+@app.get('/api/demo/risk-session')
+async def get_risk_session(request:Request,nexora_sid:str|None=Cookie(default=None)):
+    user=active_user(request,nexora_sid)
+    with db.SessionLocal() as sess:
+        return risk_session_summary(sess,user.id)
+
+
+@app.post('/api/demo/risk-session/reset')
+async def reset_risk_session(request:Request,payload:RiskResetRequest,
+                            nexora_sid:str|None=Cookie(default=None)):
+    """Manual reset changes risk-session accounting only; never deletes broker records."""
+    user=active_user(request,nexora_sid)
+    if payload.confirm!='RESET_DEMO_RISK_SESSION':
+        raise HTTPException(403,'Confirme o reinício da sessão de treinamento')
+    async with autopilot_lock:
+        if user.id in autopilot_enabled:
+            raise HTTPException(409,'Desligue o robô antes de reiniciar a sessão')
+        with db.SessionLocal() as sess:
+            pending=sess.scalars(select(db.DemoOrder).where(
+                db.DemoOrder.user_id==user.id,
+                db.DemoOrder.state.in_(('PENDING','CONFIRMED','UNKNOWN')))).all()
+            if pending:
+                raise HTTPException(409,'Existe contrato pendente ou incerto. Aguarde a liquidação e reconciliação antes de reiniciar.')
+            latest=sess.scalars(select(db.DemoOrder.id).where(
+                db.DemoOrder.user_id==user.id).order_by(db.DemoOrder.id.desc()).limit(1)).first()
+            session=db.RiskSession(user_id=user.id,after_order_id=latest or 0)
+            sess.add(session)
+            # Stale persisted run must not resume a progression across the reset.
+            run=sess.get(db.RobotRun,user.id)
+            if run:
+                sess.delete(run)
+            sess.commit()
+            session_id=session.id
+        autopilot_last_attempt.pop(user.id,None)
+        autopilot_reasons[user.id]='Sessão de risco reiniciada; ative o robô manualmente'
+    return {'ok':True,'session_id':session_id,
+            'message':'Nova sessão DEMO iniciada. Histórico e saldo preservados.'}
+
+
+def autopilot_start_blocker(user,orders,*,after_order_id=0):
     """Read-only explanation for refused starts; never bypass order safeguards."""
     if not autopilot_allowed():
         return 'AutoPilot DEMO está desativado na configuração do servidor'
@@ -633,7 +697,7 @@ def autopilot_start_blocker(user,orders):
         return 'Configuração antiga de Martingale incompatível; salve novamente em Configurações'
     from .demo_ledger import order_guard,OrderGuardError
     try:
-        order_guard(user,orders,user.stake)
+        order_guard(user,orders,user.stake,after_order_id=after_order_id)
     except OrderGuardError as exc:
         if 'Contrato demo em andamento' in str(exc):
             if any(o.state in ('PENDING','UNKNOWN') for o in orders):
@@ -650,7 +714,8 @@ async def autopilot_readiness(request:Request,nexora_sid:str|None=Cookie(default
     user=active_user(request,nexora_sid)
     with db.SessionLocal() as sess:
         orders=sess.scalars(select(db.DemoOrder).where(db.DemoOrder.user_id==user.id)).all()
-        reason=autopilot_start_blocker(user,orders)
+        boundary=latest_risk_session(sess,user.id)
+        reason=autopilot_start_blocker(user,orders,after_order_id=boundary.after_order_id if boundary else 0)
     return {'ready':reason is None,'reason':reason,
             'execution':'DERIV_DEMO_ONLY','real_orders_enabled':False}
 
@@ -669,7 +734,8 @@ async def autopilot_start(request:Request,payload:AutoPilotSwitch,
         raise HTTPException(409,'Desative Martingale para ativar o AutoPilot')
     with db.SessionLocal() as sess:
         orders=sess.scalars(select(db.DemoOrder).where(db.DemoOrder.user_id==user.id)).all()
-        blocker=autopilot_start_blocker(user,orders)
+        boundary=latest_risk_session(sess,user.id)
+        blocker=autopilot_start_blocker(user,orders,after_order_id=boundary.after_order_id if boundary else 0)
         if blocker:
             raise HTTPException(409,blocker)
     # Each manual activation starts a new durable sequence. Historical settled
