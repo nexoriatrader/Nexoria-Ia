@@ -9,7 +9,7 @@ import asyncio
 import re
 from datetime import datetime,timezone
 from .market import MarketError,discover_symbols,discover_contracts
-from .strategy_lab import fetch_candles
+from .strategy_lab import fetch_candles, score, EXPIRIES, MIN_SIGNALS
 from .autopilot import analyze
 
 MAX_ASSETS=8
@@ -55,6 +55,35 @@ def choose_assets(symbols: list[dict]) -> list[dict]:
     return preferred
 
 
+def compare_history(candles: list[dict], family: str) -> dict:
+    """Chronological, non-overlapping directional research, NEVER broker P/L.
+
+    Expiry signals are evaluated only when the full observed interval stays
+    inside their 70/30 partition; no lookahead or payout approximation.
+    """
+    if len(candles)<150:
+        raise MarketError('Mínimo de 150 velas M1 para comparação histórica')
+    if family not in ('step','range_break','volatility'):
+        raise MarketError('Família de índice não reconhecida')
+    # Same crossover hypothesis for Step and Volatility; Range Break uses
+    # breakout channels. Neither is presumed to predict broker payouts.
+    strategy='range_channel' if family=='range_break' else 'step_ma'
+    split=int(len(candles)*0.7)
+    rows=[]
+    for minutes in EXPIRIES:
+        training=score(candles,strategy,minutes,start=26,end=split-1)
+        validation=score(candles,strategy,minutes,start=split,end=len(candles)-1)
+        rows.append({'duration_minutes':minutes,'train':training,
+                     'validation':validation,
+                     'enough_validation_samples':validation['signals']>=MIN_SIGNALS,
+                     'validated_for_trading':False})
+    return {'strategy':strategy,'split':'70% treino / 30% validação cronológica',
+            'results':rows,'contract_compatibility':'CALL_PUT_LISTED_DURATION_UNVERIFIED',
+            'payout_adjusted':False,
+            'warning':'Acertos DIRECIONAIS históricos, não lucro de contratos. '
+                      'Payout e execução real não avaliados; sem estratégia liberada.'}
+
+
 async def scan_assets() -> dict:
     symbols=await discover_symbols()
     targets=choose_assets(symbols)
@@ -70,20 +99,22 @@ async def scan_assets() -> dict:
                 if not {'CALL','PUT'}.issubset(set(types)):
                     return None, {'symbol':item['symbol'],
                                   'reason':'Contratos CALL/PUT não disponíveis no catálogo'}
-                candles=await fetch_candles(item['symbol'],count=240)
-                if len(candles)<80:
+                candles=await fetch_candles(item['symbol'],count=700)
+                if len(candles)<150:
                     return None, {'symbol':item['symbol'],
                                   'reason':'Histórico M1 insuficiente para analisar'}
-                recent=candles[-240:]
+                recent=candles[-700:]
                 # Never use the current, still-forming candle; fetch_candles filters it.
                 if any(b['epoch']-a['epoch']!=60 for a,b in zip(recent,recent[1:])):
                     return None, {'symbol':item['symbol'],
                                   'reason':'Histórico M1 incompleto ou com intervalos'}
                 snapshot=analyze([c['close'] for c in recent])
+                evaluation=compare_history(recent,item['family'])
                 return {**item,'candles':len(recent),
                         'last_candle_at':datetime.fromtimestamp(
                             recent[-1]['epoch'],timezone.utc).isoformat(),
                         'research_state':snapshot['state'],
+                        'comparison':evaluation,
                         'candidates':snapshot['candidates'],
                         'reason':snapshot['reason'],
                         'compatible_types':['CALL','PUT'],
