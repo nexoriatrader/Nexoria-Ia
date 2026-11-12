@@ -409,8 +409,7 @@ button.choose-account:focus-visible{outline:3px solid #71d2ff;outline-offset:4px
   <div class="metric-grid">
     <div class="card metric"><div class="metric-label">Saldo Treinamento</div><div class="metric-value" id="balanceMetric">—</div><div class="metric-sub">Saldo virtual oficial · Deriv</div></div>
     <div class="card metric balance-real"><div class="metric-label">Saldo Conta Real</div><div class="metric-value" id="realBalanceMetric">—</div><div class="metric-sub" id="realBalanceReason">Verificando saldo oficial · Deriv</div></div>
-    <div class="card metric"><div class="metric-label">Resultado acumulado</div><div class="metric-value" id="profitMetric">—</div><div class="metric-sub">Somente contratos liquidados</div></div>
-    <div class="card metric"><div class="metric-label">Vitórias / Derrotas</div><div class="metric-value" id="scoreMetric">— / —</div><div class="metric-sub">Histórico Deriv Demo</div></div>
+    <div class="card metric"><div class="metric-label">Resultado do dia</div><div class="metric-value" id="profitMetric">—</div><div class="metric-sub">Desde 00h · Brasília · contratos liquidados</div></div>
   </div>
   <div class="card">
     <div class="surface-heading">Última operação</div>
@@ -581,7 +580,7 @@ function go(v){toggleMenu(false);page(v);window.scrollTo({top:0,behavior:'smooth
 function fail(msg){$('error').textContent=msg||''}
 async function req(path,opts={}){const r=await fetch(path,{credentials:'same-origin',...opts});let data;try{data=await r.json()}catch{throw Error('Resposta inválida do servidor')}if(!r.ok)throw Error(data.detail||'Falha na conexão');return data}
 async function init(){try{const s=await req('/api/session');if(!s.authenticated){page('welcome');return}const justConnected=new URLSearchParams(window.location.search).get('login')==='ok';if(justConnected){window.history.replaceState({},'',window.location.pathname);const account=s.demo_accounts&&s.demo_accounts[0];$('demoInfo').textContent=account?'Conectada à Deriv · '+safe(account.account_id):'Conta conectada à Deriv';page('choose');applyAccountSelection();loadVerifiedAccounts()}else{page('dashboard');refreshDashboard()}refreshTimer=setInterval(()=>{if(activePage==='dashboard'||activePage==='results')refreshDashboard()},30000)}catch(e){fail(e.message);page('welcome')}}
-async function refreshDashboard(){try{const [status]=await Promise.all([req('/api/status'),loadDemoBalance(),loadDemoOrders(),loadRealBalance()]);$('feedState').textContent=(status.connected?'● Cotações conectadas':'○ Reconectando cotações')+' · '+safe(status.symbol);robotRunning=Boolean(status.running);const available=Boolean(status.auto_buy_enabled);$('robotState').textContent=robotRunning?'ATIVO':status.interrupted_after_restart?'INTERROMPIDO':available?'PRONTO':'INDISPONÍVEL';$('robotMessage').textContent=status.reason||'Aguardando oportunidades no mercado DEMO';$('robotButton').textContent=robotRunning?'DESLIGAR ROBÔ':'LIGAR ROBÔ';$('robotButton').disabled=!robotRunning&&!available;$('robotButton').setAttribute('aria-disabled',String($('robotButton').disabled));$('robotButton').style.background=robotRunning?'linear-gradient(135deg,#fa9b9d,#dc5269)':'';fail('')}catch(e){fail('Painel: '+e.message)}}
+async function refreshDashboard(){try{const [status]=await Promise.all([req('/api/status'),loadDemoBalance(),loadDemoOrders(),loadRealBalance(),loadDailyResult()]);$('feedState').textContent=(status.connected?'● Cotações conectadas':'○ Reconectando cotações')+' · '+safe(status.symbol);robotRunning=Boolean(status.running);const available=Boolean(status.auto_buy_enabled);$('robotState').textContent=robotRunning?'ATIVO':status.interrupted_after_restart?'INTERROMPIDO':available?'PRONTO':'INDISPONÍVEL';$('robotMessage').textContent=status.reason||'Aguardando oportunidades no mercado DEMO';$('robotButton').textContent=robotRunning?'DESLIGAR ROBÔ':'LIGAR ROBÔ';$('robotButton').disabled=!robotRunning&&!available;$('robotButton').setAttribute('aria-disabled',String($('robotButton').disabled));$('robotButton').style.background=robotRunning?'linear-gradient(135deg,#fa9b9d,#dc5269)':'';fail('')}catch(e){fail('Painel: '+e.message)}}
 async function toggleRobot(){
   try{
     $('robotButton').disabled=true;
@@ -614,8 +613,28 @@ async function loadRealBalance(){
  }
 }
 async function loadDemoBalance(){try{const b=await req('/api/demo/balance');demoBalance=b;$('balanceMetric').textContent=money(b.balance,b.currency);$('accountBalance').textContent=money(b.balance,b.currency);return b}catch(e){$('balanceMetric').textContent='Indisponível';$('accountBalance').textContent='Indisponível';throw e}}
-function summarizeOrders(items){const settled=items.filter(o=>o.state==='SETTLED'&&Number.isFinite(Number(o.pnl)));const pnl=settled.reduce((sum,o)=>sum+Number(o.pnl),0);const won=settled.filter(o=>Number(o.pnl)>0).length;const lost=settled.filter(o=>Number(o.pnl)<=0).length;return {pnl,won,lost}}
-async function loadDemoOrders(){try{const data=await req('/api/demo/orders');demoOrders=data.items||[];const summary=summarizeOrders(demoOrders);const p=$('profitMetric');p.textContent=money(summary.pnl);p.className='metric-value '+(summary.pnl>0?'positive':summary.pnl<0?'negative':'');$('scoreMetric').textContent=summary.won+' / '+summary.lost;const last=demoOrders[0];$('lastOrder').textContent=last?last.symbol+' · '+last.direction+' · Entrada '+money(last.stake)+' · '+last.state+(last.pnl===null?' · Aguardando resultado':' · P/L '+money(last.pnl)):'Nenhum contrato oficial ainda.';renderOrders();return data}catch(e){$('ordersBody').innerHTML='<tr><td colspan="6" class="empty">Não foi possível carregar o histórico.</td></tr>';throw e}}
+let dailyResultResetTimer=null;
+async function loadDailyResult(){
+ const el=$('profitMetric');
+ try{
+   const result=await req('/api/demo/results/today');
+   const amount=Number(result.pnl);
+   if(!Number.isFinite(amount))throw Error('Resultado diário inválido');
+   el.textContent=money(amount);
+   el.className='metric-value '+(amount>0?'positive':amount<0?'negative':'');
+   if(dailyResultResetTimer)clearTimeout(dailyResultResetTimer);
+   const ms=new Date(result.next_reset_at).getTime()-Date.now()+500;
+   if(Number.isFinite(ms)&&ms>0){
+     dailyResultResetTimer=setTimeout(()=>{
+       if(activePage==='dashboard')loadDailyResult();
+     },Math.min(ms,2147483647));
+   }
+ }catch(e){
+   el.textContent='Indisponível';
+   el.className='metric-value';
+ }
+}
+async function loadDemoOrders(){try{const data=await req('/api/demo/orders');demoOrders=data.items||[];const last=demoOrders[0];$('lastOrder').textContent=last?last.symbol+' · '+last.direction+' · Entrada '+money(last.stake)+' · '+last.state+(last.pnl===null?' · Aguardando resultado':' · P/L '+money(last.pnl)):'Nenhum contrato oficial ainda.';renderOrders();return data}catch(e){$('ordersBody').innerHTML='<tr><td colspan="6" class="empty">Não foi possível carregar o histórico.</td></tr>';throw e}}
 function renderOrders(){const tbody=$('ordersBody');tbody.replaceChildren();if(!demoOrders.length){const tr=document.createElement('tr'),td=document.createElement('td');td.colSpan=6;td.className='empty';td.textContent='Nenhum contrato oficial registrado.';tr.append(td);tbody.append(tr);return}for(const o of demoOrders){const row=document.createElement('tr');for(const text of [o.symbol,o.direction,money(o.stake),o.state,o.pnl===null?'Pendente':money(o.pnl)]){const td=document.createElement('td');td.textContent=text;row.append(td)}const action=document.createElement('td');if(o.state==='CONFIRMED'&&o.contract_id){const b=document.createElement('button');b.className='outline';b.textContent='Conferir';b.onclick=()=>reconcile(o.id);action.append(b)}else if(o.state==='UNKNOWN'){action.textContent='Verificar na Deriv'}else action.textContent='—';row.append(action);tbody.append(row)}}
 async function loadStrategyStats(){
   const tbody=$('strategyStats');

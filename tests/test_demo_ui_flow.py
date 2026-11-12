@@ -21,7 +21,8 @@ def test_official_contract_history_replaces_local_simulator():
     html=load_ui()
     assert "Histórico oficial" in html
     assert "/api/demo/orders" in html
-    assert "state==='SETTLED'" in html
+    assert 'id="ordersBody"' in html  # Historical results are preserved.
+    assert '/api/demo/results/today' in html  # Daily P/L computed on server.
     for forbidden in ("LIGAR SIMULAÇÃO", "Histórico de simulação", "Resultado virtual",
                       "/api/start", "/api/stop", "/api/history"):
         assert forbidden not in html

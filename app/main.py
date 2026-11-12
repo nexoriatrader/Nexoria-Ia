@@ -1,6 +1,8 @@
 """NEXORA IA. Official Deriv DEMO orders and read-only AutoPilot research."""
 import asyncio, json, logging, os, secrets, re
 from datetime import datetime, timedelta, timezone
+from decimal import Decimal, InvalidOperation
+from zoneinfo import ZoneInfo
 from contextlib import asynccontextmanager
 from pathlib import Path
 from urllib.parse import urlsplit
@@ -1030,6 +1032,51 @@ async def autopilot_strategy_stats(request:Request,nexora_sid:str|None=Cookie(de
             item['win_rate']=round(item['wins']/item['settled'],4)
     return {'items':list(summary.values()),'execution':'DERIV_DEMO_ONLY',
             'note':'Resultados observados de contratos oficiais; não validam predição futura'}
+
+
+BRASILIA_TZ=ZoneInfo('America/Sao_Paulo')
+
+
+def daily_pnl_window(now=None):
+    """Start of today in Brazil, expressed as UTC instants, independent of UTC date."""
+    instant=now or datetime.now(timezone.utc)
+    if instant.tzinfo is None:
+        raise ValueError('Um instante com fuso horário é obrigatório')
+    local=instant.astimezone(BRASILIA_TZ)
+    midnight=local.replace(hour=0,minute=0,second=0,microsecond=0)
+    return midnight.astimezone(timezone.utc),instant.astimezone(timezone.utc),midnight
+
+
+def today_demo_pnl(session,user_id,now=None):
+    """Official settled P/L only, with SQL range over all orders (not UI's 100)."""
+    start,end,local_start=daily_pnl_window(now)
+    orders=session.scalars(select(db.DemoOrder).where(
+        db.DemoOrder.user_id==user_id,
+        db.DemoOrder.state=='SETTLED',
+        db.DemoOrder.updated_at>=start,
+        db.DemoOrder.updated_at<=end)).all()
+    total=Decimal('0')
+    for order in orders:
+        if order.pnl is None:
+            continue
+        try:
+            number=Decimal(str(order.pnl))
+        except (InvalidOperation,ValueError,TypeError):
+            continue
+        if number.is_finite():
+            total+=number
+    tomorrow=(local_start+timedelta(days=1))
+    return {'pnl':str(total.quantize(Decimal('0.01'))),
+            'date':local_start.date().isoformat(),
+            'timezone':'America/Sao_Paulo',
+            'next_reset_at':tomorrow.isoformat()}
+
+
+@app.get('/api/demo/results/today')
+async def demo_results_today(request:Request,nexora_sid:str|None=Cookie(default=None)):
+    user=active_user(request,nexora_sid)
+    with db.SessionLocal() as sess:
+        return today_demo_pnl(sess,user.id)
 
 
 @app.get('/api/demo/orders')
