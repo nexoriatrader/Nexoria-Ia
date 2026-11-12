@@ -4,6 +4,7 @@ from dataclasses import dataclass, field
 from decimal import Decimal, InvalidOperation
 from datetime import datetime, timezone
 from typing import Optional
+from .analysis import analyze_prices
 
 
 def money(value):
@@ -101,18 +102,9 @@ class Engine:
         return self.settings.stake
 
     def signal(self):
-        """Regra experimental e NÃO validada. Sem previsão ou estimativa de probabilidade."""
-        if len(self.prices) < 55:
-            return None
-        p = list(self.prices)
-        previous, recent = sum(p[-50:-10])/40, sum(p[-10:])/10
-        # Demonstração apenas: divergência de médias com limiar de 0,015%
-        diff = (recent - previous) / previous if previous else 0
-        if diff > 0.00015:
-            return 'RISE'
-        if diff < -0.00015:
-            return 'FALL'
-        return None
+        """Return an experimental signal for local simulation only."""
+        signal = analyze_prices(list(self.prices))["signal"]
+        return {'CALL': 'RISE', 'PUT': 'FALL'}.get(signal)
 
     def push_tick(self, price: float):
         if not (0 < price < float('inf')):
@@ -179,4 +171,5 @@ class Engine:
                 'history':self.closed[:20], 'session_opened_at':self.session_opened_at,
                 'settings': {'stake':str(self.settings.stake), 'stop_win':str(self.settings.stop_win),
                              'stop_loss':str(self.settings.stop_loss), 'martingale':self.settings.martingale,
-                             'multiplier':str(self.settings.multiplier)}}
+                             'multiplier':str(self.settings.multiplier)},
+                'analysis':analyze_prices(list(self.prices))}
