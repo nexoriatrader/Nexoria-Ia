@@ -50,7 +50,7 @@ def test_rejected_outcome_and_exposure_limits():
         calculate([dict(row(1,2,-2),state='CONFIRMED')])
     with pytest.raises(ProgressionHalt,match='histórico diferente'):
         calculate([row(1,4,-4)])
-    with pytest.raises(ProgressionHalt,match='limite máximo'):
+    with pytest.raises(ProgressionHalt,match='[Ll]imite máximo'):
         calculate([row(i,20,-20) for i in range(1,7)],
                   base='20.00',gales=5,cycles=5,gale_multiplier='1',cycle_multiplier='1')
     with pytest.raises(ProgressionHalt):
