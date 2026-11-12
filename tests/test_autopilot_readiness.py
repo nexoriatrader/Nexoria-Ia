@@ -40,9 +40,18 @@ def test_readiness_blocks_pending_but_does_not_override_confirmed(tmp_path,monke
     finally:cleanup(engine)
 
 
-def test_dashboard_keeps_reason_after_refresh_and_uses_readiness():
+def test_dashboard_shows_persistent_stop_notice_below_start_button():
     html=(Path(__file__).resolve().parents[1]/'app'/'index.html').read_text()
-    assert 'id="robotStartNotice"' in html
+    button=html.index('id="robotButton"')
+    notice=html.index('id="robotStartNotice"')
+    assert button < notice < html.index('id="feedState"')
+    assert 'role="alert"' in html
+    assert 'robot-notice' in html
+    assert 'showRobotNotice(reason)' in html
     assert "/api/autopilot/readiness" in html
-    assert "await refreshDashboard().catch(()=>{});" in html
-    assert "$('robotStartNotice').textContent=reason" in html
+    assert 'await refreshDashboard().catch(()=>{});' in html
+    assert "Limpar resultados anteriores ainda não está disponível" in html
+    assert 'REINICIAR SESSÃO · EM BREVE' in html
+    assert 'onclick="go(\'settings\')"' in html
+    # No temporary toast should be used for the start failure.
+    assert "fail(reason);" not in html
