@@ -19,6 +19,7 @@ from .autopilot import analyze, quote_assessment
 from .engine import Engine, Settings
 from .market import MarketError, discover_symbols, discover_contracts, indicative_proposal
 from .strategy_lab import run_lab
+from .progression import next_entry, ProgressionHalt
 from .security import CLIENT_ID, REDIRECT, TOKEN_URL, build_authorize_url, make_login, make_session_id, hashsecret, encrypt, decrypt, cookie_options
 
 log=logging.getLogger('nexora')
@@ -116,8 +117,35 @@ def autopilot_allowed():
             and os.getenv('NEXORA_DEMO_BUY_ENABLED','false').lower()=='true')
 
 
+def autopilot_entry_plan(sess, user, orders):
+    """Read immutable official ledger results since this run was armed."""
+    plan=sess.get(db.RobotPlan,user.id)
+    cfg=sess.get(db.RobotCycleParams,user.id)
+    run=sess.get(db.RobotRun,user.id)
+    if not run:
+        raise ProgressionHalt('Reative o robô para iniciar uma nova sequência')
+    previous=[o for o in sorted(orders,key=lambda x:x.id) if o.id>run.after_order_id]
+    attribution_ids=[o.id for o in previous]
+    attributions=sess.scalars(select(db.AutoPilotAttribution).where(
+        db.AutoPilotAttribution.order_id.in_(attribution_ids))).all() if attribution_ids else []
+    attrs={a.order_id:a for a in attributions}
+    if len(attrs)!=len(previous):
+        raise ProgressionHalt('Existem contratos fora do histórico automático desta sequência')
+    rows=[{'id':o.id,'state':o.state,'pnl':o.pnl,'direction':o.direction,
+           'symbol':o.symbol,'stake':o.stake,'strategy':attrs[o.id].strategy}
+          for o in previous]
+    cycles=(plan.cycles_limit if plan else 0) or 0
+    entry=next_entry(base=user.stake,gale_enabled=bool(plan and plan.requested_martingale),
+        gales=plan.gale_count if plan and plan.requested_martingale else 0,
+        gale_multiplier=plan.requested_multiplier if plan else '2',
+        cycles=cycles or None,cycles_enabled=cycles>0,
+        cycle_multiplier=cfg.multiplier if cfg else '2',orders=rows)
+    last=previous[-1] if previous else None
+    return entry,last
+
+
 async def autopilot_once():
-    """Continuously discover experimental candidates; broker enforces one active order."""
+    """DEMO order progression uses only settled, verified broker contracts."""
     if not autopilot_enabled:
         return
     now=asyncio.get_running_loop().time()
@@ -128,17 +156,11 @@ async def autopilot_once():
         for uid in tuple(autopilot_enabled):
             autopilot_reasons[uid]='Aguardando cotações recentes da Deriv'
         return
+    # Research is optional only for continuation of a verified losing sequence.
     research=analyze(prices)
-    if not research['candidates']:
-        for uid in tuple(autopilot_enabled):
-            autopilot_reasons[uid]='Buscando oportunidade: '+research['reason']
-        return
     candidates=research['candidates']
     for uid in tuple(autopilot_enabled):
-        if uid not in autopilot_enabled:
-            continue
-        # Throttle checks; order_guard independently prevents overlapping orders.
-        if now-autopilot_last_attempt.get(uid,-1e12)<60:
+        if uid not in autopilot_enabled or now-autopilot_last_attempt.get(uid,-1e12)<60:
             continue
         async with autopilot_lock:
             if uid not in autopilot_enabled or not autopilot_allowed():
@@ -147,11 +169,7 @@ async def autopilot_once():
                 user=sess.get(db.User,uid)
                 if not user or user.selected_mode!='demo':
                     autopilot_enabled.discard(uid)
-                    autopilot_reasons[uid]='Conta demonstrativa indisponível; robô desligado'
-                    continue
-                if user.martingale:
-                    autopilot_enabled.discard(uid)
-                    autopilot_reasons[uid]='Desative Martingale nas configurações para usar o AutoPilot'
+                    autopilot_reasons[uid]='Conta de treinamento indisponível; robô desligado'
                     continue
                 auths=sess.scalars(select(db.Session).where(db.Session.user_id==uid)
                                  .order_by(db.Session.created_at.desc())).all()
@@ -171,43 +189,70 @@ async def autopilot_once():
                     autopilot_reasons[uid]='Sessão Deriv expirada; conecte novamente'
                     continue
                 orders=sess.scalars(select(db.DemoOrder).where(db.DemoOrder.user_id==uid)).all()
-                # Rotate the available independent hypotheses, recording each source.
-                previous=sess.scalars(select(db.AutoPilotAttribution.id)
-                        .where(db.AutoPilotAttribution.user_id==uid)).all()
-                candidate=candidates[len(previous)%len(candidates)]
+                try:
+                    entry,last=autopilot_entry_plan(sess,user,orders)
+                except ProgressionHalt as exc:
+                    autopilot_enabled.discard(uid)
+                    autopilot_reasons[uid]=str(exc)
+                    continue
+                if entry.retry:
+                    # Allow one full M1 candle boundary after confirmed settlement.
+                    # This does not claim that the next tick is a filled candle.
+                    settlement=last.updated_at if last else None
+                    if not settlement:
+                        autopilot_reasons[uid]='Aguardando horário da liquidação oficial'
+                        continue
+                    if settlement.tzinfo is None:
+                        settlement=settlement.replace(tzinfo=timezone.utc)
+                    next_boundary=(int(settlement.timestamp())//60+1)*60
+                    if datetime.now(timezone.utc).timestamp()<next_boundary:
+                        autopilot_reasons[uid]='Aguardando próxima vela de 1 minuto'
+                        continue
+                    candidate={'strategy':entry.strategy or 'recuperacao',
+                        'direction':entry.direction,
+                        'reason':'Continuação controlada: ciclo '+str(entry.cycle)+
+                                 ', martingale '+str(entry.gale)}
+                else:
+                    if not candidates:
+                        autopilot_reasons[uid]='Buscando oportunidade: '+research['reason']
+                        continue
+                    previous=sess.scalars(select(db.AutoPilotAttribution.id).where(
+                        db.AutoPilotAttribution.user_id==uid)).all()
+                    candidate=candidates[len(previous)%len(candidates)]
                 from .demo_ledger import order_guard
                 try:
-                    order_guard(user,orders,user.stake)
-                except OrderGuardError as e:
-                    message=str(e)
-                    if 'Stop' in message or 'Martingale' in message:
+                    order_guard(user,orders,entry.stake)
+                except OrderGuardError as exc:
+                    msg=str(exc)
+                    if 'Stop' in msg or 'Loss' in msg or 'Win' in msg or 'ultrapass' in msg:
                         autopilot_enabled.discard(uid)
-                    autopilot_reasons[uid]=message
+                    autopilot_reasons[uid]=msg
                     continue
-                # Detached user snapshot survives session scope (expire_on_commit=False).
-                account=user.deriv_account_id
-            # Repeat authorization and feed checks before broker call.
+                if entry.retry and entry.symbol!=SYMBOL:
+                    autopilot_enabled.discard(uid)
+                    autopilot_reasons[uid]='O ativo anterior não está disponível para recuperação'
+                    continue
             if uid not in autopilot_enabled:
                 continue
             autopilot_last_attempt[uid]=now
             key='auto-'+secrets.token_hex(16)
-            autopilot_reasons[uid]='Enviando contrato oficial DEMO: '+candidate['strategy']
+            autopilot_reasons[uid]='Enviando contrato de treinamento: '+str(entry.stake)+' USD'
             try:
                 result=await perform_demo_buy(user,token,
-                     DemoBuy(symbol=SYMBOL,direction=candidate['direction'],minutes=5,
-                             confirm='DEMO_ONLY',request_key=key),
-                     attribution={'strategy':candidate['strategy'],'reason':candidate['reason']})
+                    DemoBuy(symbol=SYMBOL,direction=candidate['direction'],minutes=5,
+                            confirm='DEMO_ONLY',request_key=key),
+                    attribution={'strategy':candidate['strategy'],'reason':candidate['reason']},
+                    stake_override=entry.stake)
                 autopilot_reasons[uid]='Contrato DEMO #'+str(result['id'])+' confirmado; aguardando liquidação'
-            except HTTPException as e:
-                # An unknown or pending buy remains blocked in the durable order ledger.
-                message=str(e.detail)
-                autopilot_reasons[uid]=message
-                if e.status_code in (401,403,502,503) or 'Stop' in message:
+            except HTTPException as exc:
+                msg=str(exc.detail)
+                autopilot_reasons[uid]=msg
+                if exc.status_code in (401,403,502,503) or 'Stop' in msg:
                     autopilot_enabled.discard(uid)
-            except Exception as e:
+            except Exception as exc:
                 autopilot_enabled.discard(uid)
                 autopilot_reasons[uid]='Falha na execução; robô desligado para segurança'
-                log.warning('AutoPilot execution halted: user=%s error=%s',uid,type(e).__name__)
+                log.warning('AutoPilot execution halted: user=%s error=%s',uid,type(exc).__name__)
 
 
 async def autopilot_loop():
@@ -801,7 +846,7 @@ async def demo_proposal_route(request:Request, payload:DemoProposal,
     except DemoTradingError as e:
         raise HTTPException(502,str(e)) from None
 
-async def perform_demo_buy(user, token, payload:DemoBuy, *, attribution:dict|None=None):
+async def perform_demo_buy(user, token, payload:DemoBuy, *, attribution:dict|None=None, stake_override=None):
     """Single guarded broker purchase path for both manual and AutoPilot DEMO orders."""
     if payload.confirm != 'DEMO_ONLY':
         raise HTTPException(403,'Confirmação de conta demo obrigatória')
@@ -816,7 +861,7 @@ async def perform_demo_buy(user, token, payload:DemoBuy, *, attribution:dict|Non
         try:
             order,created=reserve(s,stored,request_key=payload.request_key,
                                   symbol=payload.symbol,direction=payload.direction,
-                                  minutes=payload.minutes)
+                                  minutes=payload.minutes,stake_override=stake_override)
         except OrderGuardError as e:
             raise HTTPException(409,str(e)) from None
         order_id=order.id
