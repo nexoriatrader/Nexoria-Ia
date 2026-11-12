@@ -529,8 +529,10 @@ async def autopilot_start(request:Request,payload:AutoPilotSwitch,
 @app.post('/api/autopilot/stop')
 async def autopilot_stop(request:Request,nexora_sid:str|None=Cookie(default=None)):
     user=active_user(request,nexora_sid)
-    autopilot_enabled.discard(user.id)
-    autopilot_reasons[user.id]='Desligado: novas entradas bloqueadas; contratos abertos permanecem na Deriv'
+    # Wait for any already dispatched broker request to finish before declaring OFF.
+    async with autopilot_lock:
+        autopilot_enabled.discard(user.id)
+        autopilot_reasons[user.id]='Desligado: novas entradas bloqueadas; contratos abertos permanecem na Deriv'
     return {'running':False,'execution':'DERIV_DEMO_ONLY','real_orders_enabled':False}
 
 
