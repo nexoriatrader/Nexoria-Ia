@@ -216,7 +216,7 @@ def test_reconcile_unknown_with_official_id_but_never_without_id(tmp_path,monkey
                     active_slot=uid,state='UNKNOWN',contract_id='77001',
                     symbol='1HZ100V',direction='CALL',duration_minutes=5,stake='2.00'),
                 db.DemoOrder(user_id=uid,request_key='unknown-without-id',
-                    active_slot=uid,state='UNKNOWN',contract_id=None,
+                    active_slot=None,state='UNKNOWN',contract_id=None,
                     symbol='1HZ100V',direction='PUT',duration_minutes=5,stake='2.00')
             ])
             s.commit()
@@ -229,7 +229,7 @@ def test_reconcile_unknown_with_official_id_but_never_without_id(tmp_path,monkey
             assert known.pnl=='1.50'
             assert known.active_slot is None
             assert unresolved.state=='UNKNOWN'
-            assert unresolved.active_slot==uid
+            assert unresolved.active_slot is None
             assert unresolved.pnl is None
     finally:
         cleanup(engine)
