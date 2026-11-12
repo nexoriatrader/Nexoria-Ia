@@ -54,6 +54,17 @@ class RobotRun(Base):
     started_at = Column(DateTime(timezone=True), default=utcnow, nullable=False)
 
 
+class RiskSession(Base):
+    """Auditable manual DEMO risk reset boundary; historical orders stay untouched."""
+    __tablename__ = 'risk_sessions'
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey('users.id'), nullable=False, index=True)
+    after_order_id = Column(Integer, nullable=False, default=0)
+    created_at = Column(DateTime(timezone=True), default=utcnow, nullable=False)
+    __table_args__ = (Index('ix_risk_sessions_user_id_id', 'user_id', 'id'),)
+
+
+
 class LoginFlow(Base):
     __tablename__ = 'login_flows'
     state_hash = Column(String(64), primary_key=True)
