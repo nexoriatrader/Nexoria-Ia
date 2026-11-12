@@ -492,6 +492,8 @@ async def callback(code:str|None=None,state:str|None=None,error:str|None=None,
             user=db.User(deriv_account_id=account);s.add(user);s.flush()
         autopilot_enabled.discard(user.id)
         autopilot_reasons[user.id]='Nova sessão Deriv: ative o AutoPilot manualmente'
+        old_run=s.get(db.RobotRun,user.id)
+        if old_run:s.delete(old_run)
         s.add(db.Session(session_hash=hashsecret(session_id),user_id=user.id, token_encrypted=encrypt(token),
                          expires_at=db.utcnow()+timedelta(seconds=max(1,ttl-30))))
         s.commit()
@@ -537,6 +539,8 @@ async def logout(request:Request,nexora_sid:str|None=Cookie(default=None)):
                 async with lock:
                     engine=runtimes.get(session.user_id)
                     if engine:engine.running=False
+                old_run=s.get(db.RobotRun,session.user_id)
+                if old_run:s.delete(old_run)
                 s.delete(session);s.commit()
     response=JSONResponse({'ok':True});response.delete_cookie('nexora_sid',path='/');return response
 
@@ -611,6 +615,10 @@ async def autopilot_stop(request:Request,nexora_sid:str|None=Cookie(default=None
     # Wait for any already dispatched broker request to finish before declaring OFF.
     async with autopilot_lock:
         autopilot_enabled.discard(user.id)
+        with db.SessionLocal() as sess:
+            run=sess.get(db.RobotRun,user.id)
+            if run:
+                sess.delete(run);sess.commit()
         autopilot_reasons[user.id]='Desligado: novas entradas bloqueadas; contratos abertos permanecem na Deriv'
     return {'running':False,'execution':'DERIV_DEMO_ONLY','real_orders_enabled':False}
 
@@ -618,6 +626,8 @@ async def autopilot_stop(request:Request,nexora_sid:str|None=Cookie(default=None
 @app.get('/api/status')
 async def status(request:Request,nexora_sid:str|None=Cookie(default=None)):
     user=active_user(request,nexora_sid)
+    with db.SessionLocal() as sess:
+        interrupted=sess.get(db.RobotRun,user.id) is not None and user.id not in autopilot_enabled
     async with lock:
         engine=rt_for(user)
         return {'connected':engine.connected,'symbol':engine.symbol,
@@ -625,7 +635,9 @@ async def status(request:Request,nexora_sid:str|None=Cookie(default=None)):
                 'ticks':len(engine.prices),'execution':'DERIV_DEMO_ONLY',
                 'running':user.id in autopilot_enabled,'auto_buy_enabled':autopilot_allowed(),
                 'real_orders_enabled':False,
-                'reason':autopilot_reasons.get(user.id,'Robô desligado')}
+                'interrupted_after_restart':interrupted,
+                'reason':autopilot_reasons.get(user.id,
+                   'Execução interrompida após reinício; reative manualmente no painel' if interrupted else 'Robô desligado')}
 
 @app.get('/api/autopilot/research')
 async def autopilot_research(request:Request,nexora_sid:str|None=Cookie(default=None)):
