@@ -78,8 +78,8 @@ def test_premium_landing_preserves_explicit_deriv_oauth_and_no_auto_start():
     assert 'href="/auth/deriv/start"' in welcome
     assert 'A conexão à corretora não inicia operações automaticamente' in welcome
     assert 'Ative o AutoPilot' in welcome
-    assert 'Conta real não habilitada para compras' in welcome
-    assert 'somente na conta de demonstração' in welcome
+    assert 'Conta real não habilitada para compras' not in welcome
+    assert 'somente na conta de demonstração' not in welcome
     assert 'operações automáticas.' in welcome
     assert 'Execução automática' in welcome
     assert 'Análise automática' in welcome
@@ -89,7 +89,7 @@ def test_premium_landing_preserves_explicit_deriv_oauth_and_no_auto_start():
     assert 'landing-showcase' in welcome
     assert 'landing-headline' in welcome
     assert '/api/autopilot/start' not in welcome
-    assert 'landing-disclaimer' in welcome
+    assert 'landing-steps' in welcome
     assert 'id="robotButton"' in html  # Trading remains opt-in in the existing dashboard.
 
 
