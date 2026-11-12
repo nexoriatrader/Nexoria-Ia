@@ -615,8 +615,8 @@ async function init(){try{const s=await req('/api/session');if(!s.authenticated)
 function showRobotNotice(reason){
  const box=$('robotStartNotice'),title=$('robotNoticeTitle'),body=$('robotNoticeText'),options=$('robotNoticeOptions');
  if(!reason){box.hidden=true;title.textContent='';body.textContent='';options.hidden=true;return}
- const stopLoss=/stop\\s*loss/i.test(reason);
- const stopWin=/stop\\s*win/i.test(reason);
+ const stopLoss=/stop\s*loss/i.test(reason);
+ const stopWin=/stop\s*win/i.test(reason);
  title.textContent=stopLoss?'⚠️ Robô não iniciado — proteção Stop Loss':stopWin?'⚠️ Robô não iniciado — Stop Win':'⚠️ Não foi possível iniciar o robô';
  body.textContent=stopLoss?'O NEXORA bloqueou a ativação porque a próxima entrada poderia ultrapassar seu limite de perdas. Motivo: '+reason:reason;
  options.hidden=!stopLoss;
