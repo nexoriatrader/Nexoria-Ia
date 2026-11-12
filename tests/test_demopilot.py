@@ -237,8 +237,9 @@ def test_reconcile_unknown_with_official_id_but_never_without_id(tmp_path,monkey
 
 def test_reconciliation_prioritizes_recent_contracts(tmp_path,monkeypatch):
     client,factory,engine,uid=prepare(tmp_path,monkeypatch)
-    broker=AsyncMock(return_value={'contract':{
-        'contract_id':'99999','is_sold':False,'status':'open'}})
+    async def open_contract(token,account_id,contract_id):
+        return {'contract':{'contract_id':contract_id,'is_sold':False,'status':'open'}}
+    broker=AsyncMock(side_effect=open_contract)
     monkeypatch.setattr(main,'demo_contract_status',broker)
     try:
         with factory() as s:
