@@ -146,6 +146,20 @@ def autopilot_entry_plan(sess, user, orders):
     return entry,last
 
 
+def m1_recovery_window_open(settled_at, now=None):
+    """Allow recovery only in first 8s of a strictly later M1 candle.
+
+    This guards against a *late* request, not a broker execution-time guarantee.
+    """
+    current=now or datetime.now(timezone.utc)
+    if settled_at.tzinfo is None:
+        settled_at=settled_at.replace(tzinfo=timezone.utc)
+    current_ts=current.timestamp()
+    candle_start=int(current_ts)//60*60
+    next_after_settlement=(int(settled_at.timestamp())//60+1)*60
+    return candle_start>=next_after_settlement and 0<=current_ts-candle_start<=8
+
+
 async def autopilot_once():
     """DEMO order progression uses only settled, verified broker contracts."""
     if not autopilot_enabled:
@@ -208,14 +222,7 @@ async def autopilot_once():
                         continue
                     if settlement.tzinfo is None:
                         settlement=settlement.replace(tzinfo=timezone.utc)
-                    next_boundary=(int(settlement.timestamp())//60+1)*60
-                    now_utc=datetime.now(timezone.utc).timestamp()
-                    # Do not enter a recovery late in an already-open candle.
-                    # The newest usable M1 boundary is the first one AFTER official
-                    # settlement, or a later boundary if polling missed the opening.
-                    current_boundary=int(now_utc)//60*60
-                    if (now_utc<next_boundary or current_boundary<next_boundary
-                        or now_utc-current_boundary>8):
+                    if not m1_recovery_window_open(settlement):
                         autopilot_reasons[uid]='Aguardando abertura de vela M1 para recuperação'
                         continue
                     candidate={'strategy':entry.strategy or 'recuperacao',
