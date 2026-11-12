@@ -550,9 +550,15 @@ async def real_balance_route(request:Request,nexora_sid:str|None=Cookie(default=
         return {'available':False,'balance':None,'currency':None,'account_id':None,
                 'reason':'Nenhuma conta real vinculada foi identificada'}
     if not entry['available']:
-        return {'available':False,'balance':None,'currency':entry['currency'] or None,
-                'account_id':entry['account_id'],
-                'reason':'Conta real encontrada, mas saldo indisponível nesta autorização'}
+        # Account discovery does not always include a balance. Ask the
+        # authenticated real Options channel for READ-ONLY balance only.
+        from .real_readonly import RealBalanceError,fetch_real_balance
+        try:
+            return await fetch_real_balance(token,entry['account_id'])
+        except RealBalanceError:
+            return {'available':False,'balance':None,'currency':entry['currency'] or None,
+                    'account_id':entry['account_id'],
+                    'reason':'Conta real identificada; não foi possível consultar o saldo'}
     return {'available':True,'balance':entry['balance'],'currency':entry['currency'],
             'account_id':entry['account_id'],'reason':None}
 
