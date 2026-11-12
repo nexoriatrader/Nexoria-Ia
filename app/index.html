@@ -466,6 +466,7 @@ button.choose-account:focus-visible{outline:3px solid #71d2ff;outline-offset:4px
     <div class="actions"><button class="outline" id="scannerRefresh" onclick="loadAssetScanner()">ANALISAR ATIVOS</button></div>
     <p class="helper" id="scannerMessage" role="status">Clique para analisar ativos disponíveis no catálogo oficial.</p>
     <div id="scannerResults" class="table-wrap"></div>
+    <p class="helper">Comparação: 70% das velas para treino e 30% posteriores para validação. A taxa apresentada mede somente acerto direcional hipotético em velas, não resultado financeiro. Não há ranking ou aprovação automática de estratégia.</p>
     <p class="helper">As oportunidades são hipóteses não validadas; não representam previsão, vantagem comprovada ou autorização para operar.</p>
   </div>
   <div class="section-heading"><div><div class="eyebrow">PESQUISA DE MERCADO</div><h1>Laboratório de estratégias</h1>
@@ -894,7 +895,7 @@ async function loadAssetScanner(){
      'Ativos avaliados: '+(report.checked_assets||0)+'. Sem operações enviadas.';
    const table=document.createElement('table'),head=document.createElement('thead');
    const tr=document.createElement('tr');
-   for(const label of ['Ativo','Família','Velas M1','Leitura experimental','Hipóteses']){
+   for(const label of ['Ativo','Família','Velas M1','Hipóteses atuais','Validação 1/3/5 min (acertos direcionais)']){
      const th=document.createElement('th');th.textContent=label;tr.append(th);
    }head.append(tr);table.append(head);
    const body=document.createElement('tbody');
@@ -902,8 +903,15 @@ async function loadAssetScanner(){
      const row=document.createElement('tr');
      const candidates=(item.candidates||[]).map(c=>
        c.strategy+' · '+(c.direction==='CALL'?'Alta':c.direction==='PUT'?'Baixa':'Aguardar')).join('; ');
+     const testRows=item.comparison?.results||[];
+     const comparisons=testRows.map(test=>{
+       const val=test.validation;
+       const result=val.hit_rate===null?'sem sinais':(100*val.hit_rate).toFixed(1)+'% em '+val.signals+' sinais';
+       return test.duration_minutes+'min: '+result+(test.enough_validation_samples?' (amostra preliminar)':' (amostra insuficiente)');
+     }).join(' | ');
      for(const value of [item.display_name+' ('+item.symbol+')',item.family,
-         item.candles,item.research_state,candidates||'Aguardar mais confirmações']){
+         item.candles,candidates||'Sem hipóteses atuais',
+         comparisons||'Validação indisponível']){
        const td=document.createElement('td');td.textContent=String(value);row.append(td);
      }
      body.append(row);
