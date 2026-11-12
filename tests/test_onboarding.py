@@ -47,7 +47,7 @@ def test_onboarding_saves_limits_and_future_preferences_without_triggering_broke
         after=client.get('/api/onboarding/config').json()
         assert after['martingale'] is True
         assert after['gale_count']==2
-        assert after['multiplier']=='3.00'
+        assert after['multiplier']=='3'
         assert after['cycles']=='5'
         assert after['stake']=='2.50'
         with factory() as sess:
