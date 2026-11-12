@@ -504,6 +504,7 @@ button.choose-account:focus-visible{outline:3px solid #71d2ff;outline-offset:4px
 <script>
 const $=id=>document.getElementById(id);
 let activePage='welcome',demoOrders=[],demoBalance=null,refreshTimer=null,resultsRefreshTimer=null,resultsRequestBusy=false,lastRequestKey=null,robotRunning=false;
+let dashboardStatusSequence=0;
 const money=(n,currency='USD')=>{const value=Number(n);return Number.isFinite(value)?value.toLocaleString('pt-BR',{style:'currency',currency:currency||'USD'}):'—'};
 const safe=(v)=>v===null||v===undefined?'—':String(v);
 let selectedAccountMode='demo';
@@ -650,16 +651,19 @@ async function loadAutopilotReadiness(){
  }
 }
 async function refreshDashboard(){
+ const sequence=++dashboardStatusSequence;
  try{
    // Fetch authoritative robot state FIRST. Other panel requests may fail
    // independently and must never make an active robot look stopped.
    const status=await req('/api/status');
+   // Ignore an older response that arrived after a newer status request.
+   if(sequence!==dashboardStatusSequence)return null;
    robotRunning=Boolean(status.running);
    const available=Boolean(status.auto_buy_enabled);
    $('robotState').textContent=robotRunning?'ATIVO':status.interrupted_after_restart?'INTERROMPIDO':available?'PRONTO':'INDISPONÍVEL';
    $('robotMessage').textContent=status.reason||'Aguardando oportunidades no mercado DEMO';
    $('robotButton').textContent=robotRunning?'DESLIGAR ROBÔ':'LIGAR ROBÔ';
-   $('robotButton').disabled=!robotRunning&&!available;
+   $('robotButton').disabled=(!robotRunning&&!available)||$('robotButton').dataset.commandPending==='true';
    $('robotButton').setAttribute('aria-disabled',String($('robotButton').disabled));
    $('robotButton').style.background=robotRunning?'linear-gradient(135deg,#fa9b9d,#dc5269)':'';
    $('feedState').textContent=(status.connected?'● Cotações conectadas':'○ Reconectando cotações')+' · '+safe(status.symbol);
@@ -669,6 +673,7 @@ async function refreshDashboard(){
    fail('');
    return status;
  }catch(e){
+   if(sequence!==dashboardStatusSequence)return null;
    $('feedState').textContent='○ Comunicação temporariamente indisponível. Último estado do robô preservado.';
    // Keep the last known status; do not imply that the server stopped trading.
    return null;
