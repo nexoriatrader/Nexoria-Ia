@@ -50,8 +50,8 @@ def test_dashboard_shows_persistent_stop_notice_below_start_button():
     assert 'showRobotNotice(reason)' in html
     assert "/api/autopilot/readiness" in html
     assert 'await refreshDashboard().catch(()=>{});' in html
-    assert "Limpar resultados anteriores ainda não está disponível" in html
-    assert 'REINICIAR SESSÃO · EM BREVE' in html
+    assert "NÃO apaga perdas, resultados" in html
+    assert 'onclick="resetRiskSession()"' in html
     assert 'onclick="go(\'settings\')"' in html
     # No temporary toast should be used for the start failure.
     assert "fail(reason);" not in html
