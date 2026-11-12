@@ -101,3 +101,30 @@ def test_premium_landing_mobile_and_accessibility():
     assert '@media(prefers-reduced-motion:reduce)' in html
     assert '.landing-cta:focus-visible' in html
     assert 'id="lab"' in html  # Existing strategy laboratory preserved.
+
+
+def test_account_selection_after_successful_deriv_oauth():
+    html=load_ui()
+    assert 'id="chooseHeading"' in html
+    assert 'id="chooseDemo"' in html
+    assert 'selectDemoAccount()' in html
+    assert "new URLSearchParams(window.location.search).get('login')==='ok'" in html
+    assert "page('choose')" in html
+    assert "page('dashboard')" in html
+    assert "history.replaceState" in html
+    assert 'id="demoInfo"' in html
+
+
+def test_real_account_card_is_informational_and_cannot_trigger_orders():
+    html=load_ui()
+    choose=html.split('<section id="choose"',1)[1].split('<section id="dashboard"',1)[0]
+    assert 'role="group"' in choose
+    assert 'aria-disabled="true"' in choose
+    assert 'EM PREPARAÇÃO' in choose
+    assert 'O envio de ordens reais ainda não está disponível' in choose
+    assert 'onclick="selectDemoAccount()"' in choose
+    assert '/api/demo/buy' not in choose
+    assert '/api/autopilot/start' not in choose
+    assert 'A escolha da conta não liga o robô' in choose
+    assert 'choose-accounts' in choose
+    assert '@media(max-width:700px)' in html
