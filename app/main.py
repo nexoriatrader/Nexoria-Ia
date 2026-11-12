@@ -132,7 +132,7 @@ async def autopilot_once():
         for uid in tuple(autopilot_enabled):
             autopilot_reasons[uid]='Buscando oportunidade: '+research['reason']
         return
-    candidate=research['candidates'][0]
+    candidates=research['candidates']
     for uid in tuple(autopilot_enabled):
         if uid not in autopilot_enabled:
             continue
@@ -170,6 +170,10 @@ async def autopilot_once():
                     autopilot_reasons[uid]='Sessão Deriv expirada; conecte novamente'
                     continue
                 orders=sess.scalars(select(db.DemoOrder).where(db.DemoOrder.user_id==uid)).all()
+                # Rotate the available independent hypotheses, recording each source.
+                previous=sess.scalars(select(db.AutoPilotAttribution.id)
+                        .where(db.AutoPilotAttribution.user_id==uid)).all()
+                candidate=candidates[len(previous)%len(candidates)]
                 from .demo_ledger import order_guard
                 try:
                     order_guard(user,orders,user.stake)
@@ -440,6 +444,8 @@ async def callback(code:str|None=None,state:str|None=None,error:str|None=None,
         user=s.execute(select(db.User).where(db.User.deriv_account_id==account)).scalar_one_or_none()
         if user is None:
             user=db.User(deriv_account_id=account);s.add(user);s.flush()
+        autopilot_enabled.discard(user.id)
+        autopilot_reasons[user.id]='Nova sessão Deriv: ative o AutoPilot manualmente'
         s.add(db.Session(session_hash=hashsecret(session_id),user_id=user.id, token_encrypted=encrypt(token),
                          expires_at=db.utcnow()+timedelta(seconds=max(1,ttl-30))))
         s.commit()
@@ -725,7 +731,43 @@ async def demo_buy_route(request:Request,payload:DemoBuy,
                          nexora_sid:str|None=Cookie(default=None)):
     """One manually confirmed official DEMO purchase."""
     user,token=active_session(request,nexora_sid)
+    if user.id in autopilot_enabled:
+        raise HTTPException(409,'Desligue o AutoPilot antes de iniciar um teste manual')
     return await perform_demo_buy(user,token,payload)
+
+@app.get('/api/autopilot/strategy-stats')
+async def autopilot_strategy_stats(request:Request,nexora_sid:str|None=Cookie(default=None)):
+    """Official settled-broker results attributed to an experimental strategy."""
+    user=active_user(request,nexora_sid)
+    from decimal import Decimal
+    with db.SessionLocal() as session:
+        records=session.execute(
+            select(db.AutoPilotAttribution, db.DemoOrder)
+            .join(db.DemoOrder,db.AutoPilotAttribution.order_id==db.DemoOrder.id)
+            .where(db.AutoPilotAttribution.user_id==user.id)
+        ).all()
+    summary={}
+    for attribution,order in records:
+        item=summary.setdefault(attribution.strategy,{'strategy':attribution.strategy,
+            'settled':0,'wins':0,'losses':0,'draws':0,'pending':0,'net_pnl':'0.00',
+            'win_rate':None,'evidence':'EXPERIMENTAL'})
+        if order.state!='SETTLED' or order.pnl is None:
+            item['pending']+=1
+            continue
+        amount=Decimal(str(order.pnl))
+        if not amount.is_finite():
+            continue
+        item['settled']+=1
+        item['wins']+=int(amount>0)
+        item['losses']+=int(amount<0)
+        item['draws']+=int(amount==0)
+        item['net_pnl']=str(Decimal(item['net_pnl'])+amount)
+    for item in summary.values():
+        if item['settled']:
+            item['win_rate']=round(item['wins']/item['settled'],4)
+    return {'items':list(summary.values()),'execution':'DERIV_DEMO_ONLY',
+            'note':'Resultados observados de contratos oficiais; não validam predição futura'}
+
 
 @app.get('/api/demo/orders')
 async def demo_orders_route(request:Request,nexora_sid:str|None=Cookie(default=None)):
