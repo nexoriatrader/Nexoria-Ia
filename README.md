@@ -41,7 +41,7 @@ Use o serviço Render já existente e a base Postgres do Supabase. Configure `DA
 
 Só habilite `NEXORA_DEMO_BUY_ENABLED=true` no ambiente de validação depois de confirmar que o serviço está usando banco persistente, conta demo autenticada e controles ativos. Nenhum segredo deve ser colocado no repositório. Não habilite conta real.
 
-A URL pública indicada ainda respondia como versão 0.4 durante a inspeção. O artefato local atualizado é v0.5.2 e ainda precisa ser publicado antes da validação ponta a ponta. O pacote não comprova OAuth, compra, liquidação ou histórico oficial até que isso seja observado na conta Demo autenticada.
+Na inspeção pré-publicação, a URL pública indicada respondia como versão 0.4 e `/api/demo/capabilities` retornava 404. O serviço Render está conectado a `main` com auto-deploy; confirme `/healthz` e as rotas v0.5.2 depois da publicação. O pacote não comprova OAuth, compra, liquidação ou histórico oficial até que isso seja observado na conta Demo autenticada.
 
 ## Limitações
 

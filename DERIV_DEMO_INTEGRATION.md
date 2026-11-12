@@ -37,7 +37,7 @@ A confirmação por `window.confirm()` é uma barreira de interface. O marcador 
 
 A suíte local usa mocks; não prova conectividade Deriv. O teste supervisionado ainda precisa demonstrar, na conta demo autenticada, saldo, proposal, confirmação manual, buy, contrato confirmado, liquidação e P/L oficial no painel/histórico. AutoPilot não deve ser ligado antes desse ciclo.
 
-Casos `UNKNOWN` sem `contract_id` ficam fail-closed e precisam de procedimento manual; não existe recuperação automatizada segura para eles nesta versão. A URL Render pública consultada ainda respondia v0.4 e não expunha as rotas novas; publique e verifique o artefato v0.5.2 antes do teste demo.
+Casos `UNKNOWN` sem `contract_id` ficam fail-closed e precisam de procedimento manual; não existe recuperação automatizada segura para eles nesta versão. Na inspeção pré-publicação, a URL Render respondia v0.4 e não expunha as rotas novas. O serviço acompanha `main` com auto-deploy; valide health/rotas v0.5.2 depois do push e antes do teste demo.
 
 ## Documentação oficial
 
