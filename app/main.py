@@ -1159,8 +1159,13 @@ def order_result_details(order,progression=None,was_automatic=False):
 @app.get('/api/demo/orders')
 async def demo_orders_route(request:Request,nexora_sid:str|None=Cookie(default=None)):
     user=active_user(request,nexora_sid)
+    # A rolling 72-hour presentation window. Old ledger records remain in
+    # Postgres for reconciliation, progression, auditability and risk checks.
+    cutoff=datetime.now(timezone.utc)-timedelta(days=3)
     with db.SessionLocal() as s:
-        orders=s.scalars(select(db.DemoOrder).where(db.DemoOrder.user_id==user.id)
+        orders=s.scalars(select(db.DemoOrder).where(
+                       db.DemoOrder.user_id==user.id,
+                       db.DemoOrder.created_at>=cutoff)
                        .order_by(db.DemoOrder.id.desc()).limit(100)).all()
         order_ids=[o.id for o in orders]
         progressions=s.scalars(select(db.DemoOrderProgression).where(
@@ -1171,7 +1176,8 @@ async def demo_orders_route(request:Request,nexora_sid:str|None=Cookie(default=N
         automatic_ids={a.order_id for a in attributions}
         return {'items':[order_result_details(o,by_order.get(o.id),
                               o.id in automatic_ids) for o in orders],
-                'execution':'DERIV_DEMO_ONLY','timezone':'America/Sao_Paulo'}
+                'execution':'DERIV_DEMO_ONLY','timezone':'America/Sao_Paulo',
+                'retention_days':3,'history_cutoff':cutoff.isoformat()}
 
 @app.post('/api/demo/orders/{order_id}/reconcile')
 async def reconcile_demo_route(request:Request,order_id:int,
