@@ -477,7 +477,7 @@ async def logout(request:Request,nexora_sid:str|None=Cookie(default=None)):
     response=JSONResponse({'ok':True});response.delete_cookie('nexora_sid',path='/');return response
 
 class Config(BaseModel):
-    stake:str='2.00';martingale:bool=False;multiplier:str='2.00';stop_win:str='20.00';stop_loss:str='10.00'
+    stake:str='2.00';martingale:bool=False;multiplier:str='2.00';stop_win:str='0.00';stop_loss:str='0.00'
 
 class DemoProposal(BaseModel):
     symbol:str='1HZ100V';direction:str='CALL';minutes:int=5
@@ -612,8 +612,8 @@ async def config(request:Request, config:Config,nexora_sid:str|None=Cookie(defau
 # Martingale and cycle controls are PLANNED preferences only: execution stays single-stake.
 class OnboardingConfig(BaseModel):
     stake:str='2.00'
-    stop_win:str='20.00'
-    stop_loss:str='10.00'
+    stop_win:str='0.00'
+    stop_loss:str='0.00'
     martingale:bool=False
     gale_count:int=0
     multiplier:str='2.00'
