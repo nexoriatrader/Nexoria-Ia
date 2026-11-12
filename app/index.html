@@ -488,11 +488,6 @@ button.choose-account:focus-visible{outline:3px solid #71d2ff;outline-offset:4px
     <div class="actions"><button class="gold" onclick="save()">SALVAR CONFIGURAÇÕES</button></div>
     <p class="helper" id="configFeedback" role="status"></p>
   </div>
-  <div class="card"><div class="surface-heading">Teste controlado de integração</div>
-    <p class="muted">Enviar UMA ordem oficial na conta Deriv Demo para testar a conexão com a corretora. Esta operação não é escolhida pelo AutoPilot, usa direção CALL fixa e pode perder o valor da entrada.</p>
-    <div class="actions"><button class="outline" onclick="testDemoBuy()">TESTAR UMA ENTRADA DEMO</button></div>
-    <p class="helper" id="demoTestInfo">Nenhuma compra solicitada nesta sessão.</p>
-  </div>
 </section>
 <section id="account" class="hidden">
   <div class="section-heading"><div><div class="eyebrow">SUA CONTA</div><h1>Conta Deriv</h1><p>Conexão e dados da corretora.</p></div></div>
@@ -832,7 +827,6 @@ async function save(){
   fail('');
  }catch(e){$('configFeedback').textContent='Não foi possível salvar: '+e.message;fail('')}
 }
-async function testDemoBuy(){try{const s=await req('/api/status');if(!window.confirm('ATENÇÃO: COMPRA OFICIAL NA DERIV DEMO\n\nEsta ação enviará uma ordem CALL fixa de 5 minutos usando o saldo virtual e o valor definido nas configurações. Não é um sinal escolhido pelo AutoPilot. Você pode perder todo o valor da entrada.\n\nDeseja confirmar?'))return;const key='demo-'+Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,12);lastRequestKey=key;const order=await req('/api/demo/buy',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({symbol:s.symbol,direction:'CALL',minutes:5,confirm:'DEMO_ONLY',request_key:key})});$('demoTestInfo').textContent='Ordem #'+order.id+' · '+order.state+' · acompanhe em Resultados.';await loadDemoOrders();await loadDemoBalance();fail('')}catch(e){fail('Compra DEMO: '+e.message)}}
 async function loadAutopilotResearch(){try{const a=await req('/api/autopilot/research');const entries=a.candidates.map(c=>c.strategy.toUpperCase()+' '+c.direction+' — '+c.reason);$('autopilotResearch').textContent=a.symbol+' · '+a.samples+' cotações · '+(entries.join(' | ')||a.reason);fail('')}catch(e){$('autopilotResearch').textContent='Análise indisponível: '+e.message}}
 async function loadAutopilotDemoPreview(){try{const a=await req('/api/autopilot/demo-preview');if(!a.proposal){$('autopilotResearch').textContent=a.reason;return}const q=a.proposal;$('autopilotResearch').textContent=a.candidate.direction+' · proposta Deriv Demo '+money(q.ask_price,q.currency)+' · pagamento '+money(q.payout,q.currency)+' · cotação somente leitura';fail('')}catch(e){$('autopilotResearch').textContent='Proposta indisponível: '+e.message}}
 async function logout(){try{await req('/api/logout',{method:'POST'});if(refreshTimer)clearInterval(refreshTimer);if(resultsRefreshTimer)clearInterval(resultsRefreshTimer);toggleMenu(false);page('welcome');demoOrders=[];demoBalance=null;fail('')}catch(e){fail(e.message)}}
