@@ -7,6 +7,7 @@ The live AutoPilot is deliberately unchanged by these experiments.
 from __future__ import annotations
 from datetime import datetime, timezone
 from time import time
+import re
 from math import isfinite
 from statistics import mean
 from .market import MarketError, public_request, discover_symbols, discover_contracts
@@ -64,7 +65,7 @@ def parse_candles(payload: dict) -> list[dict]:
 
 
 async def fetch_candles(symbol: str, *, count: int=MAX_BARS) -> list[dict]:
-    if not isinstance(symbol,str) or not symbol.isalnum() or not 2<=len(symbol)<=30:
+    if not isinstance(symbol,str) or not re.fullmatch(r'[A-Za-z0-9_]{2,30}',symbol):
         raise MarketError('Símbolo inválido')
     payload=await public_request({
         'ticks_history':symbol,'style':'candles','granularity':60,
