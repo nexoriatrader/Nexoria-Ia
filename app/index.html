@@ -118,6 +118,22 @@ button.choose-account:focus-visible{outline:3px solid #71d2ff;outline-offset:4px
 @media(max-width:700px){.account-choose{padding:26px 0 15px}.choose-intro{margin-bottom:25px}.choose-intro h1{font-size:clamp(31px,8.3vw,42px)}.choose-accounts{grid-template-columns:1fr;gap:14px;max-width:490px;margin:auto}.choose-account{min-height:0;padding:22px}.choose-account-top{margin-bottom:17px}.choose-account-desc{min-height:0;margin-bottom:10px}.choose-account-meta{margin-bottom:23px}.choose-footnote{max-width:420px}.choose-overline{font-size:9px}}
 @media(prefers-reduced-motion:reduce){button.choose-account{transition:none}button.choose-account:hover{transform:none}}
 
+.choose-account.chosen{border-color:#65c7bd;box-shadow:0 17px 42px #0006,inset 0 0 0 1px #65c7bd25}
+.choose-account.chosen:focus-visible{outline:3px solid #72d1ff;outline-offset:3px}
+.choose-account-check{position:absolute;right:19px;bottom:19px;background:#184d45;border:1px solid #48a88d;color:#a4f0d8;border-radius:50%;width:28px;height:28px;display:grid;place-items:center;font-weight:900}
+.choose-account-check-off{background:#273443;border-color:#526072;color:#a4b5c4}
+.choose-account{min-height:260px}
+.choose-account-top{margin-bottom:16px}
+.choose-advice{display:flex;align-items:flex-start;gap:14px;border:1px solid #385e73;border-radius:18px;padding:20px 22px;margin:20px 0 18px;background:linear-gradient(120deg,#142d3f,#0e1d2d)}
+.choose-advice-icon{display:grid;place-items:center;flex:none;width:37px;height:37px;border-radius:12px;background:#453b2c;color:#f5ce81;font-size:24px}
+.choose-advice strong{font-size:16px;color:#f7d796}
+.choose-advice p{font-size:13px;line-height:1.6;color:#bacbd8;margin:7px 0 0}
+.choose-advice .choose-advice-small{font-size:12px;color:#91b0c4;margin-top:10px}
+.choose-continue{width:100%;min-height:60px;display:flex;align-items:center;justify-content:center;gap:15px;position:relative;padding:14px 54px;background:linear-gradient(115deg,#ffe49b,#f3b94b);border:1px solid #ffe09b;border-radius:15px;color:#241a08;font-size:16px;font-weight:950;letter-spacing:.06em;box-shadow:0 12px 35px #df9f3236}
+.choose-continue span{position:absolute;right:21px;font-size:22px}
+.choose-continue:hover{filter:brightness(1.06)}
+.choose-continue:focus-visible{outline:3px solid #72d1ff;outline-offset:3px}
+@media(max-width:700px){.choose-account{min-height:225px}.choose-account-meta{margin-bottom:28px}.choose-advice{padding:18px 16px;gap:10px}.choose-continue{min-height:60px}}
 /* Premium welcome page: isolated selectors to preserve the authenticated dashboard. */
 .login.landing{position:relative;isolation:isolate;max-width:1050px;margin:35px auto 14px;text-align:left}
 .landing-backdrop{position:absolute;inset:-50px -5vw auto;height:520px;z-index:-1;overflow:hidden;pointer-events:none}
@@ -236,27 +252,33 @@ button.choose-account:focus-visible{outline:3px solid #71d2ff;outline-offset:4px
 <section id="choose" class="account-choose hidden" aria-labelledby="chooseHeading">
   <div class="choose-glow" aria-hidden="true"></div>
   <div class="choose-intro">
-    <div class="choose-overline"><span class="choose-overline-dot"></span> CONEXÃO ESTABELECIDA</div>
-    <h1 id="chooseHeading">Escolha sua <span>experiência.</span></h1>
-    <p>Sua conta foi conectada à Deriv. Selecione como deseja acessar o NEXORA AutoPilot.</p>
+    <div class="choose-overline"><span class="choose-overline-dot"></span> SUA JORNADA COMEÇA AQUI</div>
+    <h1 id="chooseHeading">A um passo do <span>seu sucesso.</span></h1>
+    <p>Escolha a conta para continuar sua experiência com o NEXORA AutoPilot.</p>
   </div>
-  <div class="choose-accounts" role="group" aria-label="Tipos de conta disponíveis">
-    <button type="button" class="choose-account choose-account-demo" id="chooseDemo" onclick="selectDemoAccount()">
-      <span class="choose-account-top"><span class="choose-symbol choose-symbol-demo" aria-hidden="true">◉</span><span class="choose-account-tag">DISPONÍVEL</span></span>
-      <span class="choose-account-name">Conta de treinamento</span>
-      <span class="choose-account-desc">Explore o NEXORA, acompanhe análises e teste a automação usando seu saldo virtual.</span>
+  <div class="choose-accounts" role="group" aria-label="Selecione o tipo de conta">
+    <button type="button" class="choose-account choose-account-demo chosen" id="chooseDemo" aria-pressed="true" onclick="selectDemoAccount()">
+      <span class="choose-account-top"><span class="choose-symbol choose-symbol-demo" aria-hidden="true">◉</span><span class="choose-account-tag">SELECIONADO</span></span>
+      <span class="choose-account-name">Treinamento</span>
+      <span class="choose-account-desc">Conheça o robô e teste suas estratégias usando saldo virtual.</span>
       <span class="choose-account-meta" id="demoInfo">Verificando conta conectada...</span>
-      <span class="choose-account-action">ACESSAR PAINEL <span aria-hidden="true">→</span></span>
+      <span class="choose-account-check" aria-hidden="true">✓</span>
     </button>
-    <div class="choose-account choose-account-real" aria-disabled="true">
-      <span class="choose-account-top"><span class="choose-symbol choose-symbol-real" aria-hidden="true">◇</span><span class="choose-account-tag choose-account-tag-muted">EM PREPARAÇÃO</span></span>
+    <button type="button" class="choose-account choose-account-real" id="chooseReal" disabled aria-disabled="true">
+      <span class="choose-account-top"><span class="choose-symbol choose-symbol-real" aria-hidden="true">◇</span><span class="choose-account-tag choose-account-tag-muted">SALDO REAL</span></span>
       <span class="choose-account-name">Conta real</span>
-      <span class="choose-account-desc">Experiência planejada para gerenciamento de operações com saldo real.</span>
-      <span class="choose-account-meta">O envio de ordens reais ainda não está disponível.</span>
-      <span class="choose-account-action choose-action-disabled">ACESSO EM BREVE <span aria-hidden="true">↗</span></span>
-    </div>
+      <span class="choose-account-desc">Ambiente para operações com seu próprio capital.</span>
+      <span class="choose-account-meta">Seleção disponível quando a integração for habilitada.</span>
+      <span class="choose-account-check choose-account-check-off" aria-hidden="true">—</span>
+    </button>
   </div>
-  <div class="choose-footnote"><span aria-hidden="true">⌑</span> A escolha da conta não liga o robô. Você decide quando ativá-lo no painel.</div>
+  <div class="choose-advice" role="note"><div class="choose-advice-icon" aria-hidden="true">✧</div><div>
+    <strong>Comece com confiança.</strong>
+    <p>Recomendamos utilizar o treinamento por algumas horas para conhecer o robô, ajustar suas configurações e compreender os riscos antes de operar com capital próprio. Para o NEXORA, proteger seu capital começa com decisões conscientes.</p>
+    <p class="choose-advice-small">Quando disponível, você poderá mudar para a conta real nas configurações do robô.</p>
+  </div></div>
+  <button type="button" class="choose-continue" id="chooseContinue" onclick="continueAccount()">CONTINUAR <span aria-hidden="true">→</span></button>
+  <div class="choose-footnote"><span aria-hidden="true">⌑</span> Escolher uma conta não inicia o robô automaticamente.</div>
   <button type="button" class="choose-signout" onclick="logout()">Sair desta conta</button>
 </section>
 <section id="dashboard" class="hidden">
@@ -344,7 +366,8 @@ const $=id=>document.getElementById(id);
 let activePage='welcome',demoOrders=[],demoBalance=null,refreshTimer=null,lastRequestKey=null,robotRunning=false;
 const money=(n,currency='USD')=>{const value=Number(n);return Number.isFinite(value)?value.toLocaleString('pt-BR',{style:'currency',currency:currency||'USD'}):'—'};
 const safe=(v)=>v===null||v===undefined?'—':String(v);
-function selectDemoAccount(){go('dashboard')}
+function selectDemoAccount(){const button=$('chooseDemo');button.classList.add('chosen');button.setAttribute('aria-pressed','true')}
+function continueAccount(){if($('chooseDemo').getAttribute('aria-pressed')==='true')go('dashboard')}
 function page(v){for(const name of ['welcome','choose','dashboard','results','lab','settings','account'])$(name).classList.toggle('hidden',name!==v);activePage=v;const logged=!['welcome','choose'].includes(v);$('accountBadge').classList.toggle('hidden',!logged);$('menuButton').classList.toggle('hidden',!logged);document.querySelectorAll('.nav[data-view]').forEach(b=>b.classList.toggle('active',b.dataset.view===v))}
 function toggleMenu(open){$('drawer').classList.toggle('hidden',!open);$('menuOverlay').classList.toggle('hidden',!open);$('menuButton').setAttribute('aria-expanded',String(open))}
 function go(v){toggleMenu(false);page(v);window.scrollTo({top:0,behavior:'smooth'});if(v==='dashboard')refreshDashboard();if(v==='results'){loadDemoOrders();loadStrategyStats()}if(v==='lab')loadStrategyLab();if(v==='account')loadDemoBalance();if(v==='settings')loadSettings()}
