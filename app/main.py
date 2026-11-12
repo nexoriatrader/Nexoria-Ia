@@ -568,7 +568,20 @@ async def autopilot_start(request:Request,payload:AutoPilotSwitch,
             # Permit arming during a previously confirmed contract; no new order until settled.
             if any(o.state in ('PENDING','UNKNOWN') for o in orders):
                 raise HTTPException(409,'Contrato pendente ou incerto: reconciliação necessária')
-    autopilot_enabled.add(user.id)
+    # Each manual activation starts a new durable sequence. Historical settled
+    # orders still apply to cumulative stop checks but not the new progression.
+    async with autopilot_lock:
+        with db.SessionLocal() as sess:
+            existing=sess.get(db.RobotRun,user.id)
+            latest=sess.scalars(select(db.DemoOrder.id).where(
+                db.DemoOrder.user_id==user.id).order_by(db.DemoOrder.id.desc()).limit(1)).first()
+            if not existing:
+                existing=db.RobotRun(user_id=user.id);sess.add(existing)
+            existing.after_order_id=latest or 0
+            existing.started_at=db.utcnow()
+            sess.commit()
+        autopilot_last_attempt.pop(user.id,None)
+        autopilot_enabled.add(user.id)
     autopilot_reasons[user.id]='AutoPilot ligado; aguardando oportunidade oficial na Deriv Demo'
     return {'running':True,'execution':'DERIV_DEMO_ONLY','real_orders_enabled':False}
 
