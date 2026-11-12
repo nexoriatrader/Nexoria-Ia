@@ -479,6 +479,7 @@ async def logout(request:Request,nexora_sid:str|None=Cookie(default=None)):
 class Config(BaseModel):
     stake:str='2.00';martingale:bool=False;multiplier:str='2.00';stop_win:str='0.00';stop_loss:str='0.00'
 
+
 class DemoProposal(BaseModel):
     symbol:str='1HZ100V';direction:str='CALL';minutes:int=5
 
@@ -594,22 +595,26 @@ async def autopilot_demo_preview(request:Request,nexora_sid:str|None=Cookie(defa
 
 @app.post('/api/config')
 async def config(request:Request, config:Config,nexora_sid:str|None=Cookie(default=None)):
+    """Legacy API retains flat stake for older integrations; UI uses onboarding."""
     u=active_user(request,nexora_sid)
+    if u.id in autopilot_enabled:
+        raise HTTPException(409,'Desligue o robô antes de alterar as configurações')
+    if config.martingale:
+        raise HTTPException(422,'Configure Martingale com quantidade de tentativas no painel atualizado')
     try:settings=Settings.parse(config.model_dump())
-    except ValueError as e:raise HTTPException(400,str(e)) from None
+    except ValueError as e:raise HTTPException(422,str(e)) from None
     async with lock:
         engine=rt_for(u)
         try:engine.configure(settings)
         except ValueError as e:raise HTTPException(409,str(e)) from None
-        with db.SessionLocal() as s:
-            stored=s.get(db.User,u.id)
+        with db.SessionLocal() as sess:
+            stored=sess.get(db.User,u.id)
             stored.stake=str(settings.stake);stored.stop_win=str(settings.stop_win);stored.stop_loss=str(settings.stop_loss)
-            stored.multiplier=str(settings.multiplier);stored.martingale=settings.martingale
-            s.commit()
+            stored.multiplier='2.00';stored.martingale=False
+            sess.commit()
     return {'ok':True}
 
-# Account onboarding config uses the same safe demo risk settings as /api/config.
-# Martingale and cycle controls are PLANNED preferences only: execution stays single-stake.
+
 class OnboardingConfig(BaseModel):
     stake:str='2.00'
     stop_win:str='0.00'
@@ -617,7 +622,24 @@ class OnboardingConfig(BaseModel):
     martingale:bool=False
     gale_count:int=0
     multiplier:str='2.00'
-    cycles:str='unlimited'
+    cycles:str='0'
+    cycle_multiplier:str='2.00'
+
+
+def parse_progression_multiplier(value, label):
+    from decimal import Decimal, InvalidOperation
+    try:
+        normalized=str(value).strip().replace(',','.')
+        d=Decimal(normalized)
+    except (InvalidOperation,ValueError,TypeError):
+        raise HTTPException(422,label+': informe um número válido, como 1.0, 2.3 ou 2.5') from None
+    if not d.is_finite() or d<1:
+        raise HTTPException(422,label+': informe um número maior ou igual a 1.0')
+    if d.as_tuple().exponent<-2:
+        raise HTTPException(422,label+': use no máximo duas casas decimais')
+    if d>100000:
+        raise HTTPException(422,label+': valor acima do limite de 100000')
+    return d
 
 
 @app.get('/api/onboarding/config')
@@ -625,44 +647,51 @@ async def get_onboarding_config(request:Request,nexora_sid:str|None=Cookie(defau
     u=active_user(request,nexora_sid)
     with db.SessionLocal() as sess:
         plan=sess.get(db.RobotPlan,u.id)
+        cycles=sess.get(db.RobotCycleParams,u.id)
         return {'mode':'demo','real_enabled':False,
                 'stake':u.stake,'stop_win':u.stop_win,'stop_loss':u.stop_loss,
                 'martingale':bool(plan.requested_martingale) if plan else False,
                 'gale_count':plan.gale_count if plan else 0,
                 'multiplier':plan.requested_multiplier if plan else '2.00',
-                'cycles':str(plan.cycles_limit) if plan and plan.cycles_limit is not None else 'unlimited',
-                'martingale_execution_enabled':False,'cycles_execution_enabled':False}
+                'cycles':str(plan.cycles_limit) if plan and plan.cycles_limit is not None else '0',
+                'cycle_multiplier':cycles.multiplier if cycles else '2.00',
+                'martingale_execution_enabled':True,'cycles_execution_enabled':True}
 
 
 @app.post('/api/onboarding/config')
 async def save_onboarding_config(request:Request,payload:OnboardingConfig,
                                  nexora_sid:str|None=Cookie(default=None)):
     u=active_user(request,nexora_sid)
-    if not isinstance(payload.martingale,bool):
-        raise HTTPException(422,'Valor de Martingale inválido')
-    if payload.gale_count not in (0,1,2,3):
-        raise HTTPException(422,'Quantidade de martingales inválida')
-    if payload.cycles not in ('1','3','5','10','unlimited'):
-        raise HTTPException(422,'Quantidade de ciclos inválida')
+    if u.id in autopilot_enabled:
+        raise HTTPException(409,'Desligue o robô antes de salvar uma nova progressão')
+    if payload.gale_count not in range(0,6):
+        raise HTTPException(422,'Quantidade de Martingales deve estar entre 0 e 5')
+    if payload.cycles not in ('0','1','2','3','4','5'):
+        raise HTTPException(422,'Quantidade de ciclos deve estar entre 0 e 5')
     if payload.martingale and payload.gale_count==0:
-        raise HTTPException(422,'Escolha pelo menos uma tentativa de Martingale')
+        raise HTTPException(422,'Para ativar Martingale, escolha entre 1 e 5 tentativas')
     if not payload.martingale and payload.gale_count!=0:
-        raise HTTPException(422,'Desative as tentativas de Martingale')
-    # For current official orders the only enabled progression is flat stake.
+        raise HTTPException(422,'Desative a quantidade de tentativas quando Martingale estiver desligado')
+    gale_factor=parse_progression_multiplier(payload.multiplier,'Multiplicador Martingale')
+    cycle_factor=parse_progression_multiplier(payload.cycle_multiplier,'Multiplicador de ciclos')
     try:
         settings=Settings.parse({'stake':payload.stake,'stop_win':payload.stop_win,
                                  'stop_loss':payload.stop_loss,
                                  'martingale':False,'multiplier':'2'})
-        selected_multiplier=Settings.parse({'stake':payload.stake,
-                                            'stop_win':payload.stop_win,'stop_loss':payload.stop_loss,
-                                            'martingale':False,'multiplier':payload.multiplier}).multiplier
     except ValueError as e:
         raise HTTPException(422,str(e)) from None
+    from .progression import CAP_PER_TRADE
+    if settings.stake>CAP_PER_TRADE:
+        raise HTTPException(422,'Entrada inicial excede o limite de US$ 100 da sequência')
     async with lock:
         engine=rt_for(u)
         try:engine.configure(settings)
         except ValueError as e:raise HTTPException(409,str(e)) from None
         with db.SessionLocal() as sess:
+            pending=sess.scalars(select(db.DemoOrder).where(
+                db.DemoOrder.user_id==u.id, db.DemoOrder.state.in_(('PENDING','CONFIRMED','UNKNOWN')))).all()
+            if pending:
+                raise HTTPException(409,'Aguarde o encerramento e a reconciliação do contrato antes de editar')
             stored=sess.get(db.User,u.id)
             stored.stake=str(settings.stake)
             stored.stop_win=str(settings.stop_win)
@@ -671,16 +700,23 @@ async def save_onboarding_config(request:Request,payload:OnboardingConfig,
             stored.multiplier='2.00'
             plan=sess.get(db.RobotPlan,u.id)
             if not plan:
-                plan=db.RobotPlan(user_id=u.id)
-                sess.add(plan)
+                plan=db.RobotPlan(user_id=u.id);sess.add(plan)
             plan.requested_martingale=payload.martingale
             plan.gale_count=payload.gale_count
-            plan.requested_multiplier=str(selected_multiplier)
-            plan.cycles_limit=None if payload.cycles=='unlimited' else int(payload.cycles)
+            plan.requested_multiplier=str(gale_factor)
+            plan.cycles_limit=int(payload.cycles)
+            cp=sess.get(db.RobotCycleParams,u.id)
+            if not cp:
+                cp=db.RobotCycleParams(user_id=u.id);sess.add(cp)
+            cp.multiplier=str(cycle_factor)
+            # Changing configuration invalidates any previously armed sequence.
+            run=sess.get(db.RobotRun,u.id)
+            if run:
+                sess.delete(run)
             sess.commit()
-    return {'ok':True,'execution_mode':'DEMO_FLAT_STAKE',
-            'martingale_execution_enabled':False,'cycles_execution_enabled':False,
-            'message':'Limites salvos. Martingale e ciclos guardados como preferências futuras, ainda sem execução.'}
+    return {'ok':True,'execution_mode':'DERIV_DEMO_ONLY',
+            'martingale_execution_enabled':True,'cycles_execution_enabled':True,
+            'message':'Configuração salva. Ative o AutoPilot separadamente no painel.'}
 
 
 # Explicit, read-only research endpoint; never touches AutoPilot execution settings.
