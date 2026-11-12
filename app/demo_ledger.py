@@ -48,7 +48,7 @@ def order_guard(user, orders, stake):
         raise OrderGuardError('Martingale indisponível para compras demo até validação adicional')
     return pnl
 
-def reserve(session, user, *, request_key, symbol, direction, minutes):
+def reserve(session, user, *, request_key, symbol, direction, minutes, stake_override=None):
     if not isinstance(request_key,str) or not 8<=len(request_key)<=64 or not all(c.isalnum() or c in '-_' for c in request_key):
         raise OrderGuardError('Identificador de tentativa inválido')
     if direction not in {'CALL','PUT'} or minutes not in {1,3,5}:
@@ -61,9 +61,10 @@ def reserve(session, user, *, request_key, symbol, direction, minutes):
         # Idempotent retry MUST NOT trigger another broker request.
         return previous, False
     entries=session.scalars(select(db.DemoOrder).where(db.DemoOrder.user_id==user.id)).all()
-    order_guard(user,entries,user.stake)
+    chosen_stake=user.stake if stake_override is None else str(stake_override)
+    order_guard(user,entries,chosen_stake)
     order=db.DemoOrder(user_id=user.id,request_key=request_key,active_slot=user.id,
-        state='PENDING',symbol=symbol,direction=direction,duration_minutes=minutes,stake=user.stake)
+        state='PENDING',symbol=symbol,direction=direction,duration_minutes=minutes,stake=chosen_stake)
     session.add(order)
     try:
         session.commit()
