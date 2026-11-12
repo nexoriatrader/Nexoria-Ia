@@ -37,7 +37,7 @@ def decimal(value):
     return d
 
 
-def next_entry(*, base, gale_enabled, gales, gale_multiplier, cycles, cycle_multiplier, orders):
+def next_entry(*, base, gale_enabled, gales, gale_multiplier, cycles, cycle_multiplier, orders, cycles_enabled=False):
     """Orders MUST be ordered by ID and scoped to this run via a persisted anchor.
 
     Each row: {state, pnl, direction, symbol, strategy, stake}.
@@ -50,7 +50,7 @@ def next_entry(*, base, gale_enabled, gales, gale_multiplier, cycles, cycle_mult
         raise ProgressionHalt('Multiplicador indisponível')
     if gales not in (0,1,2,3) or (not gale_enabled and gales!=0):
         raise ProgressionHalt('Quantidade de Martingale inválida')
-    if cycles is not None and cycles not in (1,3,5,10):
+    if cycles_enabled and cycles is not None and cycles not in (1,3,5,10):
         raise ProgressionHalt('Quantidade de ciclos inválida')
     cycle=gale=0
     total=Decimal('0')
@@ -88,6 +88,10 @@ def next_entry(*, base, gale_enabled, gales, gale_multiplier, cycles, cycle_mult
         elif gale<gales:
             gale+=1
             previous=row
+        elif not cycles_enabled:
+            cycle=gale=0
+            total=Decimal('0')
+            previous=None
         else:
             cycle+=1
             gale=0
