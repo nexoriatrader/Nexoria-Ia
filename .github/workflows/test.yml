@@ -2,6 +2,7 @@ name: NEXORA Python tests
 on:
   push:
     branches:
+      - main
       - feature/nexora-autopilot-research-v06
   pull_request:
     branches:
