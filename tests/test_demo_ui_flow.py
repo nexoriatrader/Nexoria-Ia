@@ -49,3 +49,23 @@ def test_real_mode_is_explicitly_unavailable_for_purchases():
     html=load_ui()
     assert "Indisponível para compras nesta fase" in html
     assert "A aplicação não envia ordens em conta real" in html
+
+def test_inline_javascript_syntax_is_valid(tmp_path):
+    """Catch malformed inline JavaScript before it blocks OAuth login initialization."""
+    import re
+    import shutil
+    import subprocess
+    import pytest
+
+    html = load_ui()
+    blocks = re.findall(r"<script(?:\\s[^>]*)?>(.*?)</script>", html, flags=re.S | re.I)
+    assert blocks, "The OAuth login UI must have a working initialization script"
+    node = shutil.which("node")
+    if node is None:
+        pytest.skip("Node.js is unavailable for syntax checking")
+    for index, block in enumerate(blocks):
+        path = tmp_path / f"inline_{index}.js"
+        path.write_text(block, encoding="utf-8")
+        result = subprocess.run([node, "--check", str(path)],
+                                capture_output=True, text=True, timeout=15)
+        assert result.returncode == 0, result.stderr
