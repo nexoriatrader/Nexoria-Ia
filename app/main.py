@@ -21,6 +21,7 @@ from .autopilot import analyze, quote_assessment
 from .engine import Engine, Settings
 from .market import MarketError, discover_symbols, discover_contracts, indicative_proposal
 from .strategy_lab import run_lab
+from .asset_scanner import scan_assets
 from .progression import next_entry, ProgressionHalt
 from .security import CLIENT_ID, REDIRECT, TOKEN_URL, build_authorize_url, make_login, make_session_id, hashsecret, encrypt, decrypt, cookie_options
 
@@ -1023,6 +1024,29 @@ async def strategy_lab_route(request:Request,nexora_sid:str|None=Cookie(default=
             raise HTTPException(502,str(exc)) from None
         _strategy_lab_cache=report
         _strategy_lab_cache_time=now
+        return {**report,'cached':False}
+
+
+
+_asset_scanner_lock=asyncio.Lock()
+_asset_scanner_cache=None
+_asset_scanner_cache_time=0.0
+
+@app.get('/api/research/asset-scanner')
+async def asset_scanner_route(request:Request,nexora_sid:str|None=Cookie(default=None)):
+    """Authenticated read-only market research, independent of AutoPilot."""
+    active_user(request,nexora_sid)
+    global _asset_scanner_cache,_asset_scanner_cache_time
+    async with _asset_scanner_lock:
+        now=asyncio.get_running_loop().time()
+        if _asset_scanner_cache is not None and now-_asset_scanner_cache_time<300:
+            return {**_asset_scanner_cache,'cached':True}
+        try:
+            report=await scan_assets()
+        except MarketError as exc:
+            raise HTTPException(502,str(exc)) from None
+        _asset_scanner_cache=report
+        _asset_scanner_cache_time=now
         return {**report,'cached':False}
 
 
