@@ -605,6 +605,38 @@ class AutoPilotSwitch(BaseModel):
     confirm:str=''
 
 
+def autopilot_start_blocker(user,orders):
+    """Read-only explanation for refused starts; never bypass order safeguards."""
+    if not autopilot_allowed():
+        return 'AutoPilot DEMO está desativado na configuração do servidor'
+    if user.selected_mode!='demo':
+        return 'Apenas a conta Treinamento está habilitada para operar'
+    if user.martingale:
+        return 'Configuração antiga de Martingale incompatível; salve novamente em Configurações'
+    from .demo_ledger import order_guard,OrderGuardError
+    try:
+        order_guard(user,orders,user.stake)
+    except OrderGuardError as exc:
+        if 'Contrato demo em andamento' in str(exc):
+            if any(o.state in ('PENDING','UNKNOWN') for o in orders):
+                return 'Existe contrato pendente ou incerto; confira o contrato na página Resultados antes de ligar o robô'
+            if any(o.state=='CONFIRMED' for o in orders):
+                return None  # Existing confirmed contract will settle before any next buy.
+        return str(exc)
+    return None
+
+
+@app.get('/api/autopilot/readiness')
+async def autopilot_readiness(request:Request,nexora_sid:str|None=Cookie(default=None)):
+    """Authenticated dry-run of start guards, without activating or purchasing."""
+    user=active_user(request,nexora_sid)
+    with db.SessionLocal() as sess:
+        orders=sess.scalars(select(db.DemoOrder).where(db.DemoOrder.user_id==user.id)).all()
+        reason=autopilot_start_blocker(user,orders)
+    return {'ready':reason is None,'reason':reason,
+            'execution':'DERIV_DEMO_ONLY','real_orders_enabled':False}
+
+
 @app.post('/api/autopilot/start')
 async def autopilot_start(request:Request,payload:AutoPilotSwitch,
                           nexora_sid:str|None=Cookie(default=None)):
@@ -619,15 +651,9 @@ async def autopilot_start(request:Request,payload:AutoPilotSwitch,
         raise HTTPException(409,'Desative Martingale para ativar o AutoPilot')
     with db.SessionLocal() as sess:
         orders=sess.scalars(select(db.DemoOrder).where(db.DemoOrder.user_id==user.id)).all()
-        from .demo_ledger import order_guard
-        try:
-            order_guard(user,orders,user.stake)
-        except OrderGuardError as e:
-            if 'Contrato demo em andamento' not in str(e):
-                raise HTTPException(409,str(e)) from None
-            # Permit arming during a previously confirmed contract; no new order until settled.
-            if any(o.state in ('PENDING','UNKNOWN') for o in orders):
-                raise HTTPException(409,'Contrato pendente ou incerto: reconciliação necessária')
+        blocker=autopilot_start_blocker(user,orders)
+        if blocker:
+            raise HTTPException(409,blocker)
     # Each manual activation starts a new durable sequence. Historical settled
     # orders still apply to cumulative stop checks but not the new progression.
     async with autopilot_lock:
