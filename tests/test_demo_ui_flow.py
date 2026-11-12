@@ -34,7 +34,7 @@ def test_mobile_navigation_and_single_primary_robot_control():
     assert 'disabled aria-disabled="true"' in html
     assert "AutoPilot" in html
     assert "loadDemoOrders()" in html
-    assert "/api/config/current" in html
+    assert "/api/onboarding/config" in html
     assert "data-view=\"results\"" in html
 
 
@@ -47,7 +47,7 @@ def test_continuity_prompt_clarifies_demo_not_real():
 
 def test_real_mode_is_explicitly_unavailable_for_purchases():
     html=load_ui()
-    assert "Seleção disponível quando a integração for habilitada" in html
+    assert "Verificando se existe conta real vinculada" in html
     assert 'aria-disabled="true"' in html
 
 def test_inline_javascript_syntax_is_valid(tmp_path):
@@ -121,7 +121,7 @@ def test_real_account_card_is_informational_and_cannot_trigger_orders():
     assert 'role="group"' in choose
     assert 'aria-disabled="true"' in choose
     assert 'SALDO REAL' in choose
-    assert 'Seleção disponível quando a integração for habilitada' in choose
+    assert 'id="realInfo"' in choose
     assert 'onclick="selectDemoAccount()"' in choose
     assert '/api/demo/buy' not in choose
     assert '/api/autopilot/start' not in choose
