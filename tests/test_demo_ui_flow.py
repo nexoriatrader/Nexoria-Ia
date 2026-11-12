@@ -192,7 +192,7 @@ def test_header_has_official_broker_access_instead_of_demo_badge():
     header=html.split("<header>",1)[1].split("</header>",1)[0]
     assert 'id="accountBadge"' in header
     assert 'ACESSAR CORRETORA' in header
-    assert 'href="https://home.deriv.com/"' in header
+    assert 'href="https://t.deriv.link?t=HR6MZB6Q499Z"' in header
     assert 'target="_blank"' in header
     assert 'rel="noopener noreferrer"' in header
     assert 'DERIV DEMO</span>' not in header
