@@ -173,3 +173,39 @@ def test_scanner_requires_auth_and_caches(monkeypatch,tmp_path):
     finally:
         main._asset_scanner_cache=None
         engine.dispose()
+
+
+def test_scanner_historical_comparison_is_chronological_and_never_validates_trading():
+    from app import asset_scanner
+    data=candles(700)
+    comparison=asset_scanner.compare_history(data,'volatility')
+    assert comparison['strategy']=='step_ma'
+    assert comparison['payout_adjusted'] is False
+    assert [r['duration_minutes'] for r in comparison['results']]==[1,3,5]
+    split=int(len(data)*0.7)
+    for row in comparison['results']:
+        assert row['validated_for_trading'] is False
+        if row['train']['last_signal'] is not None:
+            assert row['train']['last_signal']<=data[split-1]['epoch']
+        if row['validation']['first_signal'] is not None:
+            assert row['validation']['first_signal']>=data[split]['epoch']
+
+
+def test_scanner_historical_comparison_rejects_short_history_and_gaps():
+    from app import asset_scanner
+    with pytest.raises(MarketError):
+        asset_scanner.compare_history(candles(149),'step')
+    data=candles(220)
+    data[100]['epoch']+=1
+    # The scoring code skips segments crossing the malformed interval.
+    result=asset_scanner.compare_history(data,'range_break')
+    assert result['payout_adjusted'] is False
+
+
+def test_scanner_ui_explains_sample_size_and_not_broker_profit():
+    from pathlib import Path
+    html=(Path(__file__).resolve().parents[1]/'app'/'index.html').read_text()
+    assert 'Validação 1/3/5 min (acertos direcionais)' in html
+    assert 'amostra insuficiente' in html
+    assert 'A taxa apresentada mede somente acerto direcional hipotético' in html
+    assert "test.validation" in html
