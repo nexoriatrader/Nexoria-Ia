@@ -507,6 +507,25 @@ async def session_info(request:Request,nexora_sid:str|None=Cookie(default=None))
     return {'authenticated':True,'demo_accounts':[{'account_id':u.deriv_account_id,'account_type':'demo'}],
             'real_enabled':False}
 
+@app.get('/api/accounts/available')
+async def available_accounts(request:Request,nexora_sid:str|None=Cookie(default=None)):
+    """Read-only account discovery; does NOT enable real-account trading."""
+    user,token=active_session(request,nexora_sid)
+    try:
+        async with httpx.AsyncClient(timeout=15) as client:
+            response=await client.get('https://api.derivws.com/trading/v1/options/accounts',
+                headers={'Authorization':f'Bearer {token}'})
+            response.raise_for_status()
+            payload=response.json()
+    except (httpx.HTTPError,ValueError):
+        raise HTTPException(502,'Não foi possível verificar as contas vinculadas à Deriv') from None
+    from .auth_helpers import extract_accounts,real_accounts
+    found=real_accounts(extract_accounts(payload))
+    return {'demo_accounts':[{'account_id':user.deriv_account_id,'account_type':'demo'}],
+            'real_accounts':found,'real_trading_enabled':False,
+            'execution':'DERIV_DEMO_ONLY'}
+
+
 @app.post('/api/logout')
 async def logout(request:Request,nexora_sid:str|None=Cookie(default=None)):
     if nexora_sid:
