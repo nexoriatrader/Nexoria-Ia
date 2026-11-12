@@ -160,6 +160,15 @@ async def brand_logo_nexora_clean(): return FileResponse(Path(__file__).parent/'
 @app.get('/brand/emblems-nexora.png')
 async def brand_emblems_nexora(): return FileResponse(Path(__file__).parent/'static'/'emblems-nexora.png', media_type='image/png')
 
+@app.get('/brand/icon-market.svg')
+async def brand_icon_market(): return FileResponse(Path(__file__).parent/'static'/'icon-market.svg', media_type='image/svg+xml')
+
+@app.get('/brand/icon-ai.svg')
+async def brand_icon_ai(): return FileResponse(Path(__file__).parent/'static'/'icon-ai.svg', media_type='image/svg+xml')
+
+@app.get('/brand/icon-risk.svg')
+async def brand_icon_risk(): return FileResponse(Path(__file__).parent/'static'/'icon-risk.svg', media_type='image/svg+xml')
+
 @app.get('/brand/logo-top-display-transparent.png')
 async def brand_logo_top_display_transparent(): return FileResponse(Path(__file__).parent/'static'/'logo-top-display-transparent.png', media_type='image/png')
 
