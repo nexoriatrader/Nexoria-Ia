@@ -185,3 +185,15 @@ def test_risk_reset_confirmation_has_real_line_breaks():
     html=load_ui()
     assert "const message=`REINICIAR SESSÃO DE RISCO DEMO?\n\n" in html
     assert "Só é permitido sem contratos pendentes. Deseja continuar?`" in html
+
+
+def test_header_has_official_broker_access_instead_of_demo_badge():
+    html=load_ui()
+    header=html.split("<header>",1)[1].split("</header>",1)[0]
+    assert 'id="accountBadge"' in header
+    assert 'ACESSAR CORRETORA' in header
+    assert 'href="https://home.deriv.com/"' in header
+    assert 'target="_blank"' in header
+    assert 'rel="noopener noreferrer"' in header
+    assert 'DERIV DEMO</span>' not in header
+    assert "$('accountBadge').classList.toggle('hidden',!logged)" in html
