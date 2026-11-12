@@ -134,3 +134,35 @@ def test_logout_disables_auto_trading(tmp_path,monkeypatch):
         assert client.post('/api/logout').status_code==200
         assert uid not in main.autopilot_enabled
     finally: cleanup(engine)
+
+
+def test_strategy_stats_uses_only_verified_settled_contracts(tmp_path,monkeypatch):
+    client,factory,engine,uid=prepare(tmp_path,monkeypatch)
+    try:
+        with factory() as sess:
+            a=db.DemoOrder(user_id=uid,request_key='abc123456',state='SETTLED',
+                symbol='1HZ100V',direction='CALL',duration_minutes=5,stake='2.00',
+                pnl='1.76')
+            b=db.DemoOrder(user_id=uid,request_key='abc123457',state='SETTLED',
+                symbol='1HZ100V',direction='PUT',duration_minutes=5,stake='2.00',
+                pnl='-2.00')
+            c=db.DemoOrder(user_id=uid,request_key='abc123458',state='CONFIRMED',
+                active_slot=uid,symbol='1HZ100V',direction='CALL',duration_minutes=5,stake='2.00',
+                contract_id='newcontract')
+            sess.add_all([a,b,c]);sess.flush()
+            for order,strategy in [(a,'tendencia'),(b,'tendencia'),(c,'rompimento')]:
+                sess.add(db.AutoPilotAttribution(order_id=order.id,user_id=uid,
+                    strategy=strategy,direction=order.direction,reason='teste'))
+            sess.commit()
+        response=client.get('/api/autopilot/strategy-stats')
+        assert response.status_code==200
+        stats={row['strategy']:row for row in response.json()['items']}
+        assert stats['tendencia']['settled']==2
+        assert stats['tendencia']['wins']==1
+        assert stats['tendencia']['losses']==1
+        assert stats['tendencia']['win_rate']==0.5
+        assert stats['tendencia']['net_pnl']=='-0.24'
+        assert stats['rompimento']['pending']==1
+        assert stats['rompimento']['settled']==0
+        assert stats['rompimento']['win_rate'] is None
+    finally: cleanup(engine)
