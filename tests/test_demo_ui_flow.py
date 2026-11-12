@@ -139,3 +139,12 @@ def test_real_account_card_is_informational_and_cannot_trigger_orders():
     assert 'aria-pressed="true"' in choose
     assert 'id="chooseReal" aria-pressed="false"' in choose
     assert '@media(max-width:700px)' in html
+
+
+def test_autopilot_activation_confirmation_is_clear_and_multiline():
+    html=load_ui()
+    assert 'window.confirm(`Você está prestes a iniciar o robô.' in html
+    assert 'Confirme apenas se já revisou as configurações' in html
+    assert 'clique em "Cancelar"' in html
+    assert 'ATIVAR AUTOPILOT NA CONTA DERIV DEMO?' not in html
+    assert 'START_DEMO_AUTOPILOT' in html
