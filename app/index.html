@@ -651,7 +651,11 @@ async function toggleRobot(){
     if(robotRunning){
       await req('/api/autopilot/stop',{method:'POST'});
     }else{
-      if(!window.confirm('ATIVAR AUTOPILOT NA CONTA DERIV DEMO?\\n\\nO robô enviará operações com saldo virtual conforme as oportunidades experimentais, uma por vez, continuamente até você desligar ou atingir os limites de risco. Não existe garantia de lucro. A conta REAL não será utilizada.\\n\\nConfirmar?')){
+      if(!window.confirm(`Você está prestes a iniciar o robô.
+
+Confirme apenas se já revisou as configurações e está tudo certo para operar.
+
+Se quiser conferir ou ajustar algo antes, clique em "Cancelar" e revise as configurações antes de ligar novamente.`)){
         await refreshDashboard();return;
       }
       await req('/api/autopilot/start',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({confirm:'START_DEMO_AUTOPILOT'})});
