@@ -629,7 +629,11 @@ async function loadRiskSession(){
 }
 async function resetRiskSession(){
  if(robotRunning){showRobotNotice('Desligue o robô antes de reiniciar a sessão.');return}
- const message='REINICIAR SESSÃO DE RISCO DEMO?\\n\\nIsso zerará o resultado usado pelos Stop Win e Stop Loss da nova sessão. NÃO apaga o histórico, NÃO recupera perdas e NÃO altera o saldo da Deriv. Reiniciar repetidamente aumenta o risco de perda.\\n\\nSó é permitido sem contratos pendentes. Deseja continuar?';
+ const message=`REINICIAR SESSÃO DE RISCO DEMO?
+
+Isso zerará o resultado usado pelos Stop Win e Stop Loss da nova sessão. NÃO apaga o histórico, NÃO recupera perdas e NÃO altera o saldo da Deriv. Reiniciar repetidamente aumenta o risco de perda.
+
+Só é permitido sem contratos pendentes. Deseja continuar?`;
  if(!window.confirm(message))return;
  try{
    await req('/api/demo/risk-session/reset',{method:'POST',headers:{'Content-Type':'application/json'},
@@ -670,6 +674,9 @@ async function refreshDashboard(){
    if(robotRunning)showRobotNotice('');
    await Promise.allSettled([loadDemoBalance(),loadDemoOrders(),loadRealBalance(),
                              loadDailyResult(),loadRiskSession(),loadAutopilotReadiness()]);
+   // A newer dashboard request may have superseded this response while
+   // secondary cards were loading; do not return an obsolete status.
+   if(sequence!==dashboardStatusSequence)return null;
    fail('');
    return status;
  }catch(e){
