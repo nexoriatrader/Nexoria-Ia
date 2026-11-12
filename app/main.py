@@ -598,6 +598,38 @@ async def real_balance_route(request:Request,nexora_sid:str|None=Cookie(default=
             'account_id':entry['account_id'],'reason':None}
 
 
+
+@app.get('/api/real/results/today')
+async def real_results_today(request:Request,nexora_sid:str|None=Cookie(default=None)):
+    """Official REAL closed-contract P/L; read-only and never conflated with DEMO."""
+    user,token=active_session(request,nexora_sid)
+    start,end,local_start=daily_pnl_window()
+    unavailable={'available':False,'pnl':None,'currency':None,'account_id':None,
+                 'date':local_start.date().isoformat(),'timezone':'America/Sao_Paulo',
+                 'source':'DERIV_REAL_PROFIT_TABLE'}
+    try:
+        async with httpx.AsyncClient(timeout=15) as client:
+            response=await client.get('https://api.derivws.com/trading/v1/options/accounts',
+                headers={'Authorization':f'Bearer {token}'})
+            response.raise_for_status()
+            payload=response.json()
+        from .auth_helpers import extract_accounts,real_balance
+        account=real_balance(extract_accounts(payload))
+        if account is None:
+            return {**unavailable,'reason':'Nenhuma conta real vinculada identificada'}
+        from .real_readonly import RealBalanceError,fetch_real_daily_profit
+        try:
+            result=await fetch_real_daily_profit(token,account['account_id'],
+                int(start.timestamp()),int(end.timestamp()))
+            return {**result,'date':local_start.date().isoformat(),
+                    'timezone':'America/Sao_Paulo'}
+        except RealBalanceError:
+            return {**unavailable,'account_id':account['account_id'],
+                    'reason':'Resultado real indisponível: consulta oficial não concluída'}
+    except (httpx.HTTPError,ValueError):
+        return {**unavailable,'reason':'Não foi possível verificar a conta real na Deriv'}
+
+
 @app.post('/api/logout')
 async def logout(request:Request,nexora_sid:str|None=Cookie(default=None)):
     if nexora_sid:
