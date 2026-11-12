@@ -168,3 +168,20 @@ def test_dashboard_drops_stale_status_responses_and_locks_pending_command():
     assert "if(sequence!==dashboardStatusSequence)return null;" in html
     assert "dataset.commandPending==='true'" in html
     assert "button.dataset.commandPending='false'" in html
+
+
+def test_dashboard_ignores_stale_status_after_loading_secondary_cards():
+    html=load_ui()
+    beginning=html.index("async function refreshDashboard(){")
+    ending=html.index("async function toggleRobot(){",beginning)
+    refresh=html[beginning:ending]
+    assert refresh.count("if(sequence!==dashboardStatusSequence)return null;")>=2
+    assert refresh.index("await Promise.allSettled(")<refresh.rindex(
+        "if(sequence!==dashboardStatusSequence)return null;")
+    assert "const status=await req('/api/status')" in refresh
+
+
+def test_risk_reset_confirmation_has_real_line_breaks():
+    html=load_ui()
+    assert "const message=`REINICIAR SESSÃO DE RISCO DEMO?\n\n" in html
+    assert "Só é permitido sem contratos pendentes. Deseja continuar?`" in html
