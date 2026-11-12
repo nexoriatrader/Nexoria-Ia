@@ -191,6 +191,8 @@ async def autopilot_once():
                     autopilot_reasons[uid]='Sessão Deriv expirada; conecte novamente'
                     continue
                 orders=sess.scalars(select(db.DemoOrder).where(db.DemoOrder.user_id==uid)).all()
+                plan=sess.get(db.RobotPlan,uid)
+                cycle_cfg=sess.get(db.RobotCycleParams,uid)
                 try:
                     entry,last=autopilot_entry_plan(sess,user,orders)
                 except ProgressionHalt as exc:
@@ -243,7 +245,10 @@ async def autopilot_once():
                 result=await perform_demo_buy(user,token,
                     DemoBuy(symbol=SYMBOL,direction=candidate['direction'],minutes=5,
                             confirm='DEMO_ONLY',request_key=key),
-                    attribution={'strategy':candidate['strategy'],'reason':candidate['reason']},
+                    attribution={'strategy':candidate['strategy'],'reason':candidate['reason'],
+                                 'cycle_index':entry.cycle,'gale_index':entry.gale,
+                                 'gale_multiplier':(plan.requested_multiplier if plan else '2.00'),
+                                 'cycle_multiplier':(cycle_cfg.multiplier if cycle_cfg else '2.00')},
                     stake_override=entry.stake)
                 autopilot_reasons[uid]='Contrato DEMO #'+str(result['id'])+' confirmado; aguardando liquidação'
             except HTTPException as exc:
@@ -978,10 +983,18 @@ async def perform_demo_buy(user, token, payload:DemoBuy, *, attribution:dict|Non
         if not created:
             return {**public_order(order),'replayed':True,'no_new_buy':True}
         if attribution:
-            # Commit strategy before network I/O. If attribution fails, do NOT buy.
+            # Persist attribution and execution progression BEFORE broker I/O;
+            # never claim a Martingale or Cycle from the stake alone.
             s.add(db.AutoPilotAttribution(order_id=order_id,user_id=user.id,
                    strategy=attribution['strategy'],direction=payload.direction,
                    reason=str(attribution['reason'])[:255]))
+            if 'cycle_index' in attribution and 'gale_index' in attribution:
+                s.add(db.DemoOrderProgression(order_id=order_id,user_id=user.id,
+                    cycle_index=int(attribution['cycle_index']),
+                    gale_index=int(attribution['gale_index']),
+                    gale_multiplier=str(attribution['gale_multiplier']),
+                    cycle_multiplier=str(attribution['cycle_multiplier']),
+                    source='autopilot',account_mode='demo'))
             s.commit()
     # Never hold DB transaction across remote Deriv call.
     try:
@@ -1105,13 +1118,60 @@ async def demo_results_today(request:Request,nexora_sid:str|None=Cookie(default=
         return today_demo_pnl(sess,user.id)
 
 
+def order_result_details(order,progression=None,was_automatic=False):
+    """Historical snapshots are factual; unknown progression stays unclassified."""
+    basic=public_order(order)
+    opened=order.created_at
+    if opened is not None:
+        if opened.tzinfo is None:
+            opened=opened.replace(tzinfo=timezone.utc)
+        basic['started_at_brasilia']=opened.astimezone(BRASILIA_TZ).isoformat()
+    else:
+        basic['started_at_brasilia']=None
+    basic['account_mode']='demo'  # This table is only the official DEMO ledger.
+    basic['outcome']='PENDING'
+    if order.state=='SETTLED' and order.pnl is not None:
+        try:
+            pnl=Decimal(str(order.pnl))
+        except (InvalidOperation,ValueError,TypeError):
+            pnl=None
+        if pnl is not None and pnl.is_finite():
+            basic['outcome']='WIN' if pnl>0 else ('LOSS' if pnl<0 else 'DRAW')
+        else:
+            basic['outcome']='UNKNOWN'
+    elif order.state=='UNKNOWN':
+        basic['outcome']='UNKNOWN'
+    if progression is not None:
+        basic['progression']={
+            'source':progression.source,
+            'cycle':progression.cycle_index,
+            'martingale':progression.gale_index,
+            'gale_multiplier':progression.gale_multiplier,
+            'cycle_multiplier':progression.cycle_multiplier}
+    elif was_automatic:
+        basic['progression']={'source':'autopilot','cycle':None,'martingale':None}
+    else:
+        basic['progression']={'source':'manual' if not was_automatic else 'unknown',
+                              'cycle':None,'martingale':None}
+    return basic
+
+
 @app.get('/api/demo/orders')
 async def demo_orders_route(request:Request,nexora_sid:str|None=Cookie(default=None)):
     user=active_user(request,nexora_sid)
     with db.SessionLocal() as s:
         orders=s.scalars(select(db.DemoOrder).where(db.DemoOrder.user_id==user.id)
                        .order_by(db.DemoOrder.id.desc()).limit(100)).all()
-        return {'items':[public_order(o) for o in orders], 'execution':'DERIV_DEMO_ONLY'}
+        order_ids=[o.id for o in orders]
+        progressions=s.scalars(select(db.DemoOrderProgression).where(
+            db.DemoOrderProgression.order_id.in_(order_ids))).all() if order_ids else []
+        by_order={p.order_id:p for p in progressions}
+        attributions=s.scalars(select(db.AutoPilotAttribution).where(
+            db.AutoPilotAttribution.order_id.in_(order_ids))).all() if order_ids else []
+        automatic_ids={a.order_id for a in attributions}
+        return {'items':[order_result_details(o,by_order.get(o.id),
+                              o.id in automatic_ids) for o in orders],
+                'execution':'DERIV_DEMO_ONLY','timezone':'America/Sao_Paulo'}
 
 @app.post('/api/demo/orders/{order_id}/reconcile')
 async def reconcile_demo_route(request:Request,order_id:int,
