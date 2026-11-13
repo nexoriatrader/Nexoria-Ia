@@ -102,11 +102,11 @@ async def indicative_proposal(symbol: str, *, stake: str, contract_type: str = '
         raise MarketError('Contrato não autorizado para pesquisa')
     try:
         amount=Decimal(stake)
-        if not amount.is_finite() or amount < Decimal('2') or amount > Decimal('1000'):
+        if not amount.is_finite() or amount < Decimal('0.50') or amount > Decimal('1000'):
             raise ValueError()
     except (InvalidOperation,ValueError):
         raise MarketError('Valor fora dos limites de pesquisa') from None
-    if duration not in (1,3,5):
+    if duration not in (1,3,5,15):
         raise MarketError('Duração não permitida para pesquisa')
     message=await public_request({
         'proposal':1, 'amount':float(amount), 'basis':'stake',
