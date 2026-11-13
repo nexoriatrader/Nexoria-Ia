@@ -409,7 +409,7 @@ def test_symbol_slots_fit_postgres_int32_and_are_distinct_per_pair():
     assert _symbol_slot(1,'frxAUDNZD')==_symbol_slot(1,'frxAUDNZD')
 
 
-def test_v21_new_evaluation_keeps_official_ledger_and_resets_only_score(tmp_path,monkeypatch):
+def test_v22_new_evaluation_keeps_official_ledger_and_resets_only_score(tmp_path,monkeypatch):
     monkeypatch.setenv('NEXORA_V2_ENABLED','true')
     client,factory,engine,uid=prepare(tmp_path,monkeypatch,stop_loss='0.00')
     try:
@@ -430,7 +430,7 @@ def test_v21_new_evaluation_keeps_official_ledger_and_resets_only_score(tmp_path
         assert result.status_code==200,result.text
         assert result.json()['running'] is False
         stats=client.get('/api/autopilot/v2/evaluation').json()
-        assert stats['batch']=='NEXORA_2.1' and stats['target']==100
+        assert stats['batch']=='NEXORA_2.2' and stats['target']==200
         assert (stats['submitted'],stats['settled'],stats['net_pnl'])==(0,0,'0')
         assert client.get('/api/demo/orders').json()['items']==[]
         with factory() as sess:
