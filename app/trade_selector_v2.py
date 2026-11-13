@@ -9,6 +9,7 @@ import re
 import time
 import logging
 from datetime import datetime,timezone
+from statistics import mean
 from .market import MarketError, discover_symbols, discover_contract_details
 from .strategy_lab import fetch_candles, direction_at
 
@@ -32,11 +33,11 @@ _last_scan={'status':'NOT_RUN','at':None,'assets':[],'selected':None}
 _log=logging.getLogger('nexora.v2')
 
 
-def has_pending_signals(user_key):
+def has_pending_signals(user_key,*,filtered=False):
     """Whether another confirmed candidate from this scan is still fresh."""
     now=time.time()
     return any(0 <= now-(item['last_bar_epoch']+60) <= 50
-               for item in _pending_signals_by_user.get(user_key,[]))
+               for item in _pending_signals_by_user.get((user_key,bool(filtered)),[]))
 
 
 def last_scan_report():
@@ -142,7 +143,31 @@ async def supported(symbol, minutes=3):
     return ok
 
 
-def signal_from_closed_candles(item,candles,now=None):
+def filtered_breakout_ok(candles, direction):
+    """Experimental V2.1 trend and breakout-range filters on COMPLETED M1 bars.
+
+    Thresholds are research hypotheses; no assertion of profitability.
+    """
+    if len(candles)<55:
+        return False
+    tail=candles[-55:]
+    closes=[float(bar['close']) for bar in tail]
+    ranges=[float(bar['high'])-float(bar['low']) for bar in tail]
+    avg_range=mean(ranges[-15:-1])
+    current_range=ranges[-1]
+    if avg_range<=0 or not 0.5*avg_range<=current_range<=2.5*avg_range:
+        return False
+    alpha=2/51
+    ema=mean(closes[:50])
+    previous_ema=ema
+    for close in closes[50:]:
+        previous_ema=ema
+        ema=alpha*close+(1-alpha)*ema
+    return ((direction=='CALL' and closes[-1]>ema and ema>previous_ema)
+         or (direction=='PUT' and closes[-1]<ema and ema<previous_ema))
+
+
+def signal_from_closed_candles(item,candles,now=None,*,filtered=False):
     """Return only a newly closed M1 signal, with gap and age checks."""
     now=time.time() if now is None else now
     if len(candles)<60:
@@ -159,20 +184,25 @@ def signal_from_closed_candles(item,candles,now=None):
     direction=direction_at(tail,len(tail)-1,strategy)
     if direction not in ('CALL','PUT'):
         return None
+    if filtered and family=='forex' and not filtered_breakout_ok(tail,direction):
+        return None
     return {'symbol':item['symbol'],'display_name':item['display_name'],
-            'strategy':('rompimento_m1' if strategy=='range_channel' else 'tendencia_m1'),
+            'strategy':('rompimento_m1_filtrado_v21' if filtered and family=='forex' else
+                        'rompimento_m1' if strategy=='range_channel' else 'tendencia_m1'),
             'direction':direction,'minutes':EXPIRY[family],
             'family':family,'last_bar_epoch':last['epoch'],
-            'reason':('Rompimento do canal de 20 velas M1 fechadas' if strategy=='range_channel'
+            'reason':('Rompimento M1 com filtro experimental EMA50 e amplitude 14 velas' if filtered and family=='forex' else
+                      'Rompimento do canal de 20 velas M1 fechadas' if strategy=='range_channel'
                       else 'Cruzamento de médias 8/21 em velas M1 fechadas')}
 
 
-async def select_demo_signal(*, exclude_symbols=(), user_key=None):
+async def select_demo_signal(*, exclude_symbols=(), user_key=None, filtered=False):
     """Select all distinct confirmed M1 candidates across sequential DEMO ticks."""
     global _last_scan,_scan_offset
     exclude=set(exclude_symbols)
     # Never reuse a setup after its 50-second post-candle freshness window.
-    queued=_pending_signals_by_user.get(user_key,[])
+    queue_key=(user_key,bool(filtered))
+    queued=_pending_signals_by_user.get(queue_key,[])
     now=time.time()
     while queued:
         item=queued.pop(0)
@@ -208,7 +238,7 @@ async def select_demo_signal(*, exclude_symbols=(), user_key=None):
                     return None,{'symbol':symbol,'status':'CALL_PUT_OR_DURATION_UNAVAILABLE',
                                  'duration_minutes':EXPIRY[item['family']]}
                 bars=await fetch_candles(symbol,count=120)
-                candidate=signal_from_closed_candles(item,bars)
+                candidate=signal_from_closed_candles(item,bars,filtered=filtered)
                 if candidate is None:
                     return None,{'symbol':symbol,'status':'NO_FRESH_CONFIRMED_SIGNAL',
                                  'candles':len(bars)}
@@ -229,7 +259,7 @@ async def select_demo_signal(*, exclude_symbols=(), user_key=None):
     signals=[candidate for candidate,_ in result if candidate]
     signals.sort(key=lambda x:(0 if x['strategy']=='rompimento_m1' else 1,x['symbol']))
     chosen=signals[0] if signals else None
-    _pending_signals_by_user[user_key]=signals[1:]
+    _pending_signals_by_user[queue_key]=signals[1:]
     rows=[row for _,row in result]
     status='SIGNAL' if chosen else (
         'MARKET_DATA_UNAVAILABLE' if all(x['status'] in (
