@@ -354,6 +354,15 @@ async def select_demo_signal(*, exclude_symbols=(), user_key=None, filtered=Fals
         if item['symbol'] not in exclude and 0 <= now-(item['last_bar_epoch']+item.get('bar_seconds',60)) <= 50:
             return item
     stamp=datetime.now(timezone.utc).isoformat()
+    # The H1/M15 setup is valid only during the approved UTC session.
+    # Outside it, do not call Deriv or report a false market-data failure.
+    if strategy_mode=='pullback_v22':
+        utc_hour=datetime.now(timezone.utc).hour
+        if not 8<=utc_hour<17:
+            _last_scan={'status':'OUTSIDE_TRADING_SESSION','at':stamp,
+                        'assets':[],'selected':None,
+                        'reason':'Estratégia 2.2 opera somente das 08h às 17h UTC (05h às 14h Brasília)'}
+            return None
     try:
         items=await catalogue()
     except (MarketError,TimeoutError,OSError) as exc:
