@@ -134,7 +134,7 @@ async def demo_proposal(token: str, account_id: str, *, symbol: str,
         raise DemoTradingError("Tipo de contrato demo não autorizado")
     if duration not in {1, 3, 5}:
         raise DemoTradingError("Duração demo não autorizada")
-    if not isinstance(symbol, str) or not symbol.isalnum() or not 2 <= len(symbol) <= 30:
+    if not isinstance(symbol, str) or not re.fullmatch(r'[A-Za-z0-9_]{2,30}',symbol):
         raise DemoTradingError("Símbolo inválido")
 
     ws_url = await get_demo_ws_url(token, account_id)
@@ -174,7 +174,7 @@ async def demo_buy(token: str, account_id: str, *, symbol: str,
         raise DemoTradingError("Confirmação demo obrigatória")
     if contract_type not in {"CALL", "PUT"} or duration not in {1, 3, 5}:
         raise DemoTradingError("Parâmetros de contrato demo não autorizados")
-    if not isinstance(symbol, str) or not symbol.isalnum() or not 2 <= len(symbol) <= 30:
+    if not isinstance(symbol, str) or not re.fullmatch(r'[A-Za-z0-9_]{2,30}',symbol):
         raise DemoTradingError("Símbolo inválido")
 
     ws_url = await get_demo_ws_url(token, account_id)
