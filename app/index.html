@@ -447,17 +447,13 @@ button.choose-account:focus-visible{outline:3px solid #71d2ff;outline-offset:4px
         <p class="helper">O histórico oficial e o saldo Deriv não podem ser apagados pelo painel. Os limites de segurança permanecem ativos.</p>
       </div>
     </div>
-    <details class="robot-details">
-      <summary>Detalhes da operação e do scanner</summary>
-      <div class="robot-details-content">
-        <p id="robotMessage" class="muted">Robô DEMO desligado. Configure e inicie quando desejar.</p>
-        <p id="autopilotVersion" class="helper" role="status">Verificando a versão operacional do robô...</p>
-        <p id="v2ScannerHealth" class="helper" role="status">Scanner Forex: aguardando primeira análise.</p>
-        <p class="helper" id="riskSessionMetric">Lucro/prejuízo da sessão DEMO: consultando...</p>
-        <div class="info" id="feedState">Conferindo conexão de cotações...</div>
-        <p class="helper">Somente Deriv DEMO. Resultados não são garantidos; desligar impede novas compras, mas não cancela contratos abertos.</p>
-      </div>
-    </details>
+    <div class="robot-details-content" aria-label="Análise do Robô Trader IA">
+      <p id="autopilotVersion" class="helper"><strong>Robô Trader I.A 2.2:</strong></p>
+      <p id="v2ScannerHealth" class="helper" role="status">Scanner Forex: verificando condições · última análise —</p>
+      <p class="helper">Análise em tempo real</p>
+      <p id="v2Opportunity" class="helper" role="status">● Oportunidade encontrada: Nenhuma no momento</p>
+    </div>
+    <div hidden aria-hidden="true"><span id="robotMessage"></span><span id="riskSessionMetric"></span><span id="feedState"></span></div>
   </div>
   <div class="metric-grid">
     <div class="card metric"><div class="metric-label">Saldo Treinamento</div><div class="metric-value" id="balanceMetric">—</div><div class="metric-sub">Saldo virtual oficial · Deriv</div></div>
@@ -727,62 +723,39 @@ async function refreshDashboard(){
    const liveCard=$('robotLiveCard');
    liveCard.classList.toggle('offline',!robotRunning);
    $('robotLiveLabel').textContent=robotRunning?'ROBÔ ONLINE':'ROBÔ OFFLINE';
-   const utcNow=new Date(), utcHour=utcNow.getUTCHours(), utcDay=utcNow.getUTCDay();
-   const isV22=(status.reason||'').includes('AutoPilot 2.2');
-   const outsideForexWindow=isV22&&(utcDay===0||utcDay===6||utcHour<8||utcHour>=17);
    $('robotLiveCopy').textContent=robotRunning
-     ?(outsideForexWindow
-       ?'IA online, aguardando o horário da estratégia H1 + M15 (08h–17h UTC).'
-       :'Nossa IA busca novas oportunidades no mercado, respeitando suas estratégias e limites de risco.')
-     :(status.interrupted_after_restart
-       ?'Execução interrompida. Confira os detalhes antes de ativar.'
-       :available?'As análises automáticas estão pausadas. Ative quando desejar.'
-       :'AutoPilot indisponível. Confira os detalhes operacionais.');
+     ?'Análise em tempo real'
+     :(status.interrupted_after_restart?'Execução interrompida. Confira o aviso antes de ativar.'
+       :available?'Análises pausadas. Ative quando desejar.':'AutoPilot indisponível.');
    const isV2=status.autopilot_version==='V2_MULTI_ASSET';
-   $('autopilotVersion').textContent=isV2
-      ?'● Forex Rise/Fall · expiração 15 min · indicadores em velas de 1 min · múltiplos pares DEMO'
-      : status.v2_upgrade_needed
-       ?'⚠ NEXORA 1.0 AINDA LIGADO NO 1HZ100V. Para iniciar o 2.0, desligue e ligue novamente o AutoPilot DEMO, após conferir os contratos pendentes.'
-       : status.v2_available
-        ?'○ Forex M15 disponível · O scanner inicia depois de ligar o robô.'
-        :'○ AutoPilot 1.0 · 1HZ100V';
+   $('autopilotVersion').textContent='Robô Trader I.A 2.2:';
    $('robotButton').textContent=robotRunning?'DESLIGAR ROBÔ':'LIGAR ROBÔ';
    $('robotButton').disabled=(!robotRunning&&!available)||$('robotButton').dataset.commandPending==='true';
    $('robotButton').setAttribute('aria-disabled',String($('robotButton').disabled));
    $('robotButton').style.background=robotRunning?'linear-gradient(135deg,#fa9b9d,#dc5269)':'';
-   $('feedState').textContent=isV2
-     ?'● Forex DEMO · O scanner consulta os dados oficiais de cada par separadamente'
-     :status.v2_available
-       ?'○ Forex M15 disponível · O scanner consulta cada par após iniciar o robô'
-       :(status.connected?'● Feed da estratégia anterior conectado':'○ Feed da estratégia anterior reconectando')+
-        ' · '+safe(status.analysis_symbol||status.symbol);
    if(robotRunning)showRobotNotice('');
    if(status.v2_available){
      req('/api/autopilot/v2/scanner-status').then(data=>{
        if(sequence!==dashboardStatusSequence)return;
-       const scan=data.scan||{},list=scan.assets||[];
-       const errors=list.filter(a=>a.status==='MARKET_DATA_ERROR'||
-         a.status==='CALL_PUT_UNAVAILABLE'||a.status==='CALL_PUT_OR_DURATION_UNAVAILABLE');
-       const scanState=scan.status||'NOT_RUN';
-       if(!robotRunning){
-         $('v2ScannerHealth').textContent='Scanner Forex: aguardando início do robô · nenhuma análise ativa';
-       }else if(scanState==='NOT_RUN'){
-         $('v2ScannerHealth').textContent='Scanner Forex: aguardando primeira análise dos pares';
-       }else{
-         const labels={
-           SIGNAL:'sinal confirmado',NO_SIGNAL:'sem sinal confirmado nesta varredura',
-           MARKET_DATA_UNAVAILABLE:'dados ou contratos indisponíveis',
-           CATALOG_UNAVAILABLE:'catálogo da Deriv indisponível',
-           SCAN_TIMEOUT:'tempo de consulta excedido',
-           NO_SUPPORTED_ASSETS_IN_CATALOG:'nenhum par compatível no catálogo'
-         };
-         $('v2ScannerHealth').textContent='Scanner Forex: '+(labels[scanState]||'verificando condições')+
-           (scan.at?' · última análise '+new Date(scan.at).toLocaleTimeString('pt-BR',{timeZone:'America/Sao_Paulo'}):'')+
-           (list.length?' · '+list.length+' pares verificados':'')+
-           (scan.catalogue_size?' · '+scan.catalogue_size+' pares no catálogo':'')+
-           (errors.length?' · '+errors.length+' sem dados ou contratos compatíveis':'');
+       const scan=data.scan||{};
+       const at=scan.at?new Date(scan.at):null;
+       const validDate=at&&!Number.isNaN(at.getTime());
+       const timeText=validDate?at.toLocaleTimeString('pt-BR',{timeZone:'America/Sao_Paulo'}):'—';
+       $('v2ScannerHealth').textContent='Scanner Forex: verificando condições · última análise '+timeText;
+       const fresh=validDate&&Date.now()-at.getTime()>=0&&Date.now()-at.getTime()<=50000;
+       const selected=scan.selected;
+       const confirmed=robotRunning&&fresh&&scan.status==='SIGNAL'&&selected
+         &&(selected.direction==='CALL'||selected.direction==='PUT');
+       $('v2Opportunity').textContent=confirmed
+         ?'● Oportunidade encontrada: '+String(selected.display_name||selected.symbol||'Forex')+
+           ' · '+selected.direction
+         :'● Oportunidade encontrada: Nenhuma no momento';
+     }).catch(()=>{
+       if(sequence===dashboardStatusSequence){
+         $('v2ScannerHealth').textContent='Scanner Forex: verificando condições · última análise —';
+         $('v2Opportunity').textContent='● Oportunidade encontrada: Nenhuma no momento';
        }
-     }).catch(()=>{});
+     });
    }
    await Promise.allSettled([loadDemoBalance(),loadDemoOrders(),loadRealBalance(),
                              loadDailyResult(),loadRealDailyResult(),loadRiskSession(),loadAutopilotReadiness()]);
