@@ -402,7 +402,8 @@ async def autopilot_once():
                         # Fresh confirmed signals from the same batch can be
                         # consumed on subsequent ticks without a new API scan.
                         if (now-v2_last_scan.get(uid,-1e12)<15
-                            and not has_pending_signals(uid,filtered=batch.max_orders>=100)):
+                            and not has_pending_signals(uid,filtered=batch.max_orders>=100 and batch.max_orders<200,
+                                                         strategy_mode='pullback_v22' if batch.max_orders>=200 else None)):
                             continue
                         if now-autopilot_last_attempt.get(uid,-1e12)<5:
                             continue
@@ -411,7 +412,8 @@ async def autopilot_once():
                             candidate=await select_demo_signal(
                                 exclude_symbols=[o.symbol for o in orders
                                                  if o.state in ('PENDING','CONFIRMED','UNKNOWN')],
-                                user_key=uid,filtered=batch.max_orders>=100)
+                                user_key=uid,filtered=batch.max_orders>=100 and batch.max_orders<200,
+                                strategy_mode='pullback_v22' if batch.max_orders>=200 else None)
                         except Exception as exc:
                             autopilot_reasons[uid]='Scanner 2.0 indisponível; aguardando reconexão'
                             log.warning('V2 scanner unavailable: %s',type(exc).__name__)
@@ -423,7 +425,8 @@ async def autopilot_once():
                                           'SCAN_TIMEOUT','MARKET_DATA_UNAVAILABLE'):
                                 autopilot_reasons[uid]='Scanner 2.0 sem dados válidos: '+status
                             else:
-                                autopilot_reasons[uid]='AutoPilot 2.0: sem rompimento ou tendência confirmados neste ciclo'
+                                autopilot_reasons[uid]=('AutoPilot 2.2: aguardando H1 + pullback M15 confirmado' if batch.max_orders>=200
+                                                       else 'AutoPilot 2.0: sem rompimento ou tendência confirmados neste ciclo')
                             continue
                     else:
                         if not candidates:
@@ -988,7 +991,7 @@ async def new_v2_evaluation(request:Request,payload:EvaluationResetRequest,
                 batch=db.PilotValidationBatch(user_id=user.id)
                 sess.add(batch)
             batch.after_order_id=anchor_id
-            batch.max_orders=100  # 2.1 marker; goal is informative, not an execution cap.
+            batch.max_orders=200  # 2.2 marker and informational sampling goal, never an execution cap.
             batch.created_at=db.utcnow()
             sess.add(db.RiskSession(user_id=user.id,after_order_id=anchor_id))
             run=sess.get(db.RobotRun,user.id)
@@ -1000,10 +1003,10 @@ async def new_v2_evaluation(request:Request,payload:EvaluationResetRequest,
         v2_last_scan.pop(user.id,None)
         from .trade_selector_v2 import clear_user_signals
         clear_user_signals(user.id)
-        autopilot_reasons[user.id]='Nova avaliação DEMO 2.1 pronta; AutoPilot desligado'
-    return {'ok':True,'batch':'NEXORA_2.1','after_order_id':anchor_id,
+        autopilot_reasons[user.id]='Nova avaliação DEMO 2.2 H1/M15 pronta; AutoPilot desligado'
+    return {'ok':True,'batch':'NEXORA_2.2','after_order_id':anchor_id,
             'execution':'DERIV_DEMO_ONLY','running':False,
-            'message':'Indicadores da segunda avaliação zerados. Histórico anterior e saldo Deriv preservados.'}
+            'message':'Indicadores da avaliação 2.2 zerados. Histórico anterior e saldo Deriv preservados.'}
 
 
 def autopilot_start_blocker(user,orders,*,after_order_id=0):
@@ -1524,7 +1527,7 @@ async def autopilot_strategy_stats(request:Request,nexora_sid:str|None=Cookie(de
         if item['settled']:
             item['win_rate']=round(item['wins']/item['settled'],4)
     return {'items':list(summary.values()),'execution':'DERIV_DEMO_ONLY',
-            'batch':('NEXORA_2.1' if batch.max_orders>=100 else 'NEXORA_2.0') if batch else 'PREVIOUS',
+            'batch':('NEXORA_2.2' if batch.max_orders>=200 else 'NEXORA_2.1' if batch.max_orders>=100 else 'NEXORA_2.0') if batch else 'PREVIOUS',
             'note':'Somente contratos oficiais desde o início da avaliação 2.0, quando ativa. '
                    'Não comprova desempenho futuro.'}
 
@@ -1600,7 +1603,7 @@ async def v2_evaluation(request:Request,nexora_sid:str|None=Cookie(default=None)
                 'losses':sum(Decimal(str(o.pnl))<0 for o in settled),
                 'pending':len(v2orders)-len(settled),'net_pnl':str(profit),
                 'target':batch.max_orders,'target_is_limit':False,'execution':'DERIV_DEMO_ONLY',
-                'batch':'NEXORA_2.1' if batch.max_orders>=100 else 'NEXORA_2.0',
+                'batch':('NEXORA_2.2' if batch.max_orders>=200 else 'NEXORA_2.1' if batch.max_orders>=100 else 'NEXORA_2.0'),
                 'started_at':batch.created_at.isoformat(),
                 'note':'Estatística DEMO apenas desta avaliação. Contratos anteriores preservados; meta sem limite automático.'}
 
