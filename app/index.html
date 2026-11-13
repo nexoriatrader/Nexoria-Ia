@@ -376,7 +376,7 @@ button.choose-account:focus-visible{outline:3px solid #71d2ff;outline-offset:4px
       <div class="setup-panel">
         <div class="setup-panel-title"><span class="setup-icon" aria-hidden="true">＄</span><div><h2>Valor de entrada</h2><p>Valor base por operação (USD).</p></div></div>
         <label for="setupStake">Valor inicial em dólar</label>
-        <div class="setup-money"><span>US$</span><input id="setupStake" name="stake" inputmode="decimal" type="number" min="2" step=".01" value="2.00" required></div>
+        <div class="setup-money"><span>US$</span><input id="setupStake" name="stake" inputmode="decimal" type="number" min="0.50" step=".01" value="0.50" required></div>
       </div>
       <div class="setup-panel">
         <div class="setup-panel-title"><span class="setup-icon" aria-hidden="true">◇</span><div><h2>Gestão de risco</h2><p>Defina os limites de lucro e perda.</p></div></div>
@@ -494,7 +494,7 @@ button.choose-account:focus-visible{outline:3px solid #71d2ff;outline-offset:4px
   <div class="card">
     <div class="surface-heading">Entrada e limites de risco</div>
     <div class="settings-grid">
-      <div class="field"><label for="stake">Entrada inicial (USD)</label><input id="stake" inputmode="decimal" type="number" value="2" min="2" step=".01"></div>
+      <div class="field"><label for="stake">Entrada inicial (USD)</label><input id="stake" inputmode="decimal" type="number" value="0.50" min="0.50" step=".01"></div>
       <div class="field"><label for="sw">Stop Win (USD)</label><input id="sw" inputmode="decimal" type="number" value="0" min="0" step=".01"></div>
       <div class="field"><label for="sl">Stop Loss (USD)</label><input id="sl" inputmode="decimal" type="number" value="0" min="0" step=".01"></div>
     </div>
