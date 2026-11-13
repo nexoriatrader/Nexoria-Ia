@@ -31,6 +31,7 @@ _catalog_at={}
 _contract_cache={}
 _last_scan={'status':'NOT_RUN','at':None,'assets':[],'selected':None}
 _log=logging.getLogger('nexora.v2')
+_log.setLevel(logging.INFO)  # Explicitly emit low-volume scanner diagnostics on Render.
 
 
 def clear_user_signals(user_key):
