@@ -425,7 +425,7 @@ button.choose-account:focus-visible{outline:3px solid #71d2ff;outline-offset:4px
         <p class="helper">O histórico oficial e o saldo Deriv não podem ser apagados pelo painel. Os limites de segurança permanecem ativos.</p>
       </div>
     </div>
-    <p class="helper" id="riskSessionMetric">Resultado acumulado da sessão DEMO: consultando...</p>
+    <p class="helper" id="riskSessionMetric">Lucro/prejuízo da sessão DEMO: consultando...</p>
     <div class="helper">Apenas Deriv Demo. Estratégias em teste, sem garantia de acerto. Desligar bloqueia novas entradas, sem cancelar contratos já abertos.</div>
     <div class="info" id="feedState">Conferindo conexão de cotações...</div>
   </div>
@@ -650,7 +650,7 @@ async function loadRiskSession(){
  try{
    const result=await req('/api/demo/risk-session');
    const n=Number(result.pnl);
-   element.textContent='Resultado acumulado da sessão DEMO: '+(Number.isFinite(n)?money(n,'USD'):'indisponível')+' · Não é o saldo da conta · Histórico preservado';
+   element.textContent='Lucro/prejuízo da sessão DEMO: '+(Number.isFinite(n)?money(n,'USD'):'indisponível')+' · Não é o saldo da conta · Histórico preservado';
  }catch(e){element.textContent='Resultado da sessão DEMO indisponível no momento'}
 }
 async function resetRiskSession(){
