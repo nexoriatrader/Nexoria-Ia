@@ -42,4 +42,4 @@ def test_per_user_engine_isolation():
     assert b.closed==[]
 
 def test_invalid_settings():
-    with pytest.raises(ValueError):Settings.parse({'stake':'1','stop_win':'10','stop_loss':'10','multiplier':'2'})
+    with pytest.raises(ValueError):Settings.parse({'stake':'0.49','stop_win':'10','stop_loss':'10','multiplier':'2'})
