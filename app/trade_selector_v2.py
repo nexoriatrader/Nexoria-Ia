@@ -12,12 +12,16 @@ from datetime import datetime,timezone
 from .market import MarketError, discover_symbols, discover_contract_details
 from .strategy_lab import fetch_candles, direction_at
 
-FX_PAIRS=('EURJPY','EURUSD','GBPUSD','USDJPY','GBPJPY',
-          'AUDUSD','USDCAD','USDCHF','NZDUSD','EURGBP','EURCHF','AUDJPY')
-MAX_SYMBOLS=24
+# Forex pairs visibly offered in Deriv Trader; runtime symbols still MUST
+# originate from active_symbols, not from this display-name allowlist.
+FX_PAIRS=('EURUSD','GBPJPY','GBPAUD','AUDNZD','AUDCAD','NZDUSD',
+          'GBPNZD','USDPLN','EURNZD','GBPCAD','GBPCHF','AUDCHF',
+          'NZDJPY','USDMXN','USDCHF','EURJPY','GBPUSD','USDJPY',
+          'AUDUSD','AUDJPY','EURAUD','EURGBP','USDCAD','EURCAD','EURCHF')
+MAX_SYMBOLS=32
 SCAN_BATCH=8
 _scan_offset=0
-EXPIRY={'range_break':3,'forex':3,'step':5,'volatility':5}
+EXPIRY={'range_break':3,'forex':15,'step':5,'volatility':5}
 _catalog_cache=()
 _catalog_at=0.0
 _contract_cache={}
@@ -67,7 +71,7 @@ def choose_tradeable(symbols):
         if not isinstance(item,dict):
             continue
         kind=classify(item)
-        if not kind:
+        if not kind or kind[0]!='forex':
             continue
         family,group=kind
         symbol=item['symbol']
