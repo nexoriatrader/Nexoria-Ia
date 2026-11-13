@@ -102,7 +102,12 @@ def classify(item):
         return 'range_break',symbol
     if 'step' in lower and 'skew' not in lower and 'multi' not in lower:
         return 'step',symbol
-    vol=re.search(r'volatility\s*(10|25|50|75|100)\b',lower)
+    # Some active_symbols 'brief' responses return codes instead of names.
+    # Accept only known Volatility naming patterns actually supplied by Deriv.
+    # Broker contract/type/duration checks still independently govern entries.
+    if re.fullmatch(r'(?:1HZ[0-9]+V|R_[0-9]+)',symbol.upper()):
+        return 'volatility',symbol
+    vol=re.search(r'volatility\s*(10|15|25|30|50|75|90|100|150|200|250|300)\b',lower)
     if vol:
         return 'volatility',symbol
     return None
