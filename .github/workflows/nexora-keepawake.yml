@@ -1,10 +1,11 @@
 name: NEXORA IA — Monitor temporário do Render
 
 # O Render Free dorme depois de 15 minutos sem tráfego.
-# GitHub Actions cron não garante execução pontual e pode consumir a cota mensal.
+# Intervalo de 5 minutos (mínimo permitido no GitHub Actions).
+# Cron não garante execução pontual: pode atrasar ou perder execuções.
 on:
   schedule:
-    - cron: '3,13,23,33,43,53 * * * *'
+    - cron: '3,8,13,18,23,28,33,38,43,48,53,58 * * * *'
   workflow_dispatch:
 
 permissions:
