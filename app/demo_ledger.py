@@ -62,9 +62,12 @@ def order_guard(user, orders, stake, *, after_order_id=0,
 
 
 def _symbol_slot(user_id:int, symbol:str)->int:
-    # Stable, account-and-symbol-specific slot; 63-bit positive SQLite/Postgres integer.
+    # demo_orders.active_slot is PostgreSQL INTEGER (signed 32-bit), not BIGINT.
+    # Keep the stable per-account/per-symbol reservation key within that range.
+    # Avoid the positive range occupied by legacy user-id slots; hash collisions
+    # still fail closed at the database UNIQUE constraint.
     digest=hashlib.sha256(f'{user_id}:{symbol}'.encode('ascii')).digest()
-    return (int.from_bytes(digest[:8],'big') & ((1<<63)-1)) or 1
+    return -((int.from_bytes(digest[:8],'big') % ((1<<31)-1)) + 1)
 
 
 def reserve(session, user, *, request_key, symbol, direction, minutes,
