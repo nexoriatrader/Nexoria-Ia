@@ -32,9 +32,10 @@ def test_parallel_exposure_and_symbol_lock(tmp_path,monkeypatch):
             o4,_=reserve(sess,user,request_key='parallel-0005',symbol='AUDNZD',
                 direction='CALL',minutes=15,parallel=True)
             confirmed(sess,o4,{'contract_id':'990004','buy_price':'2'})
-            with pytest.raises(OrderGuardError,match='Máximo de 4'):
-                reserve(sess,user,request_key='parallel-0006',symbol='USDCAD',
-                    direction='CALL',minutes=15,parallel=True)
+            o5,_=reserve(sess,user,request_key='parallel-0006',symbol='USDCAD',
+                direction='CALL',minutes=15,parallel=True)
+            confirmed(sess,o5,{'contract_id':'990005','buy_price':'2'})
+            assert len([o for o in (o,o2,o3,o4,o5) if o.state=='CONFIRMED'])==5
             assert settle(sess,o,{'contract_id':'990001','is_sold':1,'profit':'-2','status':'lost'})
             assert settle(sess,o2,{'contract_id':'990002','is_sold':1,'profit':'1.50','status':'won'})
     finally:cleanup(engine)
@@ -360,8 +361,34 @@ def test_half_dollar_four_parallel_m15_orders_keep_exposure_guard(tmp_path,monke
                     symbol=symbol,direction='CALL',minutes=15,
                     stake_override=Decimal('0.50'),parallel=True)
                 confirmed(sess,o,{'contract_id':str(100000+i),'buy_price':'0.50'})
-            with pytest.raises(OrderGuardError,match='Máximo de 4'):
-                reserve(sess,user,request_key='halfdollar-0005',
-                    symbol='frxAUDCAD',direction='CALL',minutes=15,
-                    stake_override=Decimal('0.50'),parallel=True)
+            fifth,_=reserve(sess,user,request_key='halfdollar-0005',
+                symbol='frxAUDCAD',direction='CALL',minutes=15,
+                stake_override=Decimal('0.50'),parallel=True)
+            confirmed(sess,fifth,{'contract_id':'100005','buy_price':'0.50'})
+            assert fifth.state=='CONFIRMED'
     finally:cleanup(engine)
+
+
+def test_v2_pending_signal_queue_exposes_other_assets_without_rescanning(monkeypatch):
+    import time
+    from app import trade_selector_v2 as selector
+    monkeypatch.setattr(selector,'_pending_signals_by_user',{})
+    monkeypatch.setattr(selector,'_scan_offset',0)
+    now=int(time.time())//60*60
+    monkeypatch.setattr(selector,'catalogue',AsyncMock(return_value=[
+        {'symbol':'frxEURUSD','family':'forex','display_name':'EUR/USD'},
+        {'symbol':'frxAUDNZD','family':'forex','display_name':'AUD/NZD'}]))
+    monkeypatch.setattr(selector,'supported',AsyncMock(return_value=True))
+    monkeypatch.setattr(selector,'fetch_candles',AsyncMock(return_value=[{'epoch':i*60}
+        for i in range(120)]))
+    def fake_signal(item,bars):
+        return {'symbol':item['symbol'],'display_name':item['display_name'],
+            'direction':'CALL','minutes':15,'strategy':'rompimento_m1',
+            'family':'forex','reason':'confirmação','last_bar_epoch':now-60}
+    monkeypatch.setattr(selector,'signal_from_closed_candles',fake_signal)
+    first=asyncio.run(selector.select_demo_signal(user_key=101))
+    second=asyncio.run(selector.select_demo_signal(user_key=101,
+        exclude_symbols=[first['symbol']]))
+    assert first['symbol']!=second['symbol']
+    assert selector.fetch_candles.await_count==2
+    assert selector._pending_signals_by_user[101]==[]
