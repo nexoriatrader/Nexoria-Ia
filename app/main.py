@@ -107,7 +107,12 @@ async def feed():
                                 # Public ticks are used for research only; no local trades.
         except asyncio.CancelledError: raise
         except Exception as e:
-            log.warning('Public feed unavailable: %s',type(e).__name__)
+            # Include safe close status for diagnosis; never log authentication or tokens.
+            close_info = ''
+            if isinstance(e, websockets.exceptions.ConnectionClosed):
+                frame = getattr(e, 'rcvd', None)
+                close_info = ' close_code=' + str(getattr(frame, 'code', 'unknown'))
+            log.warning('Public feed unavailable: %s%s',type(e).__name__,close_info)
             async with lock:
                 market_connected=False;last_market_reason='Conexão interrompida'
                 for engine in runtimes.values():
