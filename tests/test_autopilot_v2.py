@@ -54,6 +54,7 @@ def test_martingale_recovery_keeps_symbol_and_original_direction(tmp_path,monkey
             user=sess.get(db.User,uid)
             user.stop_win='0.00'
             sess.add(db.PilotValidationBatch(user_id=uid,after_order_id=0))
+            sess.add(db.RobotRun(user_id=uid,after_order_id=0))
             sess.add(db.RobotPlan(user_id=uid,requested_martingale=True,
                 gale_count=2,requested_multiplier='2.0'))
             for symbol,pnl in [('EURJPY','-2.00'),('EURUSD','1.56')]:
