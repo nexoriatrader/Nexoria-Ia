@@ -22,7 +22,7 @@ from .engine import Engine, Settings
 from .market import MarketError, discover_symbols, discover_contracts, indicative_proposal
 from .strategy_lab import run_lab
 from .asset_scanner import scan_assets
-from .trade_selector_v2 import select_demo_signal, last_scan_report
+from .trade_selector_v2 import select_demo_signal, last_scan_report, has_pending_signals
 from .progression import next_entry, ProgressionHalt, NextEntry
 from .security import CLIENT_ID, REDIRECT, TOKEN_URL, build_authorize_url, make_login, make_session_id, hashsecret, encrypt, decrypt, cookie_options
 
@@ -396,8 +396,10 @@ async def autopilot_once():
                     if not batch and now-autopilot_last_attempt.get(uid,-1e12)<60:
                         continue
                     if batch:
-                        # Limit heavy public history scans to once per minute per user.
-                        if now-v2_last_scan.get(uid,-1e12)<15:
+                        # Fresh confirmed signals from the same batch can be
+                        # consumed on subsequent ticks without a new API scan.
+                        if (now-v2_last_scan.get(uid,-1e12)<15
+                            and not has_pending_signals(uid)):
                             continue
                         if now-autopilot_last_attempt.get(uid,-1e12)<5:
                             continue
