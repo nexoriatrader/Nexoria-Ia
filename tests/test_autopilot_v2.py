@@ -26,9 +26,15 @@ def test_parallel_exposure_and_symbol_lock(tmp_path,monkeypatch):
                 direction='PUT',minutes=3,parallel=True)
             confirmed(sess,o2,{'contract_id':'990002','buy_price':'2'})
             assert o.active_slot!=o2.active_slot
-            with pytest.raises(OrderGuardError,match='Máximo de 2'):
-                reserve(sess,user,request_key='parallel-0004',symbol='GBPUSD',
-                    direction='CALL',minutes=3,parallel=True)
+            o3,_=reserve(sess,user,request_key='parallel-0004',symbol='GBPUSD',
+                direction='CALL',minutes=15,parallel=True)
+            confirmed(sess,o3,{'contract_id':'990003','buy_price':'2'})
+            o4,_=reserve(sess,user,request_key='parallel-0005',symbol='AUDNZD',
+                direction='CALL',minutes=15,parallel=True)
+            confirmed(sess,o4,{'contract_id':'990004','buy_price':'2'})
+            with pytest.raises(OrderGuardError,match='Máximo de 4'):
+                reserve(sess,user,request_key='parallel-0006',symbol='USDCAD',
+                    direction='CALL',minutes=15,parallel=True)
             assert settle(sess,o,{'contract_id':'990001','is_sold':1,'profit':'-2','status':'lost'})
             assert settle(sess,o2,{'contract_id':'990002','is_sold':1,'profit':'1.50','status':'won'})
     finally:cleanup(engine)
@@ -246,8 +252,9 @@ def test_selector_expands_catalogue_without_inventing_symbols():
     assert len(out)>=20
     assert len(out)==len({x['symbol'] for x in out})
     assert all(x['symbol']!='FAKE123' for x in out)
-    assert {'frxEURJPY','frxAUDUSD','1HZ100V','STPRNG'} <= {
+    assert {'frxEURJPY','frxAUDUSD','frxAUDNZD','frxEURCAD'} <= {
         x['symbol'] for x in out}
+    assert all(x['family']=='forex' for x in out)
 
 
 def test_selector_rotates_bounded_groups_across_catalogue(monkeypatch):
@@ -278,8 +285,8 @@ def test_underscore_deriv_symbol_can_be_discovered_quoted_and_reserved(tmp_path,
     from app.demo import demo_proposal
     assert selector.classify({'symbol':'R_100','display_name':'Volatility 100 Index'}) == (
         'volatility','R_100')
-    assert any(x['symbol']=='R_100' for x in selector.choose_tradeable([
-        {'symbol':'R_100','display_name':'Volatility 100 Index'}]))
+    assert not selector.choose_tradeable([
+        {'symbol':'R_100','display_name':'Volatility 100 Index'}])  # Forex-only M15 mode
     client,factory,engine,uid=prepare(tmp_path,monkeypatch)
     try:
         with factory() as sess:
@@ -324,3 +331,37 @@ def test_v2_uses_official_call_put_expiry_limits():
     # Incomplete broker metadata must fail closed.
     assert not contract_supports_duration([{'contract_type':'CALL'}],minutes=3)
     assert not contract_supports_duration([contracts[0]],minutes=5)
+
+
+def test_forex_m15_selector_and_half_dollar_progression():
+    from app import trade_selector_v2 as selector
+    from app.progression import next_entry
+    assert selector.EXPIRY['forex']==15
+    assert selector.choose_tradeable([
+        {'symbol':'frxAUDNZD','display_name':'AUD/NZD'},
+        {'symbol':'R_100','display_name':'Volatility 100 Index'}])[0]['symbol']=='frxAUDNZD'
+    entry=next_entry(base='0.50',gale_enabled=True,gales=1,
+        gale_multiplier='2',cycles=None,cycle_multiplier='2',orders=[])
+    assert entry.stake==Decimal('0.50')
+    again=next_entry(base='0.50',gale_enabled=True,gales=1,
+        gale_multiplier='2',cycles=None,cycle_multiplier='2',
+        orders=[{'id':1,'state':'SETTLED','pnl':'-0.50','direction':'CALL',
+                 'symbol':'frxAUDNZD','strategy':'rompimento_m1','stake':'0.50'}])
+    assert again.stake==Decimal('1.00') and again.symbol=='frxAUDNZD'
+
+
+def test_half_dollar_four_parallel_m15_orders_keep_exposure_guard(tmp_path,monkeypatch):
+    client,factory,engine,uid=prepare(tmp_path,monkeypatch,stop_loss='0.00')
+    try:
+        with factory() as sess:
+            user=sess.get(db.User,uid)
+            for i,symbol in enumerate(('frxAUDNZD','frxEURUSD','frxUSDJPY','frxGBPUSD')):
+                o,_=reserve(sess,user,request_key=f'halfdollar-{i:04}',
+                    symbol=symbol,direction='CALL',minutes=15,
+                    stake_override=Decimal('0.50'),parallel=True)
+                confirmed(sess,o,{'contract_id':str(100000+i),'buy_price':'0.50'})
+            with pytest.raises(OrderGuardError,match='Máximo de 4'):
+                reserve(sess,user,request_key='halfdollar-0005',
+                    symbol='frxAUDCAD',direction='CALL',minutes=15,
+                    stake_override=Decimal('0.50'),parallel=True)
+    finally:cleanup(engine)
