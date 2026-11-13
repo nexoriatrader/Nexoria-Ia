@@ -258,7 +258,7 @@ button.choose-account:focus-visible{outline:3px solid #71d2ff;outline-offset:4px
 <body>
 <div class="shell">
 <header>
-  <div class="brand"><img src="/brand/logo-nexora-clean.png" alt="NEXORA IA"><div><div class="brand-title">NEXORA IA</div><div class="brand-tag">SEU ROBÔ INTELIGENTE</div></div></div>
+  <div class="brand"><img src="/brand/logo-nexora-v21.svg" alt="NEXORA IA — Robô Trader"><div><div class="brand-title">NEXORA IA</div><div class="brand-tag">ROBÔ TRADER AUTOMÁTICO</div></div></div>
   <div class="header-actions"><a id="accountBadge" class="broker-link hidden" href="https://t.deriv.link?t=HR6MZB6Q499Z" target="_blank" rel="noopener noreferrer" aria-label="Acessar corretora Deriv em nova aba" title="Abrir site oficial da Deriv para consultar operações e movimentar sua conta">ACESSAR CORRETORA <span aria-hidden="true">↗</span></a><button id="menuButton" class="iconbutton hidden" aria-label="Abrir menu" aria-expanded="false" onclick="toggleMenu(true)">☰</button></div>
 </header>
 <div id="menuOverlay" class="menu-overlay hidden" onclick="toggleMenu(false)"></div>
@@ -449,14 +449,16 @@ button.choose-account:focus-visible{outline:3px solid #71d2ff;outline-offset:4px
   </div>
 </section>
 <section id="results" class="hidden">
-  <div class="section-heading"><div><div class="eyebrow">DADOS OFICIAIS</div><h1>Resultados NEXORA IA</h1><p>Somente operações da avaliação 2.0, quando iniciada. Registros oficiais anteriores não são excluídos da corretora ou do banco.</p></div></div>
-  <div class="card"><div class="surface-heading">Histórico oficial DEMO — avaliação NEXORA 2.0 (últimos 3 dias)</div>
+  <div class="section-heading"><div><div class="eyebrow">DADOS OFICIAIS · DEMO</div><h1>Resultados NEXORA IA</h1><p>Cada avaliação começa com contadores independentes. Contratos anteriores continuam arquivados para reconciliação e auditoria.</p></div></div>
+  <div class="card"><div class="surface-heading">Histórico de contratos da avaliação atual — últimos 3 dias</div>
     <div class="actions"><button class="outline" onclick="loadDemoOrders()">ATUALIZAR CONTRATOS</button><span class="helper" id="resultsLiveStatus" role="status">● Atualização automática a cada 3 segundos</span></div>
-    <div class="table-wrap"><table><thead><tr><th>Data (Brasília)</th><th>Horário</th><th>Conta</th><th>Ativo</th><th>Direção</th><th>Entrada</th><th>Etapa</th><th>Situação</th><th>WIN / LOSS</th><th>Resultado</th><th>Ação</th></tr></thead><tbody id="ordersBody"><tr><td colspan="11" class="empty">Carregando contratos...</td></tr></tbody></table></div>
+    <div class="table-wrap"><table><thead><tr><th>Data (Brasília)</th><th>Horário</th><th>Conta</th><th>Ativo</th><th>Direção</th><th>Entrada</th><th>Expiração</th><th>Etapa</th><th>Situação</th><th>WIN / LOSS</th><th>Resultado</th><th>Ação</th></tr></thead><tbody id="ordersBody"><tr><td colspan="12" class="empty">Carregando contratos...</td></tr></tbody></table></div>
   </div>
-  <div class="card"><div class="surface-heading">NEXORA 2.0 · Avaliação independente</div>
-    <p class="muted">Começa do zero na primeira ativação do AutoPilot 2.0. Meta de 50 operações, sem desligamento por quantidade. Até 2 contratos DEMO simultâneos em ativos diferentes, respeitando stops e exposição total.</p>
-    <p class="helper" id="v2EvalStatus" role="status">Consultando a avaliação 2.0...</p>
+  <div class="card"><div class="surface-heading">Avaliação independente do AutoPilot · DEMO</div>
+    <p class="muted">Os resultados desta avaliação são separados dos anteriores; metas de amostragem não limitam automaticamente as operações. Cada par mantém sua própria sequência, respeitando as proteções e os limites configurados.</p>
+    <p class="helper" id="v2EvalStatus" role="status">Consultando avaliação atual...</p>
+    <div class="actions"><button class="outline" id="newEvalBtn" type="button" onclick="startNewEvaluation()">INICIAR NOVA AVALIAÇÃO · ZERAR PLACAR</button></div>
+    <p class="helper">Requer robô desligado e todos os contratos encerrados. Zera apenas os números da nova avaliação e a sessão de risco; não apaga contratos anteriores, não altera o saldo da Deriv e não inicia operações automaticamente. A próxima avaliação usará filtros experimentais de tendência EMA50 e amplitude de velas, ainda sem comprovação de superioridade.</p>
   </div>
   <div class="card"><div class="surface-heading">Desempenho das estratégias</div>
     <p class="muted">Entradas automáticas oficiais na Deriv Demo, agrupadas pela estratégia de origem. Não são previsões de resultados futuros.</p>
@@ -860,7 +862,7 @@ async function loadRealDailyResult(){
    reason.textContent='Consulta ao resultado real temporariamente indisponível';
  }
 }
-async function loadDemoOrders(){try{const data=await req('/api/demo/orders');demoOrders=data.items||[];if(activePage==='results')loadV2Evaluation().catch(()=>{});const last=demoOrders[0];$('lastOrder').textContent=last?last.symbol+' · '+last.direction+' · Entrada '+money(last.stake)+' · '+last.state+(last.pnl===null?' · Aguardando resultado':' · P/L '+money(last.pnl)):'Nenhum contrato oficial ainda.';renderOrders();return data}catch(e){$('ordersBody').innerHTML='<tr><td colspan="11" class="empty">Não foi possível carregar o histórico.</td></tr>';throw e}}
+async function loadDemoOrders(){try{const data=await req('/api/demo/orders');demoOrders=data.items||[];if(activePage==='results')loadV2Evaluation().catch(()=>{});const last=demoOrders[0];$('lastOrder').textContent=last?last.symbol+' · '+last.direction+' · M'+last.duration_minutes+' · Entrada '+money(last.stake)+' · '+last.state+(last.pnl===null?' · Aguardando resultado':' · P/L '+money(last.pnl)):'Nenhum contrato oficial ainda.';renderOrders();return data}catch(e){$('ordersBody').innerHTML='<tr><td colspan="12" class="empty">Não foi possível carregar o histórico.</td></tr>';throw e}}
 const brasilDateTime=(iso)=>{
  if(!iso)return ['—','—'];
  const d=new Date(iso);
@@ -883,7 +885,7 @@ function renderOrders(){
  const tbody=$('ordersBody');tbody.replaceChildren();
  if(!demoOrders.length){
    const tr=document.createElement('tr'),td=document.createElement('td');
-   td.colSpan=11;td.className='empty';td.textContent='Nenhum contrato nos últimos 3 dias.';
+   td.colSpan=12;td.className='empty';td.textContent='Nenhum contrato nesta avaliação.';
    tr.append(td);tbody.append(tr);return;
  }
  for(const o of demoOrders){
@@ -892,12 +894,12 @@ function renderOrders(){
    const result=o.outcome||'PENDING';
    const outcome=result==='WIN'?'WIN':result==='LOSS'?'LOSS':result==='DRAW'?'EMPATE':result==='UNKNOWN'?'INDEFINIDO':'PENDENTE';
    const columns=[date,time,o.account_mode==='demo'?'Treinamento':o.account_mode==='real'?'Real':'Não registrada',
-      o.symbol,o.direction,money(o.stake),tradeStage(o),o.state,outcome,
+      o.symbol,o.direction,money(o.stake),Number.isInteger(Number(o.duration_minutes))&&Number(o.duration_minutes)>0?'M'+o.duration_minutes:'—',tradeStage(o),o.state,outcome,
       o.pnl===null?'Pendente':money(o.pnl)];
    for(let i=0;i<columns.length;i++){
      const td=document.createElement('td');td.textContent=columns[i];
-     if(i===8&&result==='WIN')td.className='positive';
-     if(i===8&&result==='LOSS')td.className='negative';
+     if(i===9&&result==='WIN')td.className='positive';
+     if(i===9&&result==='LOSS')td.className='negative';
      row.append(td);
    }
    const action=document.createElement('td');
@@ -922,8 +924,24 @@ async function loadV2Evaluation(){
   place.textContent='Operações registradas: '+x.submitted+' · Liquidadas: '+settled+
    ' · WIN: '+wins+' · LOSS: '+x.losses+' · Pendentes: '+x.pending+
    ' · Taxa observada: '+rate+' · Resultado DEMO: '+money(x.net_pnl)+
-   ' · Meta inicial: 50 (sem limite automático)';
+   ' · Meta inicial: '+(x.target||50)+' (sem limite automático) · '+(x.batch||'NEXORA 2.0');
  }catch(e){place.textContent='Avaliação 2.0 temporariamente indisponível: '+e.message;}
+}
+async function startNewEvaluation(){
+ const button=$('newEvalBtn');
+ if(button.disabled)return;
+ const message='INICIAR AVALIAÇÃO DEMO 2.1?\n\nExige AutoPilot desligado e todos os contratos anteriores liquidados.\n\nO placar da nova avaliação e os stops de sessão começam do zero. Os contratos, resultados históricos e o saldo oficial da Deriv NÃO são apagados.\n\nA próxima ativação utilizará filtros experimentais EMA50 e amplitude, ainda não validados. Deseja continuar?';
+ if(!window.confirm(message))return;
+ button.disabled=true;
+ try{
+   const result=await req('/api/autopilot/v2/new-evaluation',{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({confirm:'START_NEW_DEMO_EVALUATION'})});
+   await Promise.allSettled([loadDemoOrders(),loadV2Evaluation(),loadStrategyStats(),
+                              loadRiskSession(),refreshDashboard()]);
+   window.alert(result.message||'Nova avaliação preparada. Robô permanece desligado.');
+ }catch(e){window.alert('Não foi possível iniciar nova avaliação: '+e.message);}
+ finally{button.disabled=false}
 }
 async function loadStrategyStats(){
   const tbody=$('strategyStats');
