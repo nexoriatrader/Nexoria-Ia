@@ -28,12 +28,12 @@ class NextEntry:
     strategy: str | None = None
 
 
-def decimal(value):
+def decimal(value, *, min_value=Decimal('1')):
     try:
         d=Decimal(str(value))
     except (InvalidOperation,TypeError,ValueError) as exc:
         raise ProgressionHalt('Progressão com valor inválido') from exc
-    if not d.is_finite() or d<1 or d.as_tuple().exponent<-2:
+    if not d.is_finite() or d<min_value or d.as_tuple().exponent<-2:
         raise ProgressionHalt('Multiplicador deve ser número a partir de 1,00 e ter no máximo duas casas decimais')
     return d
 
@@ -44,7 +44,7 @@ def next_entry(*, base, gale_enabled, gales, gale_multiplier, cycles, cycle_mult
     Each row: {state, pnl, direction, symbol, strategy, stake}.
     The result is a plan. DB and broker purchase checks execute independently.
     """
-    base=decimal(base)
+    base=decimal(base,min_value=Decimal('0.50'))
     gale_multiplier=decimal(gale_multiplier)
     cycle_multiplier=decimal(cycle_multiplier)
     if gale_multiplier<1 or cycle_multiplier<1:
@@ -70,7 +70,7 @@ def next_entry(*, base, gale_enabled, gales, gale_multiplier, cycles, cycle_mult
             raise ProgressionHalt('Valor anterior desconhecido')
         expected=(base*((cycle_multiplier*(gale_multiplier**gales))**cycle)*(gale_multiplier**gale)).quantize(
             Decimal('0.01'),rounding=ROUND_HALF_UP)
-        actual=decimal(row['stake'])
+        actual=decimal(row['stake'],min_value=Decimal('0.50'))
         if actual!=expected:
             raise ProgressionHalt('Entrada do histórico diferente da progressão planejada')
         total+=actual
