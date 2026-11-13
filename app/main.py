@@ -118,7 +118,7 @@ async def feed():
 
 
 def v2_enabled():
-    return os.getenv('NEXORA_V2_ENABLED','true').lower()=='true'
+    return os.getenv('NEXORA_V2_ENABLED','false').lower()=='true'
 
 
 def autopilot_allowed():
