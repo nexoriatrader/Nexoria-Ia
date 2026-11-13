@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#07111e">
 <meta name="description" content="NEXORA IA — seu robô inteligente de operações automáticas, análise de mercado e gestão de risco em um só painel.">
-<title>NEXORA IA | Robô de Operações Automáticas</title>
+<title>Nexora Robô Automático</title>
 <style>
 :root{color-scheme:dark;--bg:#060c15;--panel:#101d2b;--panel2:#132436;--line:#223b50;--ink:#eff8ff;--muted:#94abc1;--blue:#39b9f5;--gold:#f4be52;--gold2:#ffdd8b;--green:#48d6ad;--red:#fa7d88}
 *{box-sizing:border-box}
@@ -411,10 +411,10 @@ button.choose-account:focus-visible{outline:3px solid #71d2ff;outline-offset:4px
 <section id="dashboard" class="hidden">
   <div class="section-heading"><div><div class="eyebrow">VISÃO GERAL</div><h1>Meu robô</h1><p>O essencial para acompanhar suas operações.</p></div></div>
   <div class="card hero">
-    <div class="hero-top"><div class="hero-title">NEXORA AutoPilot</div><span id="robotState" class="hero-state">DESLIGADO</span></div>
-    <p id="robotMessage" class="hero-copy">Preparando AutoPilot DEMO experimental, com limites de risco configurados.</p>
+    <div class="hero-top"><div class="hero-title">Nexora Robô Automático</div><span id="robotState" class="hero-state">DESLIGADO</span></div>
+    <p id="robotMessage" class="hero-copy">Robô DEMO desligado. Configure e inicie quando desejar.</p>
     <p id="autopilotVersion" class="helper" role="status">Verificando a versão operacional do robô...</p>
-    <p id="v2ScannerHealth" class="helper" role="status">Scanner 2.0: aguardando diagnóstico dos ativos.</p>
+    <p id="v2ScannerHealth" class="helper" role="status">Scanner Forex: aguardando primeira análise.</p>
     <button id="robotButton" class="hero-action" disabled aria-disabled="true" onclick="toggleRobot()">LIGAR ROBÔ</button>
     <div id="robotStartNotice" class="robot-notice" role="alert" aria-live="polite" hidden>
       <strong id="robotNoticeTitle"></strong>
@@ -425,7 +425,7 @@ button.choose-account:focus-visible{outline:3px solid #71d2ff;outline-offset:4px
         <p class="helper">O histórico oficial e o saldo Deriv não podem ser apagados pelo painel. Os limites de segurança permanecem ativos.</p>
       </div>
     </div>
-    <p class="helper" id="riskSessionMetric">Sessão de risco DEMO: consultando resultado...</p>
+    <p class="helper" id="riskSessionMetric">Resultado acumulado da sessão DEMO: consultando...</p>
     <div class="helper">Apenas Deriv Demo. Estratégias em teste, sem garantia de acerto. Desligar bloqueia novas entradas, sem cancelar contratos já abertos.</div>
     <div class="info" id="feedState">Conferindo conexão de cotações...</div>
   </div>
@@ -650,8 +650,8 @@ async function loadRiskSession(){
  try{
    const result=await req('/api/demo/risk-session');
    const n=Number(result.pnl);
-   element.textContent='Resultado da sessão de risco DEMO: '+(Number.isFinite(n)?money(n,'USD'):'indisponível')+' · Histórico geral preservado';
- }catch(e){element.textContent='Sessão de risco DEMO: informação indisponível'}
+   element.textContent='Resultado acumulado da sessão DEMO: '+(Number.isFinite(n)?money(n,'USD'):'indisponível')+' · Não é o saldo da conta · Histórico preservado';
+ }catch(e){element.textContent='Resultado da sessão DEMO indisponível no momento'}
 }
 async function resetRiskSession(){
  if(robotRunning){showRobotNotice('Desligue o robô antes de reiniciar a sessão.');return}
@@ -694,31 +694,48 @@ async function refreshDashboard(){
    $('robotMessage').textContent=status.reason||'Aguardando oportunidades no mercado DEMO';
    const isV2=status.autopilot_version==='V2_MULTI_ASSET';
    $('autopilotVersion').textContent=isV2
-      ?'● NEXORA 2.0 FOREX M15 · Sinais confirmados M1 · Rise/Fall DEMO · entradas em pares diferentes'
+      ?'● Forex Rise/Fall · expiração 15 min · indicadores em velas de 1 min · múltiplos pares DEMO'
       : status.v2_upgrade_needed
        ?'⚠ NEXORA 1.0 AINDA LIGADO NO 1HZ100V. Para iniciar o 2.0, desligue e ligue novamente o AutoPilot DEMO, após conferir os contratos pendentes.'
        : status.v2_available
-        ?'○ NEXORA 2.0 DISPONÍVEL. Ao ligar, o robô inicia o teste multiativos (se autorizado).'
+        ?'○ Forex M15 disponível · O scanner inicia depois de ligar o robô.'
         :'○ AutoPilot 1.0 · 1HZ100V';
    $('robotButton').textContent=robotRunning?'DESLIGAR ROBÔ':'LIGAR ROBÔ';
    $('robotButton').disabled=(!robotRunning&&!available)||$('robotButton').dataset.commandPending==='true';
    $('robotButton').setAttribute('aria-disabled',String($('robotButton').disabled));
    $('robotButton').style.background=robotRunning?'linear-gradient(135deg,#fa9b9d,#dc5269)':'';
-   $('feedState').textContent=(status.connected?'● Feed legado conectado':'○ Feed legado reconectando')+
-     ' · '+safe(status.analysis_symbol||status.symbol)+
-     (isV2?' · Scanner 2.0 utiliza cotações próprias de cada ativo':'');
+   $('feedState').textContent=isV2
+     ?'● Forex DEMO · O scanner consulta os dados oficiais de cada par separadamente'
+     :status.v2_available
+       ?'○ Forex M15 disponível · O scanner consulta cada par após iniciar o robô'
+       :(status.connected?'● Feed da estratégia anterior conectado':'○ Feed da estratégia anterior reconectando')+
+        ' · '+safe(status.analysis_symbol||status.symbol);
    if(robotRunning)showRobotNotice('');
    if(status.v2_available){
      req('/api/autopilot/v2/scanner-status').then(data=>{
        if(sequence!==dashboardStatusSequence)return;
        const scan=data.scan||{},list=scan.assets||[];
-       const errors=list.filter(a=>a.status==='MARKET_DATA_ERROR'||a.status==='CALL_PUT_UNAVAILABLE');
-       $('v2ScannerHealth').textContent='Scanner 2.0: '+(scan.status||'AGUARDANDO')+
-         (scan.at?' · última análise '+new Date(scan.at).toLocaleTimeString('pt-BR',{timeZone:'America/Sao_Paulo'}):'')+
-         (list.length?' · '+list.length+' ativos neste ciclo':'')+
-         (scan.catalogue_size?' · '+scan.catalogue_size+' ativos na lista rotativa':'')+
-         (errors.length?' · '+errors.length+' sem dados/contratos':'')+
-         (scan.reason?' · '+scan.reason:'');
+       const errors=list.filter(a=>a.status==='MARKET_DATA_ERROR'||
+         a.status==='CALL_PUT_UNAVAILABLE'||a.status==='CALL_PUT_OR_DURATION_UNAVAILABLE');
+       const scanState=scan.status||'NOT_RUN';
+       if(!robotRunning){
+         $('v2ScannerHealth').textContent='Scanner Forex: aguardando início do robô · nenhuma análise ativa';
+       }else if(scanState==='NOT_RUN'){
+         $('v2ScannerHealth').textContent='Scanner Forex: aguardando primeira análise dos pares';
+       }else{
+         const labels={
+           SIGNAL:'sinal confirmado',NO_SIGNAL:'sem sinal confirmado nesta varredura',
+           MARKET_DATA_UNAVAILABLE:'dados ou contratos indisponíveis',
+           CATALOG_UNAVAILABLE:'catálogo da Deriv indisponível',
+           SCAN_TIMEOUT:'tempo de consulta excedido',
+           NO_SUPPORTED_ASSETS_IN_CATALOG:'nenhum par compatível no catálogo'
+         };
+         $('v2ScannerHealth').textContent='Scanner Forex: '+(labels[scanState]||'verificando condições')+
+           (scan.at?' · última análise '+new Date(scan.at).toLocaleTimeString('pt-BR',{timeZone:'America/Sao_Paulo'}):'')+
+           (list.length?' · '+list.length+' pares verificados':'')+
+           (scan.catalogue_size?' · '+scan.catalogue_size+' pares no catálogo':'')+
+           (errors.length?' · '+errors.length+' sem dados ou contratos compatíveis':'');
+       }
      }).catch(()=>{});
    }
    await Promise.allSettled([loadDemoBalance(),loadDemoOrders(),loadRealBalance(),
