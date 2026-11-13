@@ -26,7 +26,8 @@ def last_scan_report():
     """Safe, read-only explanation of the last scan (no account credentials)."""
     return {'status':_last_scan['status'],'at':_last_scan['at'],
             'assets':[dict(a) for a in _last_scan['assets']],
-            'selected':dict(_last_scan['selected']) if _last_scan['selected'] else None}
+            'selected':dict(_last_scan['selected']) if _last_scan['selected'] else None,
+            'reason':_last_scan.get('reason')}
 
 
 
