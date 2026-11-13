@@ -394,3 +394,16 @@ def test_v2_pending_signal_queue_exposes_other_assets_without_rescanning(monkeyp
     assert first['symbol']!=second['symbol']
     assert selector.fetch_candles.await_count==2
     assert selector._pending_signals_by_user[101]==[]
+
+
+def test_symbol_slots_fit_postgres_int32_and_are_distinct_per_pair():
+    # The production demo_orders.active_slot column is INTEGER, not BIGINT.
+    # Signed per-symbol slots must survive PostgreSQL insertion without DataError.
+    from app.demo_ledger import _symbol_slot
+    pairs=('frxAUDNZD','frxAUDCAD','frxEURUSD','frxGBPUSD','frxUSDJPY',
+           'frxEURJPY','frxGBPNZD','frxGBPAUD')
+    slots=[_symbol_slot(uid,pair) for uid in (1,2,3) for pair in pairs]
+    assert all(-(2**31)<=slot<=2**31-1 for slot in slots)
+    assert all(slot<0 for slot in slots)
+    assert len(slots)==len(set(slots))
+    assert _symbol_slot(1,'frxAUDNZD')==_symbol_slot(1,'frxAUDNZD')
