@@ -58,7 +58,7 @@ def order_guard(user, orders, stake, *, after_order_id=0,
     if stop_loss>0 and (pnl<=-stop_loss or pnl-exposure-stake < -stop_loss):
         raise OrderGuardError('A exposição máxima excederia o Stop Loss')
     if user.martingale:
-        raise OrderGuardError('Martingale legado não autorizado para compras demo')
+        raise OrderGuardError('Martingale indisponível para compras demo na configuração antiga')
     return pnl
 
 
