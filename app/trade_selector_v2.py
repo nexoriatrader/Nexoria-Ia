@@ -7,6 +7,8 @@ from __future__ import annotations
 import asyncio
 import re
 import time
+import logging
+from datetime import datetime,timezone
 from .market import MarketError, discover_symbols, discover_contracts
 from .strategy_lab import fetch_candles, direction_at
 
@@ -16,6 +18,16 @@ EXPIRY={'range_break':3,'forex':3,'step':5,'volatility':5}
 _catalog_cache=()
 _catalog_at=0.0
 _contract_cache={}
+_last_scan={'status':'NOT_RUN','at':None,'assets':[],'selected':None}
+_log=logging.getLogger('nexora.v2')
+
+
+def last_scan_report():
+    """Safe, read-only explanation of the last scan (no account credentials)."""
+    return {'status':_last_scan['status'],'at':_last_scan['at'],
+            'assets':[dict(a) for a in _last_scan['assets']],
+            'selected':dict(_last_scan['selected']) if _last_scan['selected'] else None}
+
 
 
 def classify(item):
@@ -105,26 +117,61 @@ def signal_from_closed_candles(item,candles,now=None):
 
 
 async def select_demo_signal(*, exclude_symbols=()):
-    """Returns one experimental candidate, never an execution authorization."""
-    items=await catalogue()
-    if not items:
+    """Return a DEMO research candidate, with explicit rejection diagnostics."""
+    global _last_scan
+    stamp=datetime.now(timezone.utc).isoformat()
+    try:
+        items=await catalogue()
+    except (MarketError,TimeoutError,OSError) as exc:
+        _last_scan={'status':'CATALOG_UNAVAILABLE','at':stamp,'assets':[],
+                    'selected':None,'reason':str(exc)[:160]}
+        _log.warning('V2 selector: catalogue unavailable: %s',type(exc).__name__)
         return None
-    sem=asyncio.Semaphore(3)
+    if not items:
+        _last_scan={'status':'NO_SUPPORTED_ASSETS_IN_CATALOG','at':stamp,
+                    'assets':[],'selected':None}
+        _log.warning('V2 selector: zero eligible symbols in Deriv public catalog')
+        return None
+    sem=asyncio.Semaphore(4)
+    exclude=set(exclude_symbols)
     async def examine(item):
         async with sem:
+            symbol=item['symbol']
+            if symbol in exclude:
+                return None,{'symbol':symbol,'status':'OPEN_CONTRACT'}
             try:
-                if not await supported(item['symbol']):
-                    return None
-                bars=await fetch_candles(item['symbol'],count=120)
-                return signal_from_closed_candles(item,bars)
-            except (MarketError,ValueError,TypeError,TimeoutError):
-                return None
-    results=await asyncio.gather(*(examine(i) for i in items))
-    # Rompimento preferred over crossover. No promise of profitable execution.
-    excluded=set(exclude_symbols)
-    signals=[x for x in results if x and x['symbol'] not in excluded]
-    if not signals:
+                if not await supported(symbol):
+                    return None,{'symbol':symbol,'status':'CALL_PUT_UNAVAILABLE'}
+                bars=await fetch_candles(symbol,count=120)
+                candidate=signal_from_closed_candles(item,bars)
+                if candidate is None:
+                    return None,{'symbol':symbol,'status':'NO_FRESH_CONFIRMED_SIGNAL',
+                                 'candles':len(bars)}
+                return candidate,{'symbol':symbol,'status':'SIGNAL',
+                                  'strategy':candidate['strategy'],
+                                  'direction':candidate['direction']}
+            except (MarketError,ValueError,TypeError,TimeoutError,OSError) as exc:
+                return None,{'symbol':symbol,'status':'MARKET_DATA_ERROR',
+                             'reason':str(exc)[:160]}
+    try:
+        result=await asyncio.wait_for(asyncio.gather(*(examine(i) for i in items)),
+                                      timeout=42)
+    except TimeoutError:
+        _last_scan={'status':'SCAN_TIMEOUT','at':stamp,'assets':[],
+                    'selected':None,'reason':'Consultas Deriv excederam 42s'}
+        _log.warning('V2 selector: public research requests exceeded 42 seconds')
         return None
-    signals.sort(key=lambda x:(0 if x['strategy']=='rompimento_m1' else 1,
-                               x['symbol']))
-    return signals[0]
+    signals=[candidate for candidate,_ in result if candidate]
+    signals.sort(key=lambda x:(0 if x['strategy']=='rompimento_m1' else 1,x['symbol']))
+    chosen=signals[0] if signals else None
+    rows=[row for _,row in result]
+    status='SIGNAL' if chosen else (
+        'MARKET_DATA_UNAVAILABLE' if all(x['status'] in (
+            'MARKET_DATA_ERROR','CALL_PUT_UNAVAILABLE') for x in rows) else 'NO_SIGNAL')
+    _last_scan={'status':status,'at':stamp,'assets':rows,
+                'selected':chosen}
+    # Expose whether a feed failure was mistaken for a lack of setups.
+    if status=='MARKET_DATA_UNAVAILABLE':
+        _log.warning('V2 selector: no market data; results=%s',
+                     ','.join(x['symbol']+':'+x['status'] for x in rows))
+    return chosen
