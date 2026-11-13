@@ -36,6 +36,7 @@ def parse_quote(message: dict) -> dict:
 
 async def public_request(payload: dict, *, expected: str, timeout: float = 12.0) -> dict:
     import websockets
+    from websockets.exceptions import ConnectionClosed, WebSocketException
     # A separate short-lived connection isolates discovery from tick streaming.
     try:
         async with asyncio.timeout(timeout):
@@ -49,8 +50,8 @@ async def public_request(payload: dict, *, expected: str, timeout: float = 12.0)
                         raise MarketError(str(msg['error'].get('message', 'Erro Deriv')))
                     if msg.get('msg_type') == expected or expected in msg:
                         return msg
-    except (TimeoutError, OSError, ConnectionError) as exc:
-        raise MarketError('Não foi possível consultar a Deriv agora') from exc
+    except (TimeoutError, OSError, ConnectionError, ConnectionClosed, WebSocketException) as exc:
+        raise MarketError('Falha de conexão com Deriv ('+type(exc).__name__+')') from exc
 
 
 def parse_symbols(message: dict) -> list[dict]:
