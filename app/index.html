@@ -432,7 +432,7 @@ button.choose-account:focus-visible{outline:3px solid #71d2ff;outline-offset:4px
   <div class="metric-grid">
     <div class="card metric"><div class="metric-label">Saldo Treinamento</div><div class="metric-value" id="balanceMetric">—</div><div class="metric-sub">Saldo virtual oficial · Deriv</div></div>
     <div class="card metric balance-real"><div class="metric-label">Saldo Conta Real</div><div class="metric-value" id="realBalanceMetric">—</div><div class="metric-sub" id="realBalanceReason">Verificando saldo oficial · Deriv</div></div>
-    <div class="card metric"><div class="metric-label">Resultado do dia</div>
+    <div class="card metric"><div class="metric-label" id="demoPnlScope">Resultado do dia</div>
       <div class="metric-sub" style="margin-top:9px">TREINAMENTO · DEMO</div>
       <div class="metric-value" id="profitMetric">—</div>
       <div class="divider" style="height:1px;background:#35536a;margin:12px 0"></div>
@@ -824,13 +824,16 @@ let dailyResultResetTimer=null;
 async function loadDailyResult(){
  const el=$('profitMetric');
  try{
-   const result=await req('/api/demo/results/today');
-   const amount=Number(result.pnl);
-   if(!Number.isFinite(amount))throw Error('Resultado diário inválido');
+   const evaluation=await req('/api/autopilot/v2/evaluation');
+   const secondBatch=evaluation.active&&evaluation.batch==='NEXORA_2.1';
+   const result=secondBatch?evaluation:await req('/api/demo/results/today');
+   $('demoPnlScope').textContent=secondBatch?'Resultado da avaliação 2.1':'Resultado do dia';
+   const amount=Number(result.net_pnl??result.pnl);
+   if(!Number.isFinite(amount))throw Error('Resultado DEMO inválido');
    el.textContent=money(amount);
    el.className='metric-value '+(amount>0?'positive':amount<0?'negative':'');
    if(dailyResultResetTimer)clearTimeout(dailyResultResetTimer);
-   const ms=new Date(result.next_reset_at).getTime()-Date.now()+500;
+   const ms=secondBatch?0:new Date(result.next_reset_at).getTime()-Date.now()+500;
    if(Number.isFinite(ms)&&ms>0){
      dailyResultResetTimer=setTimeout(()=>{
        if(activePage==='dashboard')loadDailyResult();
