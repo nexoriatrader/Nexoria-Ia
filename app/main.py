@@ -27,6 +27,7 @@ from .progression import next_entry, ProgressionHalt, NextEntry
 from .security import CLIENT_ID, REDIRECT, TOKEN_URL, build_authorize_url, make_login, make_session_id, hashsecret, encrypt, decrypt, cookie_options
 
 log=logging.getLogger('nexora')
+log.setLevel(logging.INFO)  # Explicitly emit low-volume scanner diagnostics on Render.
 VERSION='0.8.0'
 PUBLIC_WS='wss://api.derivws.com/trading/v1/options/ws/public'
 SYMBOL=os.getenv('NEXORA_SYMBOL','1HZ100V')
