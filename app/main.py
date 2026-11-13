@@ -218,6 +218,55 @@ def restore_demo_autopilot_consent():
                 log.info('DEMO AutoPilot resumed: user=%s',uid)
         sess.commit()
 
+
+def v2_symbol_recovery(sess,user,orders,plan,cycle_cfg,batch):
+    """Pick an owed Martingale on its ORIGINAL symbol, after broker settlement.
+
+    Per-symbol order streams must not be combined: each symbol has its own
+    sequential progression and an active trade always blocks its own symbol.
+    """
+    if not batch:
+        return None,None
+    historical=[o for o in orders if o.id>batch.after_order_id]
+    if not historical:
+        return None,None
+    ids=[o.id for o in historical]
+    attributes={a.order_id:a for a in sess.scalars(select(db.AutoPilotAttribution).where(
+        db.AutoPilotAttribution.user_id==user.id,
+        db.AutoPilotAttribution.order_id.in_(ids))).all()}
+    symbol_groups={}
+    for order in historical:
+        if order.id not in attributes:
+            # Manual operations cannot be blended into progression.
+            raise ProgressionHalt('Contrato sem atribuição automática na avaliação 2.0')
+        symbol_groups.setdefault(order.symbol,[]).append(order)
+    next_retries=[]
+    for symbol,group in symbol_groups.items():
+        if any(o.state in ('PENDING','UNKNOWN','CONFIRMED') for o in group):
+            continue
+        rows=[{'id':o.id,'state':o.state,'pnl':o.pnl,'direction':o.direction,
+               'symbol':o.symbol,'stake':o.stake,
+               'strategy':attributes[o.id].strategy} for o in group]
+        try:
+            entry=next_entry(base=user.stake,
+                gale_enabled=bool(plan and plan.requested_martingale),
+                gales=plan.gale_count if plan and plan.requested_martingale else 0,
+                gale_multiplier=plan.requested_multiplier if plan else '2',
+                cycles=(plan.cycles_limit if plan else None),
+                cycles_enabled=bool(plan and plan.cycles_limit),
+                cycle_multiplier=cycle_cfg.multiplier if cycle_cfg else '2',orders=rows)
+        except ProgressionHalt as exc:
+            if 'Quantidade de ciclos concluída' in str(exc):
+                continue
+            raise
+        if entry.retry:
+            next_retries.append((group[-1].id,entry,group[-1]))
+    if not next_retries:
+        return None,None
+    _,entry,last=max(next_retries,key=lambda pair:pair[0])
+    return entry,last
+
+
 def m1_recovery_window_open(settled_at, now=None):
     """Allow recovery only in first 8s of a strictly later M1 candle.
 
@@ -254,7 +303,7 @@ async def autopilot_once():
     research=analyze(prices) if connected else {'candidates':[],'reason':'Cotações indisponíveis'}
     candidates=research['candidates']
     for uid in tuple(autopilot_enabled):
-        if uid not in autopilot_enabled or now-autopilot_last_attempt.get(uid,-1e12)<60:
+        if uid not in autopilot_enabled:
             continue
         async with autopilot_lock:
             if uid not in autopilot_enabled or not autopilot_allowed():
@@ -290,12 +339,6 @@ async def autopilot_once():
                 # Risk stops and broker-uncertainty safeguards remain mandatory.
                 try:
                     if batch:
-                        # Parallel V2 is flat-stake only; no Martingale/cycle progression
-                        # can be inferred from unordered simultaneous settlements.
-                        if plan and (plan.requested_martingale or plan.gale_count
-                                     or plan.cycles_limit):
-                            disarm_autopilot(uid,'Desative Martingale e ciclos para testar ordens simultâneas 2.0')
-                            continue
                         active=[o for o in orders if o.state in ('PENDING','CONFIRMED','UNKNOWN')]
                         if any(o.state in ('PENDING','UNKNOWN') for o in active):
                             autopilot_reasons[uid]='Contrato DEMO incerto; aguardando conferência'
@@ -303,8 +346,9 @@ async def autopilot_once():
                         if len(active)>=2:
                             autopilot_reasons[uid]='Dois contratos DEMO simultâneos; aguardando liquidação oficial'
                             continue
-                        entry=NextEntry(stake=Decimal(str(user.stake)),cycle=0,gale=0,retry=False)
-                        last=None
+                        entry,last=v2_symbol_recovery(sess,user,orders,plan,cycle_cfg,batch)
+                        if entry is None:
+                            entry=NextEntry(stake=Decimal(str(user.stake)),cycle=0,gale=0,retry=False)
                     else:
                         entry,last=autopilot_entry_plan(sess,user,orders)
                 except ProgressionHalt as exc:
@@ -318,16 +362,21 @@ async def autopilot_once():
                     disarm_autopilot(uid,reason)
                     continue
                 if entry.retry:
-                    # Allow one full M1 candle boundary after confirmed settlement.
-                    # This does not claim that the next tick is a filled candle.
+                    # V2 recovery is not held by the 60s fresh-scan cooldown.
+                    # It can start promptly AFTER verified official settlement.
+                    # Legacy mode retains its original M1 candle rule.
+                    if not batch and now-autopilot_last_attempt.get(uid,-1e12)<60:
+                        continue
                     settlement=last.updated_at if last else None
                     if not settlement:
                         autopilot_reasons[uid]='Aguardando horário da liquidação oficial'
                         continue
                     if settlement.tzinfo is None:
                         settlement=settlement.replace(tzinfo=timezone.utc)
-                    if not m1_recovery_window_open(settlement):
+                    if not batch and not m1_recovery_window_open(settlement):
                         autopilot_reasons[uid]='Aguardando abertura de vela M1 para recuperação'
+                        continue
+                    if batch and now-autopilot_last_attempt.get(uid,-1e12)<5:
                         continue
                     candidate={'strategy':entry.strategy or 'recuperacao',
                         'direction':entry.direction,
@@ -336,9 +385,13 @@ async def autopilot_once():
                         'reason':'Continuação controlada: ciclo '+str(entry.cycle)+
                                  ', martingale '+str(entry.gale)}
                 else:
+                    if not batch and now-autopilot_last_attempt.get(uid,-1e12)<60:
+                        continue
                     if batch:
                         # Limit heavy public history scans to once per minute per user.
-                        if now-v2_last_scan.get(uid,-1e12)<60:
+                        if now-v2_last_scan.get(uid,-1e12)<15:
+                            continue
+                        if now-autopilot_last_attempt.get(uid,-1e12)<5:
                             continue
                         v2_last_scan[uid]=now
                         try:
@@ -374,9 +427,10 @@ async def autopilot_once():
                 if entry.retry and not batch and entry.symbol!=SYMBOL:
                     disarm_autopilot(uid,'O ativo anterior não está disponível para recuperação')
                     continue
-                if batch:
-                    # Authenticated DEMO quote verifies exact symbol, expiry and
-                    # positive potential payout before any broker-buy request.
+                if batch and not entry.retry:
+                    # Fresh entries have two proposal checks. For recovery,
+                    # skip this redundant preflight; the actual broker proposal
+                    # is STILL checked for min payout immediately before buy.
                     try:
                         quote=await demo_proposal(token,user.deriv_account_id,
                             symbol=candidate['symbol'],contract_type=candidate['direction'],
@@ -916,13 +970,8 @@ async def autopilot_start(request:Request,payload:AutoPilotSwitch,
     if user.selected_mode!='demo':
         raise HTTPException(403,'Somente conta demonstrativa')
     if user.martingale:
-        raise HTTPException(409,'Desative Martingale para ativar o AutoPilot')
+        raise HTTPException(409,'Configuração antiga de Martingale: salve novamente as opções atuais')
     with db.SessionLocal() as sess:
-        if v2_enabled():
-            plan=sess.get(db.RobotPlan,user.id)
-            if plan and (plan.requested_martingale or plan.gale_count or plan.cycles_limit):
-                raise HTTPException(409,'Para operar 2 ativos simultâneos, desative Martingale e ciclos nas Configurações')
-
         orders=sess.scalars(select(db.DemoOrder).where(db.DemoOrder.user_id==user.id)).all()
         boundary=latest_risk_session(sess,user.id)
         blocker=autopilot_start_blocker(user,orders,after_order_id=boundary.after_order_id if boundary else 0)
