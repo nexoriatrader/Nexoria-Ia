@@ -58,7 +58,7 @@ def log_v2_gate(uid:int, gate:str, detail:str=''):
     key=(uid,gate)
     if now-v2_gate_last_log.get(key,-1e12)>=60:
         v2_gate_last_log[key]=now
-        log.info('AutoPilot V2.2 gate: %s%s',gate,(' '+detail) if detail else '')
+        log.warning('AutoPilot V2.2 gate: %s%s',gate,(' '+detail) if detail else '')
 
 
 async def public_market_selfcheck_once():
@@ -1154,7 +1154,7 @@ async def autopilot_start(request:Request,payload:AutoPilotSwitch,
         autopilot_last_attempt.pop(user.id,None)
         v2_last_scan.pop(user.id,None)
         autopilot_enabled.add(user.id)
-        log.info('AutoPilot armed: scan_mode=%s; market=automatic; execution=DEMO',
+        log.warning('AutoPilot armed: scan_mode=%s; market=automatic; execution=DEMO',
                  'V2.2_H1_M15' if v2_enabled() else 'LEGACY')
     autopilot_reasons[user.id]='AutoPilot ligado; aguardando oportunidade oficial na Deriv Demo'
     return {'running':True,'execution':'DERIV_DEMO_ONLY','real_orders_enabled':False}
