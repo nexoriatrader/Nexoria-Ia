@@ -34,7 +34,7 @@ runtimes: dict[int, Engine] = {}
 market_task = None
 reconcile_task = None
 autopilot_task = None
-# User opt-in is intentionally volatile: service restarts always turn bots OFF.
+# Runtime state is volatile; explicit DEMO resume intent is persisted separately.
 autopilot_enabled: set[int] = set()
 autopilot_last_attempt: dict[int,float] = {}
 autopilot_reasons: dict[int,str] = {}
@@ -147,6 +147,71 @@ def autopilot_entry_plan(sess, user, orders):
     return entry,last
 
 
+
+def disarm_autopilot(uid:int, reason:str):
+    """Revoke persistent opt-in on a safety stop."""
+    autopilot_enabled.discard(uid)
+    with db.SessionLocal() as sess:
+        consent=sess.get(db.AutoPilotResumeConsent,uid)
+        if consent:
+            sess.delete(consent)
+            sess.commit()
+    autopilot_reasons[uid]=reason
+
+
+def restore_demo_autopilot_consent():
+    """Boot-time, DEMO-only restoration after local fail-closed checks."""
+    if not autopilot_allowed():
+        return
+    with db.SessionLocal() as sess:
+        ids=sess.scalars(select(db.AutoPilotResumeConsent.user_id)).all()
+        for uid in ids:
+            user=sess.get(db.User,uid)
+            run=sess.get(db.RobotRun,uid)
+            orders=sess.scalars(select(db.DemoOrder).where(db.DemoOrder.user_id==uid)).all()
+            sessions=sess.scalars(select(db.Session).where(
+                db.Session.user_id==uid).order_by(db.Session.created_at.desc())).all()
+            valid_auth=False
+            for auth in sessions:
+                expiry=auth.expires_at
+                if expiry.tzinfo is None: expiry=expiry.replace(tzinfo=timezone.utc)
+                if expiry<=db.utcnow()+timedelta(minutes=5): continue
+                try:
+                    decrypt(auth.token_encrypted)
+                    valid_auth=True
+                    break
+                except Exception:
+                    continue
+            reason=None
+            if not user or not run or user.selected_mode!='demo' or user.martingale:
+                reason='Retomada bloqueada: configuração ou conta DEMO inválida'
+            elif not valid_auth:
+                reason='Retomada bloqueada: sessão Deriv expirada ou indisponível'
+            elif any(o.state in ('PENDING','UNKNOWN') for o in orders):
+                reason='Retomada bloqueada: contrato pendente ou incerto; confira os resultados'
+            else:
+                boundary=latest_risk_session(sess,uid)
+                reason=autopilot_start_blocker(
+                    user,orders,after_order_id=boundary.after_order_id if boundary else 0)
+                if reason is None:
+                    try:
+                        autopilot_entry_plan(sess,user,orders)
+                    except ProgressionHalt as exc:
+                        # CONFIRMED broker contracts are handled by normal reconciliation.
+                        if str(exc)!='Contrato anterior não liquidado; aguardando reconciliação':
+                            reason=str(exc)
+            if reason:
+                consent=sess.get(db.AutoPilotResumeConsent,uid)
+                if consent:sess.delete(consent)
+                autopilot_reasons[uid]=reason
+                log.warning('DEMO AutoPilot resume blocked: user=%s',uid)
+            else:
+                autopilot_enabled.add(uid)
+                autopilot_last_attempt.pop(uid,None)
+                autopilot_reasons[uid]='AutoPilot DEMO restaurado; aguardando dados e liquidação oficial'
+                log.info('DEMO AutoPilot resumed: user=%s',uid)
+        sess.commit()
+
 def m1_recovery_window_open(settled_at, now=None):
     """Allow recovery only in first 8s of a strictly later M1 candle.
 
@@ -185,8 +250,7 @@ async def autopilot_once():
             with db.SessionLocal() as sess:
                 user=sess.get(db.User,uid)
                 if not user or user.selected_mode!='demo':
-                    autopilot_enabled.discard(uid)
-                    autopilot_reasons[uid]='Conta de treinamento indisponível; robô desligado'
+                    disarm_autopilot(uid,'Conta de treinamento indisponível; robô desligado')
                     continue
                 auths=sess.scalars(select(db.Session).where(db.Session.user_id==uid)
                                  .order_by(db.Session.created_at.desc())).all()
@@ -202,8 +266,7 @@ async def autopilot_once():
                         except Exception:
                             continue
                 if not token:
-                    autopilot_enabled.discard(uid)
-                    autopilot_reasons[uid]='Sessão Deriv expirada; conecte novamente'
+                    disarm_autopilot(uid,'Sessão Deriv expirada; conecte novamente')
                     continue
                 orders=sess.scalars(select(db.DemoOrder).where(db.DemoOrder.user_id==uid)).all()
                 plan=sess.get(db.RobotPlan,uid)
@@ -218,8 +281,7 @@ async def autopilot_once():
                     if reason=='Contrato anterior não liquidado; aguardando reconciliação':
                         autopilot_reasons[uid]='Aguardando liquidação oficial do contrato anterior na Deriv'
                         continue
-                    autopilot_enabled.discard(uid)
-                    autopilot_reasons[uid]=reason
+                    disarm_autopilot(uid,reason)
                     continue
                 if entry.retry:
                     # Allow one full M1 candle boundary after confirmed settlement.
@@ -251,12 +313,10 @@ async def autopilot_once():
                 except OrderGuardError as exc:
                     msg=str(exc)
                     if 'Stop' in msg or 'Loss' in msg or 'Win' in msg or 'ultrapass' in msg:
-                        autopilot_enabled.discard(uid)
-                    autopilot_reasons[uid]=msg
+                        disarm_autopilot(uid,msg)
                     continue
                 if entry.retry and entry.symbol!=SYMBOL:
-                    autopilot_enabled.discard(uid)
-                    autopilot_reasons[uid]='O ativo anterior não está disponível para recuperação'
+                    disarm_autopilot(uid,'O ativo anterior não está disponível para recuperação')
                     continue
             if uid not in autopilot_enabled:
                 continue
@@ -277,10 +337,9 @@ async def autopilot_once():
                 msg=str(exc.detail)
                 autopilot_reasons[uid]=msg
                 if exc.status_code in (401,403,502,503) or 'Stop' in msg:
-                    autopilot_enabled.discard(uid)
+                    disarm_autopilot(uid,msg)
             except Exception as exc:
-                autopilot_enabled.discard(uid)
-                autopilot_reasons[uid]='Falha na execução; robô desligado para segurança'
+                disarm_autopilot(uid,'Falha na execução; robô desligado para segurança')
                 log.warning('AutoPilot execution halted: user=%s error=%s',uid,type(exc).__name__)
 
 
@@ -368,6 +427,7 @@ async def lifespan(app):
     if os.getenv('NEXORA_PUBLIC_URL','').startswith('https://') and db.DB_URL.startswith('sqlite:'):
         raise RuntimeError('Não usar SQLite efêmero em implantação pública: configure DATABASE_URL de Postgres')
     db.init_db()
+    restore_demo_autopilot_consent()
     market_task=asyncio.create_task(feed())
     reconcile_task=asyncio.create_task(reconcile_confirmed_loop())
     autopilot_task=asyncio.create_task(autopilot_loop())
@@ -527,6 +587,8 @@ async def callback(code:str|None=None,state:str|None=None,error:str|None=None,
         if user is None:
             user=db.User(deriv_account_id=account);s.add(user);s.flush()
         autopilot_enabled.discard(user.id)
+        old_consent=s.get(db.AutoPilotResumeConsent,user.id)
+        if old_consent:s.delete(old_consent)
         autopilot_reasons[user.id]='Nova sessão Deriv: ative o AutoPilot manualmente'
         old_run=s.get(db.RobotRun,user.id)
         if old_run:s.delete(old_run)
@@ -638,6 +700,8 @@ async def logout(request:Request,nexora_sid:str|None=Cookie(default=None)):
             session=s.get(db.Session,hashsecret(nexora_sid))
             if session:
                 autopilot_enabled.discard(session.user_id)
+                old_consent=s.get(db.AutoPilotResumeConsent,session.user_id)
+                if old_consent:s.delete(old_consent)
                 autopilot_reasons[session.user_id]='Sessão encerrada; AutoPilot desligado'
                 async with lock:
                     engine=runtimes.get(session.user_id)
@@ -796,6 +860,8 @@ async def autopilot_start(request:Request,payload:AutoPilotSwitch,
                 existing=db.RobotRun(user_id=user.id);sess.add(existing)
             existing.after_order_id=latest or 0
             existing.started_at=db.utcnow()
+            if not sess.get(db.AutoPilotResumeConsent,user.id):
+                sess.add(db.AutoPilotResumeConsent(user_id=user.id))
             sess.commit()
         autopilot_last_attempt.pop(user.id,None)
         autopilot_enabled.add(user.id)
@@ -811,8 +877,10 @@ async def autopilot_stop(request:Request,nexora_sid:str|None=Cookie(default=None
         autopilot_enabled.discard(user.id)
         with db.SessionLocal() as sess:
             run=sess.get(db.RobotRun,user.id)
-            if run:
-                sess.delete(run);sess.commit()
+            consent=sess.get(db.AutoPilotResumeConsent,user.id)
+            if run:sess.delete(run)
+            if consent:sess.delete(consent)
+            sess.commit()
         autopilot_reasons[user.id]='Desligado: novas entradas bloqueadas; contratos abertos permanecem na Deriv'
     return {'running':False,'execution':'DERIV_DEMO_ONLY','real_orders_enabled':False}
 
