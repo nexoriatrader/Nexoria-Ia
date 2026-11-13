@@ -715,7 +715,8 @@ async function refreshDashboard(){
        const errors=list.filter(a=>a.status==='MARKET_DATA_ERROR'||a.status==='CALL_PUT_UNAVAILABLE');
        $('v2ScannerHealth').textContent='Scanner 2.0: '+(scan.status||'AGUARDANDO')+
          (scan.at?' · última análise '+new Date(scan.at).toLocaleTimeString('pt-BR',{timeZone:'America/Sao_Paulo'}):'')+
-         (list.length?' · '+list.length+' ativos consultados':'')+
+         (list.length?' · '+list.length+' ativos neste ciclo':'')+
+         (scan.catalogue_size?' · '+scan.catalogue_size+' ativos na lista rotativa':'')+
          (errors.length?' · '+errors.length+' sem dados/contratos':'')+
          (scan.reason?' · '+scan.reason:'');
      }).catch(()=>{});
