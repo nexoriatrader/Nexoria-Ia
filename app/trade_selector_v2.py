@@ -467,6 +467,16 @@ async def select_demo_signal(*, exclude_symbols=(), user_key=None, filtered=Fals
     _last_scan={'status':status,'at':stamp,'assets':rows,
                 'selected':chosen,'catalogue_size':total,'batch_size':len(rows),
                 'next_scan_offset':_scan_offset,'market':market}
+    # Summarize normal and failed scans so 'no signal' is distinguishable
+    # from broken market data. No account info or private tokens are logged.
+    from collections import Counter
+    counts=dict(Counter(row['status'] for row in rows))
+    if not hasattr(select_demo_signal,'_last_summary_at'):
+        select_demo_signal._last_summary_at=0.0
+    if status!='NO_SIGNAL' or time.monotonic()-select_demo_signal._last_summary_at>=60:
+        _log.info('V2 scan summary: market=%s mode=%s assets=%s scanned=%s status=%s counts=%s',
+                  market,effective_mode,total,len(rows),status,counts)
+        select_demo_signal._last_summary_at=time.monotonic()
     # Expose whether a feed failure was mistaken for a lack of setups.
     if status=='MARKET_DATA_UNAVAILABLE':
         _log.warning('V2 selector: no market data; results=%s',
