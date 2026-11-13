@@ -85,6 +85,17 @@ async def discover_contracts(symbol: str) -> list[str]:
     return parse_contract_types(await public_request({'contracts_for':symbol},expected='contracts_for'))
 
 
+async def discover_contract_details(symbol: str) -> list[dict]:
+    """Read-only authoritative contract durations and types for one symbol."""
+    response=await public_request({'contracts_for':symbol},expected='contracts_for')
+    data=response.get('contracts_for')
+    contracts=data.get('available') if isinstance(data,dict) else None
+    if not isinstance(contracts,list):
+        raise MarketError('Deriv não informou as condições dos contratos')
+    return [item for item in contracts if isinstance(item,dict)]
+
+
+
 async def indicative_proposal(symbol: str, *, stake: str, contract_type: str = 'CALL', duration: int = 5,
                               currency: str = 'USD') -> dict:
     if contract_type not in ('CALL','PUT'):
