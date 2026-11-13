@@ -35,8 +35,8 @@ def order_guard(user, orders, stake, *, after_order_id=0,
     if parallel:
         if any(o.state in ('PENDING','UNKNOWN') for o in active):
             raise OrderGuardError('Contrato pendente ou incerto; novas entradas bloqueadas')
-        if len(active)>=2:
-            raise OrderGuardError('Máximo de 2 contratos DEMO simultâneos')
+        if len(active)>=4:
+            raise OrderGuardError('Máximo de 4 contratos DEMO simultâneos')
         if any(o.symbol==symbol for o in active):
             raise OrderGuardError('Já existe contrato aberto neste ativo')
         if any(o.active_slot==user.id for o in active):
@@ -45,7 +45,7 @@ def order_guard(user, orders, stake, *, after_order_id=0,
         raise OrderGuardError('Contrato demo em andamento ou pendente de reconciliação')
     pnl=sum((money(o.pnl) for o in orders if o.state=='SETTLED' and o.pnl is not None
              and (after_order_id==0 or (getattr(o,'id',None) or 0)>after_order_id)),Decimal('0'))
-    if stake < Decimal('2') or stake > Decimal('1000'):
+    if stake < Decimal('0.50') or stake > Decimal('1000'):
         raise OrderGuardError('Valor da entrada fora dos limites de treinamento')
     stop_win=money(user.stop_win)
     stop_loss=money(user.stop_loss)
@@ -73,7 +73,7 @@ def reserve(session, user, *, request_key, symbol, direction, minutes,
             stake_override=None, parallel=False):
     if not isinstance(request_key,str) or not 8<=len(request_key)<=64 or not all(c.isalnum() or c in '-_' for c in request_key):
         raise OrderGuardError('Identificador de tentativa inválido')
-    if direction not in {'CALL','PUT'} or minutes not in {1,3,5}:
+    if direction not in {'CALL','PUT'} or minutes not in {1,3,5,15}:
         raise OrderGuardError('Contrato demo inválido')
     if not isinstance(symbol,str) or not re.fullmatch(r'[A-Za-z0-9_]{2,30}',symbol):
         raise OrderGuardError('Ativo demo inválido')
