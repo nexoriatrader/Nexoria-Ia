@@ -33,6 +33,12 @@ _last_scan={'status':'NOT_RUN','at':None,'assets':[],'selected':None}
 _log=logging.getLogger('nexora.v2')
 
 
+def clear_user_signals(user_key):
+    """Drop cached signals when starting a fresh evaluation."""
+    _pending_signals_by_user.pop(user_key,None)
+    _pending_signals_by_user.pop((user_key,True),None)
+
+
 def has_pending_signals(user_key,*,filtered=False):
     """Whether another confirmed candidate from this scan is still fresh."""
     now=time.time()
