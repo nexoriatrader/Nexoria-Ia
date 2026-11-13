@@ -201,9 +201,15 @@ def restore_demo_autopilot_consent():
                     user,orders,after_order_id=boundary.after_order_id if boundary else 0)
                 if reason is None:
                     try:
-                        autopilot_entry_plan(sess,user,orders)
+                        batch=sess.get(db.PilotValidationBatch,uid)
+                        if batch:
+                            # V2 progression is independent per active symbol.
+                            v2_symbol_recovery(sess,user,orders,
+                                sess.get(db.RobotPlan,uid),
+                                sess.get(db.RobotCycleParams,uid),batch)
+                        else:
+                            autopilot_entry_plan(sess,user,orders)
                     except ProgressionHalt as exc:
-                        # CONFIRMED broker contracts are handled by normal reconciliation.
                         if str(exc)!='Contrato anterior não liquidado; aguardando reconciliação':
                             reason=str(exc)
             if reason:
@@ -227,7 +233,12 @@ def v2_symbol_recovery(sess,user,orders,plan,cycle_cfg,batch):
     """
     if not batch:
         return None,None
-    historical=[o for o in orders if o.id>batch.after_order_id]
+    run=sess.get(db.RobotRun,user.id)
+    if not run:
+        raise ProgressionHalt('Reative o AutoPilot para iniciar uma sequência DEMO')
+    # New manual activation resets progression, not accumulated V2 evaluation.
+    after=max(batch.after_order_id,run.after_order_id)
+    historical=[o for o in orders if o.id>after]
     if not historical:
         return None,None
     ids=[o.id for o in historical]
