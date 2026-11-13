@@ -74,6 +74,13 @@ header{display:flex;align-items:center;justify-content:space-between;gap:14px;pa
 .robot-notice .outline{flex:0 1 auto;background:#20384b}
 .robot-notice .helper{color:#f2cda4}
 .robot-notice button:disabled{opacity:.65}
+.market-schedule{margin:9px 0 14px;padding:11px 13px;border:1px solid #35546a;border-radius:12px;background:rgba(9,29,45,.45);max-width:480px}
+.market-schedule-row{display:flex;align-items:center;gap:9px;font-size:12px;color:#d3e5f3;padding:4px 0}
+.market-schedule-row strong{font-size:10px;letter-spacing:.035em;color:#b5c8d6;margin-left:auto}
+.market-schedule-dot{flex:none;width:8px;height:8px;border-radius:50%;background:#637a8b}
+.market-schedule-dot.active{background:#49cf89;box-shadow:0 0 7px #49cf8980}
+.market-schedule-row:has(.market-schedule-dot.active) strong{color:#71dca1}
+.market-schedule-note{display:block;margin-top:7px;font-size:10px;color:#8da9bf;line-height:1.5}
 .helper{font-size:12px;color:#92b0c6;margin-top:10px}
 .info{background:#13283a;border:1px solid #2f536b;border-radius:12px;padding:11px 14px;font-size:12px;color:#bbd4e5;margin-top:18px}
 .metric-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:13px}
@@ -449,6 +456,11 @@ button.choose-account:focus-visible{outline:3px solid #71d2ff;outline-offset:4px
     </div>
     <div class="robot-details-content" aria-label="Análise do Robô Trader IA">
       <p id="autopilotVersion" class="helper"><strong>Robô Trader I.A 2.2:</strong></p>
+      <div class="market-schedule" aria-label="Cronograma automático de mercados" role="status">
+        <div class="market-schedule-row"><span class="market-schedule-dot active" id="forexScheduleDot"></span><span>Forex</span><strong id="forexScheduleStatus">Verificando horário</strong></div>
+        <div class="market-schedule-row"><span class="market-schedule-dot" id="volScheduleDot"></span><span>Deriv (Volatility)</span><strong id="volScheduleStatus">Verificando horário</strong></div>
+        <span class="market-schedule-note">Forex: dias úteis, 05h–14h (Brasília) · Volatility: demais horários</span>
+      </div>
       <p id="v2ScannerHealth" class="helper" role="status">Scanner: verificando condições · última análise —</p>
       <p class="helper">Análise em tempo real</p>
       <p id="v2Opportunity" class="helper" role="status">● Oportunidade encontrada: Nenhuma no momento</p>
@@ -725,6 +737,13 @@ async function refreshDashboard(){
        :available?'Análises pausadas. Ative quando desejar.':'AutoPilot indisponível.');
    const isV2=status.autopilot_version==='V2_MULTI_ASSET';
    $('autopilotVersion').textContent='Robô Trader I.A 2.2:';
+   // Match the server's active_market() UTC session rule, regardless of robot ON/OFF.
+   const scheduleNow=new Date(), utcDay=scheduleNow.getUTCDay(), utcHour=scheduleNow.getUTCHours();
+   const forexSelected=utcDay>=1&&utcDay<=5&&utcHour>=8&&utcHour<17;
+   $('forexScheduleStatus').textContent=forexSelected?'SELECIONADO':'EM ESPERA';
+   $('volScheduleStatus').textContent=forexSelected?'EM ESPERA':'SELECIONADO';
+   $('forexScheduleDot').classList.toggle('active',forexSelected);
+   $('volScheduleDot').classList.toggle('active',!forexSelected);
    $('robotButton').textContent=robotRunning?'DESLIGAR ROBÔ':'LIGAR ROBÔ';
    $('robotButton').disabled=(!robotRunning&&!available)||$('robotButton').dataset.commandPending==='true';
    $('robotButton').setAttribute('aria-disabled',String($('robotButton').disabled));
