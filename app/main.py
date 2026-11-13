@@ -22,6 +22,7 @@ from .engine import Engine, Settings
 from .market import MarketError, discover_symbols, discover_contracts, indicative_proposal
 from .strategy_lab import run_lab
 from .asset_scanner import scan_assets
+from .trade_selector_v2 import select_demo_signal
 from .progression import next_entry, ProgressionHalt
 from .security import CLIENT_ID, REDIRECT, TOKEN_URL, build_authorize_url, make_login, make_session_id, hashsecret, encrypt, decrypt, cookie_options
 
@@ -234,12 +235,18 @@ async def autopilot_once():
     async with lock:
         connected=market_connected and market_last_tick>0 and now-market_last_tick<35
         prices=list(recent_prices)
+    # V2 uses independent fresh M1 candles for each catalogue symbol;
+    # legacy V1 alone still requires the original tick feed.
     if not connected:
+        with db.SessionLocal() as sess:
+            live_v2={v for v in autopilot_enabled
+                     if sess.get(db.PilotValidationBatch,v) is not None}
         for uid in tuple(autopilot_enabled):
-            autopilot_reasons[uid]='Aguardando cotações recentes da Deriv'
-        return
-    # Research is optional only for continuation of a verified losing sequence.
-    research=analyze(prices)
+            if uid not in live_v2:
+                autopilot_reasons[uid]='Aguardando cotações recentes da Deriv'
+        if not live_v2:
+            return
+    research=analyze(prices) if connected else {'candidates':[],'reason':'Cotações indisponíveis'}
     candidates=research['candidates']
     for uid in tuple(autopilot_enabled):
         if uid not in autopilot_enabled or now-autopilot_last_attempt.get(uid,-1e12)<60:
@@ -271,6 +278,16 @@ async def autopilot_once():
                 orders=sess.scalars(select(db.DemoOrder).where(db.DemoOrder.user_id==uid)).all()
                 plan=sess.get(db.RobotPlan,uid)
                 cycle_cfg=sess.get(db.RobotCycleParams,uid)
+                batch=sess.get(db.PilotValidationBatch,uid)
+                if not batch and not connected:
+                    continue
+                if batch:
+                    # Count every recorded automatic request (including UNKNOWN),
+                    # never only profitable or settled orders.
+                    batch_orders=[o for o in orders if o.id>batch.after_order_id]
+                    if len(batch_orders)>=batch.max_orders:
+                        disarm_autopilot(uid,'Lote de 50 entradas DEMO concluído. Confira os resultados 2.0.')
+                        continue
                 try:
                     entry,last=autopilot_entry_plan(sess,user,orders)
                 except ProgressionHalt as exc:
@@ -297,15 +314,29 @@ async def autopilot_once():
                         continue
                     candidate={'strategy':entry.strategy or 'recuperacao',
                         'direction':entry.direction,
+                        'symbol':entry.symbol or SYMBOL,
+                        'minutes':last.duration_minutes if last else 5,
                         'reason':'Continuação controlada: ciclo '+str(entry.cycle)+
                                  ', martingale '+str(entry.gale)}
                 else:
-                    if not candidates:
-                        autopilot_reasons[uid]='Buscando oportunidade: '+research['reason']
-                        continue
-                    previous=sess.scalars(select(db.AutoPilotAttribution.id).where(
-                        db.AutoPilotAttribution.user_id==uid)).all()
-                    candidate=candidates[len(previous)%len(candidates)]
+                    if batch:
+                        try:
+                            candidate=await select_demo_signal()
+                        except Exception as exc:
+                            autopilot_reasons[uid]='Scanner 2.0 indisponível; aguardando reconexão'
+                            log.warning('V2 scanner unavailable: %s',type(exc).__name__)
+                            continue
+                        if candidate is None:
+                            autopilot_reasons[uid]='AutoPilot 2.0: buscando rompimento ou tendência confirmados em velas M1'
+                            continue
+                    else:
+                        if not candidates:
+                            autopilot_reasons[uid]='Buscando oportunidade: '+research['reason']
+                            continue
+                        previous=sess.scalars(select(db.AutoPilotAttribution.id).where(
+                            db.AutoPilotAttribution.user_id==uid)).all()
+                        candidate=candidates[len(previous)%len(candidates)]
+                        candidate={**candidate,'symbol':SYMBOL,'minutes':5}
                 from .demo_ledger import order_guard
                 try:
                     boundary=latest_risk_session(sess,uid)
@@ -315,9 +346,25 @@ async def autopilot_once():
                     if 'Stop' in msg or 'Loss' in msg or 'Win' in msg or 'ultrapass' in msg:
                         disarm_autopilot(uid,msg)
                     continue
-                if entry.retry and entry.symbol!=SYMBOL:
+                if entry.retry and not batch and entry.symbol!=SYMBOL:
                     disarm_autopilot(uid,'O ativo anterior não está disponível para recuperação')
                     continue
+                if batch:
+                    # Authenticated DEMO quote verifies exact symbol, expiry and
+                    # positive potential payout before any broker-buy request.
+                    try:
+                        quote=await demo_proposal(token,user.deriv_account_id,
+                            symbol=candidate['symbol'],contract_type=candidate['direction'],
+                            stake=str(entry.stake),duration=candidate['minutes'])
+                        ask=Decimal(str(quote['ask_price']))
+                        payout=Decimal(str(quote['payout']))
+                        if (not ask.is_finite() or not payout.is_finite()
+                            or ask<=0 or ask>entry.stake or payout<ask*Decimal('1.50')):
+                            autopilot_reasons[uid]='Proposta DEMO sem payout mínimo experimental de 1,50×'
+                            continue
+                    except (DemoTradingError,InvalidOperation,KeyError,ValueError,TypeError):
+                        autopilot_reasons[uid]='Ativo ou duração sem proposta DEMO compatível; nova análise depois'
+                        continue
             if uid not in autopilot_enabled:
                 continue
             autopilot_last_attempt[uid]=now
@@ -325,9 +372,10 @@ async def autopilot_once():
             autopilot_reasons[uid]='Enviando contrato de treinamento: '+str(entry.stake)+' USD'
             try:
                 result=await perform_demo_buy(user,token,
-                    DemoBuy(symbol=SYMBOL,direction=candidate['direction'],minutes=5,
-                            confirm='DEMO_ONLY',request_key=key),
+                    DemoBuy(symbol=candidate['symbol'],direction=candidate['direction'],
+                            minutes=candidate['minutes'],confirm='DEMO_ONLY',request_key=key),
                     attribution={'strategy':candidate['strategy'],'reason':candidate['reason'],
+                                 'v2':bool(batch),
                                  'cycle_index':entry.cycle,'gale_index':entry.gale,
                                  'gale_multiplier':(plan.requested_multiplier if plan else '2.00'),
                                  'cycle_multiplier':(cycle_cfg.multiplier if cycle_cfg else '2.00')},
@@ -1216,9 +1264,11 @@ async def perform_demo_buy(user, token, payload:DemoBuy, *, attribution:dict|Non
             s.commit()
     # Never hold DB transaction across remote Deriv call.
     try:
-        receipt=await demo_buy(token, user.deriv_account_id, symbol=payload.symbol,
-                 contract_type=payload.direction, stake=order.stake,
-                 duration=payload.minutes, confirm='DEMO_ONLY')
+        buy_kwargs={'symbol':payload.symbol,'contract_type':payload.direction,
+                    'stake':order.stake,'duration':payload.minutes,'confirm':'DEMO_ONLY'}
+        if attribution and attribution.get('v2'):
+            buy_kwargs['min_payout_ratio']='1.50'
+        receipt=await demo_buy(token, user.deriv_account_id, **buy_kwargs)
     except Exception as exc:
         log.warning('Demo buy outcome unknown: order=%s error=%s',order_id,type(exc).__name__)
         try:
