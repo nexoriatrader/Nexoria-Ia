@@ -136,7 +136,14 @@ async def catalogue(market='forex'):
     cached=_catalog_cache.get(market)
     if cached and now-_catalog_at.get(market,0)<300:
         return list(cached)
-    found=choose_tradeable(await discover_symbols(),market=market)
+    source=await discover_symbols()
+    found=choose_tradeable(source,market=market)
+    # Diagnose catalogue/label mismatches without storing account details.
+    if not found:
+        sample=[(item.get('symbol','')[:32],item.get('display_name','')[:55])
+                for item in source[:8] if isinstance(item,dict)]
+        _log.warning('V2 catalogue empty: market=%s source_count=%s sample=%s',
+                     market,len(source),sample)
     _catalog_cache[market]=tuple(found)
     _catalog_at[market]=now
     return found
