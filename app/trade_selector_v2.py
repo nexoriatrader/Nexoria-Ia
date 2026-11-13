@@ -5,6 +5,7 @@ provide the actual evaluation. Never invent symbols or buy from this module.
 """
 from __future__ import annotations
 import asyncio
+import os
 import re
 import time
 import logging
@@ -31,6 +32,8 @@ _catalog_at={}
 _contract_cache={}
 _last_scan={'status':'NOT_RUN','at':None,'assets':[],'selected':None}
 _log=logging.getLogger('nexora.v2')
+# Temporary DEMO test; set NEXORA_V22_TEST_MODE=false to restore strict H1/M15.
+V22_TEST_MODE=os.getenv('NEXORA_V22_TEST_MODE','true').lower()=='true'
 _log.setLevel(logging.INFO)  # Explicitly emit low-volume scanner diagnostics on Render.
 
 
@@ -340,6 +343,19 @@ def v22_pullback_signal(item, h1, m15, now):
         direction='PUT'
     else:
         return None
+    if V22_TEST_MODE:
+        # Relax entry filters, not data integrity, official contract checks or risk guards.
+        confirm=m15[-1]
+        confirms=(confirm['close']>confirm['open'] and confirm['close']>em[-1]
+                  if direction=='CALL' else
+                  confirm['close']<confirm['open'] and confirm['close']<em[-1])
+        if not confirms:
+            return None
+        return {'symbol':item['symbol'],'display_name':item['display_name'],
+                'strategy':'h1_m15_test_relaxed_v22','direction':direction,
+                'minutes':15,'family':item['family'],
+                'last_bar_epoch':confirm['epoch'],'bar_seconds':900,
+                'reason':'Teste DEMO: H1 EMA50 + confirmação M15 simplificada'}
     if not swing_structure(h1,direction):
         return None
     if direction=='CALL' and not (m15[-1]['close']>em[-1] and em[-1]>em[-4]):
@@ -473,8 +489,8 @@ async def select_demo_signal(*, exclude_symbols=(), user_key=None, filtered=Fals
     if not hasattr(select_demo_signal,'_last_summary_at'):
         select_demo_signal._last_summary_at=0.0
     if status!='NO_SIGNAL' or time.monotonic()-select_demo_signal._last_summary_at>=60:
-        _log.warning('V2 scan summary: market=%s mode=%s assets=%s scanned=%s status=%s counts=%s',
-                  market,effective_mode,total,len(rows),status,counts)
+        _log.warning('V2 scan summary: market=%s mode=%s test_mode=%s assets=%s scanned=%s status=%s counts=%s',
+                  market,effective_mode,V22_TEST_MODE,total,len(rows),status,counts)
         select_demo_signal._last_summary_at=time.monotonic()
     # Expose whether a feed failure was mistaken for a lack of setups.
     if status=='MARKET_DATA_UNAVAILABLE':
