@@ -32,6 +32,13 @@ _last_scan={'status':'NOT_RUN','at':None,'assets':[],'selected':None}
 _log=logging.getLogger('nexora.v2')
 
 
+def has_pending_signals(user_key):
+    """Whether another confirmed candidate from this scan is still fresh."""
+    now=time.time()
+    return any(0 <= now-(item['last_bar_epoch']+60) <= 50
+               for item in _pending_signals_by_user.get(user_key,[]))
+
+
 def last_scan_report():
     """Safe, read-only explanation of the last scan (no account credentials)."""
     return {'status':_last_scan['status'],'at':_last_scan['at'],
