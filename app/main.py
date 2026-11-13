@@ -1084,11 +1084,18 @@ async def autopilot_start(request:Request,payload:AutoPilotSwitch,
                 existing=db.RobotRun(user_id=user.id);sess.add(existing)
             existing.after_order_id=latest or 0
             existing.started_at=db.utcnow()
-            if v2_enabled() and sess.get(db.PilotValidationBatch,user.id) is None:
-                # First V2 activation creates a durable baseline. Old broker
-                # records remain untouched, out of the V2 evaluation window.
-                sess.add(db.PilotValidationBatch(
-                    user_id=user.id,after_order_id=latest or 0,max_orders=50))
+            if v2_enabled():
+                batch=sess.get(db.PilotValidationBatch,user.id)
+                if batch is None:
+                    # New users start with the current 2.2 H1/M15 scanner.
+                    # Existing orders remain outside this first evaluation.
+                    sess.add(db.PilotValidationBatch(
+                        user_id=user.id,after_order_id=latest or 0,max_orders=200))
+                elif batch.max_orders<200:
+                    # The UI is 2.2: never silently run the older M1 scanner.
+                    # Preserve this evaluation's original after_order_id,
+                    # orders, official results, and risk-session boundary.
+                    batch.max_orders=200
             if not sess.get(db.AutoPilotResumeConsent,user.id):
                 sess.add(db.AutoPilotResumeConsent(user_id=user.id))
             sess.commit()
@@ -1144,7 +1151,9 @@ async def autopilot_v2_scanner_status(request:Request,
     user=active_user(request,nexora_sid)
     with db.SessionLocal() as sess:
         batch=sess.get(db.PilotValidationBatch,user.id)
-    return {'version':'NEXORA_2.1' if batch and batch.max_orders>=100 else 'NEXORA_2.0','v2_enabled':v2_enabled(),
+    version=('NEXORA_2.2' if batch and batch.max_orders>=200 else
+             'NEXORA_2.1' if batch and batch.max_orders>=100 else 'NEXORA_2.0')
+    return {'version':version,'v2_enabled':v2_enabled(),
             'v2_session_active':bool(batch),'running':user.id in autopilot_enabled,
             'scan':last_scan_report(),'real_orders_enabled':False}
 
