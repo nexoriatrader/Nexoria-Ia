@@ -407,3 +407,57 @@ def test_symbol_slots_fit_postgres_int32_and_are_distinct_per_pair():
     assert all(slot<0 for slot in slots)
     assert len(slots)==len(set(slots))
     assert _symbol_slot(1,'frxAUDNZD')==_symbol_slot(1,'frxAUDNZD')
+
+
+def test_v21_new_evaluation_keeps_official_ledger_and_resets_only_score(tmp_path,monkeypatch):
+    monkeypatch.setenv('NEXORA_V2_ENABLED','true')
+    client,factory,engine,uid=prepare(tmp_path,monkeypatch,stop_loss='0.00')
+    try:
+        with factory() as sess:
+            user=sess.get(db.User,uid)
+            user.stake='0.50'
+            sess.add(db.RobotPlan(user_id=uid,requested_martingale=False,gale_count=0))
+            sess.add(db.PilotValidationBatch(user_id=uid,after_order_id=0,max_orders=50))
+            sess.add(db.DemoOrder(user_id=uid,request_key='historical-001',
+                state='SETTLED',symbol='frxEURUSD',direction='CALL',
+                duration_minutes=15,stake='2.00',pnl='-2.00'))
+            sess.commit()
+        assert client.get('/api/autopilot/v2/evaluation').json()['settled']==0
+        forbidden=client.post('/api/autopilot/v2/new-evaluation',json={'confirm':'NO'})
+        assert forbidden.status_code==403
+        result=client.post('/api/autopilot/v2/new-evaluation',
+            json={'confirm':'START_NEW_DEMO_EVALUATION'})
+        assert result.status_code==200,result.text
+        assert result.json()['running'] is False
+        stats=client.get('/api/autopilot/v2/evaluation').json()
+        assert stats['batch']=='NEXORA_2.1' and stats['target']==100
+        assert (stats['submitted'],stats['settled'],stats['net_pnl'])==(0,0,'0')
+        assert client.get('/api/demo/orders').json()['items']==[]
+        with factory() as sess:
+            assert len(sess.scalars(select(db.DemoOrder)).all())==1
+            assert sess.get(db.User,uid).stake=='0.50'
+            assert sess.get(db.RobotPlan,uid).requested_martingale is False
+        assert client.post('/api/autopilot/start',
+            json={'confirm':'START_DEMO_AUTOPILOT'}).status_code==200
+        assert client.post('/api/autopilot/v2/new-evaluation',
+            json={'confirm':'START_NEW_DEMO_EVALUATION'}).status_code==409
+    finally:
+        cleanup(engine)
+
+
+def test_v21_reset_rejects_confirmed_contract(tmp_path,monkeypatch):
+    monkeypatch.setenv('NEXORA_V2_ENABLED','true')
+    client,factory,engine,uid=prepare(tmp_path,monkeypatch,stop_loss='0.00')
+    try:
+        with factory() as sess:
+            sess.add(db.DemoOrder(user_id=uid,request_key='unsettled-001',
+                state='CONFIRMED',symbol='frxEURUSD',direction='CALL',
+                duration_minutes=15,stake='0.50',contract_id='889012'))
+            sess.commit()
+        result=client.post('/api/autopilot/v2/new-evaluation',
+            json={'confirm':'START_NEW_DEMO_EVALUATION'})
+        assert result.status_code==409,result.text
+        with factory() as sess:
+            assert len(sess.scalars(select(db.DemoOrder)).all())==1
+    finally:
+        cleanup(engine)
