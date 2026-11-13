@@ -271,3 +271,20 @@ def test_selector_rotates_bounded_groups_across_catalogue(monkeypatch):
     seen2={row['symbol'] for row in report2['assets']}
     assert not seen1.intersection(seen2)
     assert report1['status']=='MARKET_DATA_UNAVAILABLE'
+
+
+def test_underscore_deriv_symbol_can_be_discovered_quoted_and_reserved(tmp_path,monkeypatch):
+    from app import trade_selector_v2 as selector
+    from app.demo import demo_proposal
+    assert selector.classify({'symbol':'R_100','display_name':'Volatility 100 Index'}) == (
+        'volatility','R_100')
+    assert any(x['symbol']=='R_100' for x in selector.choose_tradeable([
+        {'symbol':'R_100','display_name':'Volatility 100 Index'}]))
+    client,factory,engine,uid=prepare(tmp_path,monkeypatch)
+    try:
+        with factory() as sess:
+            user=sess.get(db.User,uid)
+            order,created=reserve(sess,user,request_key='underscore001',
+                symbol='R_100',direction='CALL',minutes=5)
+            assert created and order.symbol=='R_100'
+    finally:cleanup(engine)
