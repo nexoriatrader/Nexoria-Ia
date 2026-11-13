@@ -457,9 +457,13 @@ async def autopilot_once():
                         if (not ask.is_finite() or not payout.is_finite()
                             or ask<=0 or ask>entry.stake or payout<ask*Decimal('1.50')):
                             autopilot_reasons[uid]='Proposta DEMO sem payout mínimo experimental de 1,50×'
+                            log.info('V2 quote rejected: symbol=%s duration=%s reason=payout_or_ask',
+                                     candidate['symbol'],candidate['minutes'])
                             continue
-                    except (DemoTradingError,InvalidOperation,KeyError,ValueError,TypeError):
+                    except (DemoTradingError,InvalidOperation,KeyError,ValueError,TypeError) as exc:
                         autopilot_reasons[uid]='Ativo ou duração sem proposta DEMO compatível; nova análise depois'
+                        log.warning('V2 quote unavailable: symbol=%s duration=%s error_type=%s',
+                                    candidate['symbol'],candidate['minutes'],type(exc).__name__)
                         continue
             if uid not in autopilot_enabled:
                 continue
