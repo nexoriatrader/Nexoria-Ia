@@ -387,6 +387,7 @@ def test_v2_pending_signal_queue_exposes_other_assets_without_rescanning(monkeyp
             'family':'forex','reason':'confirmação','last_bar_epoch':now-60}
     monkeypatch.setattr(selector,'signal_from_closed_candles',fake_signal)
     first=asyncio.run(selector.select_demo_signal(user_key=101))
+    assert len(selector._pending_signals_by_user[101])==1, selector.last_scan_report()
     second=asyncio.run(selector.select_demo_signal(user_key=101,
         exclude_symbols=[first['symbol']]))
     assert first['symbol']!=second['symbol']
