@@ -288,3 +288,20 @@ def test_underscore_deriv_symbol_can_be_discovered_quoted_and_reserved(tmp_path,
                 symbol='R_100',direction='CALL',minutes=5)
             assert created and order.symbol=='R_100'
     finally:cleanup(engine)
+
+
+def test_public_market_websocket_close_is_reported_as_data_error(monkeypatch):
+    import sys,types
+    from websockets.exceptions import ConnectionClosedError
+    from app.market import public_request,MarketError
+    from app import trade_selector_v2 as selector
+    class ClosedSocket:
+        async def __aenter__(self): raise ConnectionClosedError(None,None)
+        async def __aexit__(self,*args): return False
+    import websockets
+    monkeypatch.setattr(websockets,'connect',lambda *a,**kw:ClosedSocket())
+    try:
+        asyncio.run(public_request({'active_symbols':'brief'},expected='active_symbols',timeout=1))
+        assert False,'ConnectionClosedError must convert to MarketError'
+    except MarketError as exc:
+        assert 'ConnectionClosedError' in str(exc)
