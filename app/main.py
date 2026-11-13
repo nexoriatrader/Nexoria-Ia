@@ -462,8 +462,9 @@ async def autopilot_once():
                             continue
                     except (DemoTradingError,InvalidOperation,KeyError,ValueError,TypeError) as exc:
                         autopilot_reasons[uid]='Ativo ou duração sem proposta DEMO compatível; nova análise depois'
-                        log.warning('V2 quote unavailable: symbol=%s duration=%s error_type=%s',
-                                    candidate['symbol'],candidate['minutes'],type(exc).__name__)
+                        log.warning('V2 quote unavailable: symbol=%s duration=%s error_type=%s deriv_code=%s',
+                                    candidate['symbol'],candidate['minutes'],type(exc).__name__,
+                                    getattr(exc,'deriv_code','NOT_BROKER_REJECTION'))
                         continue
             if uid not in autopilot_enabled:
                 continue
