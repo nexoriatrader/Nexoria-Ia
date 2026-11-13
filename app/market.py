@@ -34,8 +34,12 @@ def parse_quote(message: dict) -> dict:
     }
 
 
-# Shared cap prevents a scan from opening many short-lived WebSockets at once.
-# One retry for transient network closures; broker errors are never retried.
+# Two reusable, read-only public Deriv sessions. V2 scans previously opened
+# a new WebSocket for every contracts/candles query, overwhelming the handshake
+# path. Serialize requests on each session, with unique IDs and fail-closed reset.
+_public_sessions = [None, None]
+_public_locks = [asyncio.Lock(), asyncio.Lock()]
+_public_slot = 0
 _public_request_limit = asyncio.Semaphore(2)
 
 
@@ -44,47 +48,69 @@ async def public_request(payload: dict, *, expected: str, timeout: float = 12.0)
     import websockets
     from websockets.exceptions import ConnectionClosed, WebSocketException
 
+    global _public_slot
     logger = logging.getLogger("nexora.market")
     async with _public_request_limit:
-        for attempt in range(2):
-            try:
-                async with asyncio.timeout(timeout):
-                    async with websockets.connect(
-                        PUBLIC_WS, open_timeout=8, ping_interval=20,
-                        ping_timeout=15, close_timeout=3, max_size=1_500_000
-                    ) as ws:
+        slot = _public_slot % len(_public_sessions)
+        _public_slot += 1
+        async with _public_locks[slot]:
+            for attempt in range(2):
+                try:
+                    async with asyncio.timeout(timeout):
+                        ws = _public_sessions[slot]
+                        if ws is None:
+                            ws = await websockets.connect(
+                                PUBLIC_WS, open_timeout=8, ping_interval=20,
+                                ping_timeout=15, close_timeout=3, max_size=1_500_000
+                            )
+                            _public_sessions[slot] = ws
+                        # A session handles only one request at a time.
                         await ws.send(json.dumps({**payload, 'req_id': 419}))
                         while True:
                             msg = json.loads(await ws.recv())
                             if msg.get('req_id') != 419:
                                 continue
                             if msg.get('error'):
-                                error = msg['error']
-                                # Remote API errors are not transient transport failures.
-                                raise MarketError(str(error.get('message', 'Erro Deriv'))[:200])
+                                raise MarketError(str(msg['error'].get('message', 'Erro Deriv'))[:200])
                             if msg.get('msg_type') == expected or expected in msg:
                                 return msg
-            except asyncio.CancelledError:
-                raise
-            except MarketError:
-                raise
-            except (TimeoutError, OSError, ConnectionError, ConnectionClosed, WebSocketException) as exc:
-                detail = type(exc).__name__
-                if isinstance(exc, ConnectionClosed):
-                    detail += f"(code={getattr(exc.rcvd, 'code', 'unknown')})"
-                # The HTTP handshake status is the missing diagnostic.
-                # Do not log response headers/body (may contain sensitive data).
-                response = getattr(exc, 'response', None)
-                status = getattr(response, 'status_code', None)
-                if isinstance(status, int):
-                    detail += f"(http_status={status})"
-                logger.warning(
-                    "Deriv public request interrupted: endpoint=%s attempt=%s/2 error=%s",
-                    expected, attempt + 1, detail
-                )
-                if attempt == 1:
-                    raise MarketError('Falha de conexão com Deriv (' + detail + ')') from exc
-                await asyncio.sleep(0.8)
+                except asyncio.CancelledError:
+                    ws = _public_sessions[slot]
+                    _public_sessions[slot] = None
+                    if ws is not None:
+                        try:
+                            await ws.close()
+                        except Exception:
+                            pass
+                    raise
+                except MarketError:
+                    # A broker response can be an explicit business rejection;
+                    # don't blindly retry or change any trade authorization.
+                    raise
+                except (TimeoutError, OSError, ConnectionError, ConnectionClosed,
+                        WebSocketException, ValueError) as exc:
+                    ws = _public_sessions[slot]
+                    _public_sessions[slot] = None
+                    if ws is not None:
+                        try:
+                            async with asyncio.timeout(2):
+                                await ws.close()
+                        except Exception:
+                            pass
+                    detail = type(exc).__name__
+                    if isinstance(exc, ConnectionClosed):
+                        detail += f"(code={getattr(exc.rcvd, 'code', 'unknown')})"
+                    response = getattr(exc, 'response', None)
+                    status = getattr(response, 'status_code', None)
+                    if isinstance(status, int):
+                        detail += f"(http_status={status})"
+                    logger.warning(
+                        "Deriv public request interrupted: endpoint=%s attempt=%s/2 error=%s",
+                        expected, attempt + 1, detail
+                    )
+                    if attempt == 1:
+                        raise MarketError('Falha de conexão com Deriv (' + detail + ')') from exc
+                    await asyncio.sleep(0.8)
     raise MarketError('Falha inesperada na consulta pública Deriv')
 
 
