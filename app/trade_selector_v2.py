@@ -207,7 +207,7 @@ async def select_demo_signal(*, exclude_symbols=(), user_key=None, filtered=Fals
     global _last_scan,_scan_offset
     exclude=set(exclude_symbols)
     # Never reuse a setup after its 50-second post-candle freshness window.
-    queue_key=(user_key,bool(filtered))
+    queue_key=(user_key,True) if filtered else user_key
     queued=_pending_signals_by_user.get(queue_key,[])
     now=time.time()
     while queued:
