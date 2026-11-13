@@ -25,7 +25,7 @@ _scan_offset=0
 # A scan may discover several independent signals at the same M1 close.
 # Keep them briefly per user so the executor can submit each one in turn.
 _pending_signals_by_user={}
-EXPIRY={'range_break':3,'forex':15,'step':5,'volatility':5}
+EXPIRY={'range_break':3,'forex':15,'step':5,'volatility':15}
 _catalog_cache={}
 _catalog_at={}
 _contract_cache={}
@@ -39,6 +39,7 @@ def clear_user_signals(user_key):
     _pending_signals_by_user.pop((user_key,True),None)
     _pending_signals_by_user.pop((user_key,'pullback_v22'),None)
     _pending_signals_by_user.pop((user_key,'volatility_m1'),None)
+    _pending_signals_by_user.pop((user_key,'volatility_v22'),None)
 
 
 def active_market(now=None):
@@ -53,13 +54,13 @@ def effective_strategy_mode(strategy_mode):
     # V2.2 users get a 24/7 read-only scanner with DEMO-only execution
     # still subject to existing broker contract and account safeguards.
     if strategy_mode=='pullback_v22':
-        return 'pullback_v22' if active_market()=='forex' else 'volatility_m1'
+        return 'pullback_v22' if active_market()=='forex' else 'volatility_v22'
     return strategy_mode
 
 
 def pending_queue_key(user_key, filtered=False, strategy_mode=None):
     mode=effective_strategy_mode(strategy_mode)
-    if mode in ('pullback_v22','volatility_m1'):
+    if mode in ('pullback_v22','volatility_v22'):
         return (user_key,mode)
     return (user_key,True) if filtered else user_key
 
@@ -310,8 +311,10 @@ def v22_pullback_signal(item, h1, m15, now):
     closed=m15[-1]['epoch']+900
     if not 0<=now-closed<=50:
         return None
-    # London / New York overlap-oriented UTC research window, not local clock.
-    if not 8<=datetime.fromtimestamp(closed,timezone.utc).hour<17:
+    # Forex research session remains 08h-17h UTC on weekdays;
+    # Volatility indices are 24/7 and use the SAME H1/M15 setup.
+    moment=datetime.fromtimestamp(closed,timezone.utc)
+    if item['family']=='forex' and not (moment.weekday()<5 and 8<=moment.hour<17):
         return None
     eh=ema_values([b['close'] for b in h1])
     em=ema_values([b['close'] for b in m15])
@@ -361,19 +364,21 @@ def v22_pullback_signal(item, h1, m15, now):
         if near:
             return {'symbol':item['symbol'],'display_name':item['display_name'],
                     'strategy':'h1_m15_pullback_v22','direction':direction,
-                    'minutes':15,'family':'forex',
+                    'minutes':15,'family':item['family'],
                     'last_bar_epoch':confirm['epoch'],'bar_seconds':900,
-                    'reason':'H1: EMA50 + swings; M15: EMA50 + pullback e confirmação; UTC 08-17'}
+                    'reason':('H1: EMA50 + swings; M15: EMA50 + pullback e confirmação; Forex UTC 08-17'
+                              if item['family']=='forex' else
+                              'H1: EMA50 + swings; M15: EMA50 + pullback e confirmação; Volatility 24/7')}
     return None
 
 
 async def select_demo_signal(*, exclude_symbols=(), user_key=None, filtered=False, strategy_mode=None):
-    """Select all distinct confirmed M1 candidates across sequential DEMO ticks."""
+    """Select confirmed V2.2 H1/M15 candidates (or legacy M1) for DEMO."""
     global _last_scan,_scan_offset
     exclude=set(exclude_symbols)
     # Never reuse a setup after its 50-second post-candle freshness window.
     effective_mode=effective_strategy_mode(strategy_mode)
-    market='volatility' if effective_mode=='volatility_m1' else 'forex'
+    market='volatility' if effective_mode=='volatility_v22' else 'forex'
     queue_key=pending_queue_key(user_key,filtered,strategy_mode)
     queued=_pending_signals_by_user.get(queue_key,[])
     now=time.time()
@@ -410,7 +415,7 @@ async def select_demo_signal(*, exclude_symbols=(), user_key=None, filtered=Fals
                 if not await supported(symbol,EXPIRY[item['family']]):
                     return None,{'symbol':symbol,'status':'CALL_PUT_OR_DURATION_UNAVAILABLE',
                                  'duration_minutes':EXPIRY[item['family']]}
-                if effective_mode=='pullback_v22':
+                if effective_mode in ('pullback_v22','volatility_v22'):
                     snapshot=time.time()
                     h1,m15=await asyncio.gather(
                         fetch_closed_timeframe(symbol,3600,105,now=snapshot),
