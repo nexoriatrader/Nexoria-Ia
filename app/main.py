@@ -621,6 +621,11 @@ async def brand_logo_transparent_web(): return FileResponse(Path(__file__).paren
 @app.get('/brand/logo-top.png')
 async def brand_logo_top(): return FileResponse(Path(__file__).parent/'static'/'logo-top.png', media_type='image/png')
 
+@app.get('/brand/logo-nexora-v21.svg')
+async def brand_logo_v21():
+    return FileResponse(Path(__file__).parent/'static'/'logo-nexora-v21.svg',media_type='image/svg+xml')
+
+
 @app.get('/brand/logo-nexora-clean.png')
 async def brand_logo_nexora_clean(): return FileResponse(Path(__file__).parent/'static'/'logo-nexora-clean.png', media_type='image/png')
 
