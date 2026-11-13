@@ -9,7 +9,7 @@ import re
 import time
 import logging
 from datetime import datetime,timezone
-from .market import MarketError, discover_symbols, discover_contracts
+from .market import MarketError, discover_symbols, discover_contract_details
 from .strategy_lab import fetch_candles, direction_at
 
 FX_PAIRS=('EURJPY','EURUSD','GBPUSD','USDJPY','GBPJPY',
@@ -92,14 +92,39 @@ async def catalogue():
     return found
 
 
-async def supported(symbol):
+def duration_seconds(value):
+    """Convert Deriv contract duration limits (s/m/h/d) to seconds."""
+    if not isinstance(value,str):
+        return None
+    match=re.fullmatch(r'([1-9][0-9]*)([smhd])',value)
+    if not match:
+        return None
+    return int(match.group(1))*{'s':1,'m':60,'h':3600,'d':86400}[match.group(2)]
+
+
+def contract_supports_duration(contracts, *, minutes):
+    """Both CALL and PUT must explicitly permit the selected expiration."""
+    seconds=minutes*60
+    allowed=set()
+    for contract in contracts:
+        if contract.get('contract_type') not in ('CALL','PUT'):
+            continue
+        minimum=duration_seconds(contract.get('min_contract_duration'))
+        maximum=duration_seconds(contract.get('max_contract_duration'))
+        if minimum is not None and maximum is not None and minimum<=seconds<=maximum:
+            allowed.add(contract['contract_type'])
+    return {'CALL','PUT'}.issubset(allowed)
+
+
+async def supported(symbol, minutes=3):
     now=time.monotonic()
-    cached=_contract_cache.get(symbol)
+    key=(symbol,minutes)
+    cached=_contract_cache.get(key)
     if cached and now-cached[0]<300:
         return cached[1]
-    types=await discover_contracts(symbol)
-    ok={'CALL','PUT'}.issubset(set(types))
-    _contract_cache[symbol]=(now,ok)
+    contracts=await discover_contract_details(symbol)
+    ok=contract_supports_duration(contracts,minutes=minutes)
+    _contract_cache[key]=(now,ok)
     return ok
 
 
@@ -158,8 +183,9 @@ async def select_demo_signal(*, exclude_symbols=()):
             if symbol in exclude:
                 return None,{'symbol':symbol,'status':'OPEN_CONTRACT'}
             try:
-                if not await supported(symbol):
-                    return None,{'symbol':symbol,'status':'CALL_PUT_UNAVAILABLE'}
+                if not await supported(symbol,EXPIRY[item['family']]):
+                    return None,{'symbol':symbol,'status':'CALL_PUT_OR_DURATION_UNAVAILABLE',
+                                 'duration_minutes':EXPIRY[item['family']]}
                 bars=await fetch_candles(symbol,count=120)
                 candidate=signal_from_closed_candles(item,bars)
                 if candidate is None:
@@ -185,7 +211,7 @@ async def select_demo_signal(*, exclude_symbols=()):
     rows=[row for _,row in result]
     status='SIGNAL' if chosen else (
         'MARKET_DATA_UNAVAILABLE' if all(x['status'] in (
-            'MARKET_DATA_ERROR','CALL_PUT_UNAVAILABLE') for x in rows) else 'NO_SIGNAL')
+            'MARKET_DATA_ERROR','CALL_PUT_OR_DURATION_UNAVAILABLE') for x in rows) else 'NO_SIGNAL')
     _last_scan={'status':status,'at':stamp,'assets':rows,
                 'selected':chosen,'catalogue_size':total,'batch_size':len(rows),
                 'next_scan_offset':_scan_offset}
