@@ -84,7 +84,7 @@ def test_v2_restart_keeps_old_records_out_of_evaluation(tmp_path,monkeypatch):
     try:
         with factory() as sess:
             sess.add(db.DemoOrder(user_id=uid,request_key='legacy-0001',state='SETTLED',
-                symbol='1HZ100V',direction='CALL',duration_minutes=5,stake='2.00',pnl='99'))
+                symbol='1HZ100V',direction='CALL',duration_minutes=5,stake='2.00',pnl='1.00'))
             sess.commit()
         assert client.post('/api/autopilot/start',
             json={'confirm':'START_DEMO_AUTOPILOT'}).status_code==200
