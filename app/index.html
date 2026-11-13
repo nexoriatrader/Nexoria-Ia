@@ -468,7 +468,7 @@ button.choose-account:focus-visible{outline:3px solid #71d2ff;outline-offset:4px
 <section id="lab" class="hidden">
   <div class="card">
     <div class="surface-heading">Scanner inteligente de ativos · AutoPilot 2.0</div>
-    <p class="muted">Pesquisa independente em Volatility, Step e Range Break. O AutoPilot 2.0 também consulta Forex e executa hipóteses experimentais M1 em DEMO após confirmar compatibilidade e pagamento na Deriv.</p>
+    <p class="muted">Pesquisa independente em Volatility, Step e Range Break. O AutoPilot 2.0 prioriza Forex Rise/Fall com expiração experimental de 15 minutos, sinais M1 e conferência de compatibilidade e pagamento na Deriv DEMO.</p>
     <div class="actions"><button class="outline" id="scannerRefresh" onclick="loadAssetScanner()">ANALISAR ATIVOS</button></div>
     <p class="helper" id="scannerMessage" role="status">Clique para analisar ativos disponíveis no catálogo oficial.</p>
     <div id="scannerResults" class="table-wrap"></div>
@@ -694,7 +694,7 @@ async function refreshDashboard(){
    $('robotMessage').textContent=status.reason||'Aguardando oportunidades no mercado DEMO';
    const isV2=status.autopilot_version==='V2_MULTI_ASSET';
    $('autopilotVersion').textContent=isV2
-      ?'● NEXORA 2.0 MULTIATIVOS · Scanner M1 experimental · Forex e índices disponíveis'
+      ?'● NEXORA 2.0 FOREX M15 · Sinais por indicadores M1 · Rise/Fall DEMO · até 4 pares diferentes'
       : status.v2_upgrade_needed
        ?'⚠ NEXORA 1.0 AINDA LIGADO NO 1HZ100V. Para iniciar o 2.0, desligue e ligue novamente o AutoPilot DEMO, após conferir os contratos pendentes.'
        : status.v2_available
