@@ -786,10 +786,11 @@ async def reset_risk_session(request:Request,payload:RiskResetRequest,
                 db.DemoOrder.user_id==user.id).order_by(db.DemoOrder.id.desc()).limit(1)).first()
             session=db.RiskSession(user_id=user.id,after_order_id=latest or 0)
             sess.add(session)
-            # Stale persisted run must not resume a progression across the reset.
+            # A reset revokes both the prior progression and resume consent.
             run=sess.get(db.RobotRun,user.id)
-            if run:
-                sess.delete(run)
+            consent=sess.get(db.AutoPilotResumeConsent,user.id)
+            if run:sess.delete(run)
+            if consent:sess.delete(consent)
             sess.commit()
             session_id=session.id
         autopilot_last_attempt.pop(user.id,None)
