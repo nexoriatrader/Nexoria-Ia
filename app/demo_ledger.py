@@ -35,8 +35,6 @@ def order_guard(user, orders, stake, *, after_order_id=0,
     if parallel:
         if any(o.state in ('PENDING','UNKNOWN') for o in active):
             raise OrderGuardError('Contrato pendente ou incerto; novas entradas bloqueadas')
-        if len(active)>=4:
-            raise OrderGuardError('Máximo de 4 contratos DEMO simultâneos')
         if any(o.symbol==symbol for o in active):
             raise OrderGuardError('Já existe contrato aberto neste ativo')
         if any(o.active_slot==user.id for o in active):
@@ -51,9 +49,9 @@ def order_guard(user, orders, stake, *, after_order_id=0,
     stop_loss=money(user.stop_loss)
     if stop_loss<0 or stop_win<0:
         raise OrderGuardError('Stops não podem ser negativos')
+    # Exposure is still considered by an explicitly configured Stop Loss,
+    # but a fixed global ceiling is not imposed on DEMO experiments.
     exposure=sum((money(o.stake) for o in active),Decimal('0'))
-    if parallel and exposure+stake>Decimal('10'):
-        raise OrderGuardError('Exposição DEMO simultânea limitada a US$ 10')
     if stop_win>0 and pnl>=stop_win:
         raise OrderGuardError('Stop Win atingido')
     if stop_loss>0 and (pnl<=-stop_loss or pnl-exposure-stake < -stop_loss):
