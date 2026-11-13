@@ -95,6 +95,7 @@ def test_demo_proposal_never_sends_buy(monkeypatch):
     assert result["currency"] == "EUR"
     assert socket.sent[0] == {"balance": 1, "req_id": 7000}
     assert socket.sent[1]["proposal"] == 1
+    assert "subscribe" not in socket.sent[1]  # preflight stays one-off and read-only
     assert all("buy" not in request for request in socket.sent)
 
 
@@ -131,6 +132,7 @@ def test_demo_buy_uses_demo_channel_and_returns_contract(monkeypatch):
     assert socket.sent[0] == {"balance": 1, "req_id": 7100}
     assert socket.sent[1]["proposal"] == 1
     assert socket.sent[1]["currency"] == "EUR"
+    assert socket.sent[1]["subscribe"] == 1  # required for new Deriv buy API
     assert socket.sent[2]["buy"] == "proposal-demo-2"
 
 
