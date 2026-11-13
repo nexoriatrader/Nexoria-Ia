@@ -352,9 +352,13 @@ def test_resume_with_confirmed_contract_keeps_broker_buy_blocked(tmp_path,monkey
     try:
         assert client.post('/api/autopilot/start',json={'confirm':'START_DEMO_AUTOPILOT'}).status_code==200
         with factory() as s:
-            s.add(db.DemoOrder(user_id=uid,request_key='known-contract',
+            order=db.DemoOrder(user_id=uid,request_key='known-contract',
                 state='CONFIRMED',symbol='1HZ100V',direction='CALL',contract_id='1234567',
-                active_slot=uid,duration_minutes=5,stake='2.00'))
+                active_slot=uid,duration_minutes=5,stake='2.00')
+            s.add(order)
+            s.flush()
+            s.add(db.AutoPilotAttribution(order_id=order.id,user_id=uid,
+                strategy='tendencia',direction='CALL',reason='historico oficial'))
             s.commit()
         main.autopilot_enabled.clear()
         main.restore_demo_autopilot_consent()
