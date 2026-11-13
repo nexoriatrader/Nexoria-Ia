@@ -229,3 +229,45 @@ def test_v2_scanner_diagnostics_distinguish_broker_failure_from_no_signal(tmp_pa
         assert scan['assets'][0]['status']=='MARKET_DATA_ERROR'
         assert scan['assets'][0]['symbol']=='frxEURJPY'
     finally:cleanup(engine)
+
+
+def test_selector_expands_catalogue_without_inventing_symbols():
+    from app import trade_selector_v2 as selector
+    raw=[{'symbol':'frx'+pair,'display_name':pair[:3]+'/'+pair[3:]}
+         for pair in selector.FX_PAIRS]
+    raw += [{'symbol':f'R_{i}','display_name':f'Volatility {i} Index'}
+            for i in (10,25,50,75,100)]
+    raw += [{'symbol':f'1HZ{i}V','display_name':f'Volatility {i} (1s) Index'}
+            for i in (10,25,50,75,100)]
+    raw += [{'symbol':'STPRNG','display_name':'Step Index'},
+            {'symbol':'RBX01','display_name':'Range Break 100 Index'}]
+    raw += [{'symbol':'FAKE123','display_name':'Not a recognized market'}]
+    out=selector.choose_tradeable(raw)
+    assert len(out)>=20
+    assert len(out)==len({x['symbol'] for x in out})
+    assert all(x['symbol']!='FAKE123' for x in out)
+    assert {'frxEURJPY','frxAUDUSD','1HZ100V','STPRNG'} <= {
+        x['symbol'] for x in out}
+
+
+def test_selector_rotates_bounded_groups_across_catalogue(monkeypatch):
+    from app import trade_selector_v2 as selector
+    monkeypatch.setattr(selector,'_scan_offset',0)
+    items=[{'symbol':f'frx{pair}','display_name':pair,
+            'family':'forex'} for pair in selector.FX_PAIRS]
+    items += [{'symbol':f'R_{n}','display_name':f'Volatility {n} Index',
+               'family':'volatility'} for n in (10,25,50,75,100)]
+    monkeypatch.setattr(selector,'catalogue',AsyncMock(return_value=items))
+    monkeypatch.setattr(selector,'supported',AsyncMock(return_value=False))
+    first=asyncio.run(selector.select_demo_signal())
+    report1=selector.last_scan_report()
+    second=asyncio.run(selector.select_demo_signal())
+    report2=selector.last_scan_report()
+    assert first is None and second is None
+    assert report1['catalogue_size']==len(items)
+    assert report1['batch_size']==selector.SCAN_BATCH
+    assert report2['batch_size']==selector.SCAN_BATCH
+    seen1={row['symbol'] for row in report1['assets']}
+    seen2={row['symbol'] for row in report2['assets']}
+    assert not seen1.intersection(seen2)
+    assert report1['status']=='MARKET_DATA_UNAVAILABLE'
