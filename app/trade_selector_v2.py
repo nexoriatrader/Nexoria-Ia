@@ -10,7 +10,7 @@ import time
 import logging
 from datetime import datetime,timezone
 from statistics import mean
-from .market import MarketError, discover_symbols, discover_contract_details
+from .market import MarketError, discover_symbols, discover_contract_details, public_request
 from .strategy_lab import fetch_candles, direction_at
 
 # Forex pairs visibly offered in Deriv Trader; runtime symbols still MUST
@@ -37,13 +37,15 @@ def clear_user_signals(user_key):
     """Drop cached signals when starting a fresh evaluation."""
     _pending_signals_by_user.pop(user_key,None)
     _pending_signals_by_user.pop((user_key,True),None)
+    _pending_signals_by_user.pop((user_key,'pullback_v22'),None)
 
 
-def has_pending_signals(user_key,*,filtered=False):
+def has_pending_signals(user_key,*,filtered=False,strategy_mode=None):
     """Whether another confirmed candidate from this scan is still fresh."""
     now=time.time()
-    return any(0 <= now-(item['last_bar_epoch']+60) <= 50
-               for item in _pending_signals_by_user.get((user_key,True) if filtered else user_key,[]))
+    queue_key=(user_key,'pullback_v22') if strategy_mode=='pullback_v22' else ((user_key,True) if filtered else user_key)
+    return any(0 <= now-(item['last_bar_epoch']+item.get('bar_seconds',60)) <= 50
+               for item in _pending_signals_by_user.get(queue_key,[]))
 
 
 def last_scan_report():
@@ -202,17 +204,154 @@ def signal_from_closed_candles(item,candles,now=None,*,filtered=False):
                       else 'Cruzamento de médias 8/21 em velas M1 fechadas')}
 
 
-async def select_demo_signal(*, exclude_symbols=(), user_key=None, filtered=False):
+
+def ema_values(closes, period=50):
+    """EMA with an SMA seed using completed bars only."""
+    if len(closes)<period+5:
+        return []
+    alpha=2/(period+1)
+    value=mean(closes[:period])
+    values=[value]
+    for close in closes[period:]:
+        value=alpha*close+(1-alpha)*value
+        values.append(value)
+    return values
+
+
+def strict_closed_bars(message, granularity, *, now):
+    """Validate actual Deriv OHLC, exclude unclosed bar, never fill gaps."""
+    raw=message.get('candles')
+    if not isinstance(raw,list):
+        raise MarketError('Candles de mercado indisponíveis')
+    result=[]
+    for bar in raw:
+        try:
+            epoch=int(bar['epoch'])
+            low=float(bar['low']); high=float(bar['high'])
+            close=float(bar['close']); open_price=float(bar['open'])
+        except (KeyError,ValueError,TypeError,OverflowError) as exc:
+            raise MarketError('Candle inválido') from exc
+        if not all(__import__('math').isfinite(x) and x>0 for x in (low,high,close,open_price)):
+            raise MarketError('Preço não finito')
+        if low>min(open_price,close) or high<max(open_price,close) or high<low:
+            raise MarketError('OHLC incoerente')
+        if epoch+granularity<=now:
+            result.append({'epoch':epoch,'low':low,'high':high,
+                           'close':close,'open':open_price})
+    result.sort(key=lambda x:x['epoch'])
+    if len({b['epoch'] for b in result})!=len(result):
+        raise MarketError('Candles duplicados')
+    return result
+
+
+async def fetch_closed_timeframe(symbol, seconds, count, *, now):
+    if seconds not in (900,3600):
+        raise MarketError('Timeframe não autorizado')
+    payload=await public_request({
+        'ticks_history':symbol,'style':'candles','granularity':seconds,
+        'count':count,'end':'latest'},expected='candles',timeout=18)
+    return strict_closed_bars(payload,seconds,now=now)
+
+
+def swing_structure(bars, direction, lookback=22):
+    """Two most recent confirmed 2-left/2-right price pivots."""
+    pivots_high=[];pivots_low=[]
+    segment=bars[-lookback:]
+    for i in range(2,len(segment)-2):
+        if all(segment[i]['high']>segment[j]['high'] for j in (i-2,i-1,i+1,i+2)):
+            pivots_high.append(segment[i]['high'])
+        if all(segment[i]['low']<segment[j]['low'] for j in (i-2,i-1,i+1,i+2)):
+            pivots_low.append(segment[i]['low'])
+    if len(pivots_high)<2 or len(pivots_low)<2:
+        return False
+    if direction=='CALL':
+        return pivots_high[-1]>pivots_high[-2] and pivots_low[-1]>pivots_low[-2]
+    return pivots_high[-1]<pivots_high[-2] and pivots_low[-1]<pivots_low[-2]
+
+
+def v22_pullback_signal(item, h1, m15, now):
+    """Closed-candle H1 trend + M15 pullback confirmation for 15m Rise/Fall.
+
+    This is a falsifiable research setup, not a profitable-strategy claim.
+    """
+    if len(h1)<85 or len(m15)<85:
+        return None
+    # Data gaps may occur on Forex weekends; require recent continuity only.
+    if any(b['epoch']-a['epoch']!=3600 for a,b in zip(h1[-7:-1],h1[-6:])):
+        return None
+    if any(b['epoch']-a['epoch']!=900 for a,b in zip(m15[-19:-1],m15[-18:])):
+        return None
+    closed=m15[-1]['epoch']+900
+    if not 0<=now-closed<=50:
+        return None
+    # London / New York overlap-oriented UTC research window, not local clock.
+    if not 8<=datetime.fromtimestamp(closed,timezone.utc).hour<17:
+        return None
+    eh=ema_values([b['close'] for b in h1])
+    em=ema_values([b['close'] for b in m15])
+    if len(eh)<5 or len(em)<7:
+        return None
+    close_h=h1[-1]['close']
+    if close_h>eh[-1] and eh[-1]>eh[-4]:
+        direction='CALL'
+    elif close_h<eh[-1] and eh[-1]<eh[-4]:
+        direction='PUT'
+    else:
+        return None
+    if not swing_structure(h1,direction):
+        return None
+    if direction=='CALL' and not (m15[-1]['close']>em[-1] and em[-1]>em[-4]):
+        return None
+    if direction=='PUT' and not (m15[-1]['close']<em[-1] and em[-1]<em[-4]):
+        return None
+    # Crossing EMA more than 2 times in the last 15 M15 closed candles => range.
+    ema_tail=em[-15:]
+    close_tail=[b['close'] for b in m15[-15:]]
+    side=[1 if c>e else (-1 if c<e else 0) for c,e in zip(close_tail,ema_tail)]
+    crosses=sum(side[i]!=0 and side[i-1]!=0 and side[i]!=side[i-1]
+                for i in range(1,len(side)))
+    if crosses>2:
+        return None
+    prev=m15[-2];confirm=m15[-1]
+    bullish=confirm['close']>confirm['open'] and confirm['close']>prev['high']
+    bearish=confirm['close']<confirm['open'] and confirm['close']<prev['low']
+    if not (bullish if direction=='CALL' else bearish):
+        return None
+    # One to four closed candles before confirmation must have approached EMA50.
+    # 35% of recent average true-candle range is an explicit research tolerance.
+    ranges=[b['high']-b['low'] for b in m15[-15:-1]]
+    avg_range=mean(ranges)
+    if avg_range<=0:
+        return None
+    # Avoid abnormal confirmation candles where expiry risks chasing a spike.
+    confirm_range=confirm['high']-confirm['low']
+    if not 0.35*avg_range<=confirm_range<=2.5*avg_range:
+        return None
+    for offset in range(2,6):
+        candle=m15[-offset]
+        ema_at=em[-offset]
+        near=(abs(candle['low']-ema_at)<=0.35*avg_range if direction=='CALL'
+              else abs(candle['high']-ema_at)<=0.35*avg_range)
+        if near:
+            return {'symbol':item['symbol'],'display_name':item['display_name'],
+                    'strategy':'h1_m15_pullback_v22','direction':direction,
+                    'minutes':15,'family':'forex',
+                    'last_bar_epoch':confirm['epoch'],'bar_seconds':900,
+                    'reason':'H1: EMA50 + swings; M15: EMA50 + pullback e confirmação; UTC 08-17'}
+    return None
+
+
+async def select_demo_signal(*, exclude_symbols=(), user_key=None, filtered=False, strategy_mode=None):
     """Select all distinct confirmed M1 candidates across sequential DEMO ticks."""
     global _last_scan,_scan_offset
     exclude=set(exclude_symbols)
     # Never reuse a setup after its 50-second post-candle freshness window.
-    queue_key=(user_key,True) if filtered else user_key
+    queue_key=(user_key,'pullback_v22') if strategy_mode=='pullback_v22' else ((user_key,True) if filtered else user_key)
     queued=_pending_signals_by_user.get(queue_key,[])
     now=time.time()
     while queued:
         item=queued.pop(0)
-        if item['symbol'] not in exclude and 0 <= now-(item['last_bar_epoch']+60) <= 50:
+        if item['symbol'] not in exclude and 0 <= now-(item['last_bar_epoch']+item.get('bar_seconds',60)) <= 50:
             return item
     stamp=datetime.now(timezone.utc).isoformat()
     try:
@@ -243,12 +382,21 @@ async def select_demo_signal(*, exclude_symbols=(), user_key=None, filtered=Fals
                 if not await supported(symbol,EXPIRY[item['family']]):
                     return None,{'symbol':symbol,'status':'CALL_PUT_OR_DURATION_UNAVAILABLE',
                                  'duration_minutes':EXPIRY[item['family']]}
-                bars=await fetch_candles(symbol,count=120)
-                candidate=(signal_from_closed_candles(item,bars,filtered=True) if filtered
-                           else signal_from_closed_candles(item,bars))
+                if strategy_mode=='pullback_v22':
+                    snapshot=time.time()
+                    h1,m15=await asyncio.gather(
+                        fetch_closed_timeframe(symbol,3600,105,now=snapshot),
+                        fetch_closed_timeframe(symbol,900,115,now=snapshot))
+                    candidate=v22_pullback_signal(item,h1,m15,snapshot)
+                    candles_checked=len(m15)
+                else:
+                    bars=await fetch_candles(symbol,count=120)
+                    candidate=(signal_from_closed_candles(item,bars,filtered=True) if filtered
+                               else signal_from_closed_candles(item,bars))
+                    candles_checked=len(bars)
                 if candidate is None:
                     return None,{'symbol':symbol,'status':'NO_FRESH_CONFIRMED_SIGNAL',
-                                 'candles':len(bars)}
+                                 'candles':candles_checked}
                 return candidate,{'symbol':symbol,'status':'SIGNAL',
                                   'strategy':candidate['strategy'],
                                   'direction':candidate['direction']}
