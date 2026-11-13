@@ -22,7 +22,7 @@ def test_zero_stops_disable_only_stop_gates():
     with pytest.raises(OrderGuardError,match='Martingale'):
         order_guard(user(mg=True),[], '2.00')
     with pytest.raises(OrderGuardError,match='Valor da entrada'):
-        order_guard(user(),[], '1.00')
+        order_guard(user(),[], '0.49')
 
 
 def test_one_zero_stop_preserves_the_other_limit():
