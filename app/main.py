@@ -22,7 +22,7 @@ from .engine import Engine, Settings
 from .market import MarketError, discover_symbols, discover_contracts, indicative_proposal
 from .strategy_lab import run_lab
 from .asset_scanner import scan_assets
-from .trade_selector_v2 import select_demo_signal
+from .trade_selector_v2 import select_demo_signal, last_scan_report
 from .progression import next_entry, ProgressionHalt, NextEntry
 from .security import CLIENT_ID, REDIRECT, TOKEN_URL, build_authorize_url, make_login, make_session_id, hashsecret, encrypt, decrypt, cookie_options
 
@@ -414,7 +414,13 @@ async def autopilot_once():
                             log.warning('V2 scanner unavailable: %s',type(exc).__name__)
                             continue
                         if candidate is None:
-                            autopilot_reasons[uid]='AutoPilot 2.0: buscando rompimento ou tendência confirmados em velas M1'
+                            state=last_scan_report()
+                            status=state.get('status','UNKNOWN')
+                            if status in ('CATALOG_UNAVAILABLE','NO_SUPPORTED_ASSETS_IN_CATALOG',
+                                          'SCAN_TIMEOUT','MARKET_DATA_UNAVAILABLE'):
+                                autopilot_reasons[uid]='Scanner 2.0 sem dados válidos: '+status
+                            else:
+                                autopilot_reasons[uid]='AutoPilot 2.0: sem rompimento ou tendência confirmados neste ciclo'
                             continue
                     else:
                         if not candidates:
@@ -1051,6 +1057,18 @@ async def status(request:Request,nexora_sid:str|None=Cookie(default=None)):
                 'analysis_symbol':SYMBOL,
                 'reason':autopilot_reasons.get(user.id,
                    'Execução interrompida após reinício; reative manualmente no painel' if interrupted else 'Robô desligado')}
+
+@app.get('/api/autopilot/v2/scanner-status')
+async def autopilot_v2_scanner_status(request:Request,
+                                     nexora_sid:str|None=Cookie(default=None)):
+    """Read-only diagnostics distinguishing data failures from absent signals."""
+    user=active_user(request,nexora_sid)
+    with db.SessionLocal() as sess:
+        batch=sess.get(db.PilotValidationBatch,user.id)
+    return {'version':'NEXORA_2.0','v2_enabled':v2_enabled(),
+            'v2_session_active':bool(batch),'running':user.id in autopilot_enabled,
+            'scan':last_scan_report(),'real_orders_enabled':False}
+
 
 @app.get('/api/autopilot/research')
 async def autopilot_research(request:Request,nexora_sid:str|None=Cookie(default=None)):
