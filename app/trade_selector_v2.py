@@ -104,7 +104,7 @@ def signal_from_closed_candles(item,candles,now=None):
                       else 'Cruzamento de médias 8/21 em velas M1 fechadas')}
 
 
-async def select_demo_signal():
+async def select_demo_signal(*, exclude_symbols=()):
     """Returns one experimental candidate, never an execution authorization."""
     items=await catalogue()
     if not items:
@@ -121,9 +121,10 @@ async def select_demo_signal():
                 return None
     results=await asyncio.gather(*(examine(i) for i in items))
     # Rompimento preferred over crossover. No promise of profitable execution.
-    signals=[x for x in results if x]
+    excluded=set(exclude_symbols)
+    signals=[x for x in results if x and x['symbol'] not in excluded]
     if not signals:
         return None
     signals.sort(key=lambda x:(0 if x['strategy']=='rompimento_m1' else 1,
-                               FX_PAIRS.index(x['group']) if x.get('group') in FX_PAIRS else 99))
+                               x['symbol']))
     return signals[0]
