@@ -65,6 +65,15 @@ class AutoPilotResumeConsent(Base):
     enabled_at = Column(DateTime(timezone=True), default=utcnow, nullable=False)
 
 
+class PilotValidationBatch(Base):
+    """A separate, opt-in AutoPilot 2.0 experiment; old official ledger stays intact."""
+    __tablename__ = 'pilot_validation_batches'
+    user_id = Column(Integer, ForeignKey('users.id'), primary_key=True)
+    after_order_id = Column(Integer, nullable=False, default=0)
+    max_orders = Column(Integer, nullable=False, default=50)
+    created_at = Column(DateTime(timezone=True), default=utcnow, nullable=False)
+
+
 class RiskSession(Base):
     """Auditable manual DEMO risk reset boundary; historical orders stay untouched."""
     __tablename__ = 'risk_sessions'
