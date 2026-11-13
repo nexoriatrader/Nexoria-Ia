@@ -37,7 +37,7 @@ def has_pending_signals(user_key,*,filtered=False):
     """Whether another confirmed candidate from this scan is still fresh."""
     now=time.time()
     return any(0 <= now-(item['last_bar_epoch']+60) <= 50
-               for item in _pending_signals_by_user.get((user_key,bool(filtered)),[]))
+               for item in _pending_signals_by_user.get((user_key,True) if filtered else user_key,[]))
 
 
 def last_scan_report():
@@ -238,7 +238,8 @@ async def select_demo_signal(*, exclude_symbols=(), user_key=None, filtered=Fals
                     return None,{'symbol':symbol,'status':'CALL_PUT_OR_DURATION_UNAVAILABLE',
                                  'duration_minutes':EXPIRY[item['family']]}
                 bars=await fetch_candles(symbol,count=120)
-                candidate=signal_from_closed_candles(item,bars,filtered=filtered)
+                candidate=(signal_from_closed_candles(item,bars,filtered=True) if filtered
+                           else signal_from_closed_candles(item,bars))
                 if candidate is None:
                     return None,{'symbol':symbol,'status':'NO_FRESH_CONFIRMED_SIGNAL',
                                  'candles':len(bars)}
