@@ -375,6 +375,7 @@ def test_v2_pending_signal_queue_exposes_other_assets_without_rescanning(monkeyp
     monkeypatch.setattr(selector,'_pending_signals_by_user',{})
     monkeypatch.setattr(selector,'_scan_offset',0)
     now=int(time.time())//60*60
+    monkeypatch.setattr(selector.time,'time',lambda: now+5)
     monkeypatch.setattr(selector,'catalogue',AsyncMock(return_value=[
         {'symbol':'frxEURUSD','family':'forex','display_name':'EUR/USD'},
         {'symbol':'frxAUDNZD','family':'forex','display_name':'AUD/NZD'}]))
