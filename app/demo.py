@@ -167,7 +167,8 @@ async def demo_proposal(token: str, account_id: str, *, symbol: str,
 
 async def demo_buy(token: str, account_id: str, *, symbol: str,
                    contract_type: str, stake: str, duration: int,
-                   confirm: str, currency: str | None = None) -> dict:
+                   confirm: str, currency: str | None = None,
+                   min_payout_ratio: str | None = None) -> dict:
     """Buy one contract on the demo channel after explicit confirmation."""
     if confirm != "DEMO_ONLY":
         raise DemoTradingError("Confirmação demo obrigatória")
@@ -192,6 +193,19 @@ async def demo_buy(token: str, account_id: str, *, symbol: str,
                 if not isinstance(proposal, dict):
                     raise DemoTradingError("Resposta de proposal demo inválida")
                 proposal_id, ask_price = str(proposal.get("id", "")), proposal.get("ask_price")
+                if min_payout_ratio is not None:
+                    # V2-only fail-closed check on the ACTUAL purchase proposal;
+                    # the preliminary quote may change before buying.
+                    try:
+                        ratio=Decimal(str(min_payout_ratio))
+                        payout=Decimal(str(proposal["payout"]))
+                        proposal_ask=Decimal(str(ask_price))
+                    except (InvalidOperation,TypeError,ValueError,KeyError) as exc:
+                        raise DemoTradingError("Payout da proposta DEMO inválido") from exc
+                    if (not ratio.is_finite() or ratio<1 or not payout.is_finite()
+                        or not proposal_ask.is_finite() or proposal_ask<=0
+                        or payout<proposal_ask*ratio):
+                        raise DemoTradingError("Proposta DEMO não atende ao payout mínimo")
                 if not proposal_id or ask_price is None:
                     raise DemoTradingError("Proposal demo sem identificador ou preço")
                 # Never accept a quote whose purchase cost exceeds the guarded stake.
