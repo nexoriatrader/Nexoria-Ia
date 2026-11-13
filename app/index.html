@@ -292,7 +292,6 @@ button.choose-account:focus-visible{outline:3px solid #71d2ff;outline-offset:4px
   <div class="drawer-head"><strong>Menu NEXORA</strong><button class="iconbutton" aria-label="Fechar menu" onclick="toggleMenu(false)">×</button></div>
   <button class="nav active" data-view="dashboard" onclick="go('dashboard')">⌂　Painel principal</button>
   <button class="nav" data-view="results" onclick="go('results')">▤　Resultados</button>
-  <button class="nav" data-view="lab" onclick="go('lab')">⌁　Laboratório de estratégias</button>
   <button class="nav" data-view="settings" onclick="go('settings')">⚙　Configurações</button>
   <button class="nav" data-view="account" onclick="go('account')">◉　Minha conta</button>
   <button class="nav signout" onclick="logout()">↪　Desconectar</button>
@@ -485,44 +484,8 @@ button.choose-account:focus-visible{outline:3px solid #71d2ff;outline-offset:4px
 <section id="results" class="hidden">
   <div class="section-heading"><div><div class="eyebrow">DADOS OFICIAIS · DEMO</div><h1>Resultados NEXORA IA</h1><p>Cada avaliação começa com contadores independentes. Contratos anteriores continuam arquivados para reconciliação e auditoria.</p></div></div>
   <div class="card"><div class="surface-heading">Histórico oficial DEMO da avaliação atual — últimos 3 dias</div>
-    <div class="actions"><button class="outline" onclick="loadDemoOrders()">ATUALIZAR CONTRATOS</button><span class="helper" id="resultsLiveStatus" role="status">● Atualização automática a cada 3 segundos</span></div>
+    <div class="actions" style="align-items:center"><button class="outline" type="button" onclick="go('dashboard')">VOLTAR AO PAINEL DO ROBÔ</button><span class="helper" id="resultsLiveStatus" role="status">● Atualização automática a cada 3 segundos</span></div>
     <div class="table-wrap"><table><thead><tr><th>Data (Brasília)</th><th>Horário</th><th>Conta</th><th>Ativo</th><th>Direção</th><th>Entrada</th><th>Expiração</th><th>Etapa</th><th>Situação</th><th>WIN / LOSS</th><th>Resultado</th><th>Ação</th></tr></thead><tbody id="ordersBody"><tr><td colspan="12" class="empty">Carregando contratos...</td></tr></tbody></table></div>
-  </div>
-  <div class="card"><div class="surface-heading">Avaliação independente do AutoPilot · DEMO</div>
-    <p class="muted">Os resultados desta avaliação são separados dos anteriores; metas de amostragem não limitam automaticamente as operações. Cada par mantém sua própria sequência, respeitando as proteções e os limites configurados.</p>
-    <p class="helper" id="v2EvalStatus" role="status">Consultando avaliação atual...</p>
-    <div class="actions"><button class="outline" id="newEvalBtn" type="button" onclick="startNewEvaluation()">INICIAR AVALIAÇÃO 2.2 · ZERAR PLACAR</button></div>
-    <p class="helper">Requer AutoPilot desligado e todos os contratos liquidados. Inicia o lote independente NEXORA 2.2 (H1: EMA50 e topos/fundos; M15: tendência, lateralização, pullback confirmado; sessões 08h–17h UTC). Mantém histórico, saldo e logo originais; não envia ordens nem liga automaticamente.</p>
-  </div>
-  <div class="card"><div class="surface-heading">Desempenho das estratégias</div>
-    <p class="muted">Entradas automáticas oficiais na Deriv Demo, agrupadas pela estratégia de origem. Não são previsões de resultados futuros.</p>
-    <div class="actions"><button class="outline" onclick="loadStrategyStats()">ATUALIZAR ESTRATÉGIAS</button></div>
-    <div class="table-wrap"><table><thead><tr><th>Estratégia</th><th>Operações</th><th>Vitórias</th><th>Derrotas</th><th>Acerto</th><th>P/L</th></tr></thead>
-    <tbody id="strategyStats"><tr><td colspan="6" class="empty">Sem entradas automáticas registradas.</td></tr></tbody></table></div>
-  </div>
-</section>
-<section id="lab" class="hidden">
-  <div class="card">
-    <div class="surface-heading">Scanner inteligente de ativos · AutoPilot 2.0</div>
-    <p class="muted">Pesquisa independente em Volatility, Step e Range Break. O AutoPilot 2.0 prioriza Forex Rise/Fall com expiração experimental de 15 minutos, sinais M1 e conferência de compatibilidade e pagamento na Deriv DEMO.</p>
-    <div class="actions"><button class="outline" id="scannerRefresh" onclick="loadAssetScanner()">ANALISAR ATIVOS</button></div>
-    <p class="helper" id="scannerMessage" role="status">Clique para analisar ativos disponíveis no catálogo oficial.</p>
-    <div id="scannerResults" class="table-wrap"></div>
-    <p class="helper">Comparação: 70% das velas para treino e 30% posteriores para validação. A taxa apresentada mede somente acerto direcional hipotético em velas, não resultado financeiro. Não há ranking ou aprovação automática de estratégia.</p>
-    <p class="helper">As oportunidades são hipóteses não validadas; não representam previsão, vantagem comprovada ou autorização para operar.</p>
-  </div>
-  <div class="section-heading"><div><div class="eyebrow">PESQUISA DE MERCADO</div><h1>Laboratório de estratégias</h1>
-  <p>Range Break e Step Index · 1, 3 e 5 minutos · Sem compras.</p></div></div>
-  <div class="card">
-    <div class="surface-heading">Comparação em históricos oficiais</div>
-    <p class="muted">A API da Deriv fornece velas M1. O laboratório separa 70% para desenvolvimento e 30% posteriores para validação; sinais não se sobrepõem. O resultado mostra <strong>acertos direcionais aproximados</strong>, não lucros de contratos. Não considera pagamentos, preço efetivo da entrada ou latência.</p>
-    <div class="actions"><button id="labRefresh" class="outline" onclick="loadStrategyLab()">CONSULTAR HISTÓRICOS</button></div>
-    <p id="labMessage" class="helper" role="status">Clique para verificar os ativos disponíveis na Deriv.</p>
-  </div>
-  <div id="labReports"></div>
-  <div class="card"><div class="surface-heading">Proteção do AutoPilot</div>
-  <p class="muted">O laboratório histórico permanece de leitura. As operações DEMO do AutoPilot 2.0 são experimentais e avaliadas separadamente por contratos liquidados oficiais; pesquisa histórica não comprova vantagem financeira.</p>
-  <p class="helper">Fontes: <a href="https://deriv.com/pt/markets/derived-indices/synthetic-indices" target="_blank" rel="noopener noreferrer">Deriv — Índices Sintéticos</a> e <a href="https://developers.deriv.com/docs/data/ticks-history/" target="_blank" rel="noopener noreferrer">Deriv API — Histórico de ticks</a>.</p>
   </div>
 </section>
 <section id="settings" class="hidden">
@@ -555,9 +518,8 @@ button.choose-account:focus-visible{outline:3px solid #71d2ff;outline-offset:4px
   <div class="section-heading"><div><div class="eyebrow">SUA CONTA</div><h1>Conta Deriv</h1><p>Conexão e dados da corretora.</p></div></div>
   <div class="card"><div class="surface-heading">Deriv Demo <span class="pill"><span class="dot"></span>CONECTADA</span></div>
     <p class="muted">Saldo oficial da Deriv Demo</p><div class="metric-value" id="accountBalance">—</div>
-    <div class="actions"><button class="outline" onclick="loadDemoBalance()">ATUALIZAR SALDO</button><button class="outline" onclick="logout()">DESCONECTAR</button></div>
+    <div class="actions"><button class="outline" onclick="logout()">DESCONECTAR</button></div>
   </div>
-  <div class="card"><div class="surface-heading">Leitura de mercado</div><p id="autopilotResearch" class="muted">Aguardando consulta.</p><div class="actions"><button class="outline" onclick="loadAutopilotResearch()">ANALISAR MERCADO</button><button class="outline" onclick="loadAutopilotDemoPreview()">CONSULTAR PROPOSTA DEMO</button></div></div>
 </section>
 <p id="error" class="alert" role="alert"></p>
 </main>
@@ -650,7 +612,7 @@ async function saveOnboarding(event){
  }catch(e){$('setupFeedback').textContent='Não foi possível salvar: '+e.message;fail('')}
  finally{btn.disabled=false}
 }
-function page(v){for(const name of ['welcome','choose','realPreview','setup','dashboard','results','lab','settings','account'])$(name).classList.toggle('hidden',name!==v);activePage=v;const logged=!['welcome','choose'].includes(v);$('accountBadge').classList.toggle('hidden',!logged);$('menuButton').classList.toggle('hidden',!logged);document.querySelectorAll('.nav[data-view]').forEach(b=>b.classList.toggle('active',b.dataset.view===v))}
+function page(v){for(const name of ['welcome','choose','realPreview','setup','dashboard','results','settings','account'])$(name).classList.toggle('hidden',name!==v);activePage=v;const logged=!['welcome','choose'].includes(v);$('accountBadge').classList.toggle('hidden',!logged);$('menuButton').classList.toggle('hidden',!logged);document.querySelectorAll('.nav[data-view]').forEach(b=>b.classList.toggle('active',b.dataset.view===v))}
 function toggleMenu(open){$('drawer').classList.toggle('hidden',!open);$('menuOverlay').classList.toggle('hidden',!open);$('menuButton').setAttribute('aria-expanded',String(open))}
 function updateResultsPolling(){
  if(resultsRefreshTimer){clearInterval(resultsRefreshTimer);resultsRefreshTimer=null;}
@@ -667,7 +629,7 @@ function updateResultsPolling(){
    },3000);
  }
 }
-function go(v){toggleMenu(false);page(v);updateResultsPolling();window.scrollTo({top:0,behavior:'smooth'});if(v==='choose')loadVerifiedAccounts();if(v==='realPreview'){$('realPreviewStatus').textContent=detectedRealAccounts.length?'A Deriv identificou '+detectedRealAccounts.length+' conta(s) real(is) vinculada(s).':'Não foi possível confirmar uma conta real nesta autorização.';}if(v==='setup')loadOnboarding();if(v==='dashboard')refreshDashboard();if(v==='results'){loadDemoOrders();loadStrategyStats()}if(v==='lab'){loadAssetScanner();loadStrategyLab();}if(v==='account')loadDemoBalance();if(v==='settings')loadSettings()}
+function go(v){toggleMenu(false);page(v);updateResultsPolling();window.scrollTo({top:0,behavior:'smooth'});if(v==='choose')loadVerifiedAccounts();if(v==='realPreview'){$('realPreviewStatus').textContent=detectedRealAccounts.length?'A Deriv identificou '+detectedRealAccounts.length+' conta(s) real(is) vinculada(s).':'Não foi possível confirmar uma conta real nesta autorização.';}if(v==='setup')loadOnboarding();if(v==='dashboard')refreshDashboard();if(v==='results'){loadDemoOrders();}if(v==='account')loadDemoBalance();if(v==='settings')loadSettings()}
 function fail(msg){$('error').textContent=msg||''}
 async function req(path,opts={}){const r=await fetch(path,{credentials:'same-origin',...opts});let data;try{data=await r.json()}catch{throw Error('Resposta inválida do servidor')}if(!r.ok)throw Error(data.detail||'Falha na conexão');return data}
 async function init(){try{const s=await req('/api/session');if(!s.authenticated){page('welcome');return}const justConnected=new URLSearchParams(window.location.search).get('login')==='ok';if(justConnected){window.history.replaceState({},'',window.location.pathname);const account=s.demo_accounts&&s.demo_accounts[0];$('demoInfo').textContent=account?'Conectada à Deriv · '+safe(account.account_id):'Conta conectada à Deriv';page('choose');applyAccountSelection();loadVerifiedAccounts()}else{page('dashboard');refreshDashboard()}refreshTimer=setInterval(()=>{if(activePage==='dashboard'||activePage==='results')refreshDashboard()},30000)}catch(e){fail(e.message);page('welcome')}}
@@ -898,7 +860,7 @@ async function loadRealDailyResult(){
    reason.textContent='Consulta ao resultado real temporariamente indisponível';
  }
 }
-async function loadDemoOrders(){try{const data=await req('/api/demo/orders');demoOrders=data.items||[];if(activePage==='results')loadV2Evaluation().catch(()=>{});const last=demoOrders[0];$('lastOrder').textContent=last?last.symbol+' · '+last.direction+' · M'+last.duration_minutes+' · Entrada '+money(last.stake)+' · '+last.state+(last.pnl===null?' · Aguardando resultado':' · P/L '+money(last.pnl)):'Nenhum contrato oficial ainda.';renderOrders();return data}catch(e){$('ordersBody').innerHTML='<tr><td colspan="12" class="empty">Não foi possível carregar o histórico.</td></tr>';throw e}}
+async function loadDemoOrders(){try{const data=await req('/api/demo/orders');demoOrders=data.items||[];const last=demoOrders[0];$('lastOrder').textContent=last?last.symbol+' · '+last.direction+' · M'+last.duration_minutes+' · Entrada '+money(last.stake)+' · '+last.state+(last.pnl===null?' · Aguardando resultado':' · P/L '+money(last.pnl)):'Nenhum contrato oficial ainda.';renderOrders();return data}catch(e){$('ordersBody').innerHTML='<tr><td colspan="12" class="empty">Não foi possível carregar o histórico.</td></tr>';throw e}}
 const brasilDateTime=(iso)=>{
  if(!iso)return ['—','—'];
  const d=new Date(iso);
@@ -946,137 +908,6 @@ function renderOrders(){
    else action.textContent='—';
    row.append(action);tbody.append(row);
  }
-}
-async function loadV2Evaluation(){
- const place=$('v2EvalStatus');
- try{
-  const x=await req('/api/autopilot/v2/evaluation');
-  if(!x.active){
-   place.textContent='Avaliação ainda não iniciada. Ao ativar o AutoPilot 2.0 pela primeira vez, o contador começa em zero.';
-   return;
-  }
-  const wins=Number(x.wins||0),settled=Number(x.settled||0);
-  const rate=settled?(wins*100/settled).toFixed(1)+'%':'—';
-  place.textContent='Operações registradas: '+x.submitted+' · Liquidadas: '+settled+
-   ' · WIN: '+wins+' · LOSS: '+x.losses+' · Pendentes: '+x.pending+
-   ' · Taxa observada: '+rate+' · Resultado DEMO: '+money(x.net_pnl)+
-   ' · Meta inicial: '+(x.target||50)+' (sem limite automático) · '+(x.batch||'NEXORA 2.0');
- }catch(e){place.textContent='Avaliação temporariamente indisponível: '+e.message;}
-}
-async function startNewEvaluation(){
- const button=$('newEvalBtn');
- if(button.disabled)return;
- const message='INICIAR AVALIAÇÃO DEMO 2.2?\n\nExige AutoPilot desligado e todos os contratos anteriores liquidados.\n\nPlacar e sessão de risco começam do zero. Contratos anteriores e saldo oficial da Deriv NÃO são apagados.\n\nNova estratégia experimental: tendência H1 + EMA50 + confirmação de pullback no M15, das 08h às 17h UTC. Não existe garantia de ganhos. Deseja continuar?';
- if(!window.confirm(message))return;
- button.disabled=true;
- try{
-   const result=await req('/api/autopilot/v2/new-evaluation',{
-      method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({confirm:'START_NEW_DEMO_EVALUATION'})});
-   await Promise.allSettled([loadDemoOrders(),loadV2Evaluation(),loadStrategyStats(),
-                              loadRiskSession(),refreshDashboard()]);
-   window.alert(result.message||'Nova avaliação preparada. Robô permanece desligado.');
- }catch(e){window.alert('Não foi possível iniciar nova avaliação: '+e.message);}
- finally{button.disabled=false}
-}
-async function loadStrategyStats(){
-  const tbody=$('strategyStats');
-  try{
-    const result=await req('/api/autopilot/strategy-stats');
-    tbody.replaceChildren();
-    if(!result.items.length){
-      const tr=document.createElement('tr'),td=document.createElement('td');
-      td.colSpan=6;td.className='empty';td.textContent='Nenhuma entrada automática registrada até agora.';
-      tr.append(td);tbody.append(tr);return;
-    }
-    for(const item of result.items){
-      const row=document.createElement('tr');
-      const rate=item.win_rate===null?'—':(100*item.win_rate).toFixed(1)+'%';
-      for(const value of [item.strategy,item.settled,item.wins,item.losses,rate,money(item.net_pnl)]){
-        const td=document.createElement('td');td.textContent=String(value);row.append(td);
-      }
-      tbody.append(row);
-    }
-  }catch(e){tbody.replaceChildren();const tr=document.createElement('tr'),td=document.createElement('td');td.colSpan=6;td.className='empty';td.textContent='Estratégias indisponíveis: '+e.message;tr.append(td);tbody.append(tr)}
-}
-async function loadAssetScanner(){
- const button=$('scannerRefresh'),place=$('scannerResults'),message=$('scannerMessage');
- if(button.disabled)return;
- button.disabled=true;
- message.textContent='Pesquisando catálogo e velas M1 oficiais. Isso não envia contratos...';
- try{
-   const report=await req('/api/research/asset-scanner');
-   place.replaceChildren();
-   message.textContent=(report.cached?'Pesquisa em cache por até 5 minutos. ':'Pesquisa atualizada. ')+
-     'Ativos avaliados: '+(report.checked_assets||0)+'. Sem operações enviadas.';
-   const table=document.createElement('table'),head=document.createElement('thead');
-   const tr=document.createElement('tr');
-   for(const label of ['Ativo','Família','Velas M1','Hipóteses atuais','Validação 1/3/5 min (acertos direcionais)']){
-     const th=document.createElement('th');th.textContent=label;tr.append(th);
-   }head.append(tr);table.append(head);
-   const body=document.createElement('tbody');
-   for(const item of report.items||[]){
-     const row=document.createElement('tr');
-     const candidates=(item.candidates||[]).map(c=>
-       c.strategy+' · '+(c.direction==='CALL'?'Alta':c.direction==='PUT'?'Baixa':'Aguardar')).join('; ');
-     const testRows=item.comparison?.results||[];
-     const comparisons=testRows.map(test=>{
-       const val=test.validation;
-       const result=val.hit_rate===null?'sem sinais':(100*val.hit_rate).toFixed(1)+'% em '+val.signals+' sinais';
-       return test.duration_minutes+'min: '+result+(test.enough_validation_samples?' (amostra preliminar)':' (amostra insuficiente)');
-     }).join(' | ');
-     for(const value of [item.display_name+' ('+item.symbol+')',item.family,
-         item.candles,candidates||'Sem hipóteses atuais',
-         comparisons||'Validação indisponível']){
-       const td=document.createElement('td');td.textContent=String(value);row.append(td);
-     }
-     body.append(row);
-   }
-   for(const item of report.errors||[]){
-     const row=document.createElement('tr'),td=document.createElement('td');
-     td.colSpan=5;td.className='empty';td.textContent=item.symbol+' · '+item.reason;
-     row.append(td);body.append(row);
-   }
-   if(!body.children.length){
-     const row=document.createElement('tr'),td=document.createElement('td');
-     td.colSpan=5;td.className='empty';td.textContent=report.reason||'Nenhum ativo elegível encontrado.';
-     row.append(td);body.append(row);
-   }
-   table.append(body);place.append(table);
- }catch(e){
-   message.textContent='Scanner indisponível: '+e.message;
- }finally{button.disabled=false}
-}
-async function loadStrategyLab(){
- const button=$('labRefresh'),reports=$('labReports');
- button.disabled=true;$('labMessage').textContent='Consultando símbolos, contratos e candles históricos da Deriv...';
- try{
-   const payload=await req('/api/research/strategy-lab');reports.replaceChildren();
-   $('labMessage').textContent=payload.cached?'Última pesquisa em cache (até 5 minutos).':'Pesquisa atualizada com dados públicos da Deriv.';
-   if(!payload.items.length){const p=document.createElement('p');p.className='card muted';p.textContent=payload.reason||'Nenhum ativo compatível retornou dados suficientes nesta consulta.';reports.append(p)}
-   for(const item of payload.items){
-     const card=document.createElement('div');card.className='card';
-     const title=document.createElement('div');title.className='surface-heading';title.textContent=item.display_name+' · '+item.symbol;card.append(title);
-     const info=document.createElement('p');info.className='muted';info.textContent=item.strategy==='range_channel'?'Estratégia: rompimento de canal de 20 velas':'Estratégia: cruzamento de médias de 8 e 21 velas';card.append(info);
-     const period=document.createElement('p');period.className='helper';period.textContent=item.candles+' candles M1 · '+item.split+' · contrato '+item.contract_compatibility;card.append(period);
-     const wrap=document.createElement('div');wrap.className='table-wrap';const table=document.createElement('table');
-     const head=document.createElement('thead'),header=document.createElement('tr');
-     for(const col of ['Expiração','Treino: sinais','Treino: acerto','Validação: sinais','Validação: acerto','Amostra']){let th=document.createElement('th');th.textContent=col;header.append(th)}
-     head.append(header);table.append(head);
-     const body=document.createElement('tbody');
-     for(const row of item.results){
-       const tr=document.createElement('tr');
-       const rate=v=>v===null?'—':(100*v).toFixed(1)+'%';
-       for(const value of [row.duration_minutes+' min',row.train.signals,rate(row.train.hit_rate),row.validation.signals,rate(row.validation.hit_rate),row.enough_validation_samples?'Preliminar':'Insuficiente']){
-         const td=document.createElement('td');td.textContent=String(value);tr.append(td)
-       }body.append(tr)
-     }table.append(body);wrap.append(table);card.append(wrap);
-     const warning=document.createElement('p');warning.className='helper';warning.textContent=item.warning;card.append(warning);reports.append(card)
-   }
-   for(const item of payload.errors||[]){const p=document.createElement('p');p.className='card muted';p.textContent=item.symbol+': '+item.reason;reports.append(p)}
-   fail('')
- }catch(e){$('labMessage').textContent='Não foi possível completar esta pesquisa: '+e.message}
- finally{button.disabled=false}
 }
 async function reconcile(id){try{await req('/api/demo/orders/'+encodeURIComponent(id)+'/reconcile',{method:'POST'});await loadDemoOrders();await loadDemoBalance();fail('')}catch(e){fail('Liquidação: '+e.message)}}
 async function loadSettings(){
