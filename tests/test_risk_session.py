@@ -72,3 +72,22 @@ def test_reset_requires_authentication(tmp_path,monkeypatch):
             json={'confirm':'RESET_DEMO_RISK_SESSION'}).status_code==401
     finally:
         cleanup(engine)
+
+
+def test_reset_revokes_durable_resume_intent(tmp_path,monkeypatch):
+    client,factory,engine,uid=prepare(tmp_path,monkeypatch)
+    try:
+        with factory() as s:
+            s.add(db.RobotRun(user_id=uid,after_order_id=0))
+            s.add(db.AutoPilotResumeConsent(user_id=uid))
+            s.commit()
+        result=client.post('/api/demo/risk-session/reset',
+            json={'confirm':'RESET_DEMO_RISK_SESSION'})
+        assert result.status_code==200
+        with factory() as s:
+            assert s.get(db.RobotRun,uid) is None
+            assert s.get(db.AutoPilotResumeConsent,uid) is None
+        main.restore_demo_autopilot_consent()
+        assert uid not in main.autopilot_enabled
+    finally:
+        cleanup(engine)
