@@ -21,6 +21,9 @@ FX_PAIRS=('EURUSD','GBPJPY','GBPAUD','AUDNZD','AUDCAD','NZDUSD',
 MAX_SYMBOLS=32
 SCAN_BATCH=8
 _scan_offset=0
+# A scan may discover several independent signals at the same M1 close.
+# Keep them briefly per user so the executor can submit each one in turn.
+_pending_signals_by_user={}
 EXPIRY={'range_break':3,'forex':15,'step':5,'volatility':5}
 _catalog_cache=()
 _catalog_at=0.0
@@ -157,9 +160,17 @@ def signal_from_closed_candles(item,candles,now=None):
                       else 'Cruzamento de médias 8/21 em velas M1 fechadas')}
 
 
-async def select_demo_signal(*, exclude_symbols=()):
-    """Return a DEMO research candidate, with explicit rejection diagnostics."""
+async def select_demo_signal(*, exclude_symbols=(), user_key=None):
+    """Select all distinct confirmed M1 candidates across sequential DEMO ticks."""
     global _last_scan,_scan_offset
+    exclude=set(exclude_symbols)
+    # Never reuse a setup after its 50-second post-candle freshness window.
+    queued=_pending_signals_by_user.get(user_key,[])
+    now=time.time()
+    while queued:
+        item=queued.pop(0)
+        if item['symbol'] not in exclude and 0 <= now-(item['last_bar_epoch']+60) <= 50:
+            return item
     stamp=datetime.now(timezone.utc).isoformat()
     try:
         items=await catalogue()
@@ -180,7 +191,6 @@ async def select_demo_signal(*, exclude_symbols=()):
                     for i in range(min(SCAN_BATCH,total))]
     _scan_offset=(_scan_offset+len(selected_items))%total
     sem=asyncio.Semaphore(3)
-    exclude=set(exclude_symbols)
     async def examine(item):
         async with sem:
             symbol=item['symbol']
@@ -212,6 +222,7 @@ async def select_demo_signal(*, exclude_symbols=()):
     signals=[candidate for candidate,_ in result if candidate]
     signals.sort(key=lambda x:(0 if x['strategy']=='rompimento_m1' else 1,x['symbol']))
     chosen=signals[0] if signals else None
+    _pending_signals_by_user[user_key]=signals[1:]
     rows=[row for _,row in result]
     status='SIGNAL' if chosen else (
         'MARKET_DATA_UNAVAILABLE' if all(x['status'] in (
