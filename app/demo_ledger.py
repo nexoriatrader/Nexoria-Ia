@@ -2,6 +2,7 @@
 from __future__ import annotations
 from decimal import Decimal, InvalidOperation
 import hashlib
+import re
 from sqlalchemy import select, func
 from sqlalchemy.exc import IntegrityError
 from . import db
@@ -74,7 +75,7 @@ def reserve(session, user, *, request_key, symbol, direction, minutes,
         raise OrderGuardError('Identificador de tentativa inválido')
     if direction not in {'CALL','PUT'} or minutes not in {1,3,5}:
         raise OrderGuardError('Contrato demo inválido')
-    if not isinstance(symbol,str) or not symbol.isalnum() or not 2<=len(symbol)<=30:
+    if not isinstance(symbol,str) or not re.fullmatch(r'[A-Za-z0-9_]{2,30}',symbol):
         raise OrderGuardError('Ativo demo inválido')
     # PostgreSQL user-row lock serializes risk/exposure checks between workers.
     # Same-process autopilot_lock independently serializes automatic activations.
