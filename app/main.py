@@ -1034,6 +1034,9 @@ async def status(request:Request,nexora_sid:str|None=Cookie(default=None)):
     user=active_user(request,nexora_sid)
     with db.SessionLocal() as sess:
         interrupted=sess.get(db.RobotRun,user.id) is not None and user.id not in autopilot_enabled
+        batch=sess.get(db.PilotValidationBatch,user.id)
+        mode='V2_MULTI_ASSET' if batch else 'V1_SINGLE_ASSET'
+        upgrade_needed=bool(v2_enabled() and batch is None and user.id in autopilot_enabled)
     async with lock:
         engine=rt_for(user)
         return {'connected':engine.connected,'symbol':engine.symbol,
@@ -1042,6 +1045,10 @@ async def status(request:Request,nexora_sid:str|None=Cookie(default=None)):
                 'running':user.id in autopilot_enabled,'auto_buy_enabled':autopilot_allowed(),
                 'real_orders_enabled':False,
                 'interrupted_after_restart':interrupted,
+                'autopilot_version':mode,
+                'v2_available':v2_enabled(),
+                'v2_upgrade_needed':upgrade_needed,
+                'analysis_symbol':SYMBOL,
                 'reason':autopilot_reasons.get(user.id,
                    'Execução interrompida após reinício; reative manualmente no painel' if interrupted else 'Robô desligado')}
 
