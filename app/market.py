@@ -72,6 +72,12 @@ async def public_request(payload: dict, *, expected: str, timeout: float = 12.0)
                 detail = type(exc).__name__
                 if isinstance(exc, ConnectionClosed):
                     detail += f"(code={getattr(exc.rcvd, 'code', 'unknown')})"
+                # The HTTP handshake status is the missing diagnostic.
+                # Do not log response headers/body (may contain sensitive data).
+                response = getattr(exc, 'response', None)
+                status = getattr(response, 'status_code', None)
+                if isinstance(status, int):
+                    detail += f"(http_status={status})"
                 logger.warning(
                     "Deriv public request interrupted: endpoint=%s attempt=%s/2 error=%s",
                     expected, attempt + 1, detail
