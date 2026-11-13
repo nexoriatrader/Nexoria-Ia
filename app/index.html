@@ -457,10 +457,10 @@ button.choose-account:focus-visible{outline:3px solid #71d2ff;outline-offset:4px
   </div>
   <div class="metric-grid">
     <div class="card metric"><div class="metric-label">Saldo Treinamento</div><div class="metric-value" id="balanceMetric">—</div><div class="metric-sub">Saldo virtual oficial · Deriv</div></div>
-    <div hidden aria-hidden="true"><span id="realBalanceMetric"></span><span id="realBalanceReason"></span></div>
+    <div class="card metric balance-real"><div class="metric-label">Saldo Conta Real</div><div class="metric-value" id="realBalanceMetric">—</div><div class="metric-sub" id="realBalanceReason">Consultando saldo...</div></div>
     <div class="card metric"><div class="metric-label" id="demoPnlScope">Resultado do dia</div>
       <div class="metric-value" id="profitMetric">—</div>
-      <div hidden aria-hidden="true"><span id="realProfitMetric"></span><span id="realProfitReason"></span></div>
+      <div class="divider" style="height:1px;background:#35536a;margin:12px 0"></div><div class="metric-sub">CONTA REAL</div><div class="metric-value" id="realProfitMetric">—</div><div class="metric-sub" id="realProfitReason">Consultando resultado...</div>
       <div class="metric-sub" style="margin-top:9px">Desde 00h · Brasília · somente contratos liquidados</div>
     </div>
   </div>
