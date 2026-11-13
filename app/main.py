@@ -432,8 +432,14 @@ async def autopilot_once():
                                             'SCAN_TIMEOUT','MARKET_DATA_UNAVAILABLE'):
                                 autopilot_reasons[uid]='Scanner 2.0 sem dados válidos: '+status
                             else:
-                                autopilot_reasons[uid]=('AutoPilot 2.2: aguardando H1 + pullback M15 confirmado' if batch.max_orders>=200
-                                                       else 'AutoPilot 2.0: sem rompimento ou tendência confirmados neste ciclo')
+                                if batch.max_orders>=200:
+                                    current_market=state.get('market','forex')
+                                    autopilot_reasons[uid]=(
+                                        'AutoPilot 2.2: Volatility em análise; aguardando sinal confirmado'
+                                        if current_market=='volatility' else
+                                        'AutoPilot 2.2: Forex H1/M15 em análise; aguardando sinal confirmado')
+                                else:
+                                    autopilot_reasons[uid]='AutoPilot 2.0: sem rompimento ou tendência confirmados neste ciclo'
                             continue
                     else:
                         if not candidates:
