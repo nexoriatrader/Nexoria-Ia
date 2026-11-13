@@ -22,7 +22,8 @@ from .engine import Engine, Settings
 from .market import MarketError, discover_symbols, discover_contracts, indicative_proposal
 from .strategy_lab import run_lab
 from .asset_scanner import scan_assets
-from .trade_selector_v2 import select_demo_signal, last_scan_report, has_pending_signals
+from .trade_selector_v2 import (select_demo_signal, last_scan_report, has_pending_signals,
+                                active_market, catalogue, supported, fetch_closed_timeframe)
 from .progression import next_entry, ProgressionHalt, NextEntry
 from .security import CLIENT_ID, REDIRECT, TOKEN_URL, build_authorize_url, make_login, make_session_id, hashsecret, encrypt, decrypt, cookie_options
 
@@ -36,6 +37,7 @@ runtimes: dict[int, Engine] = {}
 market_task = None
 reconcile_task = None
 autopilot_task = None
+market_selfcheck_task = None
 # Runtime state is volatile; explicit DEMO resume intent is persisted separately.
 autopilot_enabled: set[int] = set()
 autopilot_last_attempt: dict[int,float] = {}
@@ -57,6 +59,38 @@ def log_v2_gate(uid:int, gate:str, detail:str=''):
     if now-v2_gate_last_log.get(key,-1e12)>=60:
         v2_gate_last_log[key]=now
         log.info('AutoPilot V2.2 gate: %s%s',gate,(' '+detail) if detail else '')
+
+
+async def public_market_selfcheck_once():
+    """One read-only public API smoke test per server boot; never buys."""
+    await asyncio.sleep(6)
+    market=active_market()
+    try:
+        items=await asyncio.wait_for(catalogue(market),timeout=20)
+        log.warning('V2.2 selfcheck: market=%s catalogue=%s',market,len(items))
+        if not items:
+            log.warning('V2.2 selfcheck: empty catalogue; unable to inspect candles')
+            return
+        # Bounded: at most three Deriv-provided assets and no trading action.
+        for item in items[:3]:
+            symbol=item['symbol']
+            try:
+                ok=await asyncio.wait_for(supported(symbol,15),timeout=18)
+                if not ok:
+                    log.warning('V2.2 selfcheck: symbol=%s 15min_CALL_PUT=unavailable',symbol)
+                    continue
+                snapshot=datetime.now(timezone.utc).timestamp()
+                h1,m15=await asyncio.wait_for(asyncio.gather(
+                    fetch_closed_timeframe(symbol,3600,105,now=snapshot),
+                    fetch_closed_timeframe(symbol,900,115,now=snapshot)),timeout=30)
+                log.warning('V2.2 selfcheck: symbol=%s 15min_CALL_PUT=available H1_candles=%s M15_candles=%s',
+                            symbol,len(h1),len(m15))
+                return
+            except (MarketError,TimeoutError,OSError,ValueError) as exc:
+                log.warning('V2.2 selfcheck: symbol=%s data_error=%s',symbol,type(exc).__name__)
+        log.warning('V2.2 selfcheck: no successfully validated H1/M15 asset in sample')
+    except (MarketError,TimeoutError,OSError,ValueError) as exc:
+        log.warning('V2.2 selfcheck: catalogue_error=%s',type(exc).__name__)
 
 
 def rt_for(user):
@@ -616,9 +650,10 @@ async def lifespan(app):
     market_task=asyncio.create_task(feed())
     reconcile_task=asyncio.create_task(reconcile_confirmed_loop())
     autopilot_task=asyncio.create_task(autopilot_loop())
+    market_selfcheck_task=asyncio.create_task(public_market_selfcheck_once())
     yield
     autopilot_enabled.clear()
-    tasks=[task for task in (market_task,reconcile_task,autopilot_task) if task]
+    tasks=[task for task in (market_task,reconcile_task,autopilot_task,market_selfcheck_task) if task]
     for task in tasks:
         task.cancel()
     await asyncio.gather(*tasks,return_exceptions=True)
