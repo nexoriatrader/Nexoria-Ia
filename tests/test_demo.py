@@ -132,3 +132,21 @@ def test_demo_buy_uses_demo_channel_and_returns_contract(monkeypatch):
     assert socket.sent[1]["proposal"] == 1
     assert socket.sent[1]["currency"] == "EUR"
     assert socket.sent[2]["buy"] == "proposal-demo-2"
+
+
+def test_deriv_proposal_error_code_is_sanitized():
+    socket = FakeSocket([
+        {"req_id": 7001, "error": {"code": "ContractUnavailable", "message": "No contract"}},
+    ])
+    with pytest.raises(demo.DemoTradingError) as err:
+        asyncio.run(demo._response_for(socket, 7001))
+    assert err.value.deriv_code == "ContractUnavailable"
+
+
+def test_deriv_error_code_does_not_allow_sensitive_or_untrusted_text():
+    socket = FakeSocket([
+        {"req_id": 7001, "error": {"code": "secret=token\\n", "message": "Denied"}},
+    ])
+    with pytest.raises(demo.DemoTradingError) as err:
+        asyncio.run(demo._response_for(socket, 7001))
+    assert err.value.deriv_code == "UNSPECIFIED"
