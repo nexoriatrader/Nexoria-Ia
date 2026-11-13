@@ -461,3 +461,38 @@ def test_v21_reset_rejects_confirmed_contract(tmp_path,monkeypatch):
             assert len(sess.scalars(select(db.DemoOrder)).all())==1
     finally:
         cleanup(engine)
+
+
+def test_v2_symbol_history_out_of_order_uses_ascending_order_ids(tmp_path,monkeypatch):
+    """SQL may return rows in any order; it must not stop a fixed-stake robot."""
+    client,factory,engine,uid=prepare(tmp_path,monkeypatch,stop_loss='0.00')
+    try:
+        with factory() as sess:
+            user=sess.get(db.User,uid)
+            user.stake='0.50'
+            sess.add(db.RobotRun(user_id=uid,after_order_id=0))
+            sess.add(db.PilotValidationBatch(user_id=uid,after_order_id=0,max_orders=100))
+            for idx,pnl in enumerate(('-0.50','0.40','-0.50'),start=1):
+                o=db.DemoOrder(user_id=uid,request_key=f'history-order-{idx}',
+                    state='SETTLED',symbol='frxEURUSD',direction='CALL',
+                    duration_minutes=15,stake='0.50',pnl=pnl)
+                sess.add(o)
+                sess.flush()
+                sess.add(db.AutoPilotAttribution(order_id=o.id,user_id=uid,
+                    strategy='rompimento_m1_filtrado_v21',direction='CALL',reason='teste'))
+            sess.commit()
+        with factory() as sess:
+            user=sess.get(db.User,uid)
+            rows=sess.scalars(select(db.DemoOrder).where(
+                db.DemoOrder.user_id==uid).order_by(db.DemoOrder.id.desc())).all()
+            assert len(rows)==3 and rows[0].id>rows[-1].id
+            entry,last=main.v2_symbol_recovery(sess,user,rows,None,None,
+                sess.get(db.PilotValidationBatch,uid))
+            assert entry is None and last is None
+            # It must also work with mixed symbols and an arbitrary shuffle.
+            rows.reverse()
+            entry,last=main.v2_symbol_recovery(sess,user,rows,None,None,
+                sess.get(db.PilotValidationBatch,uid))
+            assert entry is None and last is None
+    finally:
+        cleanup(engine)
