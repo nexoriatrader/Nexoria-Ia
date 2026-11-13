@@ -305,3 +305,22 @@ def test_public_market_websocket_close_is_reported_as_data_error(monkeypatch):
         assert False,'ConnectionClosedError must convert to MarketError'
     except MarketError as exc:
         assert 'ConnectionClosedError' in str(exc)
+
+
+def test_v2_uses_official_call_put_expiry_limits():
+    from app.trade_selector_v2 import duration_seconds,contract_supports_duration
+    assert duration_seconds('15s')==15
+    assert duration_seconds('3m')==180
+    assert duration_seconds('1h')==3600
+    assert duration_seconds('1d')==86400
+    assert duration_seconds('not-duration') is None
+    contracts=[
+        {'contract_type':'CALL','min_contract_duration':'5m',
+         'max_contract_duration':'1d'},
+        {'contract_type':'PUT','min_contract_duration':'5m',
+         'max_contract_duration':'1d'}]
+    assert not contract_supports_duration(contracts,minutes=3)
+    assert contract_supports_duration(contracts,minutes=5)
+    # Incomplete broker metadata must fail closed.
+    assert not contract_supports_duration([{'contract_type':'CALL'}],minutes=3)
+    assert not contract_supports_duration([contracts[0]],minutes=5)
