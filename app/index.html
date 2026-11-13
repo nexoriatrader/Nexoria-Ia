@@ -457,8 +457,8 @@ button.choose-account:focus-visible{outline:3px solid #71d2ff;outline-offset:4px
   <div class="card"><div class="surface-heading">Avaliação independente do AutoPilot · DEMO</div>
     <p class="muted">Os resultados desta avaliação são separados dos anteriores; metas de amostragem não limitam automaticamente as operações. Cada par mantém sua própria sequência, respeitando as proteções e os limites configurados.</p>
     <p class="helper" id="v2EvalStatus" role="status">Consultando avaliação atual...</p>
-    <div class="actions"><button class="outline" id="newEvalBtn" type="button" onclick="startNewEvaluation()">INICIAR NOVA AVALIAÇÃO · ZERAR PLACAR</button></div>
-    <p class="helper">Requer robô desligado e todos os contratos encerrados. Zera apenas os números da nova avaliação e a sessão de risco; não apaga contratos anteriores, não altera o saldo da Deriv e não inicia operações automaticamente. A próxima avaliação usará filtros experimentais de tendência EMA50 e amplitude de velas, ainda sem comprovação de superioridade.</p>
+    <div class="actions"><button class="outline" id="newEvalBtn" type="button" onclick="startNewEvaluation()">INICIAR AVALIAÇÃO 2.2 · ZERAR PLACAR</button></div>
+    <p class="helper">Requer AutoPilot desligado e todos os contratos liquidados. Inicia o lote independente NEXORA 2.2 (H1: EMA50 e topos/fundos; M15: tendência, lateralização, pullback confirmado; sessões 08h–17h UTC). Mantém histórico, saldo e logo originais; não envia ordens nem liga automaticamente.</p>
   </div>
   <div class="card"><div class="surface-heading">Desempenho das estratégias</div>
     <p class="muted">Entradas automáticas oficiais na Deriv Demo, agrupadas pela estratégia de origem. Não são previsões de resultados futuros.</p>
@@ -825,9 +825,9 @@ async function loadDailyResult(){
  const el=$('profitMetric');
  try{
    const evaluation=await req('/api/autopilot/v2/evaluation');
-   const secondBatch=evaluation.active&&evaluation.batch==='NEXORA_2.1';
+   const secondBatch=evaluation.active&&['NEXORA_2.1','NEXORA_2.2'].includes(evaluation.batch);
    const result=secondBatch?evaluation:await req('/api/demo/results/today');
-   $('demoPnlScope').textContent=secondBatch?'Resultado da avaliação 2.1':'Resultado do dia';
+   $('demoPnlScope').textContent=secondBatch?'Resultado da avaliação '+evaluation.batch.replace('NEXORA_',''):'Resultado do dia';
    const amount=Number(result.net_pnl??result.pnl);
    if(!Number.isFinite(amount))throw Error('Resultado DEMO inválido');
    el.textContent=money(amount);
@@ -928,12 +928,12 @@ async function loadV2Evaluation(){
    ' · WIN: '+wins+' · LOSS: '+x.losses+' · Pendentes: '+x.pending+
    ' · Taxa observada: '+rate+' · Resultado DEMO: '+money(x.net_pnl)+
    ' · Meta inicial: '+(x.target||50)+' (sem limite automático) · '+(x.batch||'NEXORA 2.0');
- }catch(e){place.textContent='Avaliação 2.0 temporariamente indisponível: '+e.message;}
+ }catch(e){place.textContent='Avaliação temporariamente indisponível: '+e.message;}
 }
 async function startNewEvaluation(){
  const button=$('newEvalBtn');
  if(button.disabled)return;
- const message='INICIAR AVALIAÇÃO DEMO 2.1?\n\nExige AutoPilot desligado e todos os contratos anteriores liquidados.\n\nO placar da nova avaliação e os stops de sessão começam do zero. Os contratos, resultados históricos e o saldo oficial da Deriv NÃO são apagados.\n\nA próxima ativação utilizará filtros experimentais EMA50 e amplitude, ainda não validados. Deseja continuar?';
+ const message='INICIAR AVALIAÇÃO DEMO 2.2?\n\nExige AutoPilot desligado e todos os contratos anteriores liquidados.\n\nPlacar e sessão de risco começam do zero. Contratos anteriores e saldo oficial da Deriv NÃO são apagados.\n\nNova estratégia experimental: tendência H1 + EMA50 + confirmação de pullback no M15, das 08h às 17h UTC. Não existe garantia de ganhos. Deseja continuar?';
  if(!window.confirm(message))return;
  button.disabled=true;
  try{
