@@ -208,3 +208,24 @@ def test_status_exposes_legacy_session_and_required_v2_rearm(tmp_path,monkeypatc
         assert state['autopilot_version']=='V2_MULTI_ASSET'
         assert state['v2_upgrade_needed'] is False
     finally:cleanup(engine)
+
+
+def test_v2_scanner_diagnostics_distinguish_broker_failure_from_no_signal(tmp_path,monkeypatch):
+    from app import trade_selector_v2 as selector
+    client,factory,engine,uid=prepare(tmp_path,monkeypatch)
+    try:
+        monkeypatch.setenv('NEXORA_V2_ENABLED','true')
+        monkeypatch.setattr(selector,'catalogue',AsyncMock(return_value=[
+            {'symbol':'frxEURJPY','display_name':'EUR/JPY','family':'forex'}]))
+        monkeypatch.setattr(selector,'supported',AsyncMock(return_value=True))
+        from app.market import MarketError
+        monkeypatch.setattr(selector,'fetch_candles',
+                            AsyncMock(side_effect=MarketError('Public feed disconnected')))
+        assert asyncio.run(selector.select_demo_signal()) is None
+        status=client.get('/api/autopilot/v2/scanner-status')
+        assert status.status_code==200
+        scan=status.json()['scan']
+        assert scan['status']=='MARKET_DATA_UNAVAILABLE'
+        assert scan['assets'][0]['status']=='MARKET_DATA_ERROR'
+        assert scan['assets'][0]['symbol']=='frxEURJPY'
+    finally:cleanup(engine)
