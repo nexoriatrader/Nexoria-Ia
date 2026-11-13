@@ -482,7 +482,7 @@ button.choose-account:focus-visible{outline:3px solid #71d2ff;outline-offset:4px
 <section id="results" class="hidden">
   <div class="section-heading"><div><h1>Resultados</h1><p>Histórico de operações DEMO.</p></div></div>
   <div class="card"><div class="surface-heading">HISTÓRICO COMPLETO DO ROBÔ</div>
-    <div class="actions" style="align-items:center"><button class="outline" type="button" onclick="go('dashboard')">VOLTAR AO PAINEL DO ROBÔ</button><span class="helper" id="resultsLiveStatus" role="status">● Atualização automática a cada 3 segundos</span></div>
+    <div class="actions" style="align-items:center"><button class="outline" type="button" onclick="go('dashboard')">VOLTAR AO PAINEL DO ROBÔ</button><span class="helper" id="resultsLiveStatus" role="status">Atualização automática 🟢</span></div>
     <div class="table-wrap"><table><thead><tr><th>Data (Brasília)</th><th>Horário</th><th>Conta</th><th>Ativo</th><th>Direção</th><th>Entrada</th><th>Expiração</th><th>Etapa</th><th>Situação</th><th>WIN / LOSS</th><th>Resultado</th></tr></thead><tbody id="ordersBody"><tr><td colspan="11" class="empty">Carregando contratos...</td></tr></tbody></table></div>
   </div>
 </section>
@@ -620,7 +620,7 @@ function updateResultsPolling(){
      resultsRequestBusy=true;
      try{
        await loadDemoOrders();
-       $('resultsLiveStatus').textContent='● Sincronização automática · 3 s · Deriv DEMO';
+       $('resultsLiveStatus').textContent='Atualização automática 🟢';
      }catch(e){
        $('resultsLiveStatus').textContent='○ Tentando sincronizar com a Deriv...';
      }finally{resultsRequestBusy=false;}
