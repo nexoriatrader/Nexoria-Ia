@@ -447,10 +447,14 @@ button.choose-account:focus-visible{outline:3px solid #71d2ff;outline-offset:4px
   </div>
 </section>
 <section id="results" class="hidden">
-  <div class="section-heading"><div><div class="eyebrow">DADOS OFICIAIS</div><h1>Resultados NEXORA IA</h1><p>Acompanhe o histórico do robô dos últimos 3 dias. Horários de Brasília e resultados oficiais da Deriv.</p></div></div>
-  <div class="card"><div class="surface-heading">Histórico oficial — últimos 3 dias</div>
+  <div class="section-heading"><div><div class="eyebrow">DADOS OFICIAIS</div><h1>Resultados NEXORA IA</h1><p>Somente operações da avaliação 2.0, quando iniciada. Registros oficiais anteriores não são excluídos da corretora ou do banco.</p></div></div>
+  <div class="card"><div class="surface-heading">Histórico DEMO — avaliação NEXORA 2.0</div>
     <div class="actions"><button class="outline" onclick="loadDemoOrders()">ATUALIZAR CONTRATOS</button><span class="helper" id="resultsLiveStatus" role="status">● Atualização automática a cada 3 segundos</span></div>
     <div class="table-wrap"><table><thead><tr><th>Data (Brasília)</th><th>Horário</th><th>Conta</th><th>Ativo</th><th>Direção</th><th>Entrada</th><th>Etapa</th><th>Situação</th><th>WIN / LOSS</th><th>Resultado</th><th>Ação</th></tr></thead><tbody id="ordersBody"><tr><td colspan="11" class="empty">Carregando contratos...</td></tr></tbody></table></div>
+  </div>
+  <div class="card"><div class="surface-heading">NEXORA 2.0 · Avaliação independente</div>
+    <p class="muted">Começa do zero na primeira ativação do AutoPilot 2.0. Meta de 50 operações, sem desligamento por quantidade. Até 2 contratos DEMO simultâneos em ativos diferentes, respeitando stops e exposição total.</p>
+    <p class="helper" id="v2EvalStatus" role="status">Consultando a avaliação 2.0...</p>
   </div>
   <div class="card"><div class="surface-heading">Desempenho das estratégias</div>
     <p class="muted">Entradas automáticas oficiais na Deriv Demo, agrupadas pela estratégia de origem. Não são previsões de resultados futuros.</p>
@@ -462,7 +466,7 @@ button.choose-account:focus-visible{outline:3px solid #71d2ff;outline-offset:4px
 <section id="lab" class="hidden">
   <div class="card">
     <div class="surface-heading">Scanner inteligente de ativos · AutoPilot 2.0</div>
-    <p class="muted">Pesquisa pública de índices da Deriv. Compara condições de mercado em Volatility, Step e Range Break, quando disponíveis e compatíveis. Nenhuma entrada será realizada por este scanner.</p>
+    <p class="muted">Pesquisa independente em Volatility, Step e Range Break. O AutoPilot 2.0 também consulta Forex e executa hipóteses experimentais M1 em DEMO após confirmar compatibilidade e pagamento na Deriv.</p>
     <div class="actions"><button class="outline" id="scannerRefresh" onclick="loadAssetScanner()">ANALISAR ATIVOS</button></div>
     <p class="helper" id="scannerMessage" role="status">Clique para analisar ativos disponíveis no catálogo oficial.</p>
     <div id="scannerResults" class="table-wrap"></div>
@@ -479,7 +483,7 @@ button.choose-account:focus-visible{outline:3px solid #71d2ff;outline-offset:4px
   </div>
   <div id="labReports"></div>
   <div class="card"><div class="surface-heading">Proteção do AutoPilot</div>
-  <p class="muted">Este estudo é exclusivamente de leitura e <strong>não altera</strong> o 1HZ100V, a direção, o tempo M5 nem as permissões de compras do robô em execução. Nenhuma estratégia é automaticamente aprovada.</p>
+  <p class="muted">O laboratório histórico permanece de leitura. As operações DEMO do AutoPilot 2.0 são experimentais e avaliadas separadamente por contratos liquidados oficiais; pesquisa histórica não comprova vantagem financeira.</p>
   <p class="helper">Fontes: <a href="https://deriv.com/pt/markets/derived-indices/synthetic-indices" target="_blank" rel="noopener noreferrer">Deriv — Índices Sintéticos</a> e <a href="https://developers.deriv.com/docs/data/ticks-history/" target="_blank" rel="noopener noreferrer">Deriv API — Histórico de ticks</a>.</p>
   </div>
 </section>
@@ -814,7 +818,7 @@ async function loadRealDailyResult(){
    reason.textContent='Consulta ao resultado real temporariamente indisponível';
  }
 }
-async function loadDemoOrders(){try{const data=await req('/api/demo/orders');demoOrders=data.items||[];const last=demoOrders[0];$('lastOrder').textContent=last?last.symbol+' · '+last.direction+' · Entrada '+money(last.stake)+' · '+last.state+(last.pnl===null?' · Aguardando resultado':' · P/L '+money(last.pnl)):'Nenhum contrato oficial ainda.';renderOrders();return data}catch(e){$('ordersBody').innerHTML='<tr><td colspan="11" class="empty">Não foi possível carregar o histórico.</td></tr>';throw e}}
+async function loadDemoOrders(){try{const data=await req('/api/demo/orders');demoOrders=data.items||[];if(activePage==='results')loadV2Evaluation().catch(()=>{});const last=demoOrders[0];$('lastOrder').textContent=last?last.symbol+' · '+last.direction+' · Entrada '+money(last.stake)+' · '+last.state+(last.pnl===null?' · Aguardando resultado':' · P/L '+money(last.pnl)):'Nenhum contrato oficial ainda.';renderOrders();return data}catch(e){$('ordersBody').innerHTML='<tr><td colspan="11" class="empty">Não foi possível carregar o histórico.</td></tr>';throw e}}
 const brasilDateTime=(iso)=>{
  if(!iso)return ['—','—'];
  const d=new Date(iso);
@@ -862,6 +866,22 @@ function renderOrders(){
    else action.textContent='—';
    row.append(action);tbody.append(row);
  }
+}
+async function loadV2Evaluation(){
+ const place=$('v2EvalStatus');
+ try{
+  const x=await req('/api/autopilot/v2/evaluation');
+  if(!x.active){
+   place.textContent='Avaliação ainda não iniciada. Ao ativar o AutoPilot 2.0 pela primeira vez, o contador começa em zero.';
+   return;
+  }
+  const wins=Number(x.wins||0),settled=Number(x.settled||0);
+  const rate=settled?(wins*100/settled).toFixed(1)+'%':'—';
+  place.textContent='Operações registradas: '+x.submitted+' · Liquidadas: '+settled+
+   ' · WIN: '+wins+' · LOSS: '+x.losses+' · Pendentes: '+x.pending+
+   ' · Taxa observada: '+rate+' · Resultado DEMO: '+money(x.net_pnl)+
+   ' · Meta inicial: 50 (sem limite automático)';
+ }catch(e){place.textContent='Avaliação 2.0 temporariamente indisponível: '+e.message;}
 }
 async function loadStrategyStats(){
   const tbody=$('strategyStats');
