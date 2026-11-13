@@ -467,11 +467,6 @@ button.choose-account:focus-visible{outline:3px solid #71d2ff;outline-offset:4px
   <div class="metric-grid">
     <div class="card metric"><div class="metric-label">Saldo Treinamento</div><div class="metric-value" id="balanceMetric">—</div><div class="metric-sub">Saldo virtual oficial · Deriv</div></div>
     <div class="card metric balance-real"><div class="metric-label">Saldo Conta Real</div><div class="metric-value" id="realBalanceMetric">—</div><div class="metric-sub" id="realBalanceReason">Consultando saldo...</div></div>
-    <div class="card metric"><div class="metric-label" id="demoPnlScope">Resultado do dia</div>
-      <div class="metric-value" id="profitMetric">—</div>
-      <div class="divider" style="height:1px;background:#35536a;margin:12px 0"></div><div class="metric-sub">CONTA REAL</div><div class="metric-value" id="realProfitMetric">—</div><div class="metric-sub" id="realProfitReason">Consultando resultado...</div>
-      <div class="metric-sub" style="margin-top:9px">Desde 00h · Brasília · somente contratos liquidados</div>
-    </div>
   </div>
   <div class="card">
     <div class="surface-heading">Última operação</div>
@@ -734,7 +729,7 @@ async function refreshDashboard(){
      });
    }
    await Promise.allSettled([loadDemoBalance(),loadDemoOrders(),loadRealBalance(),
-                             loadDailyResult(),loadRealDailyResult(),loadRiskSession(),loadAutopilotReadiness()]);
+                             loadRiskSession(),loadAutopilotReadiness()]);
    // A newer dashboard request may have superseded this response while
    // secondary cards were loading; do not return an obsolete status.
    if(sequence!==dashboardStatusSequence)return null;
@@ -813,51 +808,6 @@ async function loadRealBalance(){
  }
 }
 async function loadDemoBalance(){try{const b=await req('/api/demo/balance');demoBalance=b;$('balanceMetric').textContent=money(b.balance,b.currency);$('accountBalance').textContent=money(b.balance,b.currency);return b}catch(e){$('balanceMetric').textContent='Indisponível';$('accountBalance').textContent='Indisponível';throw e}}
-let dailyResultResetTimer=null;
-async function loadDailyResult(){
- const el=$('profitMetric');
- try{
-   const evaluation=await req('/api/autopilot/v2/evaluation');
-   const secondBatch=evaluation.active&&['NEXORA_2.1','NEXORA_2.2'].includes(evaluation.batch);
-   const result=secondBatch?evaluation:await req('/api/demo/results/today');
-   $('demoPnlScope').textContent=secondBatch?'Resultado da avaliação '+evaluation.batch.replace('NEXORA_',''):'Resultado do dia';
-   const amount=Number(result.net_pnl??result.pnl);
-   if(!Number.isFinite(amount))throw Error('Resultado DEMO inválido');
-   el.textContent=money(amount);
-   el.className='metric-value '+(amount>0?'positive':amount<0?'negative':'');
-   if(dailyResultResetTimer)clearTimeout(dailyResultResetTimer);
-   const ms=secondBatch?0:new Date(result.next_reset_at).getTime()-Date.now()+500;
-   if(Number.isFinite(ms)&&ms>0){
-     dailyResultResetTimer=setTimeout(()=>{
-       if(activePage==='dashboard')loadDailyResult();
-     },Math.min(ms,2147483647));
-   }
- }catch(e){
-   el.textContent='Indisponível';
-   el.className='metric-value';
- }
-}
-async function loadRealDailyResult(){
- const value=$('realProfitMetric'),reason=$('realProfitReason');
- try{
-   const result=await req('/api/real/results/today');
-   if(result.available&&result.pnl!==null&&result.currency){
-     const amount=Number(result.pnl);
-     if(!Number.isFinite(amount))throw Error('Resultado real inválido');
-     value.textContent=money(amount,result.currency);
-     value.className='metric-value '+(amount>0?'positive':amount<0?'negative':'');
-     reason.textContent='Contratos encerrados · Deriv · '+safe(result.account_id);
-   }else{
-     value.textContent='—';
-     value.className='metric-value';
-     reason.textContent=result.reason||'Resultado real não disponível';
-   }
- }catch(e){
-   value.textContent='—';
-   value.className='metric-value';
-   reason.textContent='Consulta ao resultado real temporariamente indisponível';
- }
-}
 async function loadDemoOrders(){try{const data=await req('/api/demo/orders');demoOrders=data.items||[];const last=demoOrders[0];$('lastOrder').textContent=last?last.symbol+' · '+last.direction+' · M'+last.duration_minutes+' · '+money(last.stake)+(last.pnl===null?' · Aguardando resultado':' · Resultado '+money(last.pnl)):'Nenhum contrato oficial ainda.';renderOrders();return data}catch(e){$('ordersBody').innerHTML='<tr><td colspan="11" class="empty">Não foi possível carregar o histórico.</td></tr>';throw e}}
 const brasilDateTime=(iso)=>{
  if(!iso)return ['—','—'];
