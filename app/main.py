@@ -354,8 +354,8 @@ async def autopilot_once():
                         if any(o.state in ('PENDING','UNKNOWN') for o in active):
                             autopilot_reasons[uid]='Contrato DEMO incerto; aguardando conferência'
                             continue
-                        if len(active)>=2:
-                            autopilot_reasons[uid]='Dois contratos DEMO simultâneos; aguardando liquidação oficial'
+                        if len(active)>=4:
+                            autopilot_reasons[uid]='Quatro contratos DEMO simultâneos; aguardando liquidação oficial'
                             continue
                         entry,last=v2_symbol_recovery(sess,user,orders,plan,cycle_cfg,batch)
                         if entry is None:
