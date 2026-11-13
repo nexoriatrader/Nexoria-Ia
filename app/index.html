@@ -294,7 +294,6 @@ button.choose-account:focus-visible{outline:3px solid #71d2ff;outline-offset:4px
   <button class="nav" data-view="results" onclick="go('results')">▤　Resultados</button>
   <button class="nav" data-view="settings" onclick="go('settings')">⚙　Configurações</button>
   <button class="nav" data-view="account" onclick="go('account')">◉　Minha conta</button>
-  <button class="nav signout" onclick="logout()">↪　Desconectar</button>
 </nav>
 <main>
 <section id="welcome" class="login landing" aria-labelledby="landingHeading">
@@ -434,7 +433,7 @@ button.choose-account:focus-visible{outline:3px solid #71d2ff;outline-offset:4px
   </form>
 </section>
 <section id="dashboard" class="hidden">
-  <div class="section-heading"><div><div class="eyebrow">VISÃO GERAL</div><h1>Meu robô</h1><p>O essencial para acompanhar suas operações.</p></div></div>
+  <div class="section-heading"><div><h1>Meu robô</h1></div></div>
   <div class="card hero">
     <div class="hero-top"><div class="hero-title">Nexora Robô Automático</div><span id="robotState" class="hero-state">DESLIGADO</span></div>
     <div class="robot-control-row">
@@ -458,10 +457,9 @@ button.choose-account:focus-visible{outline:3px solid #71d2ff;outline-offset:4px
       <div class="market-schedule" aria-label="Cronograma automático de mercados" role="status">
         <div class="market-schedule-row"><span class="market-schedule-dot active" id="forexScheduleDot"></span><span>Forex</span><strong id="forexScheduleStatus">Verificando horário</strong></div>
         <div class="market-schedule-row"><span class="market-schedule-dot" id="volScheduleDot"></span><span>Deriv (Volatility)</span><strong id="volScheduleStatus">Verificando horário</strong></div>
-        <span class="market-schedule-note">Forex: dias úteis, 05h–14h (Brasília) · Volatility: demais horários</span>
+        <span class="market-schedule-note">Troca automática · Brasília: Forex 05h–14h (dias úteis)</span>
       </div>
       <p id="v2ScannerHealth" class="helper" role="status">Scanner: verificando condições · última análise —</p>
-      <p class="helper">Análise em tempo real</p>
       <p id="v2Opportunity" class="helper" role="status">● Oportunidade encontrada: Nenhuma no momento</p>
     </div>
     <div hidden aria-hidden="true"><span id="robotMessage"></span><span id="riskSessionMetric"></span><span id="feedState"></span></div>
@@ -482,8 +480,8 @@ button.choose-account:focus-visible{outline:3px solid #71d2ff;outline-offset:4px
   </div>
 </section>
 <section id="results" class="hidden">
-  <div class="section-heading"><div><div class="eyebrow">DADOS OFICIAIS · DEMO</div><h1>Resultados NEXORA IA</h1><p>Cada avaliação começa com contadores independentes. Contratos anteriores continuam arquivados para reconciliação e auditoria.</p></div></div>
-  <div class="card"><div class="surface-heading">Histórico oficial DEMO da avaliação atual — últimos 3 dias</div>
+  <div class="section-heading"><div><h1>Resultados</h1><p>Histórico de operações DEMO.</p></div></div>
+  <div class="card"><div class="surface-heading">Últimos 3 dias</div>
     <div class="actions" style="align-items:center"><button class="outline" type="button" onclick="go('dashboard')">VOLTAR AO PAINEL DO ROBÔ</button><span class="helper" id="resultsLiveStatus" role="status">● Atualização automática a cada 3 segundos</span></div>
     <div class="table-wrap"><table><thead><tr><th>Data (Brasília)</th><th>Horário</th><th>Conta</th><th>Ativo</th><th>Direção</th><th>Entrada</th><th>Expiração</th><th>Etapa</th><th>Situação</th><th>WIN / LOSS</th><th>Resultado</th></tr></thead><tbody id="ordersBody"><tr><td colspan="11" class="empty">Carregando contratos...</td></tr></tbody></table></div>
   </div>
@@ -515,7 +513,7 @@ button.choose-account:focus-visible{outline:3px solid #71d2ff;outline-offset:4px
   </div>
 </section>
 <section id="account" class="hidden">
-  <div class="section-heading"><div><div class="eyebrow">SUA CONTA</div><h1>Conta Deriv</h1><p>Conexão e dados da corretora.</p></div></div>
+  <div class="section-heading"><div><h1>Minha conta</h1></div></div>
   <div class="card"><div class="surface-heading">Deriv Demo <span class="pill"><span class="dot"></span>CONECTADA</span></div>
     <p class="muted">Saldo oficial da Deriv Demo</p><div class="metric-value" id="accountBalance">—</div>
     <div class="actions"><button class="outline" onclick="logout()">DESCONECTAR</button></div>
@@ -523,7 +521,7 @@ button.choose-account:focus-visible{outline:3px solid #71d2ff;outline-offset:4px
 </section>
 <p id="error" class="alert" role="alert"></p>
 </main>
-<footer class="section-foot">NEXORA IA · Deriv Demo · Resultados de contratos oficiais, sem simulação local.</footer>
+<footer class="section-foot">NEXORA IA · Deriv</footer>
 </div>
 <script>
 const $=id=>document.getElementById(id);
