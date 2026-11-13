@@ -38,6 +38,7 @@ autopilot_task = None
 # Runtime state is volatile; explicit DEMO resume intent is persisted separately.
 autopilot_enabled: set[int] = set()
 autopilot_last_attempt: dict[int,float] = {}
+v2_last_scan: dict[int,float] = {}
 autopilot_reasons: dict[int,str] = {}
 autopilot_lock = asyncio.Lock()
 market_last_tick = 0.0
@@ -114,6 +115,10 @@ async def feed():
                     engine.last_reason='Conexão de cotações interrompida'
             await asyncio.sleep(delay)
             delay=min(delay*2,30)
+
+
+def v2_enabled():
+    return os.getenv('NEXORA_V2_ENABLED','true').lower()=='true'
 
 
 def autopilot_allowed():
@@ -281,13 +286,8 @@ async def autopilot_once():
                 batch=sess.get(db.PilotValidationBatch,uid)
                 if not batch and not connected:
                     continue
-                if batch:
-                    # Count every recorded automatic request (including UNKNOWN),
-                    # never only profitable or settled orders.
-                    batch_orders=[o for o in orders if o.id>batch.after_order_id]
-                    if len(batch_orders)>=batch.max_orders:
-                        disarm_autopilot(uid,'Lote de 50 entradas DEMO concluído. Confira os resultados 2.0.')
-                        continue
+                # The goal of 50 trades is informational, NOT an execution cap.
+                # Risk stops and broker-uncertainty safeguards remain mandatory.
                 try:
                     entry,last=autopilot_entry_plan(sess,user,orders)
                 except ProgressionHalt as exc:
@@ -320,6 +320,10 @@ async def autopilot_once():
                                  ', martingale '+str(entry.gale)}
                 else:
                     if batch:
+                        # Limit heavy public history scans to once per minute per user.
+                        if now-v2_last_scan.get(uid,-1e12)<60:
+                            continue
+                        v2_last_scan[uid]=now
                         try:
                             candidate=await select_demo_signal()
                         except Exception as exc:
@@ -909,6 +913,11 @@ async def autopilot_start(request:Request,payload:AutoPilotSwitch,
                 existing=db.RobotRun(user_id=user.id);sess.add(existing)
             existing.after_order_id=latest or 0
             existing.started_at=db.utcnow()
+            if v2_enabled() and sess.get(db.PilotValidationBatch,user.id) is None:
+                # First V2 activation creates a durable baseline. Old broker
+                # records remain untouched, out of the V2 evaluation window.
+                sess.add(db.PilotValidationBatch(
+                    user_id=user.id,after_order_id=latest or 0,max_orders=50))
             if not sess.get(db.AutoPilotResumeConsent,user.id):
                 sess.add(db.AutoPilotResumeConsent(user_id=user.id))
             sess.commit()
