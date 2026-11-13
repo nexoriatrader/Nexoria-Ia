@@ -694,7 +694,7 @@ async function refreshDashboard(){
    $('robotMessage').textContent=status.reason||'Aguardando oportunidades no mercado DEMO';
    const isV2=status.autopilot_version==='V2_MULTI_ASSET';
    $('autopilotVersion').textContent=isV2
-      ?'● NEXORA 2.0 FOREX M15 · Sinais por indicadores M1 · Rise/Fall DEMO · até 4 pares diferentes'
+      ?'● NEXORA 2.0 FOREX M15 · Sinais confirmados M1 · Rise/Fall DEMO · entradas em pares diferentes'
       : status.v2_upgrade_needed
        ?'⚠ NEXORA 1.0 AINDA LIGADO NO 1HZ100V. Para iniciar o 2.0, desligue e ligue novamente o AutoPilot DEMO, após conferir os contratos pendentes.'
        : status.v2_available
