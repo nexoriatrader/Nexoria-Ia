@@ -1,6 +1,7 @@
 """Fail-closed, demo-only order ledger. No access to real account execution."""
 from __future__ import annotations
 from decimal import Decimal, InvalidOperation
+import hashlib
 from sqlalchemy import select, func
 from sqlalchemy.exc import IntegrityError
 from . import db
@@ -25,57 +26,85 @@ def public_order(o):
             'buy_price':o.buy_price,'pnl':o.pnl,'broker_status':o.broker_status,
             'created_at':o.created_at.isoformat() if o.created_at else None}
 
-def order_guard(user, orders, stake, *, after_order_id=0):
-    """Use only settled demo broker PnL; reject negative-edge and exposed entries."""
-    if any(o.state in ACTIVE for o in orders):
-        raise OrderGuardError('Contrato demo em andamento ou pendente de reconciliação')
-    # Explicit user-confirmed risk session boundary; older official records remain intact.
-    pnl=sum((money(o.pnl) for o in orders if o.state=='SETTLED' and o.pnl is not None
-             and (after_order_id==0 or (getattr(o, 'id', None) or 0)>after_order_id)),Decimal('0'))
+def order_guard(user, orders, stake, *, after_order_id=0,
+                parallel=False, symbol=None):
+    """Official DEMO risk guard, including exposure reserved in open contracts."""
+    active=[o for o in orders if o.state in ACTIVE]
     stake=money(stake)
+    if parallel:
+        if any(o.state in ('PENDING','UNKNOWN') for o in active):
+            raise OrderGuardError('Contrato pendente ou incerto; novas entradas bloqueadas')
+        if len(active)>=2:
+            raise OrderGuardError('Máximo de 2 contratos DEMO simultâneos')
+        if any(o.symbol==symbol for o in active):
+            raise OrderGuardError('Já existe contrato aberto neste ativo')
+        if any(o.active_slot==user.id for o in active):
+            raise OrderGuardError('Contrato antigo exige liquidação antes do modo paralelo')
+    elif active:
+        raise OrderGuardError('Contrato demo em andamento ou pendente de reconciliação')
+    pnl=sum((money(o.pnl) for o in orders if o.state=='SETTLED' and o.pnl is not None
+             and (after_order_id==0 or (getattr(o,'id',None) or 0)>after_order_id)),Decimal('0'))
     if stake < Decimal('2') or stake > Decimal('1000'):
         raise OrderGuardError('Valor da entrada fora dos limites de treinamento')
     stop_win=money(user.stop_win)
     stop_loss=money(user.stop_loss)
-    if stop_loss < 0 or stop_win < 0:
+    if stop_loss<0 or stop_win<0:
         raise OrderGuardError('Stops não podem ser negativos')
-    # Zero explicitly disables this specific cumulative stop for DEMO only.
-    if stop_win > 0 and pnl >= stop_win:
+    exposure=sum((money(o.stake) for o in active),Decimal('0'))
+    if parallel and exposure+stake>Decimal('10'):
+        raise OrderGuardError('Exposição DEMO simultânea limitada a US$ 10')
+    if stop_win>0 and pnl>=stop_win:
         raise OrderGuardError('Stop Win atingido')
-    if stop_loss > 0 and (pnl <= -stop_loss or pnl-stake < -stop_loss):
-        raise OrderGuardError('A próxima entrada excederia o Stop Loss')
-    # Execution with Martingale progression is deliberately not supported in v0.5.
+    if stop_loss>0 and (pnl<=-stop_loss or pnl-exposure-stake < -stop_loss):
+        raise OrderGuardError('A exposição máxima excederia o Stop Loss')
     if user.martingale:
-        raise OrderGuardError('Martingale indisponível para compras demo até validação adicional')
+        raise OrderGuardError('Martingale legado não autorizado para compras demo')
     return pnl
 
-def reserve(session, user, *, request_key, symbol, direction, minutes, stake_override=None):
+
+def _symbol_slot(user_id:int, symbol:str)->int:
+    # Stable, account-and-symbol-specific slot; 63-bit positive SQLite/Postgres integer.
+    digest=hashlib.sha256(f'{user_id}:{symbol}'.encode('ascii')).digest()
+    return (int.from_bytes(digest[:8],'big') & ((1<<63)-1)) or 1
+
+
+def reserve(session, user, *, request_key, symbol, direction, minutes,
+            stake_override=None, parallel=False):
     if not isinstance(request_key,str) or not 8<=len(request_key)<=64 or not all(c.isalnum() or c in '-_' for c in request_key):
         raise OrderGuardError('Identificador de tentativa inválido')
     if direction not in {'CALL','PUT'} or minutes not in {1,3,5}:
         raise OrderGuardError('Contrato demo inválido')
     if not isinstance(symbol,str) or not symbol.isalnum() or not 2<=len(symbol)<=30:
         raise OrderGuardError('Ativo demo inválido')
-    previous=session.scalar(select(db.DemoOrder).where(db.DemoOrder.user_id==user.id,
-                                                      db.DemoOrder.request_key==request_key))
+    # PostgreSQL user-row lock serializes risk/exposure checks between workers.
+    # Same-process autopilot_lock independently serializes automatic activations.
+    locked_user=session.get(db.User,user.id,with_for_update=True)
+    if not locked_user:
+        raise OrderGuardError('Conta DEMO indisponível')
+    previous=session.scalar(select(db.DemoOrder).where(
+        db.DemoOrder.user_id==user.id,db.DemoOrder.request_key==request_key))
     if previous:
-        # Idempotent retry MUST NOT trigger another broker request.
-        return previous, False
-    entries=session.scalars(select(db.DemoOrder).where(db.DemoOrder.user_id==user.id)).all()
+        return previous,False
+    entries=session.scalars(select(db.DemoOrder).where(
+        db.DemoOrder.user_id==user.id)).all()
     chosen_stake=user.stake if stake_override is None else str(stake_override)
     boundary=session.scalars(select(db.RiskSession).where(
         db.RiskSession.user_id==user.id).order_by(db.RiskSession.id.desc()).limit(1)).first()
-    order_guard(user,entries,chosen_stake,after_order_id=boundary.after_order_id if boundary else 0)
-    order=db.DemoOrder(user_id=user.id,request_key=request_key,active_slot=user.id,
+    order_guard(locked_user,entries,chosen_stake,
+                after_order_id=boundary.after_order_id if boundary else 0,
+                parallel=parallel,symbol=symbol)
+    slot=_symbol_slot(user.id,symbol) if parallel else user.id
+    order=db.DemoOrder(user_id=user.id,request_key=request_key,active_slot=slot,
         state='PENDING',symbol=symbol,direction=direction,duration_minutes=minutes,stake=chosen_stake)
     session.add(order)
     try:
         session.commit()
     except IntegrityError as exc:
         session.rollback()
-        raise OrderGuardError('Outra tentativa já está registrada para esta conta') from exc
+        raise OrderGuardError('Outra tentativa já está registrada para esta conta ou ativo') from exc
     session.refresh(order)
-    return order, True
+    return order,True
+
 
 def confirmed(session, order, receipt):
     if order.state!='PENDING':
