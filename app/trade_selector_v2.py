@@ -12,8 +12,11 @@ from datetime import datetime,timezone
 from .market import MarketError, discover_symbols, discover_contracts
 from .strategy_lab import fetch_candles, direction_at
 
-FX_PAIRS=('EURJPY','EURUSD','GBPUSD','USDJPY','GBPJPY')
-MAX_SYMBOLS=8
+FX_PAIRS=('EURJPY','EURUSD','GBPUSD','USDJPY','GBPJPY',
+          'AUDUSD','USDCAD','USDCHF','NZDUSD','EURGBP','EURCHF','AUDJPY')
+MAX_SYMBOLS=24
+SCAN_BATCH=8
+_scan_offset=0
 EXPIRY={'range_break':3,'forex':3,'step':5,'volatility':5}
 _catalog_cache=()
 _catalog_at=0.0
@@ -27,7 +30,10 @@ def last_scan_report():
     return {'status':_last_scan['status'],'at':_last_scan['at'],
             'assets':[dict(a) for a in _last_scan['assets']],
             'selected':dict(_last_scan['selected']) if _last_scan['selected'] else None,
-            'reason':_last_scan.get('reason')}
+            'reason':_last_scan.get('reason'),
+            'catalogue_size':_last_scan.get('catalogue_size'),
+            'batch_size':_last_scan.get('batch_size'),
+            'next_scan_offset':_last_scan.get('next_scan_offset')}
 
 
 
@@ -45,12 +51,12 @@ def classify(item):
             return 'forex',pair
     lower=label.lower()
     if 'range break' in lower:
-        return 'range_break','range_break'
+        return 'range_break',symbol
     if 'step' in lower and 'skew' not in lower and 'multi' not in lower:
-        return 'step','step'
+        return 'step',symbol
     vol=re.search(r'volatility\s*(10|25|50|75|100)\b',lower)
     if vol:
-        return 'volatility','vol'+vol.group(1)
+        return 'volatility',symbol
     return None
 
 
@@ -64,10 +70,15 @@ def choose_tradeable(symbols):
         if not kind:
             continue
         family,group=kind
-        if group not in picked:
-            picked[group]={**item,'family':family,'group':group}
-    order=list(FX_PAIRS)+['range_break','step','vol10','vol25','vol50','vol75','vol100']
-    return [picked[key] for key in order if key in picked][:MAX_SYMBOLS]
+        symbol=item['symbol']
+        if symbol not in picked:
+            picked[symbol]={**item,'family':family,'group':group}
+    priority={'forex':0,'range_break':1,'step':2,'volatility':3}
+    ordered=sorted(picked.values(),key=lambda item:(
+        priority[item['family']],
+        FX_PAIRS.index(item['group']) if item['family']=='forex' else 0,
+        item['symbol']))
+    return ordered[:MAX_SYMBOLS]
 
 
 async def catalogue():
@@ -119,7 +130,7 @@ def signal_from_closed_candles(item,candles,now=None):
 
 async def select_demo_signal(*, exclude_symbols=()):
     """Return a DEMO research candidate, with explicit rejection diagnostics."""
-    global _last_scan
+    global _last_scan,_scan_offset
     stamp=datetime.now(timezone.utc).isoformat()
     try:
         items=await catalogue()
@@ -133,7 +144,13 @@ async def select_demo_signal(*, exclude_symbols=()):
                     'assets':[],'selected':None}
         _log.warning('V2 selector: zero eligible symbols in Deriv public catalog')
         return None
-    sem=asyncio.Semaphore(4)
+    # Rotate a bounded scan batch across all eligible catalogue assets.
+    # Do not contact dozens of WebSockets simultaneously on Render Free.
+    total=len(items)
+    selected_items=[items[(_scan_offset+i)%total]
+                    for i in range(min(SCAN_BATCH,total))]
+    _scan_offset=(_scan_offset+len(selected_items))%total
+    sem=asyncio.Semaphore(3)
     exclude=set(exclude_symbols)
     async def examine(item):
         async with sem:
@@ -155,7 +172,7 @@ async def select_demo_signal(*, exclude_symbols=()):
                 return None,{'symbol':symbol,'status':'MARKET_DATA_ERROR',
                              'reason':str(exc)[:160]}
     try:
-        result=await asyncio.wait_for(asyncio.gather(*(examine(i) for i in items)),
+        result=await asyncio.wait_for(asyncio.gather(*(examine(i) for i in selected_items)),
                                       timeout=42)
     except TimeoutError:
         _last_scan={'status':'SCAN_TIMEOUT','at':stamp,'assets':[],
@@ -170,7 +187,8 @@ async def select_demo_signal(*, exclude_symbols=()):
         'MARKET_DATA_UNAVAILABLE' if all(x['status'] in (
             'MARKET_DATA_ERROR','CALL_PUT_UNAVAILABLE') for x in rows) else 'NO_SIGNAL')
     _last_scan={'status':status,'at':stamp,'assets':rows,
-                'selected':chosen}
+                'selected':chosen,'catalogue_size':total,'batch_size':len(rows),
+                'next_scan_offset':_scan_offset}
     # Expose whether a feed failure was mistaken for a lack of setups.
     if status=='MARKET_DATA_UNAVAILABLE':
         _log.warning('V2 selector: no market data; results=%s',
