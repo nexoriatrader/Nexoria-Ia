@@ -188,3 +188,23 @@ def test_v2_martingale_enters_same_symbol_without_waiting_for_scan(tmp_path,monk
     finally:
         main.v2_last_scan.clear()
         cleanup(engine)
+
+
+def test_status_exposes_legacy_session_and_required_v2_rearm(tmp_path,monkeypatch):
+    client,factory,engine,uid=prepare(tmp_path,monkeypatch)
+    try:
+        monkeypatch.setenv('NEXORA_V2_ENABLED','false')
+        assert client.post('/api/autopilot/start',
+            json={'confirm':'START_DEMO_AUTOPILOT'}).status_code==200
+        monkeypatch.setenv('NEXORA_V2_ENABLED','true')
+        state=client.get('/api/status').json()
+        assert state['autopilot_version']=='V1_SINGLE_ASSET'
+        assert state['v2_upgrade_needed'] is True
+        assert state['analysis_symbol']=='1HZ100V'
+        assert client.post('/api/autopilot/stop').status_code==200
+        assert client.post('/api/autopilot/start',
+            json={'confirm':'START_DEMO_AUTOPILOT'}).status_code==200
+        state=client.get('/api/status').json()
+        assert state['autopilot_version']=='V2_MULTI_ASSET'
+        assert state['v2_upgrade_needed'] is False
+    finally:cleanup(engine)
