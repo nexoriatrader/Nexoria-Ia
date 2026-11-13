@@ -405,7 +405,8 @@ async def autopilot_once():
                         try:
                             candidate=await select_demo_signal(
                                 exclude_symbols=[o.symbol for o in orders
-                                                 if o.state in ('PENDING','CONFIRMED','UNKNOWN')])
+                                                 if o.state in ('PENDING','CONFIRMED','UNKNOWN')],
+                                user_key=uid)
                         except Exception as exc:
                             autopilot_reasons[uid]='Scanner 2.0 indisponível; aguardando reconexão'
                             log.warning('V2 scanner unavailable: %s',type(exc).__name__)
