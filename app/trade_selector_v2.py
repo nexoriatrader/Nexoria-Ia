@@ -475,7 +475,7 @@ async def select_demo_signal(*, exclude_symbols=(), user_key=None, filtered=Fals
     if not hasattr(select_demo_signal,'_last_summary_at'):
         select_demo_signal._last_summary_at=0.0
     if status!='NO_SIGNAL' or time.monotonic()-select_demo_signal._last_summary_at>=60:
-        _log.info('V2 scan summary: market=%s mode=%s assets=%s scanned=%s status=%s counts=%s',
+        _log.warning('V2 scan summary: market=%s mode=%s assets=%s scanned=%s status=%s counts=%s',
                   market,effective_mode,total,len(rows),status,counts)
         select_demo_signal._last_summary_at=time.monotonic()
     # Expose whether a feed failure was mistaken for a lack of setups.
