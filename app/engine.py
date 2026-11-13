@@ -35,7 +35,7 @@ class Settings:
         if not isinstance(mg, bool):
             raise ValueError('Martingale deve ser verdadeiro ou falso')
         mult = money(payload.get('multiplier', 2))
-        if stake < 2 or sw < 0 or sl < 0 or mult not in (Decimal('2'), Decimal('3'), Decimal('4')):
+        if stake < Decimal('0.50') or sw < 0 or sl < 0 or mult not in (Decimal('2'), Decimal('3'), Decimal('4')):
             raise ValueError('Valores fora dos limites aceitos')
         return cls(stake=stake, stop_win=sw, stop_loss=sl, martingale=mg, multiplier=mult)
 
