@@ -34,24 +34,52 @@ def parse_quote(message: dict) -> dict:
     }
 
 
+# Shared cap prevents a scan from opening many short-lived WebSockets at once.
+# One retry for transient network closures; broker errors are never retried.
+_public_request_limit = asyncio.Semaphore(2)
+
+
 async def public_request(payload: dict, *, expected: str, timeout: float = 12.0) -> dict:
+    import logging
     import websockets
     from websockets.exceptions import ConnectionClosed, WebSocketException
-    # A separate short-lived connection isolates discovery from tick streaming.
-    try:
-        async with asyncio.timeout(timeout):
-            async with websockets.connect(PUBLIC_WS, ping_interval=20, ping_timeout=10, max_size=1_500_000) as ws:
-                await ws.send(json.dumps({**payload, 'req_id':419}))
-                while True:
-                    msg = json.loads(await ws.recv())
-                    if msg.get('req_id') != 419:
-                        continue
-                    if msg.get('error'):
-                        raise MarketError(str(msg['error'].get('message', 'Erro Deriv')))
-                    if msg.get('msg_type') == expected or expected in msg:
-                        return msg
-    except (TimeoutError, OSError, ConnectionError, ConnectionClosed, WebSocketException) as exc:
-        raise MarketError('Falha de conexão com Deriv ('+type(exc).__name__+')') from exc
+
+    logger = logging.getLogger("nexora.market")
+    async with _public_request_limit:
+        for attempt in range(2):
+            try:
+                async with asyncio.timeout(timeout):
+                    async with websockets.connect(
+                        PUBLIC_WS, open_timeout=8, ping_interval=20,
+                        ping_timeout=15, close_timeout=3, max_size=1_500_000
+                    ) as ws:
+                        await ws.send(json.dumps({**payload, 'req_id': 419}))
+                        while True:
+                            msg = json.loads(await ws.recv())
+                            if msg.get('req_id') != 419:
+                                continue
+                            if msg.get('error'):
+                                error = msg['error']
+                                # Remote API errors are not transient transport failures.
+                                raise MarketError(str(error.get('message', 'Erro Deriv'))[:200])
+                            if msg.get('msg_type') == expected or expected in msg:
+                                return msg
+            except asyncio.CancelledError:
+                raise
+            except MarketError:
+                raise
+            except (TimeoutError, OSError, ConnectionError, ConnectionClosed, WebSocketException) as exc:
+                detail = type(exc).__name__
+                if isinstance(exc, ConnectionClosed):
+                    detail += f"(code={getattr(exc.rcvd, 'code', 'unknown')})"
+                logger.warning(
+                    "Deriv public request interrupted: endpoint=%s attempt=%s/2 error=%s",
+                    expected, attempt + 1, detail
+                )
+                if attempt == 1:
+                    raise MarketError('Falha de conexão com Deriv (' + detail + ')') from exc
+                await asyncio.sleep(0.8)
+    raise MarketError('Falha inesperada na consulta pública Deriv')
 
 
 def parse_symbols(message: dict) -> list[dict]:
