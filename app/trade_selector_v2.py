@@ -20,8 +20,8 @@ FX_PAIRS=('EURUSD','GBPJPY','GBPAUD','AUDNZD','AUDCAD','NZDUSD',
           'NZDJPY','USDMXN','USDCHF','EURJPY','GBPUSD','USDJPY',
           'AUDUSD','AUDJPY','EURAUD','EURGBP','USDCAD','EURCAD','EURCHF')
 MAX_SYMBOLS=32
-SCAN_BATCH=8
-_scan_offset=0
+# Each scanner pass covers the complete broker catalogue for the chosen market.
+# Keep request concurrency bounded separately from the number of assets.
 # A scan may discover several independent signals at the same M1 close.
 # Keep them briefly per user so the executor can submit each one in turn.
 _pending_signals_by_user={}
@@ -387,7 +387,7 @@ def v22_pullback_signal(item, h1, m15, now):
 
 async def select_demo_signal(*, exclude_symbols=(), user_key=None, filtered=False, strategy_mode=None):
     """Select confirmed V2.2 H1/M15 candidates (or legacy M1) for DEMO."""
-    global _last_scan,_scan_offset
+    global _last_scan
     exclude=set(exclude_symbols)
     # Never reuse a setup after its 50-second post-candle freshness window.
     effective_mode=effective_strategy_mode(strategy_mode)
@@ -412,12 +412,10 @@ async def select_demo_signal(*, exclude_symbols=(), user_key=None, filtered=Fals
                     'assets':[],'selected':None,'market':market}
         _log.warning('V2 selector: zero eligible symbols in Deriv public catalog')
         return None
-    # Rotate a bounded scan batch across all eligible catalogue assets.
-    # Do not contact dozens of WebSockets simultaneously on Render Free.
+    # Evaluate EVERY currently eligible broker asset on each pass.
+    # A semaphore keeps Deriv/WebSocket requests bounded on Render Free.
     total=len(items)
-    selected_items=[items[(_scan_offset+i)%total]
-                    for i in range(min(SCAN_BATCH,total))]
-    _scan_offset=(_scan_offset+len(selected_items))%total
+    selected_items=items
     sem=asyncio.Semaphore(3)
     async def examine(item):
         async with sem:
@@ -451,11 +449,11 @@ async def select_demo_signal(*, exclude_symbols=(), user_key=None, filtered=Fals
                              'reason':str(exc)[:160]}
     try:
         result=await asyncio.wait_for(asyncio.gather(*(examine(i) for i in selected_items)),
-                                      timeout=42)
+                                      timeout=90)
     except TimeoutError:
         _last_scan={'status':'SCAN_TIMEOUT','at':stamp,'assets':[],
-                    'selected':None,'reason':'Consultas Deriv excederam 42s','market':market}
-        _log.warning('V2 selector: public research requests exceeded 42 seconds')
+                    'selected':None,'reason':'Consultas Deriv excederam 90s','market':market}
+        _log.warning('V2 selector: public research requests exceeded 90 seconds')
         return None
     signals=[candidate for candidate,_ in result if candidate]
     signals.sort(key=lambda x:(0 if x['strategy']=='rompimento_m1' else 1,x['symbol']))
@@ -467,7 +465,7 @@ async def select_demo_signal(*, exclude_symbols=(), user_key=None, filtered=Fals
             'MARKET_DATA_ERROR','CALL_PUT_OR_DURATION_UNAVAILABLE') for x in rows) else 'NO_SIGNAL')
     _last_scan={'status':status,'at':stamp,'assets':rows,
                 'selected':chosen,'catalogue_size':total,'batch_size':len(rows),
-                'next_scan_offset':_scan_offset,'market':market}
+                'next_scan_offset':None,'market':market}
     # Summarize normal and failed scans so 'no signal' is distinguishable
     # from broken market data. No account info or private tokens are logged.
     from collections import Counter
