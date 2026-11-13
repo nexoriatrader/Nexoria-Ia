@@ -124,7 +124,10 @@ def parse_symbols(message: dict) -> list[dict]:
             continue
         symbol = item.get('symbol') or item.get('underlying_symbol')
         if isinstance(symbol,str) and 2 <= len(symbol) <= 30:
-            result.append({'symbol':symbol,'display_name':str(item.get('display_name',symbol))[:100]})
+            # Deriv's current API renamed display_name to underlying_symbol_name.
+            # Preserve old-version compatibility while using broker-provided names.
+            name=item.get('underlying_symbol_name') or item.get('display_name') or symbol
+            result.append({'symbol':symbol,'display_name':str(name)[:100]})
     return result
 
 
