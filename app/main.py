@@ -23,7 +23,7 @@ from .market import MarketError, discover_symbols, discover_contracts, indicativ
 from .strategy_lab import run_lab
 from .asset_scanner import scan_assets
 from .trade_selector_v2 import select_demo_signal
-from .progression import next_entry, ProgressionHalt
+from .progression import next_entry, ProgressionHalt, NextEntry
 from .security import CLIENT_ID, REDIRECT, TOKEN_URL, build_authorize_url, make_login, make_session_id, hashsecret, encrypt, decrypt, cookie_options
 
 log=logging.getLogger('nexora')
@@ -289,7 +289,24 @@ async def autopilot_once():
                 # The goal of 50 trades is informational, NOT an execution cap.
                 # Risk stops and broker-uncertainty safeguards remain mandatory.
                 try:
-                    entry,last=autopilot_entry_plan(sess,user,orders)
+                    if batch:
+                        # Parallel V2 is flat-stake only; no Martingale/cycle progression
+                        # can be inferred from unordered simultaneous settlements.
+                        if plan and (plan.requested_martingale or plan.gale_count
+                                     or plan.cycles_limit):
+                            disarm_autopilot(uid,'Desative Martingale e ciclos para testar ordens simultâneas 2.0')
+                            continue
+                        active=[o for o in orders if o.state in ('PENDING','CONFIRMED','UNKNOWN')]
+                        if any(o.state in ('PENDING','UNKNOWN') for o in active):
+                            autopilot_reasons[uid]='Contrato DEMO incerto; aguardando conferência'
+                            continue
+                        if len(active)>=2:
+                            autopilot_reasons[uid]='Dois contratos DEMO simultâneos; aguardando liquidação oficial'
+                            continue
+                        entry=NextEntry(stake=Decimal(str(user.stake)),cycle=0,gale=0,retry=False)
+                        last=None
+                    else:
+                        entry,last=autopilot_entry_plan(sess,user,orders)
                 except ProgressionHalt as exc:
                     reason=str(exc)
                     # An unliquidated broker contract is normal during the
@@ -325,7 +342,9 @@ async def autopilot_once():
                             continue
                         v2_last_scan[uid]=now
                         try:
-                            candidate=await select_demo_signal()
+                            candidate=await select_demo_signal(
+                                exclude_symbols=[o.symbol for o in orders
+                                                 if o.state in ('PENDING','CONFIRMED','UNKNOWN')])
                         except Exception as exc:
                             autopilot_reasons[uid]='Scanner 2.0 indisponível; aguardando reconexão'
                             log.warning('V2 scanner unavailable: %s',type(exc).__name__)
@@ -344,7 +363,9 @@ async def autopilot_once():
                 from .demo_ledger import order_guard
                 try:
                     boundary=latest_risk_session(sess,uid)
-                    order_guard(user,orders,entry.stake,after_order_id=boundary.after_order_id if boundary else 0)
+                    order_guard(user,orders,entry.stake,
+                        after_order_id=boundary.after_order_id if boundary else 0,
+                        parallel=bool(batch),symbol=candidate['symbol'])
                 except OrderGuardError as exc:
                     msg=str(exc)
                     if 'Stop' in msg or 'Loss' in msg or 'Win' in msg or 'ultrapass' in msg:
@@ -897,6 +918,11 @@ async def autopilot_start(request:Request,payload:AutoPilotSwitch,
     if user.martingale:
         raise HTTPException(409,'Desative Martingale para ativar o AutoPilot')
     with db.SessionLocal() as sess:
+        if v2_enabled():
+            plan=sess.get(db.RobotPlan,user.id)
+            if plan and (plan.requested_martingale or plan.gale_count or plan.cycles_limit):
+                raise HTTPException(409,'Para operar 2 ativos simultâneos, desative Martingale e ciclos nas Configurações')
+
         orders=sess.scalars(select(db.DemoOrder).where(db.DemoOrder.user_id==user.id)).all()
         boundary=latest_risk_session(sess,user.id)
         blocker=autopilot_start_blocker(user,orders,after_order_id=boundary.after_order_id if boundary else 0)
@@ -1251,7 +1277,8 @@ async def perform_demo_buy(user, token, payload:DemoBuy, *, attribution:dict|Non
         try:
             order,created=reserve(s,stored,request_key=payload.request_key,
                                   symbol=payload.symbol,direction=payload.direction,
-                                  minutes=payload.minutes,stake_override=stake_override)
+                                  minutes=payload.minutes,stake_override=stake_override,
+                                  parallel=bool(attribution and attribution.get('v2')))
         except OrderGuardError as e:
             raise HTTPException(409,str(e)) from None
         order_id=order.id
