@@ -414,6 +414,7 @@ button.choose-account:focus-visible{outline:3px solid #71d2ff;outline-offset:4px
     <div class="hero-top"><div class="hero-title">NEXORA AutoPilot</div><span id="robotState" class="hero-state">DESLIGADO</span></div>
     <p id="robotMessage" class="hero-copy">Preparando AutoPilot DEMO experimental, com limites de risco configurados.</p>
     <p id="autopilotVersion" class="helper" role="status">Verificando a versão operacional do robô...</p>
+    <p id="v2ScannerHealth" class="helper" role="status">Scanner 2.0: aguardando diagnóstico dos ativos.</p>
     <button id="robotButton" class="hero-action" disabled aria-disabled="true" onclick="toggleRobot()">LIGAR ROBÔ</button>
     <div id="robotStartNotice" class="robot-notice" role="alert" aria-live="polite" hidden>
       <strong id="robotNoticeTitle"></strong>
@@ -707,6 +708,18 @@ async function refreshDashboard(){
      ' · '+safe(status.analysis_symbol||status.symbol)+
      (isV2?' · Scanner 2.0 utiliza cotações próprias de cada ativo':'');
    if(robotRunning)showRobotNotice('');
+   if(status.v2_available){
+     req('/api/autopilot/v2/scanner-status').then(data=>{
+       if(sequence!==dashboardStatusSequence)return;
+       const scan=data.scan||{},list=scan.assets||[];
+       const errors=list.filter(a=>a.status==='MARKET_DATA_ERROR'||a.status==='CALL_PUT_UNAVAILABLE');
+       $('v2ScannerHealth').textContent='Scanner 2.0: '+(scan.status||'AGUARDANDO')+
+         (scan.at?' · última análise '+new Date(scan.at).toLocaleTimeString('pt-BR',{timeZone:'America/Sao_Paulo'}):'')+
+         (list.length?' · '+list.length+' ativos consultados':'')+
+         (errors.length?' · '+errors.length+' sem dados/contratos':'')+
+         (scan.reason?' · '+scan.reason:'');
+     }).catch(()=>{});
+   }
    await Promise.allSettled([loadDemoBalance(),loadDemoOrders(),loadRealBalance(),
                              loadDailyResult(),loadRealDailyResult(),loadRiskSession(),loadAutopilotReadiness()]);
    // A newer dashboard request may have superseded this response while
