@@ -412,7 +412,8 @@ button.choose-account:focus-visible{outline:3px solid #71d2ff;outline-offset:4px
   <div class="section-heading"><div><div class="eyebrow">VISÃO GERAL</div><h1>Meu robô</h1><p>O essencial para acompanhar suas operações.</p></div></div>
   <div class="card hero">
     <div class="hero-top"><div class="hero-title">NEXORA AutoPilot</div><span id="robotState" class="hero-state">DESLIGADO</span></div>
-    <p id="robotMessage" class="hero-copy">Preparando AutoPilot DEMO experimental. Uma posição por vez, com limites de risco configurados.</p>
+    <p id="robotMessage" class="hero-copy">Preparando AutoPilot DEMO experimental, com limites de risco configurados.</p>
+    <p id="autopilotVersion" class="helper" role="status">Verificando a versão operacional do robô...</p>
     <button id="robotButton" class="hero-action" disabled aria-disabled="true" onclick="toggleRobot()">LIGAR ROBÔ</button>
     <div id="robotStartNotice" class="robot-notice" role="alert" aria-live="polite" hidden>
       <strong id="robotNoticeTitle"></strong>
@@ -690,11 +691,21 @@ async function refreshDashboard(){
    const available=Boolean(status.auto_buy_enabled);
    $('robotState').textContent=robotRunning?'ATIVO':status.interrupted_after_restart?'INTERROMPIDO':available?'PRONTO':'INDISPONÍVEL';
    $('robotMessage').textContent=status.reason||'Aguardando oportunidades no mercado DEMO';
+   const isV2=status.autopilot_version==='V2_MULTI_ASSET';
+   $('autopilotVersion').textContent=isV2
+      ?'● NEXORA 2.0 MULTIATIVOS · Scanner M1 experimental · Forex e índices disponíveis'
+      : status.v2_upgrade_needed
+       ?'⚠ NEXORA 1.0 AINDA LIGADO NO 1HZ100V. Para iniciar o 2.0, desligue e ligue novamente o AutoPilot DEMO, após conferir os contratos pendentes.'
+       : status.v2_available
+        ?'○ NEXORA 2.0 DISPONÍVEL. Ao ligar, o robô inicia o teste multiativos (se autorizado).'
+        :'○ AutoPilot 1.0 · 1HZ100V';
    $('robotButton').textContent=robotRunning?'DESLIGAR ROBÔ':'LIGAR ROBÔ';
    $('robotButton').disabled=(!robotRunning&&!available)||$('robotButton').dataset.commandPending==='true';
    $('robotButton').setAttribute('aria-disabled',String($('robotButton').disabled));
    $('robotButton').style.background=robotRunning?'linear-gradient(135deg,#fa9b9d,#dc5269)':'';
-   $('feedState').textContent=(status.connected?'● Cotações conectadas':'○ Reconectando cotações')+' · '+safe(status.symbol);
+   $('feedState').textContent=(status.connected?'● Feed legado conectado':'○ Feed legado reconectando')+
+     ' · '+safe(status.analysis_symbol||status.symbol)+
+     (isV2?' · Scanner 2.0 utiliza cotações próprias de cada ativo':'');
    if(robotRunning)showRobotNotice('');
    await Promise.allSettled([loadDemoBalance(),loadDemoOrders(),loadRealBalance(),
                              loadDailyResult(),loadRealDailyResult(),loadRiskSession(),loadAutopilotReadiness()]);
