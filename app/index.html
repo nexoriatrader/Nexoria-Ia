@@ -47,6 +47,25 @@ header{display:flex;align-items:center;justify-content:space-between;gap:14px;pa
 .hero-copy{color:#aac1d2;margin:18px 0 20px;font-size:13px;max-width:500px}
 .hero-action{width:100%;max-width:450px;border:0;border-radius:16px;min-height:65px;background:linear-gradient(135deg,#ffdf8d,#f0b339);color:#2a1b05;font-size:18px;font-weight:950;letter-spacing:.045em;box-shadow:0 11px 30px #e8ae3b22;position:relative}
 .hero-action:disabled{opacity:1;background:#8b7550;color:#f5e6c9;box-shadow:none}
+.robot-control-row{position:relative;display:grid;grid-template-columns:minmax(160px,.9fr) minmax(0,1.1fr);align-items:stretch;gap:12px;margin-top:20px}
+.robot-control-row .hero-action{max-width:none;min-height:112px;height:100%}
+.robot-live-card{display:flex;flex-direction:column;justify-content:center;gap:10px;border:1px solid #2c5e65;border-radius:16px;background:linear-gradient(125deg,#103136,#10253a);padding:15px 18px;min-width:0}
+.robot-live-heading{display:flex;align-items:center;gap:9px;font-size:13px;font-weight:900;letter-spacing:.08em;color:#a6f7d2}
+.robot-live-dot{width:11px;height:11px;border-radius:50%;background:#50e6a4;box-shadow:0 0 0 4px #50e6a422,0 0 13px #50e6a48a;flex:none;animation:robot-live-pulse 1.8s ease-in-out infinite}
+.robot-live-copy{color:#d0e5f2;font-size:12px;line-height:1.5}
+.robot-live-card.offline{border-color:#42536a;background:linear-gradient(125deg,#1b2d3e,#0d1c2e)}
+.robot-live-card.offline .robot-live-heading{color:#b8cbd8}
+.robot-live-card.offline .robot-live-dot{background:#889cb0;box-shadow:none;animation:none}
+@keyframes robot-live-pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.43;transform:scale(.78)}}
+@media(prefers-reduced-motion:reduce){.robot-live-dot{animation:none!important}}
+.robot-details{position:relative;margin-top:15px;font-size:12px;color:#a6c0d5}
+.robot-details summary{cursor:pointer;display:inline-flex;align-items:center;min-height:35px;padding:6px 0;font-size:12px;font-weight:750;color:#aac7de}
+.robot-details summary:hover,.robot-details summary:focus-visible{color:#fff}
+.robot-details-content{padding:5px 0 0}
+.robot-details-content #robotMessage{margin-top:0}
+.robot-details-content .helper{margin-top:7px}
+.robot-details-content .info{margin-top:10px}
+@media(max-width:520px){.robot-control-row{grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:9px}.robot-control-row .hero-action{font-size:14px;padding:10px;min-height:125px}.robot-live-card{padding:13px 11px}.robot-live-heading{font-size:10px;letter-spacing:.02em;gap:6px}.robot-live-dot{width:9px;height:9px}.robot-live-copy{font-size:11px}}
 .robot-notice{max-width:640px;margin-top:14px;padding:16px 18px;border:1px solid #ba8742;border-radius:15px;background:#402c1b;color:#fff0d5;line-height:1.55;overflow-wrap:anywhere}
 .robot-notice[hidden]{display:none}
 .robot-notice strong{display:block;font-size:14px;margin-bottom:6px}
@@ -412,10 +431,13 @@ button.choose-account:focus-visible{outline:3px solid #71d2ff;outline-offset:4px
   <div class="section-heading"><div><div class="eyebrow">VISÃO GERAL</div><h1>Meu robô</h1><p>O essencial para acompanhar suas operações.</p></div></div>
   <div class="card hero">
     <div class="hero-top"><div class="hero-title">Nexora Robô Automático</div><span id="robotState" class="hero-state">DESLIGADO</span></div>
-    <p id="robotMessage" class="hero-copy">Robô DEMO desligado. Configure e inicie quando desejar.</p>
-    <p id="autopilotVersion" class="helper" role="status">Verificando a versão operacional do robô...</p>
-    <p id="v2ScannerHealth" class="helper" role="status">Scanner Forex: aguardando primeira análise.</p>
-    <button id="robotButton" class="hero-action" disabled aria-disabled="true" onclick="toggleRobot()">LIGAR ROBÔ</button>
+    <div class="robot-control-row">
+      <button id="robotButton" class="hero-action" disabled aria-disabled="true" onclick="toggleRobot()">LIGAR ROBÔ</button>
+      <div id="robotLiveCard" class="robot-live-card offline" role="status" aria-live="polite" aria-atomic="true">
+        <div class="robot-live-heading"><span class="robot-live-dot" aria-hidden="true"></span><span id="robotLiveLabel">ROBÔ OFFLINE</span></div>
+        <p id="robotLiveCopy" class="robot-live-copy">Pronto para buscar novas oportunidades quando você ativar.</p>
+      </div>
+    </div>
     <div id="robotStartNotice" class="robot-notice" role="alert" aria-live="polite" hidden>
       <strong id="robotNoticeTitle"></strong>
       <p id="robotNoticeText"></p>
@@ -425,9 +447,17 @@ button.choose-account:focus-visible{outline:3px solid #71d2ff;outline-offset:4px
         <p class="helper">O histórico oficial e o saldo Deriv não podem ser apagados pelo painel. Os limites de segurança permanecem ativos.</p>
       </div>
     </div>
-    <p class="helper" id="riskSessionMetric">Lucro/prejuízo da sessão DEMO: consultando...</p>
-    <div class="helper">Apenas Deriv Demo. Estratégias em teste, sem garantia de acerto. Desligar bloqueia novas entradas, sem cancelar contratos já abertos.</div>
-    <div class="info" id="feedState">Conferindo conexão de cotações...</div>
+    <details class="robot-details">
+      <summary>Detalhes da operação e do scanner</summary>
+      <div class="robot-details-content">
+        <p id="robotMessage" class="muted">Robô DEMO desligado. Configure e inicie quando desejar.</p>
+        <p id="autopilotVersion" class="helper" role="status">Verificando a versão operacional do robô...</p>
+        <p id="v2ScannerHealth" class="helper" role="status">Scanner Forex: aguardando primeira análise.</p>
+        <p class="helper" id="riskSessionMetric">Lucro/prejuízo da sessão DEMO: consultando...</p>
+        <div class="info" id="feedState">Conferindo conexão de cotações...</div>
+        <p class="helper">Somente Deriv DEMO. Resultados não são garantidos; desligar impede novas compras, mas não cancela contratos abertos.</p>
+      </div>
+    </details>
   </div>
   <div class="metric-grid">
     <div class="card metric"><div class="metric-label">Saldo Treinamento</div><div class="metric-value" id="balanceMetric">—</div><div class="metric-sub">Saldo virtual oficial · Deriv</div></div>
@@ -694,6 +724,20 @@ async function refreshDashboard(){
    const available=Boolean(status.auto_buy_enabled);
    $('robotState').textContent=robotRunning?'ATIVO':status.interrupted_after_restart?'INTERROMPIDO':available?'PRONTO':'INDISPONÍVEL';
    $('robotMessage').textContent=status.reason||'Aguardando oportunidades no mercado DEMO';
+   const liveCard=$('robotLiveCard');
+   liveCard.classList.toggle('offline',!robotRunning);
+   $('robotLiveLabel').textContent=robotRunning?'ROBÔ ONLINE':'ROBÔ OFFLINE';
+   const utcNow=new Date(), utcHour=utcNow.getUTCHours(), utcDay=utcNow.getUTCDay();
+   const isV22=(status.reason||'').includes('AutoPilot 2.2');
+   const outsideForexWindow=isV22&&(utcDay===0||utcDay===6||utcHour<8||utcHour>=17);
+   $('robotLiveCopy').textContent=robotRunning
+     ?(outsideForexWindow
+       ?'IA online, aguardando o horário da estratégia H1 + M15 (08h–17h UTC).'
+       :'Nossa IA busca novas oportunidades no mercado, respeitando suas estratégias e limites de risco.')
+     :(status.interrupted_after_restart
+       ?'Execução interrompida. Confira os detalhes antes de ativar.'
+       :available?'As análises automáticas estão pausadas. Ative quando desejar.'
+       :'AutoPilot indisponível. Confira os detalhes operacionais.');
    const isV2=status.autopilot_version==='V2_MULTI_ASSET';
    $('autopilotVersion').textContent=isV2
       ?'● Forex Rise/Fall · expiração 15 min · indicadores em velas de 1 min · múltiplos pares DEMO'
