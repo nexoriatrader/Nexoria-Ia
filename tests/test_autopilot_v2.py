@@ -129,3 +129,61 @@ def test_v2_parallel_real_path_with_two_assets(tmp_path,monkeypatch):
     finally:
         main.v2_last_scan.clear()
         cleanup(engine)
+
+
+def test_v2_martingale_enters_same_symbol_without_waiting_for_scan(tmp_path,monkeypatch):
+    """EURJPY recovery can coexist with EURUSD, but must never overlap EURJPY."""
+    monkeypatch.setenv('NEXORA_V2_ENABLED','true')
+    client,factory,engine,uid=prepare(tmp_path,monkeypatch,stop_loss='20.00')
+    broker=AsyncMock(side_effect=[
+        {'contract_id':'910001','buy_price':'2.00'},
+        {'contract_id':'910002','buy_price':'2.00'},
+        {'contract_id':'910003','buy_price':'4.00'}])
+    proposals=AsyncMock(return_value={'ask_price':'2.00','payout':'3.60'})
+    signals=AsyncMock(side_effect=[
+        {'symbol':'EURJPY','direction':'CALL','minutes':3,
+         'strategy':'rompimento_m1','reason':'rompimento validando'},
+        {'symbol':'EURUSD','direction':'PUT','minutes':3,
+         'strategy':'rompimento_m1','reason':'rompimento validando'}])
+    monkeypatch.setattr(main,'demo_buy',broker)
+    monkeypatch.setattr(main,'demo_proposal',proposals)
+    monkeypatch.setattr(main,'select_demo_signal',signals)
+    monkeypatch.setattr(main,'market_connected',False)
+    try:
+        with factory() as s:
+            s.add(db.RobotPlan(user_id=uid,requested_martingale=True,gale_count=1,
+                requested_multiplier='2.00'))
+            s.commit()
+        assert client.post('/api/autopilot/start',
+            json={'confirm':'START_DEMO_AUTOPILOT'}).status_code==200
+        async def tick():
+            await main.autopilot_once()
+        asyncio.run(tick())
+        main.v2_last_scan[uid]=-1e12
+        main.autopilot_last_attempt[uid]=-1e12
+        asyncio.run(tick())
+        with factory() as s:
+            eurjpy=s.scalar(select(db.DemoOrder).where(db.DemoOrder.symbol=='EURJPY'))
+            assert eurjpy is not None
+            assert settle(s,eurjpy,{'contract_id':'910001','is_sold':1,
+                'profit':'-2.00','status':'lost'})
+        main.autopilot_last_attempt[uid]=-1e12
+        asyncio.run(tick())
+        assert broker.await_count==3
+        assert proposals.await_count==2  # no redundant preliminary quote for gale
+        assert signals.await_count==2  # gale does not wait for new scanner cycle
+        with factory() as s:
+            orders=s.scalars(select(db.DemoOrder).order_by(db.DemoOrder.id)).all()
+            assert [(o.symbol,o.stake,o.state) for o in orders]==[
+                ('EURJPY','2.00','SETTLED'),('EURUSD','2.00','CONFIRMED'),
+                ('EURJPY','4.00','CONFIRMED')]
+            attr=s.scalar(select(db.AutoPilotAttribution).where(
+                db.AutoPilotAttribution.order_id==orders[-1].id))
+            assert attr.strategy=='rompimento_m1'
+        # No fourth trade while both symbols are occupied.
+        main.autopilot_last_attempt[uid]=-1e12
+        asyncio.run(tick())
+        assert broker.await_count==3
+    finally:
+        main.v2_last_scan.clear()
+        cleanup(engine)
