@@ -190,10 +190,12 @@ async def demo_buy(token: str, account_id: str, *, symbol: str,
                 if currency is None:
                     _, currency = await _read_balance(ws, 7100)
                 currency = _currency(currency)
+                # Deriv v1/options API: only a streamed proposal ID may be
+                # purchased. Keep preflight demo_proposal() read-only.
                 proposal_request = {"proposal": 1, "amount": _amount(stake), "basis": "stake",
                                    "contract_type": contract_type, "currency": currency,
                                    "duration": duration, "duration_unit": "m",
-                                   "underlying_symbol": symbol, "req_id": 7101}
+                                   "underlying_symbol": symbol, "subscribe": 1, "req_id": 7101}
                 await ws.send(json.dumps(proposal_request))
                 proposal = (await _response_for(ws, 7101)).get("proposal")
                 if not isinstance(proposal, dict):
