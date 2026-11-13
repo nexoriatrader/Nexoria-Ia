@@ -399,7 +399,7 @@ async def autopilot_once():
                         # Fresh confirmed signals from the same batch can be
                         # consumed on subsequent ticks without a new API scan.
                         if (now-v2_last_scan.get(uid,-1e12)<15
-                            and not has_pending_signals(uid)):
+                            and not has_pending_signals(uid,filtered=batch.max_orders>=100)):
                             continue
                         if now-autopilot_last_attempt.get(uid,-1e12)<5:
                             continue
@@ -408,7 +408,7 @@ async def autopilot_once():
                             candidate=await select_demo_signal(
                                 exclude_symbols=[o.symbol for o in orders
                                                  if o.state in ('PENDING','CONFIRMED','UNKNOWN')],
-                                user_key=uid)
+                                user_key=uid,filtered=batch.max_orders>=100)
                         except Exception as exc:
                             autopilot_reasons[uid]='Scanner 2.0 indisponível; aguardando reconexão'
                             log.warning('V2 scanner unavailable: %s',type(exc).__name__)
@@ -948,6 +948,56 @@ async def reset_risk_session(request:Request,payload:RiskResetRequest,
             'message':'Nova sessão DEMO iniciada. Histórico e saldo preservados.'}
 
 
+class EvaluationResetRequest(BaseModel):
+    confirm:str
+
+
+@app.post('/api/autopilot/v2/new-evaluation')
+async def new_v2_evaluation(request:Request,payload:EvaluationResetRequest,
+                            nexora_sid:str|None=Cookie(default=None)):
+    """Start independent DEMO V2.1 evaluation without deleting broker evidence."""
+    user=active_user(request,nexora_sid)
+    if payload.confirm!='START_NEW_DEMO_EVALUATION':
+        raise HTTPException(403,'Confirme o início de nova avaliação DEMO')
+    if user.selected_mode!='demo':
+        raise HTTPException(403,'Somente conta DEMO')
+    if not v2_enabled():
+        raise HTTPException(503,'Experimento Forex indisponível')
+    async with autopilot_lock:
+        if user.id in autopilot_enabled:
+            raise HTTPException(409,'Desligue o AutoPilot antes de iniciar nova avaliação')
+        with db.SessionLocal() as sess:
+            active=sess.scalars(select(db.DemoOrder).where(
+                db.DemoOrder.user_id==user.id,
+                db.DemoOrder.state.in_(('PENDING','CONFIRMED','UNKNOWN')))).all()
+            if active:
+                raise HTTPException(409,'Aguarde a liquidação ou reconciliação dos contratos abertos antes de iniciar nova avaliação')
+            last=sess.scalars(select(db.DemoOrder.id).where(
+                db.DemoOrder.user_id==user.id).order_by(db.DemoOrder.id.desc()).limit(1)).first()
+            anchor_id=last or 0
+            batch=sess.get(db.PilotValidationBatch,user.id)
+            if batch is None:
+                batch=db.PilotValidationBatch(user_id=user.id)
+                sess.add(batch)
+            batch.after_order_id=anchor_id
+            batch.max_orders=100  # 2.1 marker; goal is informative, not an execution cap.
+            batch.created_at=db.utcnow()
+            sess.add(db.RiskSession(user_id=user.id,after_order_id=anchor_id))
+            run=sess.get(db.RobotRun,user.id)
+            consent=sess.get(db.AutoPilotResumeConsent,user.id)
+            if run:sess.delete(run)
+            if consent:sess.delete(consent)
+            sess.commit()
+        autopilot_last_attempt.pop(user.id,None)
+        v2_last_scan.pop(user.id,None)
+        from .trade_selector_v2 import clear_user_signals
+        clear_user_signals(user.id)
+        autopilot_reasons[user.id]='Nova avaliação DEMO 2.1 pronta; AutoPilot desligado'
+    return {'ok':True,'batch':'NEXORA_2.1','after_order_id':anchor_id,
+            'execution':'DERIV_DEMO_ONLY','running':False,
+            'message':'Indicadores da segunda avaliação zerados. Histórico anterior e saldo Deriv preservados.'}
+
+
 def autopilot_start_blocker(user,orders,*,after_order_id=0):
     """Read-only explanation for refused starts; never bypass order safeguards."""
     if not autopilot_allowed():
@@ -1070,7 +1120,7 @@ async def autopilot_v2_scanner_status(request:Request,
     user=active_user(request,nexora_sid)
     with db.SessionLocal() as sess:
         batch=sess.get(db.PilotValidationBatch,user.id)
-    return {'version':'NEXORA_2.0','v2_enabled':v2_enabled(),
+    return {'version':'NEXORA_2.1' if batch and batch.max_orders>=100 else 'NEXORA_2.0','v2_enabled':v2_enabled(),
             'v2_session_active':bool(batch),'running':user.id in autopilot_enabled,
             'scan':last_scan_report(),'real_orders_enabled':False}
 
@@ -1466,7 +1516,7 @@ async def autopilot_strategy_stats(request:Request,nexora_sid:str|None=Cookie(de
         if item['settled']:
             item['win_rate']=round(item['wins']/item['settled'],4)
     return {'items':list(summary.values()),'execution':'DERIV_DEMO_ONLY',
-            'batch':'NEXORA_2.0' if batch else 'PREVIOUS',
+            'batch':('NEXORA_2.1' if batch.max_orders>=100 else 'NEXORA_2.0') if batch else 'PREVIOUS',
             'note':'Somente contratos oficiais desde o início da avaliação 2.0, quando ativa. '
                    'Não comprova desempenho futuro.'}
 
@@ -1541,14 +1591,16 @@ async def v2_evaluation(request:Request,nexora_sid:str|None=Cookie(default=None)
                 'wins':sum(Decimal(str(o.pnl))>0 for o in settled),
                 'losses':sum(Decimal(str(o.pnl))<0 for o in settled),
                 'pending':len(v2orders)-len(settled),'net_pnl':str(profit),
-                'target':50,'target_is_limit':False,'execution':'DERIV_DEMO_ONLY',
+                'target':batch.max_orders,'target_is_limit':False,'execution':'DERIV_DEMO_ONLY',
+                'batch':'NEXORA_2.1' if batch.max_orders>=100 else 'NEXORA_2.0',
                 'started_at':batch.created_at.isoformat(),
-                'note':'Estatística financeira oficial DEMO apenas do lote NEXORA 2.0; meta 50 sem limite automático.'}
+                'note':'Estatística DEMO apenas desta avaliação. Contratos anteriores preservados; meta sem limite automático.'}
 
 
 def order_result_details(order,progression=None,was_automatic=False):
     """Historical snapshots are factual; unknown progression stays unclassified."""
     basic=public_order(order)
+    basic['duration_minutes']=order.duration_minutes
     opened=order.created_at
     if opened is not None:
         if opened.tzinfo is None:
@@ -1608,7 +1660,7 @@ async def demo_orders_route(request:Request,nexora_sid:str|None=Cookie(default=N
                               o.id in automatic_ids) for o in orders],
                 'execution':'DERIV_DEMO_ONLY','timezone':'America/Sao_Paulo',
                 'retention_days':3,'history_cutoff':cutoff.isoformat(),
-                'batch':'NEXORA_2.0' if batch else 'PREVIOUS'}
+                'batch':('NEXORA_2.1' if batch.max_orders>=100 else 'NEXORA_2.0') if batch else 'PREVIOUS'}
 
 @app.post('/api/demo/orders/{order_id}/reconcile')
 async def reconcile_demo_route(request:Request,order_id:int,
