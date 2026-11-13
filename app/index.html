@@ -449,7 +449,7 @@ button.choose-account:focus-visible{outline:3px solid #71d2ff;outline-offset:4px
     </div>
     <div class="robot-details-content" aria-label="Análise do Robô Trader IA">
       <p id="autopilotVersion" class="helper"><strong>Robô Trader I.A 2.2:</strong></p>
-      <p id="v2ScannerHealth" class="helper" role="status">Scanner Forex: verificando condições · última análise —</p>
+      <p id="v2ScannerHealth" class="helper" role="status">Scanner: verificando condições · última análise —</p>
       <p class="helper">Análise em tempo real</p>
       <p id="v2Opportunity" class="helper" role="status">● Oportunidade encontrada: Nenhuma no momento</p>
     </div>
@@ -457,14 +457,10 @@ button.choose-account:focus-visible{outline:3px solid #71d2ff;outline-offset:4px
   </div>
   <div class="metric-grid">
     <div class="card metric"><div class="metric-label">Saldo Treinamento</div><div class="metric-value" id="balanceMetric">—</div><div class="metric-sub">Saldo virtual oficial · Deriv</div></div>
-    <div class="card metric balance-real"><div class="metric-label">Saldo Conta Real</div><div class="metric-value" id="realBalanceMetric">—</div><div class="metric-sub" id="realBalanceReason">Verificando saldo oficial · Deriv</div></div>
+    <div hidden aria-hidden="true"><span id="realBalanceMetric"></span><span id="realBalanceReason"></span></div>
     <div class="card metric"><div class="metric-label" id="demoPnlScope">Resultado do dia</div>
-      <div class="metric-sub" style="margin-top:9px">TREINAMENTO · DEMO</div>
       <div class="metric-value" id="profitMetric">—</div>
-      <div class="divider" style="height:1px;background:#35536a;margin:12px 0"></div>
-      <div class="metric-sub">CONTA REAL · DERIV</div>
-      <div class="metric-value" id="realProfitMetric">—</div>
-      <div class="metric-sub" id="realProfitReason">Consultando resultado oficial da conta real...</div>
+      <div hidden aria-hidden="true"><span id="realProfitMetric"></span><span id="realProfitReason"></span></div>
       <div class="metric-sub" style="margin-top:9px">Desde 00h · Brasília · somente contratos liquidados</div>
     </div>
   </div>
@@ -741,7 +737,8 @@ async function refreshDashboard(){
        const at=scan.at?new Date(scan.at):null;
        const validDate=at&&!Number.isNaN(at.getTime());
        const timeText=validDate?at.toLocaleTimeString('pt-BR',{timeZone:'America/Sao_Paulo'}):'—';
-       $('v2ScannerHealth').textContent='Scanner Forex: verificando condições · última análise '+timeText;
+       const marketLabel=scan.market==='volatility'?'Volatility':'Forex';
+       $('v2ScannerHealth').textContent='Scanner '+marketLabel+': verificando condições · última análise '+timeText;
        const fresh=validDate&&Date.now()-at.getTime()>=0&&Date.now()-at.getTime()<=50000;
        const selected=scan.selected;
        const confirmed=robotRunning&&fresh&&scan.status==='SIGNAL'&&selected
@@ -752,7 +749,7 @@ async function refreshDashboard(){
          :'● Oportunidade encontrada: Nenhuma no momento';
      }).catch(()=>{
        if(sequence===dashboardStatusSequence){
-         $('v2ScannerHealth').textContent='Scanner Forex: verificando condições · última análise —';
+         $('v2ScannerHealth').textContent='Scanner: verificando condições · última análise —';
          $('v2Opportunity').textContent='● Oportunidade encontrada: Nenhuma no momento';
        }
      });
