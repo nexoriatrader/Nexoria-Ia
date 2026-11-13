@@ -103,7 +103,13 @@ async def _response_for(ws, req_id: int) -> dict:
         if message.get("req_id") != req_id:
             continue
         if message.get("error"):
-            raise DemoTradingError(str(message["error"].get("message", "Operação demo recusada")))
+            error = message["error"]
+            exc = DemoTradingError(str(error.get("message", "Operação demo recusada")))
+            # Broker error code is diagnostic metadata; never log the raw response,
+            # OTP, account identifier, authorization token or arbitrary message.
+            code = error.get("code")
+            exc.deriv_code = code if isinstance(code, str) and re.fullmatch(r"[A-Za-z0-9_]{1,64}", code) else "UNSPECIFIED"
+            raise exc
         return message
 
 
