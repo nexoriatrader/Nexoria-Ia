@@ -42,7 +42,7 @@ def classify(item):
     label=item.get('display_name','')
     if not isinstance(symbol,str) or not isinstance(label,str):
         return None
-    if not re.fullmatch(r'[A-Za-z0-9]{2,30}',symbol):
+    if not re.fullmatch(r'[A-Za-z0-9_]{2,30}',symbol):
         return None
     normalized=re.sub('[^A-Z]','',label.upper())
     code=symbol.upper()
