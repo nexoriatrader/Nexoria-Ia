@@ -858,7 +858,7 @@ async function loadRealDailyResult(){
    reason.textContent='Consulta ao resultado real temporariamente indisponível';
  }
 }
-async function loadDemoOrders(){try{const data=await req('/api/demo/orders');demoOrders=data.items||[];const last=demoOrders[0];$('lastOrder').textContent=last?last.symbol+' · '+last.direction+' · M'+last.duration_minutes+' · Entrada '+money(last.stake)+' · '+last.state+(last.pnl===null?' · Aguardando resultado':' · P/L '+money(last.pnl)):'Nenhum contrato oficial ainda.';renderOrders();return data}catch(e){$('ordersBody').innerHTML='<tr><td colspan="11" class="empty">Não foi possível carregar o histórico.</td></tr>';throw e}}
+async function loadDemoOrders(){try{const data=await req('/api/demo/orders');demoOrders=data.items||[];const last=demoOrders[0];$('lastOrder').textContent=last?last.symbol+' · '+last.direction+' · M'+last.duration_minutes+' · '+money(last.stake)+(last.pnl===null?' · Aguardando resultado':' · Resultado '+money(last.pnl)):'Nenhum contrato oficial ainda.';renderOrders();return data}catch(e){$('ordersBody').innerHTML='<tr><td colspan="11" class="empty">Não foi possível carregar o histórico.</td></tr>';throw e}}
 const brasilDateTime=(iso)=>{
  if(!iso)return ['—','—'];
  const d=new Date(iso);
