@@ -26,8 +26,8 @@ _scan_offset=0
 # Keep them briefly per user so the executor can submit each one in turn.
 _pending_signals_by_user={}
 EXPIRY={'range_break':3,'forex':15,'step':5,'volatility':5}
-_catalog_cache=()
-_catalog_at=0.0
+_catalog_cache={}
+_catalog_at={}
 _contract_cache={}
 _last_scan={'status':'NOT_RUN','at':None,'assets':[],'selected':None}
 _log=logging.getLogger('nexora.v2')
@@ -38,12 +38,35 @@ def clear_user_signals(user_key):
     _pending_signals_by_user.pop(user_key,None)
     _pending_signals_by_user.pop((user_key,True),None)
     _pending_signals_by_user.pop((user_key,'pullback_v22'),None)
+    _pending_signals_by_user.pop((user_key,'volatility_m1'),None)
+
+
+def active_market(now=None):
+    """Route by the approved Forex research window; UTC is authoritative."""
+    current=datetime.now(timezone.utc) if now is None else now.astimezone(timezone.utc)
+    if current.weekday()<5 and 8<=current.hour<17:
+        return 'forex'
+    return 'volatility'
+
+
+def effective_strategy_mode(strategy_mode):
+    # V2.2 users get a 24/7 read-only scanner with DEMO-only execution
+    # still subject to existing broker contract and account safeguards.
+    if strategy_mode=='pullback_v22':
+        return 'pullback_v22' if active_market()=='forex' else 'volatility_m1'
+    return strategy_mode
+
+
+def pending_queue_key(user_key, filtered=False, strategy_mode=None):
+    mode=effective_strategy_mode(strategy_mode)
+    if mode in ('pullback_v22','volatility_m1'):
+        return (user_key,mode)
+    return (user_key,True) if filtered else user_key
 
 
 def has_pending_signals(user_key,*,filtered=False,strategy_mode=None):
-    """Whether another confirmed candidate from this scan is still fresh."""
     now=time.time()
-    queue_key=(user_key,'pullback_v22') if strategy_mode=='pullback_v22' else ((user_key,True) if filtered else user_key)
+    queue_key=pending_queue_key(user_key,filtered,strategy_mode)
     return any(0 <= now-(item['last_bar_epoch']+item.get('bar_seconds',60)) <= 50
                for item in _pending_signals_by_user.get(queue_key,[]))
 
@@ -56,7 +79,8 @@ def last_scan_report():
             'reason':_last_scan.get('reason'),
             'catalogue_size':_last_scan.get('catalogue_size'),
             'batch_size':_last_scan.get('batch_size'),
-            'next_scan_offset':_last_scan.get('next_scan_offset')}
+            'next_scan_offset':_last_scan.get('next_scan_offset'),
+            'market':_last_scan.get('market')}
 
 
 
@@ -83,35 +107,37 @@ def classify(item):
     return None
 
 
-def choose_tradeable(symbols):
-    """Only items returned by the Deriv catalogue, never assumed identifiers."""
+def choose_tradeable(symbols, *, market='forex'):
+    """Use only real names/codes returned by Deriv, never hardcoded symbols."""
     picked={}
     for item in symbols:
         if not isinstance(item,dict):
             continue
         kind=classify(item)
-        if not kind or kind[0]!='forex':
+        if not kind:
             continue
         family,group=kind
+        if market=='forex' and family!='forex':
+            continue
+        if market=='volatility' and family!='volatility':
+            continue
         symbol=item['symbol']
-        if symbol not in picked:
-            picked[symbol]={**item,'family':family,'group':group}
-    priority={'forex':0,'range_break':1,'step':2,'volatility':3}
-    ordered=sorted(picked.values(),key=lambda item:(
-        priority[item['family']],
-        FX_PAIRS.index(item['group']) if item['family']=='forex' else 0,
-        item['symbol']))
-    return ordered[:MAX_SYMBOLS]
+        picked.setdefault(symbol,{**item,'family':family,'group':group})
+    if market=='forex':
+        return sorted(picked.values(),key=lambda item:(
+            FX_PAIRS.index(item['group']),item['symbol']))[:MAX_SYMBOLS]
+    return sorted(picked.values(),key=lambda item:item['symbol'])[:MAX_SYMBOLS]
 
 
-async def catalogue():
+async def catalogue(market='forex'):
     global _catalog_at,_catalog_cache
     now=time.monotonic()
-    if _catalog_cache and now-_catalog_at<300:
-        return list(_catalog_cache)
-    found=choose_tradeable(await discover_symbols())
-    _catalog_cache=tuple(found)
-    _catalog_at=now
+    cached=_catalog_cache.get(market)
+    if cached and now-_catalog_at.get(market,0)<300:
+        return list(cached)
+    found=choose_tradeable(await discover_symbols(),market=market)
+    _catalog_cache[market]=tuple(found)
+    _catalog_at[market]=now
     return found
 
 
@@ -346,7 +372,9 @@ async def select_demo_signal(*, exclude_symbols=(), user_key=None, filtered=Fals
     global _last_scan,_scan_offset
     exclude=set(exclude_symbols)
     # Never reuse a setup after its 50-second post-candle freshness window.
-    queue_key=(user_key,'pullback_v22') if strategy_mode=='pullback_v22' else ((user_key,True) if filtered else user_key)
+    effective_mode=effective_strategy_mode(strategy_mode)
+    market='volatility' if effective_mode=='volatility_m1' else 'forex'
+    queue_key=pending_queue_key(user_key,filtered,strategy_mode)
     queued=_pending_signals_by_user.get(queue_key,[])
     now=time.time()
     while queued:
@@ -354,25 +382,16 @@ async def select_demo_signal(*, exclude_symbols=(), user_key=None, filtered=Fals
         if item['symbol'] not in exclude and 0 <= now-(item['last_bar_epoch']+item.get('bar_seconds',60)) <= 50:
             return item
     stamp=datetime.now(timezone.utc).isoformat()
-    # The H1/M15 setup is valid only during the approved UTC session.
-    # Outside it, do not call Deriv or report a false market-data failure.
-    if strategy_mode=='pullback_v22':
-        utc_hour=datetime.now(timezone.utc).hour
-        if not 8<=utc_hour<17:
-            _last_scan={'status':'OUTSIDE_TRADING_SESSION','at':stamp,
-                        'assets':[],'selected':None,
-                        'reason':'Estratégia 2.2 opera somente das 08h às 17h UTC (05h às 14h Brasília)'}
-            return None
     try:
-        items=await catalogue()
+        items=await catalogue(market)
     except (MarketError,TimeoutError,OSError) as exc:
         _last_scan={'status':'CATALOG_UNAVAILABLE','at':stamp,'assets':[],
-                    'selected':None,'reason':str(exc)[:160]}
+                    'selected':None,'reason':str(exc)[:160],'market':market}
         _log.warning('V2 selector: catalogue unavailable: %s',type(exc).__name__)
         return None
     if not items:
         _last_scan={'status':'NO_SUPPORTED_ASSETS_IN_CATALOG','at':stamp,
-                    'assets':[],'selected':None}
+                    'assets':[],'selected':None,'market':market}
         _log.warning('V2 selector: zero eligible symbols in Deriv public catalog')
         return None
     # Rotate a bounded scan batch across all eligible catalogue assets.
@@ -391,7 +410,7 @@ async def select_demo_signal(*, exclude_symbols=(), user_key=None, filtered=Fals
                 if not await supported(symbol,EXPIRY[item['family']]):
                     return None,{'symbol':symbol,'status':'CALL_PUT_OR_DURATION_UNAVAILABLE',
                                  'duration_minutes':EXPIRY[item['family']]}
-                if strategy_mode=='pullback_v22':
+                if effective_mode=='pullback_v22':
                     snapshot=time.time()
                     h1,m15=await asyncio.gather(
                         fetch_closed_timeframe(symbol,3600,105,now=snapshot),
@@ -417,7 +436,7 @@ async def select_demo_signal(*, exclude_symbols=(), user_key=None, filtered=Fals
                                       timeout=42)
     except TimeoutError:
         _last_scan={'status':'SCAN_TIMEOUT','at':stamp,'assets':[],
-                    'selected':None,'reason':'Consultas Deriv excederam 42s'}
+                    'selected':None,'reason':'Consultas Deriv excederam 42s','market':market}
         _log.warning('V2 selector: public research requests exceeded 42 seconds')
         return None
     signals=[candidate for candidate,_ in result if candidate]
@@ -430,7 +449,7 @@ async def select_demo_signal(*, exclude_symbols=(), user_key=None, filtered=Fals
             'MARKET_DATA_ERROR','CALL_PUT_OR_DURATION_UNAVAILABLE') for x in rows) else 'NO_SIGNAL')
     _last_scan={'status':status,'at':stamp,'assets':rows,
                 'selected':chosen,'catalogue_size':total,'batch_size':len(rows),
-                'next_scan_offset':_scan_offset}
+                'next_scan_offset':_scan_offset,'market':market}
     # Expose whether a feed failure was mistaken for a lack of setups.
     if status=='MARKET_DATA_UNAVAILABLE':
         _log.warning('V2 selector: no market data; results=%s',
