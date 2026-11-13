@@ -39,6 +39,7 @@ autopilot_task = None
 autopilot_enabled: set[int] = set()
 autopilot_last_attempt: dict[int,float] = {}
 v2_last_scan: dict[int,float] = {}
+v2_gate_last_log: dict[tuple[int,str],float] = {}
 autopilot_reasons: dict[int,str] = {}
 autopilot_lock = asyncio.Lock()
 market_last_tick = 0.0
@@ -47,6 +48,15 @@ recent_prices=[]
 last_market_reason='Aguardando conexão'
 lock=asyncio.Lock()
 reconcile_lock=asyncio.Lock()
+
+def log_v2_gate(uid:int, gate:str, detail:str=''):
+    """Rate-limit internal scanner gate diagnostics, without account secrets."""
+    now=asyncio.get_running_loop().time()
+    key=(uid,gate)
+    if now-v2_gate_last_log.get(key,-1e12)>=60:
+        v2_gate_last_log[key]=now
+        log.info('AutoPilot V2.2 gate: %s%s',gate,(' '+detail) if detail else '')
+
 
 def rt_for(user):
     engine=runtimes.get(user.id)
@@ -308,8 +318,8 @@ async def autopilot_once():
     async with lock:
         connected=market_connected and market_last_tick>0 and now-market_last_tick<35
         prices=list(recent_prices)
-    # V2 uses independent fresh M1 candles for each catalogue symbol;
-    # legacy V1 alone still requires the original tick feed.
+    # V2.2 uses independent H1/M15 candles for each catalogue symbol;
+    # only legacy V1 requires the separate realtime tick feed.
     if not connected:
         with db.SessionLocal() as sess:
             live_v2={v for v in autopilot_enabled
@@ -360,6 +370,7 @@ async def autopilot_once():
                     if batch:
                         active=[o for o in orders if o.state in ('PENDING','CONFIRMED','UNKNOWN')]
                         if any(o.state in ('PENDING','UNKNOWN') for o in active):
+                            log_v2_gate(uid,'PENDING_OR_UNKNOWN_CONTRACT')
                             autopilot_reasons[uid]='Contrato DEMO incerto; aguardando conferência'
                             continue
                         entry,last=v2_symbol_recovery(sess,user,orders,plan,cycle_cfg,batch)
@@ -393,7 +404,9 @@ async def autopilot_once():
                         autopilot_reasons[uid]='Aguardando abertura de vela M1 para recuperação'
                         continue
                     if batch and now-autopilot_last_attempt.get(uid,-1e12)<5:
+                        log_v2_gate(uid,'RECOVERY_COOLDOWN')
                         continue
+                    if batch: log_v2_gate(uid,'RECOVERY_PENDING')
                     candidate={'strategy':entry.strategy or 'recuperacao',
                         'direction':entry.direction,
                         'symbol':entry.symbol or SYMBOL,
@@ -409,8 +422,10 @@ async def autopilot_once():
                         if (now-v2_last_scan.get(uid,-1e12)<15
                             and not has_pending_signals(uid,filtered=batch.max_orders>=100 and batch.max_orders<200,
                                                          strategy_mode='pullback_v22' if batch.max_orders>=200 else None)):
+                            log_v2_gate(uid,'SCAN_INTERVAL')
                             continue
                         if now-autopilot_last_attempt.get(uid,-1e12)<5:
+                            log_v2_gate(uid,'ORDER_COOLDOWN')
                             continue
                         v2_last_scan[uid]=now
                         try:
@@ -426,6 +441,7 @@ async def autopilot_once():
                         if candidate is None:
                             state=last_scan_report()
                             status=state.get('status','UNKNOWN')
+                            log_v2_gate(uid,'SCAN_'+status,'market='+str(state.get('market','?')))
                             if status=='OUTSIDE_TRADING_SESSION':
                                 autopilot_reasons[uid]='AutoPilot 2.2: fora do horário de análise (05h às 14h, Brasília)'
                             elif status in ('CATALOG_UNAVAILABLE','NO_SUPPORTED_ASSETS_IN_CATALOG',
@@ -1100,7 +1116,10 @@ async def autopilot_start(request:Request,payload:AutoPilotSwitch,
                 sess.add(db.AutoPilotResumeConsent(user_id=user.id))
             sess.commit()
         autopilot_last_attempt.pop(user.id,None)
+        v2_last_scan.pop(user.id,None)
         autopilot_enabled.add(user.id)
+        log.info('AutoPilot armed: scan_mode=%s; market=automatic; execution=DEMO',
+                 'V2.2_H1_M15' if v2_enabled() else 'LEGACY')
     autopilot_reasons[user.id]='AutoPilot ligado; aguardando oportunidade oficial na Deriv Demo'
     return {'running':True,'execution':'DERIV_DEMO_ONLY','real_orders_enabled':False}
 
@@ -1111,6 +1130,8 @@ async def autopilot_stop(request:Request,nexora_sid:str|None=Cookie(default=None
     # Wait for any already dispatched broker request to finish before declaring OFF.
     async with autopilot_lock:
         autopilot_enabled.discard(user.id)
+        for key in list(v2_gate_last_log):
+            if key[0]==user.id: v2_gate_last_log.pop(key,None)
         with db.SessionLocal() as sess:
             run=sess.get(db.RobotRun,user.id)
             consent=sess.get(db.AutoPilotResumeConsent,user.id)
