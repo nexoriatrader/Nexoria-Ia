@@ -28,7 +28,7 @@ def _amount(value: str) -> float:
         amount = Decimal(str(value))
     except (InvalidOperation, ValueError, TypeError) as exc:
         raise DemoTradingError("Valor de stake inválido") from exc
-    if not amount.is_finite() or amount < Decimal("2") or amount > Decimal("1000"):
+    if not amount.is_finite() or amount < Decimal("0.50") or amount > Decimal("1000"):
         raise DemoTradingError("Stake demo fora dos limites permitidos")
     return float(amount)
 
@@ -138,7 +138,7 @@ async def demo_proposal(token: str, account_id: str, *, symbol: str,
     """Query a real demo-account proposal without buying a contract."""
     if contract_type not in {"CALL", "PUT"}:
         raise DemoTradingError("Tipo de contrato demo não autorizado")
-    if duration not in {1, 3, 5}:
+    if duration not in {1, 3, 5, 15}:
         raise DemoTradingError("Duração demo não autorizada")
     if not isinstance(symbol, str) or not re.fullmatch(r'[A-Za-z0-9_]{2,30}',symbol):
         raise DemoTradingError("Símbolo inválido")
@@ -178,7 +178,7 @@ async def demo_buy(token: str, account_id: str, *, symbol: str,
     """Buy one contract on the demo channel after explicit confirmation."""
     if confirm != "DEMO_ONLY":
         raise DemoTradingError("Confirmação demo obrigatória")
-    if contract_type not in {"CALL", "PUT"} or duration not in {1, 3, 5}:
+    if contract_type not in {"CALL", "PUT"} or duration not in {1, 3, 5, 15}:
         raise DemoTradingError("Parâmetros de contrato demo não autorizados")
     if not isinstance(symbol, str) or not re.fullmatch(r'[A-Za-z0-9_]{2,30}',symbol):
         raise DemoTradingError("Símbolo inválido")
