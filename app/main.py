@@ -1355,7 +1355,7 @@ async def perform_demo_buy(user, token, payload:DemoBuy, *, attribution:dict|Non
         raise HTTPException(503,'Compra demonstrativa desabilitada')
     if user.selected_mode!='demo':
         raise HTTPException(403,'Somente conta demonstrativa')
-    if not re.fullmatch(r'[A-Za-z0-9]{2,30}',payload.symbol):
+    if not re.fullmatch(r'[A-Za-z0-9_]{2,30}',payload.symbol):
         raise HTTPException(422,'Ativo inválido')
     with db.SessionLocal() as s:
         stored=s.get(db.User,user.id)
