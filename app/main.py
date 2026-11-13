@@ -426,8 +426,10 @@ async def autopilot_once():
                         if candidate is None:
                             state=last_scan_report()
                             status=state.get('status','UNKNOWN')
-                            if status in ('CATALOG_UNAVAILABLE','NO_SUPPORTED_ASSETS_IN_CATALOG',
-                                          'SCAN_TIMEOUT','MARKET_DATA_UNAVAILABLE'):
+                            if status=='OUTSIDE_TRADING_SESSION':
+                                autopilot_reasons[uid]='AutoPilot 2.2: fora do horário de análise (05h às 14h, Brasília)'
+                            elif status in ('CATALOG_UNAVAILABLE','NO_SUPPORTED_ASSETS_IN_CATALOG',
+                                            'SCAN_TIMEOUT','MARKET_DATA_UNAVAILABLE'):
                                 autopilot_reasons[uid]='Scanner 2.0 sem dados válidos: '+status
                             else:
                                 autopilot_reasons[uid]=('AutoPilot 2.2: aguardando H1 + pullback M15 confirmado' if batch.max_orders>=200
