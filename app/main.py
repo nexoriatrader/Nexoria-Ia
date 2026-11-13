@@ -1349,11 +1349,13 @@ async def autopilot_strategy_stats(request:Request,nexora_sid:str|None=Cookie(de
     user=active_user(request,nexora_sid)
     from decimal import Decimal
     with db.SessionLocal() as session:
-        records=session.execute(
-            select(db.AutoPilotAttribution, db.DemoOrder)
+        batch=session.get(db.PilotValidationBatch,user.id)
+        statement=(select(db.AutoPilotAttribution, db.DemoOrder)
             .join(db.DemoOrder,db.AutoPilotAttribution.order_id==db.DemoOrder.id)
-            .where(db.AutoPilotAttribution.user_id==user.id)
-        ).all()
+            .where(db.AutoPilotAttribution.user_id==user.id))
+        if batch:
+            statement=statement.where(db.DemoOrder.id>batch.after_order_id)
+        records=session.execute(statement).all()
     summary={}
     for attribution,order in records:
         item=summary.setdefault(attribution.strategy,{'strategy':attribution.strategy,
@@ -1374,7 +1376,9 @@ async def autopilot_strategy_stats(request:Request,nexora_sid:str|None=Cookie(de
         if item['settled']:
             item['win_rate']=round(item['wins']/item['settled'],4)
     return {'items':list(summary.values()),'execution':'DERIV_DEMO_ONLY',
-            'note':'Resultados observados de contratos oficiais; não validam predição futura'}
+            'batch':'NEXORA_2.0' if batch else 'PREVIOUS',
+            'note':'Somente contratos oficiais desde o início da avaliação 2.0, quando ativa. '
+                   'Não comprova desempenho futuro.'}
 
 
 BRASILIA_TZ=ZoneInfo('America/Sao_Paulo')
@@ -1419,7 +1423,37 @@ def today_demo_pnl(session,user_id,now=None):
 async def demo_results_today(request:Request,nexora_sid:str|None=Cookie(default=None)):
     user=active_user(request,nexora_sid)
     with db.SessionLocal() as sess:
-        return today_demo_pnl(sess,user.id)
+        result=today_demo_pnl(sess,user.id)
+        # This endpoint is deliberately the actual account-wide official daily
+        # DEMO P/L, not the isolated V2 evaluation statistic.
+        return {**result,'scope':'ALL_DEMO_TODAY'}
+
+
+@app.get('/api/autopilot/v2/evaluation')
+async def v2_evaluation(request:Request,nexora_sid:str|None=Cookie(default=None)):
+    """Official broker-settled V2-only results; previous ledger is not deleted."""
+    user=active_user(request,nexora_sid)
+    with db.SessionLocal() as sess:
+        batch=sess.get(db.PilotValidationBatch,user.id)
+        if not batch:
+            return {'active':False,'submitted':0,'settled':0,'wins':0,'losses':0,
+                    'pending':0,'net_pnl':'0.00','target':50,'target_is_limit':False,
+                    'execution':'DERIV_DEMO_ONLY'}
+        orders=sess.scalars(select(db.DemoOrder).where(
+            db.DemoOrder.user_id==user.id,db.DemoOrder.id>batch.after_order_id)).all()
+        attributed_ids=set(sess.scalars(select(db.AutoPilotAttribution.order_id).where(
+            db.AutoPilotAttribution.user_id==user.id,
+            db.AutoPilotAttribution.order_id>batch.after_order_id)).all())
+        v2orders=[o for o in orders if o.id in attributed_ids]
+        settled=[o for o in v2orders if o.state=='SETTLED' and o.pnl is not None]
+        profit=sum((Decimal(str(o.pnl)) for o in settled),Decimal('0'))
+        return {'active':True,'submitted':len(v2orders),'settled':len(settled),
+                'wins':sum(Decimal(str(o.pnl))>0 for o in settled),
+                'losses':sum(Decimal(str(o.pnl))<0 for o in settled),
+                'pending':len(v2orders)-len(settled),'net_pnl':str(profit),
+                'target':50,'target_is_limit':False,'execution':'DERIV_DEMO_ONLY',
+                'started_at':batch.created_at.isoformat(),
+                'note':'Estatística financeira oficial DEMO apenas do lote NEXORA 2.0; meta 50 sem limite automático.'}
 
 
 def order_result_details(order,progression=None,was_automatic=False):
@@ -1467,10 +1501,12 @@ async def demo_orders_route(request:Request,nexora_sid:str|None=Cookie(default=N
     # Postgres for reconciliation, progression, auditability and risk checks.
     cutoff=datetime.now(timezone.utc)-timedelta(days=3)
     with db.SessionLocal() as s:
-        orders=s.scalars(select(db.DemoOrder).where(
-                       db.DemoOrder.user_id==user.id,
-                       db.DemoOrder.created_at>=cutoff)
-                       .order_by(db.DemoOrder.id.desc()).limit(100)).all()
+        batch=s.get(db.PilotValidationBatch,user.id)
+        stmt=select(db.DemoOrder).where(db.DemoOrder.user_id==user.id,
+                                       db.DemoOrder.created_at>=cutoff)
+        if batch:
+            stmt=stmt.where(db.DemoOrder.id>batch.after_order_id)
+        orders=s.scalars(stmt.order_by(db.DemoOrder.id.desc()).limit(100)).all()
         order_ids=[o.id for o in orders]
         progressions=s.scalars(select(db.DemoOrderProgression).where(
             db.DemoOrderProgression.order_id.in_(order_ids))).all() if order_ids else []
@@ -1481,7 +1517,8 @@ async def demo_orders_route(request:Request,nexora_sid:str|None=Cookie(default=N
         return {'items':[order_result_details(o,by_order.get(o.id),
                               o.id in automatic_ids) for o in orders],
                 'execution':'DERIV_DEMO_ONLY','timezone':'America/Sao_Paulo',
-                'retention_days':3,'history_cutoff':cutoff.isoformat()}
+                'retention_days':3,'history_cutoff':cutoff.isoformat(),
+                'batch':'NEXORA_2.0' if batch else 'PREVIOUS'}
 
 @app.post('/api/demo/orders/{order_id}/reconcile')
 async def reconcile_demo_route(request:Request,order_id:int,
