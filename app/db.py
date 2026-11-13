@@ -26,7 +26,7 @@ class User(Base):
     stop_win = Column(String(20), default='0.00', nullable=False)
     stop_loss = Column(String(20), default='0.00', nullable=False)
     selected_mode = Column(String(16), default='demo', nullable=False)
-    # User switch is intentionally NOT persisted: all bots start OFF after restart.
+    # Execution consent is stored separately; existing users do not auto-enroll.
 
 class RobotPlan(Base):
     """Saved onboarding preferences; experimental progressions are NOT execution rules."""
@@ -52,6 +52,17 @@ class RobotRun(Base):
     user_id = Column(Integer, ForeignKey('users.id'), primary_key=True)
     after_order_id = Column(Integer, nullable=False, default=0)
     started_at = Column(DateTime(timezone=True), default=utcnow, nullable=False)
+
+
+class AutoPilotResumeConsent(Base):
+    """Explicit DEMO-only opt-in for resuming after a process restart.
+
+    New table rather than retroactively interpreting old RobotRun rows as consent.
+    Cleared on stop, logout, account reconnection, or safety halt.
+    """
+    __tablename__ = 'autopilot_resume_consents'
+    user_id = Column(Integer, ForeignKey('users.id'), primary_key=True)
+    enabled_at = Column(DateTime(timezone=True), default=utcnow, nullable=False)
 
 
 class RiskSession(Base):
