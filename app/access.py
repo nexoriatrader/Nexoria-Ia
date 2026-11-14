@@ -5,6 +5,8 @@ testing. One configurable trial (7 days by default, 24h for controlled testing) 
 All reads use server time; logout/login never renews the trial.
 """
 import os
+import secrets
+from sqlalchemy import select
 from datetime import datetime, timedelta, timezone
 from . import db
 
@@ -61,3 +63,59 @@ def start_trial_on_first_robot_start(session,user_id,now=None):
         session.add(grant)
         session.flush()
     return access_status(session,user_id,now)
+
+
+def ensure_referral_link(session, user_id):
+    """Stable, opaque ID for sharing. The internal DB id is never in the link."""
+    row=session.get(db.ReferralLink,user_id)
+    if row is None:
+        row=db.ReferralLink(user_id=user_id,code=secrets.token_urlsafe(12))
+        session.add(row)
+        session.flush()
+    return row.code
+
+
+def referral_report(session, user_id):
+    code=ensure_referral_link(session,user_id)
+    credits=session.scalars(select(db.ReferralCredit).where(
+        db.ReferralCredit.referrer_user_id==user_id)).all()
+    return {'user_code':code,'confirmed_referrals':len(credits),
+            'bonus_hours':sum(c.credited_hours for c in credits)}
+
+
+def register_first_login(session, user, *, created_new, referred_code=None, now=None):
+    """Called only after valid Deriv OAuth, in same DB transaction as login.
+
+    New identity only, no repeated login credits, no self-referral.
+    The guest's initial trial is 24h only when enforcement is enabled.
+    A referral reward is an atomic, once-per-invitee ledger entry.
+    """
+    now=utc(now or db.utcnow())
+    ensure_referral_link(session,user.id)
+    if not created_new:
+        return
+    if access_control_enabled():
+        start_trial_on_first_robot_start(session,user.id,now)
+    if not referred_code or not access_control_enabled():
+        return
+    link=session.scalar(select(db.ReferralLink).where(
+        db.ReferralLink.code==referred_code))
+    if link is None or link.user_id==user.id:
+        return
+    # First completed OAuth registration is the only point of attribution.
+    session.add(db.ReferralAttribution(invitee_user_id=user.id,
+                        referrer_user_id=link.user_id,created_at=now))
+    if session.get(db.ReferralCredit,user.id) is not None:
+        return
+    access=session.get(db.RobotAccess,link.user_id)
+    if access is None:
+        # Existing testers can earn a day from first qualifying referral.
+        access=db.RobotAccess(user_id=link.user_id,access_kind='referral',
+                              starts_at=now,expires_at=now)
+        session.add(access)
+        session.flush()
+    baseline=max(now,utc(access.expires_at))
+    access.expires_at=baseline+timedelta(hours=24)
+    session.add(db.ReferralCredit(invitee_user_id=user.id,
+                   referrer_user_id=link.user_id,credited_hours=24,created_at=now))
+    session.flush()
