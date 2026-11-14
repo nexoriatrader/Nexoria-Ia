@@ -238,6 +238,18 @@ async def collect_m1_30_days():
 
 async def m1_collect_loop():
     await asyncio.sleep(100)
+    # An already validated research snapshot is available even when the public
+    # Deriv history endpoint is rate-limited. Audit it without refetching.
+    try:
+        from .research_persistence import latest_multitimeframe_study, audit_summary
+        stored = await asyncio.to_thread(latest_multitimeframe_study)
+        if stored and stored.get("results"):
+            audit = audit_summary(stored)
+            for section in ("by_expiry", "by_strategy_observed", "smc_all", "exploratory_flags"):
+                LOG.warning("Research audit %s: %s", section,
+                            json.dumps(audit[section], separators=(",", ":")))
+    except Exception as exc:
+        LOG.warning("Research audit unavailable: %s", type(exc).__name__)
     while True:
         succeeded = False
         try:
