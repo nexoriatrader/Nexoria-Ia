@@ -145,6 +145,15 @@ class PilotValidationBatch(Base):
     created_at = Column(DateTime(timezone=True), default=utcnow, nullable=False)
 
 
+class PilotStrategyChoice(Base):
+    """Explicit owner-of-session choice; never enables execution by itself."""
+    __tablename__ = 'pilot_strategy_choices'
+    user_id = Column(Integer, ForeignKey('users.id'), primary_key=True)
+    strategy = Column(String(40), nullable=False, default='standard')
+    updated_at = Column(DateTime(timezone=True), default=utcnow,
+                        onupdate=utcnow, nullable=False)
+
+
 class RiskSession(Base):
     """Auditable manual DEMO risk reset boundary; historical orders stay untouched."""
     __tablename__ = 'risk_sessions'
