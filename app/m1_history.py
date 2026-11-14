@@ -250,6 +250,25 @@ async def m1_collect_loop():
                             json.dumps(audit[section], separators=(",", ":")))
     except Exception as exc:
         LOG.warning("Research audit unavailable: %s", type(exc).__name__)
+    # Evaluate the new pre-specified pullback rules against the already
+    # persisted M1 snapshots. No new broker history calls are necessary.
+    try:
+        from .pullback_study import run_stored_pullback_study
+        from .research_persistence import persist_pullback_study
+        pullback_report = await asyncio.wait_for(
+            asyncio.to_thread(run_stored_pullback_study), timeout=120)
+        pullback_report["generated_at"] = datetime.now(timezone.utc).isoformat()
+        await asyncio.to_thread(persist_pullback_study, pullback_report)
+        LOG.warning("Research PULLBACK M1 M3 complete: %s", json.dumps({
+            "coverage_pct":pullback_report["coverage_pct"],
+            "missing_minutes":pullback_report["missing_minutes"],
+            "results":pullback_report["results"], "orders_sent":0
+        }, separators=(",", ":")))
+    except asyncio.CancelledError:
+        raise
+    except Exception as exc:
+        LOG.warning("Research PULLBACK M1 M3 unavailable: %s: %s",
+                    type(exc).__name__, str(exc)[:160])
     while True:
         succeeded = False
         try:
