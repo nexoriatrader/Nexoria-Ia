@@ -35,6 +35,27 @@ def _latest_closed(bars, t, minutes, lookback):
     return [bars[k] for k in range(idx - lookback + 1, idx + 1) if k in bars]
 
 
+def _order_blocks(closed_bars):
+    """Last opposite-body candle before a large impulse, using *only* closed HTF."""
+    if len(closed_bars) < 6:
+        return []
+    bodies = [abs(b[4]-b[1]) for b in closed_bars]
+    blocks = []
+    for i in range(5, len(closed_bars)):
+        prev, impulse = closed_bars[i-1], closed_bars[i]
+        baseline = sum(bodies[i-5:i]) / 5
+        if baseline <= 0 or bodies[i] < 1.5 * baseline:
+            continue
+        # Bullish displacement preceded by bearish candle => demand order block.
+        if prev[4] < prev[1] and impulse[4] > impulse[1] and impulse[4] > prev[2]:
+            blocks.append((1, min(prev[1],prev[4]), max(prev[1],prev[4])))
+        # Bearish displacement preceded by bullish candle => supply order block.
+        elif prev[4] > prev[1] and impulse[4] < impulse[1] and impulse[4] < prev[3]:
+            blocks.append((-1, min(prev[1],prev[4]), max(prev[1],prev[4])))
+    return blocks[-4:]
+
+
+
 def make_smc_signals(m1, signal_minutes=1):
     """Return sparse causal signals keyed by M1 closed-minute timestamps.
 
@@ -125,8 +146,13 @@ def make_smc_signals(m1, signal_minutes=1):
         body = max(abs(close-op), abs(close)*1e-9)
         lower_wick = min(op, close)-low
         upper_wick = high-max(op, close)
-        near_low = any(abs(low-z) <= tolerance for z in zone_levels[::2])
-        near_high = any(abs(high-z) <= tolerance for z in zone_levels[1::2])
+        order_blocks = _order_blocks(m15_closed) + _order_blocks(h1_closed)
+        near_low = any(abs(low-z) <= tolerance for z in zone_levels[::2]) or any(
+            side == 1 and band_low-tolerance <= low <= band_high+tolerance
+            for side, band_low, band_high in order_blocks)
+        near_high = any(abs(high-z) <= tolerance for z in zone_levels[1::2]) or any(
+            side == -1 and band_low-tolerance <= high <= band_high+tolerance
+            for side, band_low, band_high in order_blocks)
         if low < recent_low and close > recent_low and lower_wick >= 1.5*body and near_low:
             pending = {"side":1, "at":i, "expiry":i+8,
                        "structure":max(x[2] for x in internal), "anchor":low}
@@ -137,6 +163,6 @@ def make_smc_signals(m1, signal_minutes=1):
         "name":"smc_sweep_choch_fvg_50",
         "zone_higher_timeframes":["M15","H1"],
         "entry_trigger_timeframe":f"M{signal_minutes}",
-        "rules":"HTF extrema zones; wick sweep of 10-bar local extremum; close through 3-bar structure in <=8 bars; FVG or 50%-impulse retest <=10 bars; entry at closed retest bar",
-        "limitations":"Heuristic zone approximation, not discretionary Order Block identification; no assertion of algorithmic liquidity-seeking."
+        "rules":"HTF extrema and opposite-candle order-block zones before >=1.5x body displacement; wick sweep of 10-bar local extremum; close through 3-bar structure in <=8 bars; FVG or 50%-impulse retest <=10 bars; entry at closed retest bar",
+        "limitations":"Mechanical order-block proxy and historical price simulations; no assertion of algorithmic liquidity-seeking."
     }
