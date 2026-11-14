@@ -339,6 +339,28 @@ def v2_symbol_recovery(sess,user,orders,plan,cycle_cfg,batch):
     return entry,last
 
 
+def v24_recovery_timing(settled_at, *, now=None):
+    """Deterministic next-M5 recovery gate after confirmed broker settlement.
+
+    Returns (target_open_epoch, ready_now, warmup_now).
+    Never permit the candle already underway at the settlement timestamp.
+    """
+    current=time.time() if now is None else float(now)
+    if settled_at.tzinfo is None:
+        settled_at=settled_at.replace(tzinfo=timezone.utc)
+    settled_ts=settled_at.timestamp()
+    target=int(current//300)*300
+    if current>target+3:
+        target+=300
+    # A recovery always follows, never precedes, confirmed settlement.
+    if target<=settled_ts:
+        target=(int(settled_ts//300)+1)*300
+    remaining=target-current
+    ready=target<=current<=target+3 and settled_ts<target
+    warmup=10<=remaining<=45 and settled_ts<target
+    return target,ready,warmup
+
+
 def m1_recovery_window_open(settled_at, now=None):
     """Allow recovery only in first 8s of a strictly later M1 candle.
 
@@ -449,6 +471,23 @@ async def autopilot_once():
                     if batch and now-autopilot_last_attempt.get(uid,-1e12)<5:
                         log_v2_gate(uid,'RECOVERY_COOLDOWN')
                         continue
+                    # Warm the authenticated DEMO socket while there is time.
+                    # Otherwise Martingale follows a cold OTP+WS connection and
+                    # commonly misses the three-second M5 opening window.
+                    if (batch and SIGNAL_PROFILE=='next_open_v24'
+                        and active_market()=='volatility'
+                        and last is not None and last.duration_minutes==5):
+                        recovery_target,recovery_ready,should_warm=(
+                            v24_recovery_timing(settlement))
+                        if should_warm:
+                            warm_start=time.monotonic()
+                            warmed=await prepare_demo_buy_socket(token,user.deriv_account_id)
+                            log_v2_gate(uid,'RECOVERY_WARMUP',
+                                        'ready='+str(warmed)+
+                                        ' latency_s=%.3f' % (time.monotonic()-warm_start))
+                        if not recovery_ready:
+                            autopilot_reasons[uid]='Recuperação aguardando abertura M5 após liquidação'
+                            continue
                     if batch: log_v2_gate(uid,'RECOVERY_PENDING')
                     candidate={'strategy':entry.strategy or 'recuperacao',
                         'direction':entry.direction,
@@ -562,7 +601,9 @@ async def autopilot_once():
                 dispatch_at=time.time()
                 # Fresh signal uses its prepared boundary. Recoveries may only
                 # send at a five-minute opening; never invent a fresh signal.
-                target=(int(dispatch_at)//300)*300 if entry.retry else candidate.get('target_open_epoch')
+                target=(v24_recovery_timing(last.updated_at,now=dispatch_at)[0]
+                        if entry.retry and last is not None
+                        else candidate.get('target_open_epoch'))
                 if target is None:
                     log.warning('V2.4 missing prepared opening: symbol=%s',candidate['symbol'])
                     continue
