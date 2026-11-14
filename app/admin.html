@@ -11,7 +11,7 @@ button{background:#e8b75e;color:#07131d;font-weight:800;border:0;padding:12px 16
 button.secondary{background:#1a3c55;color:#effaff;border:1px solid #41647a}button:disabled{opacity:.65}
 .grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}.buttons{display:flex;gap:10px;flex-wrap:wrap;margin-top:16px}
 table{width:100%;border-collapse:collapse;white-space:nowrap}th,td{padding:11px;border-bottom:1px solid #294356;text-align:left;font-size:13px}
-tr[data-id]{cursor:pointer}tr[data-id]:hover{background:#203a50}.scroll{overflow:auto}
+tr[data-id]{cursor:pointer}tr[data-id]:hover,tr[data-id].selected{background:#203a50} .small-note{font-size:12px;color:#aabed0}.scroll{overflow:auto}
 #feedback{color:#d7e9b7;margin-top:12px;min-height:18px}#audit{white-space:pre-line;color:#b6cddd;font-size:13px}
 [hidden]{display:none!important}@media(max-width:600px){.grid{grid-template-columns:1fr}.card{padding:15px}}
 </style></head><body><main>
@@ -24,12 +24,17 @@ tr[data-id]{cursor:pointer}tr[data-id]:hover{background:#203a50}.scroll{overflow
 </section>
 <section id="panel" hidden>
 <div class="buttons"><button class="secondary" onclick="logout()">SAIR</button><button class="secondary" onclick="refresh()">ATUALIZAR</button></div>
-<div class="card"><h2>Usuários cadastrados</h2>
-<p>Toque em um usuário para selecioná-lo. Mostrando os 100 mais recentes.</p>
-<div class="scroll"><table><thead><tr><th>ID</th><th>Conta Deriv</th><th>Indicações</th><th>Status</th><th>Vencimento</th></tr></thead><tbody id="users"></tbody></table></div></div>
+<div class="card"><h2>Buscar usuário</h2>
+<p>Pesquise pelo ID NEXORA (ex.: NXR-000001) ou pela conta Deriv. Toque no resultado para selecionar.</p>
+<div class="grid" style="grid-template-columns:minmax(0,1fr) auto;align-items:end">
+<div><label for="userSearch">ID NEXORA ou conta Deriv</label><input id="userSearch" placeholder="NXR-000001" autocomplete="off"></div>
+<button class="secondary" onclick="refresh()">BUSCAR</button></div>
+<div class="scroll" style="margin-top:14px"><table><thead><tr><th>ID NEXORA</th><th>Conta Deriv</th><th>Indicações</th><th>Status</th><th>Vencimento</th></tr></thead><tbody id="users"></tbody></table></div>
+<p class="small-note" style="margin-top:10px">Sem busca: 100 usuários mais recentes.</p>
+</div>
 <div class="card"><h2>Alterar acesso</h2>
 <div class="grid">
-<div><label>Usuário ID</label><input type="number" min="1" id="userId" required></div>
+<div><label for="userId">ID NEXORA selecionado</label><input id="userId" placeholder="NXR-000001" autocomplete="off" required></div>
 <div><label>Ação</label><select id="action" onchange="actionUI()"><option value="add_hours">Adicionar dias</option><option value="remove_hours">Retirar dias</option><option value="suspend">Suspender acesso</option><option value="resume">Reativar acesso</option><option value="refund_revoke">Estorno: bloquear</option></select></div>
 <div id="daysField"><label>Quantidade de dias</label><input type="number" id="days" min="1" max="90" value="1"></div>
 </div>
@@ -52,26 +57,35 @@ $('loginForm').addEventListener('submit',async e=>{e.preventDefault();$('error')
  $('loginPassword').value='';await show()}catch(e){$('error').textContent=e.message}});
 async function logout(){await call('/api/admin/logout',{method:'POST'});$('panel').hidden=true;$('login').hidden=false}
 function actionUI(){$('daysField').hidden=!['add_hours','remove_hours'].includes($('action').value)}
+function formatNexoraId(id){return 'NXR-'+String(id).padStart(6,'0')}
+function parseNexoraId(raw){
+ const match=String(raw).trim().match(/^(?:NXR-?)?(\d{1,12})$/i);
+ return match?Number(match[1]):NaN;
+}
 async function refresh(){try{
- const [users,audit]=await Promise.all([call('/api/admin/access/users'),call('/api/admin/access/audit')]);
+ $('error').textContent='';
+ const query=$('userSearch').value.trim();
+ const [users,audit]=await Promise.all([call('/api/admin/access/users'+(query?'?q='+encodeURIComponent(query):'')),call('/api/admin/access/audit')]);
  $('users').replaceChildren();
+ if(!users.items.length){const tr=document.createElement('tr'),td=document.createElement('td');td.colSpan=5;td.textContent='Nenhum usuário encontrado';tr.append(td);$('users').append(tr)}
  for(const u of users.items){const tr=document.createElement('tr');tr.dataset.id=u.user_id;
- const values=[u.user_id,u.deriv_account_id,u.referrals,u.access.status,
+ const values=[u.nexora_id,u.deriv_account_id,u.referrals,u.access.status,
  u.access.expires_at?new Date(u.access.expires_at).toLocaleString('pt-BR',{timeZone:'America/Sao_Paulo'}):'—'];
  for(const value of values){const cell=document.createElement('td');cell.textContent=String(value);tr.append(cell)}
- tr.onclick=()=>{$('userId').value=u.user_id};$('users').append(tr)}
+ tr.onclick=()=>{$('userId').value=u.nexora_id;document.querySelectorAll('tr[data-id]').forEach(row=>row.classList.toggle('selected',row===tr))};$('users').append(tr)}
  $('audit').textContent=audit.items.map(x=>new Date(x.at).toLocaleString('pt-BR',{timeZone:'America/Sao_Paulo'})
- +' · #'+x.user_id+' · '+x.action+' · '+x.note).join('\n')||'Nenhuma alteração registrada';
+ +' · '+formatNexoraId(x.user_id)+' · '+x.action+' · '+x.note).join('\n')||'Nenhuma alteração registrada';
 }catch(e){$('error').textContent=e.message}}
-async function save(){const user_id=Number($('userId').value),action=$('action').value,
+$('userSearch').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();refresh()}});
+async function save(){const user_id=parseNexoraId($('userId').value),action=$('action').value,
  days=Number($('days').value),hours=['add_hours','remove_hours'].includes(action)?days*24:0,
  note=$('note').value.trim();
  if(!Number.isInteger(user_id)||user_id<1||note.length<5||(hours&&(!Number.isInteger(days)||days<1||days>90))){
  $('feedback').textContent='Confira o ID, os dias e o motivo.';return}
- if(!confirm('Confirma esta alteração no usuário #'+user_id+'?'))return;
+ if(!confirm('Confirma esta alteração no usuário '+formatNexoraId(user_id)+'?'))return;
  try{const r=await call('/api/admin/access/adjust',{method:'POST',headers:{'Content-Type':'application/json'},
  body:JSON.stringify({user_id,action,hours,note})});
- $('feedback').textContent='Alteração salva: '+r.access.status;await refresh();
+ $('feedback').textContent='Alteração salva para '+formatNexoraId(user_id)+': '+r.access.status;await refresh();
  }catch(e){$('feedback').textContent=e.message}}
 show();
 </script></body></html>
