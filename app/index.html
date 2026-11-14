@@ -443,6 +443,7 @@ button.choose-account:focus-visible{outline:3px solid #71d2ff;outline-offset:4px
         <p id="robotLiveCopy" class="robot-live-copy">Pronto para buscar novas oportunidades quando você ativar.</p>
       </div>
     </div>
+    <p class="helper" style="margin-top:10px">Acesso disponível: <strong id="dashboardAccessCountdown">consultando...</strong> · <a href="#" onclick="event.preventDefault();go('account')">Minha conta</a></p>
     <div id="robotStartNotice" class="robot-notice" role="alert" aria-live="polite" hidden>
       <strong id="robotNoticeTitle"></strong>
       <p id="robotNoticeText"></p>
@@ -545,11 +546,13 @@ const durationString=seconds=>{
 function updateAccessCountdown(){
   const counter=$('robotAccessCountdown');
   if(!counter)return;
-  if(accessMode==='TRIAL_AVAILABLE'){counter.textContent='24:00:00';return;}
-  if(accessMode==='SUSPENDED'){counter.textContent='SUSPENSO';return;}
-  if(!accessExpiresMs){counter.textContent='--:--:--';return;}
+  const mini=$('dashboardAccessCountdown');
+  if(accessMode==='TRIAL_AVAILABLE'){counter.textContent='24:00:00';if(mini)mini.textContent='24h grátis disponíveis';return;}
+  if(accessMode==='SUSPENDED'){counter.textContent='SUSPENSO';if(mini)mini.textContent='suspenso';return;}
+  if(!accessExpiresMs){counter.textContent='--:--:--';if(mini)mini.textContent='consultando...';return;}
   const remain=Math.max(0,Math.floor((accessExpiresMs-(Date.now()+accessServerDelta))/1000));
   counter.textContent=durationString(remain);
+  if(mini)mini.textContent=durationString(remain);
   if(remain===0&&accessMode==='ACTIVE'){
     accessMode='EXPIRED';
     const info=$('robotAccessInfo');
@@ -777,7 +780,7 @@ async function refreshDashboard(){
        }
      });
    }
-   await Promise.allSettled([loadDemoBalance(),loadDemoOrders(),loadRealBalance(),
+   await Promise.allSettled([loadRobotAccess(),loadDemoBalance(),loadDemoOrders(),loadRealBalance(),
                              loadRiskSession(),loadAutopilotReadiness()]);
    // A newer dashboard request may have superseded this response while
    // secondary cards were loading; do not return an obsolete status.
