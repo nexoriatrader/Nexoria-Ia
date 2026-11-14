@@ -269,6 +269,24 @@ async def m1_collect_loop():
     except Exception as exc:
         LOG.warning("Research PULLBACK M1 M3 unavailable: %s: %s",
                     type(exc).__name__, str(exc)[:160])
+    # NEXORA PULSO: original, read-only independent research. Use existing
+    # candle database; does not request new Deriv data or place orders.
+    try:
+        from .nexora_pulso import run_stored_pulso
+        pulse = await asyncio.wait_for(
+            asyncio.to_thread(run_stored_pulso), timeout=170)
+        LOG.warning("Research PULSO V1 complete: %s", json.dumps({
+            "candles":pulse["candles"], "missing":pulse["missing_minutes"],
+            "selection_count":pulse["candidates_eligible"],
+            "chosen":pulse["chosen_before_final"],
+            "event_counts":pulse["event_counts"],
+            "rows":pulse["results"], "orders_sent":0
+        }, separators=(",", ":")))
+    except asyncio.CancelledError:
+        raise
+    except Exception as exc:
+        LOG.warning("Research PULSO V1 unavailable: %s: %s",
+                    type(exc).__name__, str(exc)[:160])
     while True:
         succeeded = False
         try:
