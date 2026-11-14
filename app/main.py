@@ -65,9 +65,11 @@ async def public_market_selfcheck_once():
     """One read-only public API smoke test per server boot; never buys."""
     await asyncio.sleep(6)
     market=active_market()
+    expiry_minutes=5 if market=='volatility' else 15
+    candle_seconds=300 if market=='volatility' else 900
     try:
         items=await asyncio.wait_for(catalogue(market),timeout=20)
-        log.warning('V2.2 selfcheck: market=%s catalogue=%s',market,len(items))
+        log.warning('V2.3 selfcheck: market=%s expiry=%sm catalogue=%s',market,expiry_minutes,len(items))
         if not items:
             log.warning('V2.2 selfcheck: empty catalogue; unable to inspect candles')
             return
@@ -75,16 +77,16 @@ async def public_market_selfcheck_once():
         for item in items[:3]:
             symbol=item['symbol']
             try:
-                ok=await asyncio.wait_for(supported(symbol,15),timeout=18)
+                ok=await asyncio.wait_for(supported(symbol,expiry_minutes),timeout=18)
                 if not ok:
-                    log.warning('V2.2 selfcheck: symbol=%s 15min_CALL_PUT=unavailable',symbol)
+                    log.warning('V2.3 selfcheck: symbol=%s expiry=%smin CALL_PUT=unavailable',symbol,expiry_minutes)
                     continue
                 snapshot=datetime.now(timezone.utc).timestamp()
                 h1,m15=await asyncio.wait_for(asyncio.gather(
                     fetch_closed_timeframe(symbol,3600,105,now=snapshot),
-                    fetch_closed_timeframe(symbol,900,115,now=snapshot)),timeout=30)
-                log.warning('V2.2 selfcheck: symbol=%s 15min_CALL_PUT=available H1_candles=%s M15_candles=%s',
-                            symbol,len(h1),len(m15))
+                    fetch_closed_timeframe(symbol,candle_seconds,115,now=snapshot)),timeout=30)
+                log.warning('V2.3 selfcheck: symbol=%s expiry=%smin CALL_PUT=available H1_candles=%s signal_granularity=%ss candles=%s',
+                            symbol,expiry_minutes,len(h1),candle_seconds,len(m15))
                 return
             except (MarketError,TimeoutError,OSError,ValueError) as exc:
                 log.warning('V2.2 selfcheck: symbol=%s data_error=%s',symbol,type(exc).__name__)
