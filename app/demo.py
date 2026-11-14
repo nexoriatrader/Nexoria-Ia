@@ -9,6 +9,7 @@ import asyncio
 import json
 import os
 import re
+import time
 from urllib.parse import parse_qs, urlsplit
 from decimal import Decimal, InvalidOperation
 
@@ -21,6 +22,10 @@ APP_ID = os.getenv("DERIV_CLIENT_ID", "34VU8L3LDiaENrDGVjqQP")
 
 class DemoTradingError(Exception):
     """A controlled failure while using the authenticated demo channel."""
+
+
+class DemoPreBuyDeadlineExceeded(DemoTradingError):
+    """No buy was sent because the allowed entry window expired."""
 
 
 def _amount(value: str) -> float:
@@ -174,7 +179,8 @@ async def demo_proposal(token: str, account_id: str, *, symbol: str,
 async def demo_buy(token: str, account_id: str, *, symbol: str,
                    contract_type: str, stake: str, duration: int,
                    confirm: str, currency: str | None = None,
-                   min_payout_ratio: str | None = None) -> dict:
+                   min_payout_ratio: str | None = None,
+                   latest_buy_send_epoch: float | None = None) -> dict:
     """Buy one contract on the demo channel after explicit confirmation."""
     if confirm != "DEMO_ONLY":
         raise DemoTradingError("Confirmação demo obrigatória")
@@ -223,6 +229,13 @@ async def demo_buy(token: str, account_id: str, *, symbol: str,
                     raise DemoTradingError("Preço demo inválido") from exc
                 if not price.is_finite() or price <= 0 or price > Decimal(str(stake)):
                     raise DemoTradingError("Preço da proposta ultrapassa o valor autorizado")
+                # Fail closed immediately before the actual outbound buy request.
+                # The broker's processing/confirmation time is outside our control.
+                if latest_buy_send_epoch is not None and time.time()>latest_buy_send_epoch:
+                    raise DemoPreBuyDeadlineExceeded("Janela de entrada M5 expirou antes do envio")
+                if latest_buy_send_epoch is not None:
+                    print("V2.4 DEMO buy dispatch epoch=%.3f deadline=%.3f" %
+                          (time.time(),latest_buy_send_epoch))
                 await ws.send(json.dumps({"buy": proposal_id, "price": float(price), "req_id": 7102}))
                 buy = (await _response_for(ws, 7102)).get("buy")
                 if not isinstance(buy, dict) or not buy.get("contract_id"):
