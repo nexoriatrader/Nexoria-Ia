@@ -18,6 +18,20 @@ import websockets
 
 OTP_BASE = "https://api.derivws.com/trading/v1/options/accounts"
 APP_ID = os.getenv("DERIV_CLIENT_ID", "34VU8L3LDiaENrDGVjqQP")
+# Only the validated ISO currency code (no balance, credentials, or OTP) is
+# cached briefly to avoid an extra WebSocket round trip on time-critical buys.
+_demo_currency_cache: dict[str, tuple[float,str]] = {}
+
+
+def cached_demo_currency(account_id: str) -> str | None:
+    cached=_demo_currency_cache.get(account_id)
+    if cached and time.monotonic()-cached[0]<120:
+        return cached[1]
+    return None
+
+
+def remember_demo_currency(account_id: str, currency: str) -> None:
+    _demo_currency_cache[account_id]=(time.monotonic(),_currency(currency))
 
 
 class DemoTradingError(Exception):
@@ -130,6 +144,7 @@ async def demo_account_balance(token: str, account_id: str) -> dict:
         async with asyncio.timeout(20):
             async with websockets.connect(ws_url, ping_interval=20, ping_timeout=10) as ws:
                 balance, currency = await _read_balance(ws, 7301)
+                remember_demo_currency(account_id,currency)
                 return {"balance": balance, "currency": currency, "demo_only": True}
     except DemoTradingError:
         raise
@@ -153,7 +168,10 @@ async def demo_proposal(token: str, account_id: str, *, symbol: str,
         async with asyncio.timeout(20):
             async with websockets.connect(ws_url, ping_interval=20, ping_timeout=10) as ws:
                 if currency is None:
-                    _, currency = await _read_balance(ws, 7000)
+                    currency=cached_demo_currency(account_id)
+                    if currency is None:
+                        _, currency = await _read_balance(ws, 7000)
+                        remember_demo_currency(account_id,currency)
                 currency = _currency(currency)
                 request = {"proposal": 1, "amount": _amount(stake), "basis": "stake",
                            "contract_type": contract_type, "currency": currency,
@@ -194,7 +212,10 @@ async def demo_buy(token: str, account_id: str, *, symbol: str,
         async with asyncio.timeout(20):
             async with websockets.connect(ws_url, ping_interval=20, ping_timeout=10) as ws:
                 if currency is None:
-                    _, currency = await _read_balance(ws, 7100)
+                    currency=cached_demo_currency(account_id)
+                    if currency is None:
+                        _, currency = await _read_balance(ws, 7100)
+                        remember_demo_currency(account_id,currency)
                 currency = _currency(currency)
                 # Deriv v1/options API: only a streamed proposal ID may be
                 # purchased. Keep preflight demo_proposal() read-only.
@@ -234,8 +255,8 @@ async def demo_buy(token: str, account_id: str, *, symbol: str,
                 if latest_buy_send_epoch is not None and time.time()>latest_buy_send_epoch:
                     raise DemoPreBuyDeadlineExceeded("Janela de entrada M5 expirou antes do envio")
                 if latest_buy_send_epoch is not None:
-                    print("V2.4 DEMO buy dispatch epoch=%.3f deadline=%.3f" %
-                          (time.time(),latest_buy_send_epoch))
+                    print("V2.4 DEMO buy dispatch offset_s=%.3f deadline=3.000" %
+                          (time.time()-(latest_buy_send_epoch-3.0)))
                 await ws.send(json.dumps({"buy": proposal_id, "price": float(price), "req_id": 7102}))
                 buy = (await _response_for(ws, 7102)).get("buy")
                 if not isinstance(buy, dict) or not buy.get("contract_id"):
