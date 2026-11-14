@@ -34,7 +34,9 @@ def access_status(session, user_id, now=None):
     now=utc(now or db.utcnow())
     grant=session.get(db.RobotAccess,user_id)
     if not access_control_enabled():
-        return {'enforced':False,'allowed':True,'status':'TEST_MODE',
+        suspended=bool(grant and grant.suspended)
+        return {'enforced':False,'allowed':not suspended,
+                'status':'SUSPENDED' if suspended else 'TEST_MODE',
                 'access_kind':grant.access_kind if grant else None,
                 'expires_at':utc(grant.expires_at).isoformat() if grant else None}
     if grant is None:
