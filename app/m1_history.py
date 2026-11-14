@@ -182,6 +182,7 @@ async def collect_m1_30_days():
 async def m1_collect_loop():
     await asyncio.sleep(100)
     while True:
+        succeeded = False
         try:
             await asyncio.wait_for(collect_m1_30_days(), timeout=480)
             # Keep all market access read-only. Analysis runs on persisted M1
@@ -193,6 +194,7 @@ async def m1_collect_loop():
             report["generated_at"] = datetime.now(timezone.utc).isoformat()
             await asyncio.to_thread(persist_multitimeframe_study, report)
             selected = report.get("training_selected") or {}
+            succeeded = True
             LOG.warning("Research M1-M15 backtest complete: %s", json.dumps({
                 "models_tested": report["models_tested"],
                 "m1_candles": report["m1_candles"],
@@ -206,4 +208,6 @@ async def m1_collect_loop():
         except Exception as exc:
             LOG.warning("Research M1 1HZ100V unavailable: %s: %s",
                         type(exc).__name__, str(exc)[:140])
-        await asyncio.sleep(86400)
+        # Retry missing/inconsistent public market data later, not once per day.
+        # A successful dataset is refreshed daily; errors retry after 15 min.
+        await asyncio.sleep(86400 if succeeded else 900)
