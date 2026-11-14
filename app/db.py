@@ -40,6 +40,7 @@ class RobotAccess(Base):
     starts_at=Column(DateTime(timezone=True),default=utcnow,nullable=False)
     expires_at=Column(DateTime(timezone=True),nullable=False)
     updated_at=Column(DateTime(timezone=True),default=utcnow,onupdate=utcnow,nullable=False)
+    suspended=Column(Boolean,nullable=False,default=False)
 
 
 class ReferralLink(Base):
@@ -64,6 +65,18 @@ class ReferralAttribution(Base):
     __tablename__='referral_attributions'
     invitee_user_id=Column(Integer,ForeignKey('users.id'),primary_key=True)
     referrer_user_id=Column(Integer,ForeignKey('users.id'),nullable=False,index=True)
+    created_at=Column(DateTime(timezone=True),default=utcnow,nullable=False)
+
+
+class AccessAdminEvent(Base):
+    """Audit log for manual exception decisions and payment refunds."""
+    __tablename__='access_admin_events'
+    id=Column(Integer,primary_key=True)
+    admin_user_id=Column(Integer,ForeignKey('users.id'),nullable=False,index=True)
+    subject_user_id=Column(Integer,ForeignKey('users.id'),nullable=False,index=True)
+    action=Column(String(32),nullable=False)
+    delta_hours=Column(Integer,nullable=True)
+    note=Column(String(255),nullable=False)
     created_at=Column(DateTime(timezone=True),default=utcnow,nullable=False)
 
 
@@ -167,6 +180,10 @@ def init_db():
     if 'referral_code' not in flow_columns:
         with engine.begin() as conn:
             conn.execute(text('ALTER TABLE login_flows ADD COLUMN referral_code VARCHAR(32)'))
+    access_columns={col['name'] for col in inspect(engine).get_columns('robot_access')}
+    if 'suspended' not in access_columns:
+        with engine.begin() as conn:
+            conn.execute(text('ALTER TABLE robot_access ADD COLUMN suspended BOOLEAN NOT NULL DEFAULT FALSE'))
 
 
 
