@@ -441,6 +441,9 @@ async def autopilot_once():
                 plan=sess.get(db.RobotPlan,uid)
                 cycle_cfg=sess.get(db.RobotCycleParams,uid)
                 batch=sess.get(db.PilotValidationBatch,uid)
+                strategy_choice=sess.get(db.PilotStrategyChoice,uid)
+                pulso_active=bool(batch and strategy_choice and
+                                  strategy_choice.strategy=='pulso_v2')
                 if not batch and not connected:
                     continue
                 # The goal of 50 trades is informational, NOT an execution cap.
@@ -467,6 +470,13 @@ async def autopilot_once():
                         continue
                     disarm_autopilot(uid,reason)
                     continue
+                if pulso_active:
+                    # Fixed-stake independent evaluation: neither Martingale
+                    # nor cycle escalation is permitted for PULSO.
+                    if any(o.state in ('PENDING','CONFIRMED','UNKNOWN') for o in orders):
+                        autopilot_reasons[uid]='PULSO DEMO: aguardando liquidação oficial do contrato anterior'
+                        continue
+                    entry=NextEntry(stake=Decimal(str(user.stake)),cycle=0,gale=0,retry=False)
                 if entry.retry:
                     # V2 recovery is not held by the 60s fresh-scan cooldown.
                     # It can start promptly AFTER verified official settlement.
@@ -514,7 +524,20 @@ async def autopilot_once():
                 else:
                     if not batch and now-autopilot_last_attempt.get(uid,-1e12)<60:
                         continue
-                    if batch:
+                    if batch and pulso_active:
+                        if now-autopilot_last_attempt.get(uid,-1e12)<8:
+                            continue
+                        try:
+                            from .pulso_live import confirmed_pulso_signal
+                            candidate=await confirmed_pulso_signal()
+                        except (MarketError,ValueError,TimeoutError,OSError) as exc:
+                            autopilot_reasons[uid]='PULSO V2: cotações DEMO indisponíveis; sem compra'
+                            log.warning('PULSO live data unavailable: %s',type(exc).__name__)
+                            continue
+                        if candidate is None:
+                            autopilot_reasons[uid]='PULSO V2: aguardando CALL com volatilidade estável'
+                            continue
+                    elif batch:
                         # Fresh confirmed signals from the same batch can be
                         # consumed on subsequent ticks without a new API scan.
                         if (now-v2_last_scan.get(uid,-1e12)<15
@@ -596,8 +619,9 @@ async def autopilot_once():
                         ask=Decimal(str(quote['ask_price']))
                         payout=Decimal(str(quote['payout']))
                         if (not ask.is_finite() or not payout.is_finite()
-                            or ask<=0 or ask>entry.stake or payout<ask*Decimal('1.50')):
-                            autopilot_reasons[uid]='Proposta DEMO sem payout mínimo experimental de 1,50×'
+                            or ask<=0 or ask>entry.stake or payout<ask*Decimal('1.88' if pulso_active else '1.50')):
+                            autopilot_reasons[uid]=('PULSO V2: payout DEMO inferior a 88%; entrada ignorada'
+                                                   if pulso_active else 'Proposta DEMO sem payout mínimo experimental de 1,50×')
                             log.info('V2 quote rejected: symbol=%s duration=%s reason=payout_or_ask',
                                      candidate['symbol'],candidate['minutes'])
                             continue
@@ -609,8 +633,9 @@ async def autopilot_once():
                         continue
             if uid not in autopilot_enabled:
                 continue
-            deadline_for_buy=None
-            timed_v24=(bool(batch) and SIGNAL_PROFILE=='next_open_v24'
+            deadline_for_buy=(candidate['last_bar_epoch']+60+12
+                              if pulso_active and not entry.retry else None)
+            timed_v24=(bool(batch) and not pulso_active and SIGNAL_PROFILE=='next_open_v24'
                        and candidate['minutes'] in (5,15)
                        and active_market()==('volatility' if candidate['minutes']==5 else 'forex'))
             if timed_v24:
@@ -641,7 +666,7 @@ async def autopilot_once():
                     DemoBuy(symbol=candidate['symbol'],direction=candidate['direction'],
                             minutes=candidate['minutes'],confirm='DEMO_ONLY',request_key=key),
                     attribution={'strategy':candidate['strategy'],'reason':candidate['reason'],
-                                 'v2':bool(batch),
+                                 'v2':bool(batch),'pulso_v2':pulso_active,
                                  'cycle_index':entry.cycle,'gale_index':entry.gale,
                                  'gale_multiplier':(plan.requested_multiplier if plan else '2.00'),
                                  'cycle_multiplier':(cycle_cfg.multiplier if cycle_cfg else '2.00')},
@@ -1454,6 +1479,33 @@ async def admin_access_audit(request:Request):
                           'hours':e.delta_hours,'note':e.note} for e in events]}
 
 
+class PulsoChoiceRequest(BaseModel):
+    confirm:str=''
+
+
+@app.post('/api/autopilot/pulso-v2/select')
+async def select_pulso_v2(request:Request,payload:PulsoChoiceRequest,
+                           nexora_sid:str|None=Cookie(default=None)):
+    """Individual DEMO strategy opt-in; does not start or place an order."""
+    user=active_user(request,nexora_sid)
+    if payload.confirm!='SELECT_PULSO_V2_DEMO':
+        raise HTTPException(403,'Confirmação de estratégia DEMO obrigatória')
+    if user.selected_mode!='demo' or not v2_enabled():
+        raise HTTPException(403,'PULSO V2 disponível somente no AutoPilot DEMO 2')
+    async with autopilot_lock:
+        if user.id in autopilot_enabled:
+            raise HTTPException(409,'Desligue o robô antes de escolher o PULSO V2')
+        with db.SessionLocal() as sess:
+            choice=sess.get(db.PilotStrategyChoice,user.id)
+            if not choice:
+                choice=db.PilotStrategyChoice(user_id=user.id,strategy='pulso_v2')
+                sess.add(choice)
+            choice.strategy='pulso_v2'
+            sess.commit()
+    return {'selected':'pulso_v2','running':False,'execution':'DERIV_DEMO_ONLY',
+            'message':'PULSO V2 selecionado. Clique LIGAR ROBÔ para iniciar DEMO.'}
+
+
 @app.post('/api/autopilot/start')
 async def autopilot_start(request:Request,payload:AutoPilotSwitch,
                           nexora_sid:str|None=Cookie(default=None)):
@@ -1537,7 +1589,9 @@ async def status(request:Request,nexora_sid:str|None=Cookie(default=None)):
     with db.SessionLocal() as sess:
         interrupted=sess.get(db.RobotRun,user.id) is not None and user.id not in autopilot_enabled
         batch=sess.get(db.PilotValidationBatch,user.id)
-        mode='V2_MULTI_ASSET' if batch else 'V1_SINGLE_ASSET'
+        choice=sess.get(db.PilotStrategyChoice,user.id)
+        selected_strategy=(choice.strategy if choice else 'standard')
+        mode='V2_PULSO' if batch and selected_strategy=='pulso_v2' else 'V2_MULTI_ASSET' if batch else 'V1_SINGLE_ASSET'
         upgrade_needed=bool(v2_enabled() and batch is None and user.id in autopilot_enabled)
     async with lock:
         engine=rt_for(user)
@@ -1548,6 +1602,7 @@ async def status(request:Request,nexora_sid:str|None=Cookie(default=None)):
                 'real_orders_enabled':False,
                 'interrupted_after_restart':interrupted,
                 'autopilot_version':mode,
+                'selected_strategy':selected_strategy,
                 'v2_available':v2_enabled(),
                 'v2_upgrade_needed':upgrade_needed,
                 'analysis_symbol':SYMBOL,
@@ -1915,7 +1970,8 @@ async def perform_demo_buy(user, token, payload:DemoBuy, *, attribution:dict|Non
         buy_kwargs={'symbol':payload.symbol,'contract_type':payload.direction,
                     'stake':order.stake,'duration':payload.minutes,'confirm':'DEMO_ONLY'}
         if attribution and attribution.get('v2'):
-            buy_kwargs['min_payout_ratio']='1.50'
+            buy_kwargs['min_payout_ratio']=(
+                '1.88' if attribution.get('pulso_v2') else '1.50')
         if latest_buy_send_epoch is not None:
             buy_kwargs['latest_buy_send_epoch']=latest_buy_send_epoch
             if time.time()>latest_buy_send_epoch:
