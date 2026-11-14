@@ -26,7 +26,7 @@ from .engine import Engine, Settings
 from .market import MarketError, discover_symbols, discover_contracts, indicative_proposal
 from .strategy_lab import run_lab
 from .single_asset_study import run_single_asset_study
-from .research_persistence import research_loop, latest_study  # isolated research, no broker trades
+from .research_persistence import research_loop, latest_study, latest_multitimeframe_study  # read-only research
 from .m1_history import m1_collect_loop, history_status
 from .asset_scanner import scan_assets
 from .trade_selector_v2 import (select_demo_signal, last_scan_report, has_pending_signals,
@@ -1299,6 +1299,21 @@ def require_nexora_admin(request):
     if not admin_auth.valid_session(request.cookies.get('nexora_admin_sid')):
         raise HTTPException(401,'Entre no painel Admin para continuar')
     return 'Admin'
+
+
+@app.get('/api/admin/research/multi-timeframe')
+async def admin_multi_timeframe_research(request:Request):
+    """Authenticated owner-only 96-model research report, no execution controls."""
+    require_nexora_admin(request)
+    try:
+        report=await asyncio.to_thread(latest_multitimeframe_study)
+    except Exception:
+        log.exception('Admin multitimeframe research read failed')
+        raise HTTPException(503,'Pesquisa M1-M15 temporariamente indisponível') from None
+    if report is None:
+        return {'state':'PENDING','symbol':'1HZ100V',
+                'message':'Aguardando histórico M1 completo e validação.'}
+    return report
 
 
 @app.get('/api/admin/research/m1-history')
