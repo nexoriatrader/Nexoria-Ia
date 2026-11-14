@@ -926,7 +926,7 @@ async def session_info(request:Request,nexora_sid:str|None=Cookie(default=None))
     try:u=active_user(request,nexora_sid)
     except HTTPException:return {'authenticated':False,'demo_accounts':[],'real_enabled':False}
     return {'authenticated':True,'demo_accounts':[{'account_id':u.deriv_account_id,'account_type':'demo'}],
-            'real_enabled':False}
+            'real_enabled':False,'is_admin':is_nexora_admin(u)}
 
 @app.get('/api/accounts/available')
 async def available_accounts(request:Request,nexora_sid:str|None=Cookie(default=None)):
