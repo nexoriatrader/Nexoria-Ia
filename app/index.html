@@ -842,7 +842,15 @@ async function loadRobotAccess(){
     const a=await req('/api/access/status');
     $('referralLink').value=location.origin+'/?ref='+encodeURIComponent(a.user_code);
     $('referralSummary').textContent=(a.confirmed_referrals||0)+' indicações válidas · '+(a.bonus_hours||0)+' horas ganhas';
-    if(!a.enforced){target.textContent='Ambiente de testes DEMO · controle de assinatura ainda não ativado';return;}
+    if(!a.enforced){
+      const expiry=a.expires_at?new Date(a.expires_at):null;
+      const until=expiry&&!Number.isNaN(expiry.getTime())
+        ?expiry.toLocaleString('pt-BR',{timeZone:'America/Sao_Paulo'}):null;
+      target.textContent=a.status==='SUSPENDED'?'Acesso suspenso pela administração':
+        'Ambiente DEMO em testes · '+(until?'validade registrada até '+until+' (Brasília)':
+        'sem prazo iniciado')+' · bloqueio por vencimento ainda não ativado';
+      return;
+    }
     if(a.status==='TRIAL_AVAILABLE'){
       target.textContent='Teste disponível: '+(a.trial_hours===24?'24 horas':'7 dias')+
         '. O prazo começa quando você ligar o robô pela primeira vez.';
