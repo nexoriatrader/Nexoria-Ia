@@ -65,6 +65,32 @@ def persist_multitimeframe_study(report):
         session.commit()
 
 
+PULLBACK_KEY = "1HZ100V_PULLBACK_M1_M3_V1"
+
+
+def latest_pullback_study():
+    with db.SessionLocal() as session:
+        row = session.scalars(
+            select(HistoricalResearchReport)
+            .where(HistoricalResearchReport.research_key == PULLBACK_KEY)
+            .order_by(HistoricalResearchReport.created_at.desc())
+            .limit(1)
+        ).first()
+        return json.loads(row.payload_json) if row else None
+
+
+def persist_pullback_study(report):
+    with db.SessionLocal() as session:
+        session.add(HistoricalResearchReport(
+            research_key=PULLBACK_KEY,
+            created_at=datetime.now(timezone.utc),
+            period_from=datetime.fromisoformat(report["period_from"]),
+            period_to=datetime.fromisoformat(report["period_to"]),
+            payload_json=json.dumps(report, separators=(",", ":"), allow_nan=False)
+        ))
+        session.commit()
+
+
 def audit_summary(report):
     """Compact transparent diagnostics; does not promote any trading setup."""
     rows = report.get("results", [])
