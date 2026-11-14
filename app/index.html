@@ -279,6 +279,88 @@ button.choose-account:focus-visible{outline:3px solid #71d2ff;outline-offset:4px
 
 @media(max-width:650px){.shell{padding:12px 15px 36px}header{padding-bottom:12px}.brand img{width:66px;height:52px}.brand-title{font-size:18px}.brand-tag{font-size:9px}.section-heading{margin-top:22px}.card{padding:18px;border-radius:19px}.hero{padding:22px 19px}.hero-action{max-width:none}.metric-grid{grid-template-columns:1fr 1fr;gap:9px}.metric{min-height:104px;padding:16px}.metric:last-child{grid-column:1 / -1}.metric-value{font-size:23px}.choice-grid{grid-template-columns:1fr}.settings-grid{grid-template-columns:1fr 1fr}.login{margin:40px auto}.header-actions{gap:7px}}
 @media(prefers-reduced-motion:no-preference){button{transition:transform .15s,filter .15s}button:not(:disabled):active{transform:scale(.985)}}
+
+/* Premium marketing home; isolated from the authenticated trading console. */
+body.marketing-mode{background:#061322}
+body.marketing-mode .shell{max-width:1320px;padding:0 28px 48px}
+body.marketing-mode .shell>header{display:none}
+body.marketing-mode .section-foot{margin-top:0}
+.lp{position:relative;isolation:isolate;overflow:hidden;padding:0 0 48px;background:radial-gradient(ellipse at 88% 13%,#123b55 0%,transparent 43%),radial-gradient(ellipse at 4% 70%,#092c42 0%,transparent 38%),#061322}
+.lp::before{content:"";position:absolute;top:325px;left:-20%;right:-20%;height:390px;border-bottom:1.5px solid #3fabe8;border-radius:0 0 55% 55%;transform:rotate(-5deg);box-shadow:0 18px 36px #0a8bd633;pointer-events:none;z-index:-1}
+.lp::after{content:"";position:absolute;top:585px;right:-8%;width:70%;height:180px;border-top:1.5px solid #efb94b;border-radius:52%;transform:rotate(-7deg);box-shadow:0 -12px 35px #db994126;pointer-events:none;z-index:-1}
+.lp a{text-decoration:none}
+.lp-nav{display:flex;align-items:center;justify-content:space-between;gap:24px;padding:24px 8px 15px}
+.lp-logo{display:flex;align-items:center;flex-shrink:0}.lp-logo img{width:230px;height:auto;max-height:69px;object-fit:contain;object-position:left}
+.lp-links{display:flex;align-items:center;gap:27px}.lp-links>a:not(.lp-signin){font-size:14px;font-weight:650;color:#d7e4ee;transition:color .2s}.lp-links>a:hover{color:#ffd16c}
+.lp-signin{border:1px solid #7297af;border-radius:12px;padding:10px 24px;color:#fff;font-weight:800}
+.lp-hero{display:grid;grid-template-columns:1.07fr .93fr;gap:34px;align-items:center;min-height:530px;padding:46px 10px 70px}
+.lp-eyebrow{display:inline-flex;align-items:center;gap:9px;text-transform:uppercase;letter-spacing:.17em;font-size:11px;font-weight:850;color:#ebc069;margin-bottom:17px}
+.lp-eyebrow::before{content:"";width:8px;height:8px;background:#45c8e5;border-radius:50%;box-shadow:0 0 11px #45c8e5}
+.lp-hero h1{font-size:clamp(38px,4.55vw,68px);letter-spacing:-.052em;line-height:1.09;font-weight:900;max-width:720px}
+.lp-hero h1 em{font-style:normal;color:#f2c35e;background:linear-gradient(100deg,#fff0a9,#f0ad35);background-clip:text;-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.lp-subtitle{font-size:clamp(17px,2vw,23px);line-height:1.5;color:#c3d1dd;max-width:590px;margin-top:24px}
+.lp-actions{display:flex;align-items:center;flex-wrap:wrap;gap:13px;margin-top:32px}
+.lp-button{display:inline-flex;align-items:center;justify-content:center;gap:15px;min-height:56px;border-radius:14px;padding:15px 25px;font-size:15px;font-weight:850;box-shadow:0 0 25px #ffc45c25;transition:transform .2s,box-shadow .2s}
+.lp-button:hover{transform:translateY(-2px);box-shadow:0 6px 30px #ffc45c44}
+.lp-button-primary{background:linear-gradient(120deg,#ffe094,#f2b638);color:#102034;border:1px solid #ffe5a8}
+.lp-button-outline{background:#082034a8;color:#f6fbff;border:1px solid #33bddb;box-shadow:none}
+.lp-proof{display:flex;flex-wrap:wrap;gap:15px 20px;color:#d4e3ef;margin-top:34px;font-size:13px}
+.lp-proof span{display:inline-flex;align-items:center;gap:7px}.lp-proof b{color:#f6c45d;font-size:20px;font-weight:750}
+.lp-mockup{position:relative;transform:perspective(1400px) rotateY(-8deg) rotateX(2deg);transform-origin:center;border:1.5px solid #eec472;border-radius:27px;padding:17px;background:linear-gradient(146deg,#0b2b42 0%,#051323 70%);box-shadow:0 0 18px #f9c85d38,0 25px 80px #0009}
+.lp-mockup::before{content:"";position:absolute;inset:-7px;border-radius:30px;border:1px solid #3c9ab477;pointer-events:none}
+.lp-mock-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:17px}
+.lp-mock-head img{width:135px;max-height:40px}
+.lp-mock-broker{font-size:10px;font-weight:800;color:#d9fcff;border:1px solid #25bad6;background:#0e5062;padding:9px;border-radius:9px;white-space:nowrap}
+.lp-mock-kicker{letter-spacing:.12em;font-size:10px;color:#f8c665;font-weight:850}
+.lp-mock-title{font-size:25px;letter-spacing:-.02em;font-weight:830}.lp-mock-desc{font-size:11px;color:#aec4d7;margin:2px 0 15px}
+.lp-mock-panel{padding:15px;border:1px solid #32617d;background:#0f2a41;border-radius:16px}
+.lp-mock-paneltop{display:flex;align-items:center;justify-content:space-between;font-size:13px;font-weight:750;margin-bottom:12px}
+.lp-mock-tag{font-size:10px;border:1px solid #63839b;border-radius:25px;padding:5px 11px}
+.lp-mock-control{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.lp-mock-start{background:linear-gradient(140deg,#ffe08f,#f2b332);color:#172336;border-radius:12px;min-height:95px;display:grid;place-items:center;font-weight:900;font-size:17px}
+.lp-mock-status{border:1px solid #405c70;background:#122337;border-radius:12px;padding:15px 12px;display:flex;flex-direction:column;justify-content:center;gap:9px}
+.lp-mock-status strong{font-size:11px}.lp-mock-status p{font-size:11px;color:#b9cbd9}
+.lp-mock-dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:#94a9bb;margin-right:5px}
+.lp-mock-metrics{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px}
+.lp-mock-metric{border:1px solid #325776;background:#0c2235;border-radius:12px;padding:15px 12px}
+.lp-mock-metric small{font-size:11px;color:#becfdc}.lp-mock-metric strong{display:block;font-size:20px;margin:5px 0 1px}.lp-mock-metric p{font-size:10px;color:#a6bfd1}
+.lp-preview-disclaimer{font-size:10px;color:#91aab9;text-align:right;margin-top:8px}
+.lp-section{padding:27px 7px 12px;scroll-margin-top:24px}
+.lp-section-title{text-align:center;display:flex;align-items:center;justify-content:center;gap:22px;font-size:clamp(24px,3vw,36px);line-height:1.2;letter-spacing:-.03em;margin-bottom:33px}
+.lp-section-title::before,.lp-section-title::after{content:"";width:min(12vw,125px);height:1px;background:linear-gradient(90deg,transparent,#f4be52)}
+.lp-section-title::after{transform:rotate(180deg)}
+.lp-cards{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:16px}
+.lp-card{padding:27px 23px 25px;min-height:216px;background:linear-gradient(145deg,#102c43,#091d30);border:1px solid #245a78;border-radius:19px;box-shadow:inset 0 1px #4e819044}
+.lp-icon{width:51px;height:51px;display:grid;place-items:center;font-size:29px;color:#fbc756;text-shadow:0 0 12px #ffcb6c99}
+.lp-card h3{font-size:21px;line-height:1.2;letter-spacing:-.025em;margin:14px 0 10px}.lp-card p{font-size:14px;color:#c4d3df;line-height:1.5}
+.lp-steps{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:28px}
+.lp-step{min-height:137px;display:flex;gap:17px;align-items:center;padding:21px;background:linear-gradient(140deg,#11334a,#0b2033);border:1px solid #34718b;border-radius:18px}
+.lp-step-num{width:57px;height:57px;display:grid;place-items:center;background:#fbc95c1c;color:#fbc95c;border:1px solid #ad8f4a;border-radius:50%;font-size:27px;flex-shrink:0}
+.lp-step h3{font-size:18px;margin-bottom:7px}.lp-step p{color:#c7d4df;font-size:13px}
+.lp-strip{border:1px solid #c99f47;background:linear-gradient(100deg,#3b3b31aa,#0e2b3e,#393a31aa);border-radius:24px;display:grid;grid-template-columns:repeat(3,1fr);margin:37px 7px;padding:24px;box-shadow:0 0 20px #f8bd4e2c}
+.lp-strip>div{display:flex;align-items:center;justify-content:center;gap:14px;font-size:16px;font-weight:700;padding:5px 15px}
+.lp-strip>div+div{border-left:1px solid #c19b57}.lp-strip span{font-size:28px;color:#f4c45c}
+.lp-final{display:flex;align-items:center;justify-content:space-between;gap:27px;padding:45px 38px 36px}
+.lp-final h2{font-size:clamp(27px,3.5vw,45px);line-height:1.15;letter-spacing:-.04em}.lp-final h2 strong{color:#f5c25a}
+.lp-disclaimer{color:#8faabc;font-size:12px;text-align:center;padding:15px 25px;border-top:1px solid #27516a}
+@media(max-width:1050px){.lp-logo img{width:190px}.lp-links{gap:16px}.lp-hero{gap:17px}.lp-card{padding:22px 17px}.lp-card h3{font-size:19px}}
+@media(max-width:780px){
+ body.marketing-mode .shell{padding:0 14px 25px}
+ .lp-nav{padding:16px 4px}.lp-logo img{width:185px}.lp-links>a:not(.lp-signin){display:none}.lp-signin{padding:8px 17px}
+ .lp-hero{grid-template-columns:1fr;gap:37px;padding:33px 8px 55px;min-height:unset}.lp-hero h1{font-size:clamp(37px,8vw,56px)}.lp-mockup{transform:none;max-width:560px;width:100%;margin:auto}
+ .lp-cards{grid-template-columns:repeat(2,1fr)}.lp-steps{grid-template-columns:1fr;gap:13px}
+ .lp-final{padding:23px 14px 33px;flex-direction:column;text-align:center}.lp-strip{margin:30px 6px;padding:17px}
+}
+@media(max-width:480px){
+ .lp-logo img{width:164px}.lp-signin{font-size:13px}
+ .lp-hero h1{font-size:38px}.lp-actions{flex-direction:column;align-items:stretch}.lp-button{width:100%;min-height:52px}
+ .lp-proof{font-size:12px;gap:9px 14px}.lp-mockup{padding:12px}.lp-mock-head img{width:105px}
+ .lp-mock-broker{font-size:9px}.lp-mock-metrics{gap:8px}.lp-mock-metric{padding:12px 8px}.lp-mock-metric strong{font-size:16px}
+ .lp-cards{grid-template-columns:1fr;gap:13px}.lp-card{min-height:auto}.lp-section-title{font-size:25px;gap:12px}
+ .lp-strip{grid-template-columns:1fr;gap:12px}.lp-strip>div+div{border-left:0;border-top:1px solid #aa8e52;padding-top:15px}
+}
+@media(prefers-reduced-motion:reduce){.lp-button{transition:none}}
+
 </style>
 </head>
 <body>
@@ -296,45 +378,60 @@ button.choose-account:focus-visible{outline:3px solid #71d2ff;outline-offset:4px
   <button class="nav" data-view="account" onclick="go('account')">◉　Minha conta</button>
 </nav>
 <main>
-<section id="welcome" class="login landing" aria-labelledby="landingHeading">
-  <div class="landing-backdrop" aria-hidden="true"><span class="landing-orbit orbit-one"></span><span class="landing-orbit orbit-two"></span><span class="landing-spark spark-one"></span><span class="landing-spark spark-two"></span></div>
-  <div class="landing-layout">
-    <div class="landing-intro">
-      <div class="landing-kicker"><span class="landing-kicker-dot"></span> ROBÔ INTELIGENTE · OPERAÇÕES AUTOMÁTICAS</div>
-      <h1 id="landingHeading" class="landing-headline">Seu robô de <span>operações automáticas.</span></h1>
-      <p class="landing-subtitle">O NEXORA acompanha o mercado, identifica oportunidades e automatiza operações conforme as estratégias e limites que você configurar.</p>
-      <a class="landing-cta" href="/auth/deriv/start" aria-label="Conectar minha conta à Deriv e continuar para o painel">
-        <span class="landing-cta-icon" aria-hidden="true">↗</span>
-        <span>CONECTAR E ACESSAR O ROBÔ</span>
-        <span class="landing-cta-arrow" aria-hidden="true">→</span>
-      </a>
-      <div class="landing-trust"><span aria-hidden="true">◈</span> Conexão OAuth oficial da Deriv. Sua senha nunca é solicitada pelo NEXORA.</div>
-      <div class="landing-demo-note"><span class="landing-mini-dot"></span> Você mantém o controle: escolha quando ligar ou desligar o robô. A conexão à corretora não inicia operações automaticamente.</div>
-    </div>
-    <div class="landing-showcase" aria-hidden="true">
-      <div class="landing-showcase-top"><span class="landing-showcase-mark">N<span>✧</span></span><span class="landing-showcase-status"><i></i> AUTOMAÇÃO INTELIGENTE</span></div>
-      <div class="landing-showcase-label">CENTRAL DE CONTROLE</div>
-      <div class="landing-showcase-name">NEXORA <span>AutoPilot</span></div>
-      <div class="landing-visual-chart">
-        <div class="landing-visual-grid"></div>
-        <svg viewBox="0 0 390 145" preserveAspectRatio="none" role="presentation">
-          <defs><linearGradient id="landingLine" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#2788b9"/><stop offset="1" stop-color="#72dddb"/></linearGradient><linearGradient id="landingFill" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#4bd5cf" stop-opacity=".28"/><stop offset="1" stop-color="#4bd5cf" stop-opacity="0"/></linearGradient></defs>
-          <path d="M0 115 L35 102 L63 113 L99 72 L125 85 L152 59 L185 77 L218 38 L248 51 L282 26 L311 47 L352 21 L390 11 L390 145 L0 145 Z" fill="url(#landingFill)"/>
-          <polyline points="0,115 35,102 63,113 99,72 125,85 152,59 185,77 218,38 248,51 282,26 311,47 352,21 390,11" fill="none" stroke="url(#landingLine)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
-          <circle cx="390" cy="11" r="5" fill="#86f6de" stroke="#0c2436" stroke-width="3"/>
-        </svg>
-      </div>
-      <div class="landing-showcase-bottom"><span><b>01</b> Monitoramento de mercado</span><span>● AUTO PILOT</span></div>
-      <div class="landing-preview-caption">VISUAL ILUSTRATIVO · NÃO REPRESENTA RESULTADOS</div>
-    </div>
+<section id="welcome" class="lp hidden" aria-labelledby="landingHeading">
+ <nav class="lp-nav" aria-label="Navegação inicial">
+  <a class="lp-logo" href="#inicio" aria-label="NEXORA IA, início"><img src="/brand/logo-nexora-v21.svg" alt="NEXORA IA — Robô Trader Automático"></a>
+  <div class="lp-links"><a href="#inicio">Início</a><a href="#recursos">Recursos</a><a href="#como-funciona">Como funciona</a><a href="#resultados">Resultados</a><a class="lp-signin" href="/auth/deriv/start">Entrar</a></div>
+ </nav>
+ <div id="inicio" class="lp-hero">
+  <div>
+   <div class="lp-eyebrow">Automação inteligente · Deriv DEMO</div>
+   <h1 id="landingHeading">O robô trader automático <em>mais fácil de usar</em></h1>
+   <p class="lp-subtitle">Experimente o NEXORA IA gratuitamente por 24 horas. Configure suas estratégias, acompanhe as análises e conheça a plataforma na prática.</p>
+   <div class="lp-actions">
+    <a class="lp-button lp-button-primary" href="/auth/deriv/start">Teste grátis por 24h <span aria-hidden="true">➜</span></a>
+    <a class="lp-button lp-button-outline" href="/auth/deriv/start">Acessar plataforma <span aria-hidden="true">↗</span></a>
+   </div>
+   <div class="lp-proof"><span><b aria-hidden="true">◇</b> Conexão oficial Deriv</span><span><b aria-hidden="true">ϟ</b> Ativação em poucos passos</span><span><b aria-hidden="true">▥</b> Gestão de risco</span></div>
   </div>
-  <div class="landing-benefits" aria-label="Recursos da plataforma">
-    <div class="landing-benefit"><span class="landing-benefit-icon" aria-hidden="true">⌁</span><div><h2>Análise automática</h2><p>O robô monitora o mercado e identifica sinais conforme as estratégias em teste.</p></div></div>
-    <div class="landing-benefit"><span class="landing-benefit-icon" aria-hidden="true">◎</span><div><h2>Execução automática</h2><p>Ative ou desligue o AutoPilot e acompanhe cada operação em um único lugar.</p></div></div>
-    <div class="landing-benefit"><span class="landing-benefit-icon" aria-hidden="true">◇</span><div><h2>Gestão de risco</h2><p>Defina entradas e limites de Stop Win e Stop Loss.</p></div></div>
+  <div class="lp-mockup" aria-label="Prévia ilustrativa do painel do NEXORA IA">
+   <div class="lp-mock-head"><img src="/brand/logo-nexora-v21.svg" alt="NEXORA IA"><span class="lp-mock-broker">ACESSAR CORRETORA ↗</span></div>
+   <div class="lp-mock-kicker">VISÃO GERAL</div><div class="lp-mock-title">Meu robô</div><p class="lp-mock-desc">O essencial para acompanhar suas operações.</p>
+   <div class="lp-mock-panel">
+    <div class="lp-mock-paneltop"><span>Nexora Robô Automático</span><span class="lp-mock-tag">PRONTO</span></div>
+    <div class="lp-mock-control"><div class="lp-mock-start">LIGAR ROBÔ</div><div class="lp-mock-status"><strong><span class="lp-mock-dot"></span>ROBÔ OFFLINE</strong><p>Análises pausadas. Ative quando desejar.</p></div></div>
+   </div>
+   <div class="lp-mock-metrics">
+     <div class="lp-mock-metric"><small>Saldo Treinamento</small><strong>DEMO</strong><p>Saldo virtual na Deriv</p></div>
+     <div class="lp-mock-metric"><small>Conta Real</small><strong>INATIVA</strong><p>Operações reais indisponíveis</p></div>
+   </div>
+   <p class="lp-preview-disclaimer">Prévia ilustrativa · Sem resultados financeiros simulados</p>
   </div>
-  <div class="landing-steps"><span>COMO FUNCIONA</span><div><b>01</b> Conecte sua conta <i>→</i> <b>02</b> Confira os limites <i>→</i> <b>03</b> Ative o AutoPilot</div></div>
-  
+ </div>
+ <section id="recursos" class="lp-section" aria-labelledby="lpFeaturesTitle">
+  <h2 class="lp-section-title" id="lpFeaturesTitle">Principais benefícios</h2>
+  <div class="lp-cards">
+   <article class="lp-card"><div class="lp-icon" aria-hidden="true">♧</div><h3>Operações automáticas</h3><p>Monitore oportunidades e ative o AutoPilot para operar na conta de treinamento.</p></article>
+   <article class="lp-card"><div class="lp-icon" aria-hidden="true">▥</div><h3>Análise em tempo real</h3><p>Acompanhe as condições do mercado e os sinais analisados pelo robô.</p></article>
+   <article class="lp-card"><div class="lp-icon" aria-hidden="true">♢</div><h3>Gestão de risco</h3><p>Personalize entradas, Stop Win e Stop Loss; operar envolve riscos.</p></article>
+   <article class="lp-card"><div class="lp-icon" aria-hidden="true">♔</div><h3>Acesso grátis por 24h</h3><p>Conheça a plataforma na DEMO e ganhe mais 24h por indicação válida.</p></article>
+  </div>
+ </section>
+ <section id="como-funciona" class="lp-section" aria-labelledby="lpStepsTitle">
+  <h2 class="lp-section-title" id="lpStepsTitle">Como funciona</h2>
+  <div class="lp-steps">
+   <article class="lp-step"><span class="lp-step-num" aria-hidden="true">1</span><div><h3>Conecte sua conta</h3><p>Entre com o login oficial da Deriv, sem compartilhar sua senha.</p></div></article>
+   <article class="lp-step"><span class="lp-step-num" aria-hidden="true">2</span><div><h3>Configure o robô</h3><p>Defina os parâmetros e limites das operações em poucos cliques.</p></div></article>
+   <article class="lp-step"><span class="lp-step-num" aria-hidden="true">3</span><div><h3>Ative o AutoPilot</h3><p>Ligue quando quiser e acompanhe o treinamento automatizado.</p></div></article>
+  </div>
+ </section>
+ <div id="resultados" class="lp-strip" aria-label="Mais vantagens">
+  <div><span aria-hidden="true">♧</span> Ganhe +24 horas por indicação</div>
+  <div><span aria-hidden="true">▣</span> Painel intuitivo</div>
+  <div><span aria-hidden="true">▥</span> Resultados registrados</div>
+ </div>
+ <div class="lp-final"><h2>Comece agora com <br><strong>24 horas grátis</strong></h2><a class="lp-button lp-button-primary" href="/auth/deriv/start">Quero testar o NEXORA IA <span aria-hidden="true">➜</span></a></div>
+ <p class="lp-disclaimer">NEXORA IA é uma plataforma de automação em fase de testes. Operações envolvem riscos e não há garantia de lucro. A execução automática disponível é em conta DEMO.</p>
 </section>
 <section id="setup" class="robot-setup hidden" aria-labelledby="setupTitle">
   <div class="setup-aura" aria-hidden="true"></div>
@@ -566,7 +663,7 @@ async function saveOnboarding(event){
  }catch(e){$('setupFeedback').textContent='Não foi possível salvar: '+e.message;fail('')}
  finally{btn.disabled=false}
 }
-function page(v){for(const name of ['welcome','setup','dashboard','results','settings','account'])$(name).classList.toggle('hidden',name!==v);activePage=v;const logged=v!=='welcome';$('accountBadge').classList.toggle('hidden',!logged);$('menuButton').classList.toggle('hidden',!logged);document.querySelectorAll('.nav[data-view]').forEach(b=>b.classList.toggle('active',b.dataset.view===v))}
+function page(v){document.body.classList.toggle('marketing-mode',v==='welcome');for(const name of ['welcome','setup','dashboard','results','settings','account'])$(name).classList.toggle('hidden',name!==v);activePage=v;const logged=v!=='welcome';$('accountBadge').classList.toggle('hidden',!logged);$('menuButton').classList.toggle('hidden',!logged);document.querySelectorAll('.nav[data-view]').forEach(b=>b.classList.toggle('active',b.dataset.view===v))}
 function toggleMenu(open){$('drawer').classList.toggle('hidden',!open);$('menuOverlay').classList.toggle('hidden',!open);$('menuButton').setAttribute('aria-expanded',String(open))}
 function updateResultsPolling(){
  if(resultsRefreshTimer){clearInterval(resultsRefreshTimer);resultsRefreshTimer=null;}
@@ -589,8 +686,9 @@ async function req(path,opts={}){const r=await fetch(path,{credentials:'same-ori
 async function init(){
  const ref=new URLSearchParams(location.search).get('ref');
  if(ref&&/^[A-Za-z0-9_-]{8,32}$/.test(ref)){
-   const login=document.querySelector('a[href="/auth/deriv/start"]');
-   if(login)login.href='/auth/deriv/start?ref='+encodeURIComponent(ref);
+   document.querySelectorAll('a[href="/auth/deriv/start"]').forEach(login=>{
+     login.href='/auth/deriv/start?ref='+encodeURIComponent(ref);
+   });
  }
  try{const s=await req('/api/session');if(!s.authenticated){page('welcome');return}const justConnected=new URLSearchParams(window.location.search).get('login')==='ok';if(justConnected){window.history.replaceState({},'',window.location.pathname);go('setup')}else{page('dashboard');refreshDashboard()}refreshTimer=setInterval(()=>{if(activePage==='dashboard'||activePage==='results')refreshDashboard()},30000)}catch(e){fail(e.message);page('welcome')}}
 function showRobotNotice(reason){
