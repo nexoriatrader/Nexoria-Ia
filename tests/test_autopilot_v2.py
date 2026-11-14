@@ -1,6 +1,7 @@
 """NEXORA 2.0 DEMO portfolio safety and per-symbol progression tests."""
 import asyncio
 from decimal import Decimal
+from datetime import datetime,timezone
 from unittest.mock import AsyncMock
 
 import pytest
@@ -496,3 +497,24 @@ def test_v2_symbol_history_out_of_order_uses_ascending_order_ids(tmp_path,monkey
             assert entry is None and last is None
     finally:
         cleanup(engine)
+
+
+def test_v24_recovery_waits_for_first_m5_after_broker_settlement():
+    settled=datetime.fromtimestamp(3000-2,tz=timezone.utc)
+    target,ready,warm=main.v24_recovery_timing(settled,now=3000-30)
+    assert (target,ready,warm)==(3000,False,True)
+    assert main.v24_recovery_timing(settled,now=3000+0.5)==(3000,True,False)
+    assert main.v24_recovery_timing(settled,now=3000+3.01)==(3300,False,False)
+    # The settlement itself happened AFTER opening, so no same-bar retry.
+    settled_late=datetime.fromtimestamp(3000+0.2,tz=timezone.utc)
+    assert main.v24_recovery_timing(settled_late,now=3000+1)==(3300,False,False)
+    assert main.v24_recovery_timing(settled_late,now=3300-20)==(3300,False,True)
+    assert main.v24_recovery_timing(settled_late,now=3300+2)==(3300,True,False)
+
+
+def test_v24_recovery_does_not_advance_past_latest_settlement():
+    settled=datetime.fromtimestamp(3280,tz=timezone.utc)
+    target,ready,warm=main.v24_recovery_timing(settled,now=3270)
+    assert (target,ready,warm)==(3300,False,True)
+    target,ready,warm=main.v24_recovery_timing(settled,now=3300+1)
+    assert (target,ready,warm)==(3300,True,False)
