@@ -1776,7 +1776,7 @@ async def v2_evaluation(request:Request,nexora_sid:str|None=Cookie(default=None)
         attributed_ids=set(sess.scalars(select(db.AutoPilotAttribution.order_id).where(
             db.AutoPilotAttribution.user_id==user.id,
             db.AutoPilotAttribution.order_id>batch.after_order_id)).all())
-        v2orders=[o for o in orders if o.id in attributed_ids]
+        v2orders=[o for o in orders if o.id in attributed_ids and o.state!='CANCELLED']
         settled=[o for o in v2orders if o.state=='SETTLED' and o.pnl is not None]
         profit=sum((Decimal(str(o.pnl)) for o in settled),Decimal('0'))
         return {'active':True,'submitted':len(v2orders),'settled':len(settled),
@@ -1793,13 +1793,14 @@ def order_result_details(order,progression=None,was_automatic=False):
     """Historical snapshots are factual; unknown progression stays unclassified."""
     basic=public_order(order)
     basic['duration_minutes']=order.duration_minutes
-    opened=order.created_at
+    opened=order.broker_purchase_at
     if opened is not None:
         if opened.tzinfo is None:
             opened=opened.replace(tzinfo=timezone.utc)
         basic['started_at_brasilia']=opened.astimezone(BRASILIA_TZ).isoformat()
     else:
         basic['started_at_brasilia']=None
+    basic['time_source']='DERIV' if order.broker_purchase_at is not None else 'NOT_REPORTED'
     basic['account_mode']='demo'  # This table is only the official DEMO ledger.
     basic['outcome']='PENDING'
     if order.state=='SETTLED' and order.pnl is not None:
@@ -1837,7 +1838,8 @@ async def demo_orders_route(request:Request,nexora_sid:str|None=Cookie(default=N
     with db.SessionLocal() as s:
         batch=s.get(db.PilotValidationBatch,user.id)
         stmt=select(db.DemoOrder).where(db.DemoOrder.user_id==user.id,
-                                       db.DemoOrder.created_at>=cutoff)
+                                       db.DemoOrder.created_at>=cutoff,
+                                       db.DemoOrder.state!='CANCELLED')
         if batch:
             stmt=stmt.where(db.DemoOrder.id>batch.after_order_id)
         orders=s.scalars(stmt.order_by(db.DemoOrder.id.desc()).limit(100)).all()
