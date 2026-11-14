@@ -25,6 +25,7 @@ from .autopilot import analyze, quote_assessment
 from .engine import Engine, Settings
 from .market import MarketError, discover_symbols, discover_contracts, indicative_proposal
 from .strategy_lab import run_lab
+from .single_asset_study import run_single_asset_study
 from .asset_scanner import scan_assets
 from .trade_selector_v2 import (select_demo_signal, last_scan_report, has_pending_signals,
                                 active_market, catalogue, supported, fetch_closed_timeframe,
@@ -1675,6 +1676,29 @@ async def save_onboarding_config(request:Request,payload:OnboardingConfig,
     return {'ok':True,'execution_mode':'DERIV_DEMO_ONLY',
             'martingale_execution_enabled':True,'cycles_execution_enabled':True,
             'message':'Configuração salva. Ative o AutoPilot separadamente no painel.'}
+
+
+# The 30-day single-symbol study is isolated from all trading controls.
+_single_asset_lock=asyncio.Lock()
+_single_asset_cache=None
+_single_asset_cache_at=0.0
+
+@app.get('/api/research/volatility100-30d')
+async def single_asset_research_route(request:Request,nexora_sid:str|None=Cookie(default=None)):
+    """Authenticated read-only historical study; zero broker buys."""
+    active_user(request,nexora_sid)
+    global _single_asset_cache, _single_asset_cache_at
+    async with _single_asset_lock:
+        now=asyncio.get_running_loop().time()
+        if _single_asset_cache is not None and now-_single_asset_cache_at<3600:
+            return {**_single_asset_cache,'cached':True}
+        try:
+            report=await run_single_asset_study()
+        except MarketError as exc:
+            raise HTTPException(502,str(exc)) from None
+        _single_asset_cache=report
+        _single_asset_cache_at=now
+        return {**report,'cached':False}
 
 
 # Explicit, read-only research endpoint; never touches AutoPilot execution settings.
