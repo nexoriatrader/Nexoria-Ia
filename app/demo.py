@@ -284,69 +284,69 @@ async def demo_buy(token: str, account_id: str, *, symbol: str,
                         ws_url=await get_demo_ws_url(token,account_id)
                         ws=await stack.enter_async_context(
                             websockets.connect(ws_url,ping_interval=20,ping_timeout=10))
-                if currency is None:
-                    currency=cached_demo_currency(account_id)
                     if currency is None:
-                        _, currency = await _read_balance(ws, 7100)
-                        remember_demo_currency(account_id,currency)
-                currency = _currency(currency)
-                # Deriv v1/options API: only a streamed proposal ID may be
-                # purchased. Keep preflight demo_proposal() read-only.
-                proposal_request = {"proposal": 1, "amount": _amount(stake), "basis": "stake",
-                                   "contract_type": contract_type, "currency": currency,
-                                   "duration": duration, "duration_unit": "m",
-                                   "underlying_symbol": symbol, "subscribe": 1, "req_id": 7101}
-                await ws.send(json.dumps(proposal_request))
-                proposal = (await _response_for(ws, 7101)).get("proposal")
-                if not isinstance(proposal, dict):
-                    raise DemoTradingError("Resposta de proposal demo inválida")
-                proposal_id, ask_price = str(proposal.get("id", "")), proposal.get("ask_price")
-                if min_payout_ratio is not None:
-                    # V2-only fail-closed check on the ACTUAL purchase proposal;
-                    # the preliminary quote may change before buying.
+                        currency=cached_demo_currency(account_id)
+                        if currency is None:
+                            _, currency = await _read_balance(ws, 7100)
+                            remember_demo_currency(account_id,currency)
+                    currency = _currency(currency)
+                    # Deriv v1/options API: only a streamed proposal ID may be
+                    # purchased. Keep preflight demo_proposal() read-only.
+                    proposal_request = {"proposal": 1, "amount": _amount(stake), "basis": "stake",
+                                       "contract_type": contract_type, "currency": currency,
+                                       "duration": duration, "duration_unit": "m",
+                                       "underlying_symbol": symbol, "subscribe": 1, "req_id": 7101}
+                    await ws.send(json.dumps(proposal_request))
+                    proposal = (await _response_for(ws, 7101)).get("proposal")
+                    if not isinstance(proposal, dict):
+                        raise DemoTradingError("Resposta de proposal demo inválida")
+                    proposal_id, ask_price = str(proposal.get("id", "")), proposal.get("ask_price")
+                    if min_payout_ratio is not None:
+                        # V2-only fail-closed check on the ACTUAL purchase proposal;
+                        # the preliminary quote may change before buying.
+                        try:
+                            ratio=Decimal(str(min_payout_ratio))
+                            payout=Decimal(str(proposal["payout"]))
+                            proposal_ask=Decimal(str(ask_price))
+                        except (InvalidOperation,TypeError,ValueError,KeyError) as exc:
+                            raise DemoTradingError("Payout da proposta DEMO inválido") from exc
+                        if (not ratio.is_finite() or ratio<1 or not payout.is_finite()
+                            or not proposal_ask.is_finite() or proposal_ask<=0
+                            or payout<proposal_ask*ratio):
+                            raise DemoTradingError("Proposta DEMO não atende ao payout mínimo")
+                    if not proposal_id or ask_price is None:
+                        raise DemoTradingError("Proposal demo sem identificador ou preço")
+                    # Never accept a quote whose purchase cost exceeds the guarded stake.
                     try:
-                        ratio=Decimal(str(min_payout_ratio))
-                        payout=Decimal(str(proposal["payout"]))
-                        proposal_ask=Decimal(str(ask_price))
-                    except (InvalidOperation,TypeError,ValueError,KeyError) as exc:
-                        raise DemoTradingError("Payout da proposta DEMO inválido") from exc
-                    if (not ratio.is_finite() or ratio<1 or not payout.is_finite()
-                        or not proposal_ask.is_finite() or proposal_ask<=0
-                        or payout<proposal_ask*ratio):
-                        raise DemoTradingError("Proposta DEMO não atende ao payout mínimo")
-                if not proposal_id or ask_price is None:
-                    raise DemoTradingError("Proposal demo sem identificador ou preço")
-                # Never accept a quote whose purchase cost exceeds the guarded stake.
-                try:
-                    price = Decimal(str(ask_price))
-                except (InvalidOperation, ValueError, TypeError) as exc:
-                    raise DemoTradingError("Preço demo inválido") from exc
-                if not price.is_finite() or price <= 0 or price > Decimal(str(stake)):
-                    raise DemoTradingError("Preço da proposta ultrapassa o valor autorizado")
-                # Fail closed immediately before the actual outbound buy request.
-                # The broker's processing/confirmation time is outside our control.
-                if latest_buy_send_epoch is not None and time.time()>latest_buy_send_epoch:
-                    raise DemoPreBuyDeadlineExceeded("Janela de entrada M5 expirou antes do envio")
-                if latest_buy_send_epoch is not None:
-                    print("V2.4 DEMO buy dispatch offset_s=%.3f deadline=3.000" %
-                          (time.time()-(latest_buy_send_epoch-3.0)))
-                await ws.send(json.dumps({"buy": proposal_id, "price": float(price), "req_id": 7102}))
-                buy = (await _response_for(ws, 7102)).get("buy")
-                if not isinstance(buy, dict) or not buy.get("contract_id"):
-                    raise DemoTradingError("A Deriv não confirmou a compra demo")
-                return {"contract_id": str(buy["contract_id"]),
-                        "buy_price": str(buy.get("buy_price", ask_price)),
-                        "symbol": symbol, "contract_type": contract_type,
-                        "duration_minutes": duration, "currency": currency,
-                        "broker_purchase_time": (buy.get("purchase_time")
-                                                 if isinstance(buy.get("purchase_time"),(int,float)) else None),
-                        "broker_start_time": (buy.get("start_time")
-                                              if isinstance(buy.get("start_time"),(int,float)) else None),
-                        "demo_only": True, "bought": True}
-        except DemoTradingError:
-            raise
-        except Exception as exc:
-            raise DemoTradingError("Não foi possível comprar o contrato demo") from exc
+                        price = Decimal(str(ask_price))
+                    except (InvalidOperation, ValueError, TypeError) as exc:
+                        raise DemoTradingError("Preço demo inválido") from exc
+                    if not price.is_finite() or price <= 0 or price > Decimal(str(stake)):
+                        raise DemoTradingError("Preço da proposta ultrapassa o valor autorizado")
+                    # Fail closed immediately before the actual outbound buy request.
+                    # The broker's processing/confirmation time is outside our control.
+                    if latest_buy_send_epoch is not None and time.time()>latest_buy_send_epoch:
+                        raise DemoPreBuyDeadlineExceeded("Janela de entrada M5 expirou antes do envio")
+                    if latest_buy_send_epoch is not None:
+                        print("V2.4 DEMO buy dispatch offset_s=%.3f deadline=3.000" %
+                              (time.time()-(latest_buy_send_epoch-3.0)))
+                    await ws.send(json.dumps({"buy": proposal_id, "price": float(price), "req_id": 7102}))
+                    buy = (await _response_for(ws, 7102)).get("buy")
+                    if not isinstance(buy, dict) or not buy.get("contract_id"):
+                        raise DemoTradingError("A Deriv não confirmou a compra demo")
+                    return {"contract_id": str(buy["contract_id"]),
+                            "buy_price": str(buy.get("buy_price", ask_price)),
+                            "symbol": symbol, "contract_type": contract_type,
+                            "duration_minutes": duration, "currency": currency,
+                            "broker_purchase_time": (buy.get("purchase_time")
+                                                     if isinstance(buy.get("purchase_time"),(int,float)) else None),
+                            "broker_start_time": (buy.get("start_time")
+                                                  if isinstance(buy.get("start_time"),(int,float)) else None),
+                            "demo_only": True, "bought": True}
+            except DemoTradingError:
+                raise
+            except Exception as exc:
+                raise DemoTradingError("Não foi possível comprar o contrato demo") from exc
             finally:
                 if warm is not None:
                     try:
