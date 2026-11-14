@@ -294,7 +294,6 @@ button.choose-account:focus-visible{outline:3px solid #71d2ff;outline-offset:4px
   <button class="nav" data-view="results" onclick="go('results')">▤　Resultados</button>
   <button class="nav" data-view="settings" onclick="go('settings')">⚙　Configurações</button>
   <button class="nav" data-view="account" onclick="go('account')">◉　Minha conta</button>
-  <button class="nav hidden" id="adminMenuButton" data-view="admin" onclick="go('admin')">⚙　Admin</button>
 </nav>
 <main>
 <section id="welcome" class="login landing" aria-labelledby="landingHeading">
@@ -525,27 +524,7 @@ button.choose-account:focus-visible{outline:3px solid #71d2ff;outline-offset:4px
     <div class="actions"><button class="outline" onclick="logout()">DESCONECTAR</button></div>
   </div>
 </section>
-<section id="admin" class="hidden">
-  <div class="section-heading"><div><h1>Admin · Acessos</h1><p>Ajustes excepcionais. Indicações são automáticas.</p></div></div>
-  <div class="card">
-    <div class="surface-heading">Usuários</div>
-    <div class="actions"><button class="outline" onclick="loadAdminUsers()">ATUALIZAR</button></div>
-    <div class="table-wrap"><table><thead><tr><th>ID</th><th>Conta Deriv</th><th>Acesso</th><th>Validade (Brasília)</th></tr></thead><tbody id="adminUsersBody"><tr><td colspan="4">Carregando...</td></tr></tbody></table></div>
-    <p class="helper">Toque no usuário para selecioná-lo.</p>
-  </div>
-  <div class="card">
-    <div class="surface-heading">Alterar acesso</div>
-    <div class="settings-grid">
-      <div class="field"><label for="adminUserId">ID</label><input type="number" min="1" id="adminUserId"></div>
-      <div class="field"><label for="adminAction">O que fazer?</label><select id="adminAction" onchange="updateAdminHours()"><option value="add_hours">Adicionar dias</option><option value="remove_hours">Retirar dias</option><option value="suspend">Suspender</option><option value="resume">Reativar</option><option value="refund_revoke">Estorno: bloquear</option></select></div>
-      <div class="field" id="adminDaysField"><label for="adminDays">Quantidade de dias</label><input type="number" min="1" max="90" value="1" id="adminDays"></div>
-    </div>
-    <div class="field" style="margin-top:12px"><label for="adminNote">Motivo obrigatório</label><input id="adminNote" maxlength="255" placeholder="Ex.: Estorno confirmado"></div>
-    <div class="actions"><button class="gold" onclick="submitAdminAccess()">SALVAR ALTERAÇÃO</button></div>
-    <p class="helper" id="adminFeedback"></p>
-  </div>
-  <details class="card"><summary>Histórico administrativo</summary><p id="adminAudit" class="muted" style="white-space:pre-line">Carregando...</p></details>
-</section>
+
 <p id="error" class="alert" role="alert"></p>
 </main>
 <footer class="section-foot">NEXORA IA · Deriv</footer>
@@ -654,7 +633,7 @@ function updateResultsPolling(){
    },3000);
  }
 }
-function go(v){toggleMenu(false);page(v);updateResultsPolling();window.scrollTo({top:0,behavior:'smooth'});if(v==='choose')loadVerifiedAccounts();if(v==='realPreview'){$('realPreviewStatus').textContent=detectedRealAccounts.length?'A Deriv identificou '+detectedRealAccounts.length+' conta(s) real(is) vinculada(s).':'Não foi possível confirmar uma conta real nesta autorização.';}if(v==='setup')loadOnboarding();if(v==='dashboard')refreshDashboard();if(v==='results'){loadDemoOrders();}if(v==='account'){loadDemoBalance();loadRobotAccess()}if(v==='admin'){loadAdminUsers();loadAdminAudit()}if(v==='settings')loadSettings()}
+function go(v){toggleMenu(false);page(v);updateResultsPolling();window.scrollTo({top:0,behavior:'smooth'});if(v==='choose')loadVerifiedAccounts();if(v==='realPreview'){$('realPreviewStatus').textContent=detectedRealAccounts.length?'A Deriv identificou '+detectedRealAccounts.length+' conta(s) real(is) vinculada(s).':'Não foi possível confirmar uma conta real nesta autorização.';}if(v==='setup')loadOnboarding();if(v==='dashboard')refreshDashboard();if(v==='results'){loadDemoOrders();}if(v==='account'){loadDemoBalance();loadRobotAccess()}if(v==='settings')loadSettings()}
 function fail(msg){$('error').textContent=msg||''}
 async function req(path,opts={}){const r=await fetch(path,{credentials:'same-origin',...opts});let data;try{data=await r.json()}catch{throw Error('Resposta inválida do servidor')}if(!r.ok)throw Error(data.detail||'Falha na conexão');return data}
 async function init(){
@@ -663,7 +642,7 @@ async function init(){
    const login=document.querySelector('a[href="/auth/deriv/start"]');
    if(login)login.href='/auth/deriv/start?ref='+encodeURIComponent(ref);
  }
- try{const s=await req('/api/session');if(!s.authenticated){page('welcome');return}$('adminMenuButton').classList.toggle('hidden',!s.is_admin);const justConnected=new URLSearchParams(window.location.search).get('login')==='ok';if(justConnected){window.history.replaceState({},'',window.location.pathname);const account=s.demo_accounts&&s.demo_accounts[0];$('demoInfo').textContent=account?'Conectada à Deriv · '+safe(account.account_id):'Conta conectada à Deriv';page('choose');applyAccountSelection();loadVerifiedAccounts()}else{page('dashboard');refreshDashboard()}refreshTimer=setInterval(()=>{if(activePage==='dashboard'||activePage==='results')refreshDashboard()},30000)}catch(e){fail(e.message);page('welcome')}}
+ try{const s=await req('/api/session');if(!s.authenticated){page('welcome');return}const justConnected=new URLSearchParams(window.location.search).get('login')==='ok';if(justConnected){window.history.replaceState({},'',window.location.pathname);const account=s.demo_accounts&&s.demo_accounts[0];$('demoInfo').textContent=account?'Conectada à Deriv · '+safe(account.account_id):'Conta conectada à Deriv';page('choose');applyAccountSelection();loadVerifiedAccounts()}else{page('dashboard');refreshDashboard()}refreshTimer=setInterval(()=>{if(activePage==='dashboard'||activePage==='results')refreshDashboard()},30000)}catch(e){fail(e.message);page('welcome')}}
 function showRobotNotice(reason){
  const box=$('robotStartNotice'),title=$('robotNoticeTitle'),body=$('robotNoticeText'),options=$('robotNoticeOptions');
  if(!reason){box.hidden=true;title.textContent='';body.textContent='';options.hidden=true;return}
@@ -855,46 +834,6 @@ function copyMyReferral(){
   const url=$('referralLink').value;
   if(!url||url==='—')return;
   navigator.clipboard.writeText(url).then(()=>{$('referralSummary').textContent+=' · Copiado'}).catch(()=>fail('Copie manualmente o link'));
-}
-function updateAdminHours(){
-  $('adminDaysField').classList.toggle('hidden',!['add_hours','remove_hours'].includes($('adminAction').value));
-}
-async function loadAdminUsers(){
-  try{
-    const data=await req('/api/admin/access/users');
-    const body=$('adminUsersBody');body.replaceChildren();
-    for(const item of data.items){
-      const tr=document.createElement('tr');
-      const fields=[item.user_id,item.deriv_account_id,item.access.status,
-        item.access.expires_at?new Date(item.access.expires_at).toLocaleString('pt-BR',{timeZone:'America/Sao_Paulo'}):'—'];
-      for(const value of fields){const td=document.createElement('td');td.textContent=value;tr.append(td)}
-      tr.style.cursor='pointer';
-      tr.addEventListener('click',()=>{$('adminUserId').value=item.user_id});
-      body.append(tr);
-    }
-  }catch(e){$('adminFeedback').textContent=e.message}
-}
-async function loadAdminAudit(){
-  try{
-    const data=await req('/api/admin/access/audit');
-    $('adminAudit').textContent=data.items.map(a=>new Date(a.at).toLocaleString('pt-BR',{timeZone:'America/Sao_Paulo'})
-       +' · #'+a.user_id+' · '+a.action+' · '+a.note).join('\n')||'Nenhuma alteração registrada.';
-  }catch(e){$('adminAudit').textContent=e.message}
-}
-async function submitAdminAccess(){
-  const user_id=Number($('adminUserId').value),action=$('adminAction').value;
-  const days=Number($('adminDays').value),hours=['add_hours','remove_hours'].includes(action)?days*24:0;
-  const note=$('adminNote').value.trim();
-  if(!Number.isInteger(user_id)||user_id<1||note.length<5||(hours&&(!Number.isInteger(days)||days<1||days>90))){
-    $('adminFeedback').textContent='Confira o ID, os dias e o motivo.';return;
-  }
-  if(!window.confirm('Confirma '+action+' para usuário #'+user_id+'?'))return;
-  try{
-    const data=await req('/api/admin/access/adjust',{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({user_id,action,hours,note})});
-    $('adminFeedback').textContent='Salvo: '+data.access.status;
-    await Promise.all([loadAdminUsers(),loadAdminAudit()]);
-  }catch(e){$('adminFeedback').textContent=e.message}
 }
 async function loadRobotAccess(){
   const target=$('robotAccessInfo');
