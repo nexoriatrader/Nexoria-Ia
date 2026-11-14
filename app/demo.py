@@ -12,6 +12,7 @@ import re
 import time
 from urllib.parse import parse_qs, urlsplit
 from decimal import Decimal, InvalidOperation
+from contextlib import AsyncExitStack
 
 import httpx
 import websockets
@@ -276,11 +277,13 @@ async def demo_buy(token: str, account_id: str, *, symbol: str,
     async with _demo_session_lock(account_id):
         warm=await _take_warmed_demo_socket(token,account_id) if latest_buy_send_epoch is not None else None
         ws=warm
-        try:
-            async with asyncio.timeout(20):
-                if ws is None:
-                    ws_url=await get_demo_ws_url(token,account_id)
-                    ws=await websockets.connect(ws_url,ping_interval=20,ping_timeout=10)
+        async with AsyncExitStack() as stack:
+            try:
+                async with asyncio.timeout(20):
+                    if ws is None:
+                        ws_url=await get_demo_ws_url(token,account_id)
+                        ws=await stack.enter_async_context(
+                            websockets.connect(ws_url,ping_interval=20,ping_timeout=10))
                 if currency is None:
                     currency=cached_demo_currency(account_id)
                     if currency is None:
@@ -344,12 +347,12 @@ async def demo_buy(token: str, account_id: str, *, symbol: str,
             raise
         except Exception as exc:
             raise DemoTradingError("Não foi possível comprar o contrato demo") from exc
-        finally:
-            if ws is not None:
-                try:
-                    await ws.close()
-                except Exception:
-                    pass
+            finally:
+                if warm is not None:
+                    try:
+                        await warm.close()
+                    except Exception:
+                        pass
 
 
 async def demo_contract_status(token: str, account_id: str, contract_id: str) -> dict:
