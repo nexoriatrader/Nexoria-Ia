@@ -87,16 +87,18 @@ def register_first_login(session, user, *, created_new, referred_code=None, now=
     """Called only after valid Deriv OAuth, in same DB transaction as login.
 
     New identity only, no repeated login credits, no self-referral.
-    The guest's initial trial is 24h only when enforcement is enabled.
+    New verified accounts receive 24h entitlement even while enforcement is in pilot mode.
     A referral reward is an atomic, once-per-invitee ledger entry.
     """
     now=utc(now or db.utcnow())
     ensure_referral_link(session,user.id)
     if not created_new:
         return
-    if access_control_enabled():
-        start_trial_on_first_robot_start(session,user.id,now)
-    if not referred_code or not access_control_enabled():
+    if session.get(db.RobotAccess,user.id) is None:
+        session.add(db.RobotAccess(user_id=user.id,access_kind='trial_24h',
+                 starts_at=now,expires_at=now+timedelta(hours=24)))
+        session.flush()
+    if not referred_code:
         return
     link=session.scalar(select(db.ReferralLink).where(
         db.ReferralLink.code==referred_code))
