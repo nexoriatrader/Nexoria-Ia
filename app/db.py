@@ -28,6 +28,20 @@ class User(Base):
     selected_mode = Column(String(16), default='demo', nullable=False)
     # Execution consent is stored separately; existing users do not auto-enroll.
 
+class RobotAccess(Base):
+    """One per-user server-side DEMO access entitlement.
+
+    The grant clock is UTC and never depends on a browser or Deriv session.
+    Renewals are explicit; merely logging in does not reset the expiry.
+    """
+    __tablename__='robot_access'
+    user_id=Column(Integer,ForeignKey('users.id'),primary_key=True)
+    access_kind=Column(String(24),nullable=False,default='trial_24h')
+    starts_at=Column(DateTime(timezone=True),default=utcnow,nullable=False)
+    expires_at=Column(DateTime(timezone=True),nullable=False)
+    updated_at=Column(DateTime(timezone=True),default=utcnow,onupdate=utcnow,nullable=False)
+
+
 class RobotPlan(Base):
     """Saved onboarding preferences; experimental progressions are NOT execution rules."""
     __tablename__ = 'robot_plans'
