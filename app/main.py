@@ -1750,6 +1750,12 @@ async def perform_demo_buy(user, token, payload:DemoBuy, *, attribution:dict|Non
         raise HTTPException(422,'Ativo inválido')
     with db.SessionLocal() as s:
         stored=s.get(db.User,user.id)
+        # Subscription is checked at the durable purchase boundary, not only
+        # once per scanner cycle. Broker-settled open contracts remain intact.
+        if attribution:
+            entitlement=access_status(s,user.id)
+            if not entitlement['allowed'] and entitlement['status']!='TRIAL_AVAILABLE':
+                raise HTTPException(403,'Acesso ao robô expirado ou suspenso. Nenhuma nova compra enviada.')
         try:
             order,created=reserve(s,stored,request_key=payload.request_key,
                                   symbol=payload.symbol,direction=payload.direction,
