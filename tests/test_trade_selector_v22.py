@@ -138,3 +138,53 @@ def test_v23_scanner_selects_highest_score(monkeypatch):
     assert result['strategy']=='h1_m15_confluence_v23'
     assert result['score']>=70
     assert len(selector._pending_signals_by_user[(400,'pullback_v22')])==1
+
+
+def test_v23_volatility_uses_m5_candles_and_five_minute_expiry(monkeypatch):
+    item,h,_,close=setup(monkeypatch)
+    item={'symbol':'1HZ100V','display_name':'Volatility 100 (1s)','family':'volatility'}
+    # Construct a fresh 5-minute close using genuine 300-second spacing.
+    m=bars(300,110,int(close)-300)
+    em=selector.ema_values([c['close'] for c in m])
+    m[-3]['low']=em[-3]
+    m[-1]['close']+=.0003
+    m[-1]['high']=m[-1]['close']+.00005
+    result=selector.v23_confluence_signal(item,h,m,close+5)
+    assert result is not None
+    assert result['strategy']=='h1_m5_confluence_v23'
+    assert result['minutes']==5
+    assert result['bar_seconds']==300
+    assert result['score']>=70
+    assert selector.v23_confluence_signal(item,h,m,close-1) is None
+    assert selector.v23_confluence_signal(item,h,m,close+51) is None
+    assert selector.EXPIRY['volatility']==5
+    assert selector.EXPIRY['forex']==15
+
+
+def test_v23_volatility_selector_requests_m5_and_five_minute_contract(monkeypatch):
+    item,h,_,close=setup(monkeypatch)
+    item={'symbol':'1HZ100V','display_name':'Volatility 100 (1s)','family':'volatility'}
+    m=bars(300,110,int(close)-300)
+    em=selector.ema_values([c['close'] for c in m])
+    m[-3]['low']=em[-3]
+    m[-1]['close']+=.0003
+    m[-1]['high']=m[-1]['close']+.00005
+    monkeypatch.setattr(selector,'SIGNAL_PROFILE','confluence_v23')
+    monkeypatch.setattr(selector,'active_market',lambda now=None:'volatility')
+    monkeypatch.setattr(selector,'_pending_signals_by_user',{})
+    monkeypatch.setattr(selector.time,'time',lambda:close+5)
+    monkeypatch.setattr(selector,'catalogue',AsyncMock(return_value=[item]))
+    check=AsyncMock(return_value=True)
+    monkeypatch.setattr(selector,'supported',check)
+    requests=[]
+    async def fake_fetch(symbol,seconds,count,*,now):
+        requests.append(seconds)
+        return h if seconds==3600 else m
+    monkeypatch.setattr(selector,'fetch_closed_timeframe',fake_fetch)
+    signal=asyncio.run(selector.select_demo_signal(user_key=9821,
+             strategy_mode='pullback_v22'))
+    assert signal is not None
+    assert signal['minutes']==5
+    assert signal['strategy']=='h1_m5_confluence_v23'
+    check.assert_awaited_once_with('1HZ100V',5)
+    assert sorted(requests)==[300,3600]
