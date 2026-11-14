@@ -12,7 +12,7 @@ import websockets
 from fastapi import FastAPI, HTTPException, Cookie, Request
 from fastapi.responses import FileResponse, RedirectResponse, JSONResponse
 from pydantic import BaseModel
-from sqlalchemy import select, delete
+from sqlalchemy import select, delete, func
 
 from . import db
 from .access import (access_control_enabled, access_status, start_trial_on_first_robot_start,
@@ -926,7 +926,7 @@ async def session_info(request:Request,nexora_sid:str|None=Cookie(default=None))
     try:u=active_user(request,nexora_sid)
     except HTTPException:return {'authenticated':False,'demo_accounts':[],'real_enabled':False}
     return {'authenticated':True,'demo_accounts':[{'account_id':u.deriv_account_id,'account_type':'demo'}],
-            'real_enabled':False,'is_admin':is_nexora_admin(u)}
+            'real_enabled':False,'is_admin':False}
 
 @app.get('/api/accounts/available')
 async def available_accounts(request:Request,nexora_sid:str|None=Cookie(default=None)):
@@ -1216,18 +1216,53 @@ async def my_access_status(request:Request,nexora_sid:str|None=Cookie(default=No
         return {**status,**referral}
 
 
-def is_nexora_admin(user):
-    """Server-only allowlist; a client cannot grant itself admin rights."""
-    allowed={x.strip() for x in os.getenv('NEXORA_ADMIN_DERIV_ACCOUNT_IDS','').split(',')
-             if x.strip()}
-    return bool(allowed) and user.deriv_account_id in allowed
+from . import admin_auth
 
 
-def require_nexora_admin(request,sid):
-    user=active_user(request,sid)
-    if not is_nexora_admin(user):
-        raise HTTPException(403,'Acesso administrativo não autorizado')
-    return user
+class AdminCredentials(BaseModel):
+    login:str
+    password:str
+
+
+@app.get('/admin')
+async def admin_home():
+    return FileResponse(Path(__file__).parent/'admin.html')
+
+
+@app.post('/api/admin/login')
+async def admin_login(request:Request,credentials:AdminCredentials):
+    # Uniform errors so a caller cannot probe whether the account is enabled.
+    identity=(request.client.host if request.client else 'unknown')
+    if not admin_auth.login_allowed(identity):
+        raise HTTPException(429,'Muitas tentativas. Tente novamente mais tarde.')
+    if not (secrets.compare_digest(credentials.login,'Admin') and
+            admin_auth.verify_password(credentials.password)):
+        admin_auth.record_failed_login(identity)
+        raise HTTPException(401,'Login ou senha inválidos')
+    admin_auth.clear_failed_logins(identity)
+    response=JSONResponse({'authenticated':True,'admin':'Admin'})
+    response.set_cookie('nexora_admin_sid',admin_auth.session_token(),
+                        max_age=admin_auth.SESSION_SECONDS,**cookie_options())
+    return response
+
+
+@app.get('/api/admin/session')
+async def admin_session(request:Request):
+    return {'authenticated':admin_auth.valid_session(
+        request.cookies.get('nexora_admin_sid'))}
+
+
+@app.post('/api/admin/logout')
+async def admin_logout(request:Request):
+    response=JSONResponse({'authenticated':False})
+    response.delete_cookie('nexora_admin_sid',path='/')
+    return response
+
+
+def require_nexora_admin(request):
+    if not admin_auth.valid_session(request.cookies.get('nexora_admin_sid')):
+        raise HTTPException(401,'Entre no painel Admin para continuar')
+    return 'Admin'
 
 
 class AdminAccessAdjustment(BaseModel):
@@ -1238,24 +1273,25 @@ class AdminAccessAdjustment(BaseModel):
 
 
 @app.get('/api/admin/access/users')
-async def admin_access_users(request:Request,nexora_sid:str|None=Cookie(default=None)):
-    admin=require_nexora_admin(request,nexora_sid)
+async def admin_access_users(request:Request):
+    require_nexora_admin(request)
     with db.SessionLocal() as sess:
         users=sess.scalars(select(db.User).order_by(db.User.id.desc()).limit(100)).all()
         result=[]
         for target in users:
             access=access_status(sess,target.id)
             link=sess.get(db.ReferralLink,target.id)
+            count=sess.scalar(select(func.count(db.ReferralCredit.invitee_user_id)).where(
+                db.ReferralCredit.referrer_user_id==target.id)) or 0
             result.append({'user_id':target.id,'deriv_account_id':target.deriv_account_id,
                            'referral_code':link.code if link else None,
-                           'access':access})
-        return {'items':result,'admin_user_id':admin.id}
+                           'referrals':count,'access':access})
+        return {'items':result}
 
 
 @app.post('/api/admin/access/adjust')
-async def admin_access_adjust(request:Request,payload:AdminAccessAdjustment,
-                              nexora_sid:str|None=Cookie(default=None)):
-    admin=require_nexora_admin(request,nexora_sid)
+async def admin_access_adjust(request:Request,payload:AdminAccessAdjustment):
+    require_nexora_admin(request)
     action=payload.action
     if action not in ('add_hours','remove_hours','suspend','resume','refund_revoke'):
         raise HTTPException(422,'Ação administrativa inválida')
@@ -1265,17 +1301,17 @@ async def admin_access_adjust(request:Request,payload:AdminAccessAdjustment,
         raise HTTPException(422,'Informe horas entre 1 e 2160')
     if action not in ('add_hours','remove_hours') and payload.hours!=0:
         raise HTTPException(422,'Esta ação não recebe horas')
-    if action in ('suspend','refund_revoke') and admin.id==payload.user_id:
-        raise HTTPException(409,'Não é permitido suspender a própria conta administrativa')
     with db.SessionLocal() as sess:
         subject=sess.get(db.User,payload.user_id)
-        if not subject: raise HTTPException(404,'Usuário não encontrado')
+        if not subject:
+            raise HTTPException(404,'Usuário não encontrado')
         now=db.utcnow()
         grant=sess.get(db.RobotAccess,subject.id)
         if grant is None:
             grant=db.RobotAccess(user_id=subject.id,access_kind='admin_exception',
-                                  starts_at=now,expires_at=now)
-            sess.add(grant);sess.flush()
+                                 starts_at=now,expires_at=now)
+            sess.add(grant)
+            sess.flush()
         if action=='add_hours':
             grant.expires_at=max(now,utc(grant.expires_at))+timedelta(hours=payload.hours)
         elif action=='remove_hours':
@@ -1285,31 +1321,28 @@ async def admin_access_adjust(request:Request,payload:AdminAccessAdjustment,
         elif action=='resume':
             grant.suspended=False
         elif action=='refund_revoke':
-            # Revoke access and prevent referral credits from re-enabling it.
-            # Never erase financial/audit history or broker contracts.
             grant.suspended=True
             grant.expires_at=now
-        sess.add(db.AccessAdminEvent(admin_user_id=admin.id,
-                     subject_user_id=subject.id,action=action,
-                     delta_hours=(payload.hours if action=='add_hours'
-                                   else -payload.hours if action=='remove_hours' else None),
-                     note=payload.note.strip()))
+        sess.add(db.OwnerAdminEvent(subject_user_id=subject.id,action=action,
+                   delta_hours=(payload.hours if action=='add_hours' else
+                                -payload.hours if action=='remove_hours' else None),
+                   note=payload.note.strip()))
         sess.commit()
         updated=access_status(sess,subject.id)
     if action in ('suspend','refund_revoke','remove_hours'):
         if updated['enforced'] and not updated['allowed'] and subject.id in autopilot_enabled:
-            disarm_autopilot(subject.id,'Acesso administrativo suspenso ou expirado; contratos existentes mantidos')
+            disarm_autopilot(subject.id,
+                'Acesso administrativo suspenso ou expirado; contratos existentes mantidos')
     return {'user_id':subject.id,'access':updated,'action':action}
 
 
 @app.get('/api/admin/access/audit')
-async def admin_access_audit(request:Request,nexora_sid:str|None=Cookie(default=None)):
-    require_nexora_admin(request,nexora_sid)
+async def admin_access_audit(request:Request):
+    require_nexora_admin(request)
     with db.SessionLocal() as sess:
-        events=sess.scalars(select(db.AccessAdminEvent).order_by(
-            db.AccessAdminEvent.id.desc()).limit(100)).all()
+        events=sess.scalars(select(db.OwnerAdminEvent).order_by(
+            db.OwnerAdminEvent.id.desc()).limit(100)).all()
         return {'items':[{'at':e.created_at.isoformat(),
-                          'admin_user_id':e.admin_user_id,
                           'user_id':e.subject_user_id,'action':e.action,
                           'hours':e.delta_hours,'note':e.note} for e in events]}
 
