@@ -26,6 +26,7 @@ from .engine import Engine, Settings
 from .market import MarketError, discover_symbols, discover_contracts, indicative_proposal
 from .strategy_lab import run_lab
 from .single_asset_study import run_single_asset_study
+from .research_persistence import research_loop, latest_study  # isolated research, no broker trades
 from .asset_scanner import scan_assets
 from .trade_selector_v2 import (select_demo_signal, last_scan_report, has_pending_signals,
                                 active_market, catalogue, supported, fetch_closed_timeframe,
@@ -44,6 +45,7 @@ market_task = None
 reconcile_task = None
 autopilot_task = None
 market_selfcheck_task = None
+research_worker_task = None
 # Runtime state is volatile; explicit DEMO resume intent is persisted separately.
 autopilot_enabled: set[int] = set()
 autopilot_last_attempt: dict[int,float] = {}
@@ -734,7 +736,7 @@ async def reconcile_confirmed_loop():
 
 @asynccontextmanager
 async def lifespan(app):
-    global market_task, reconcile_task, autopilot_task
+    global market_task, reconcile_task, autopilot_task, research_worker_task
     if os.getenv('NEXORA_PUBLIC_URL','').startswith('https://') and db.DB_URL.startswith('sqlite:'):
         raise RuntimeError('Não usar SQLite efêmero em implantação pública: configure DATABASE_URL de Postgres')
     db.init_db()
@@ -743,9 +745,10 @@ async def lifespan(app):
     reconcile_task=asyncio.create_task(reconcile_confirmed_loop())
     autopilot_task=asyncio.create_task(autopilot_loop())
     market_selfcheck_task=asyncio.create_task(public_market_selfcheck_once())
+    research_worker_task=asyncio.create_task(research_loop(),name='research-1hz100v-daily')
     yield
     autopilot_enabled.clear()
-    tasks=[task for task in (market_task,reconcile_task,autopilot_task,market_selfcheck_task) if task]
+    tasks=[task for task in (market_task,reconcile_task,autopilot_task,market_selfcheck_task,research_worker_task) if task]
     for task in tasks:
         task.cancel()
     await asyncio.gather(*tasks,return_exceptions=True)
