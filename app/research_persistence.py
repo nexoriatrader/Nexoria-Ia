@@ -65,6 +65,42 @@ def persist_multitimeframe_study(report):
         session.commit()
 
 
+def audit_summary(report):
+    """Compact transparent diagnostics; does not promote any trading setup."""
+    rows = report.get("results", [])
+    eligible = [r for r in rows if r["holdout"]["signals"] >= 100]
+    def view(r):
+        h = r["holdout"]
+        return {"tf":r["timeframe"],"expiry":r["expiry_minutes"],
+                "strategy":r["strategy"],"signals":h["signals"],
+                "win_rate":h["win_rate"],"lower95":h["wilson_95_lower"],
+                "pnl_hypothetical":h["pnl_per_1_usd_at_88pct"],
+                "training_signals":r["training"]["signals"],
+                "training_rate":r["training"]["win_rate"]}
+    groups = {}
+    for expiry in (1,3,5,15):
+        subset = [r for r in eligible if r["expiry_minutes"] == expiry]
+        groups[str(expiry)] = {
+            "tested": len([r for r in rows if r["expiry_minutes"] == expiry]),
+            "eligible": len(subset),
+            "best_holdout_observed": view(max(subset, key=lambda r:r["holdout"]["win_rate"]))
+                if subset else None}
+    smc = [view(r) for r in rows if r["strategy"]=="smc_sweep_choch_fvg_50"]
+    flagged = [view(r) for r in rows if r.get("passed_exploratory_threshold")]
+    best_by_strategy = {}
+    for key in sorted(set(r["strategy"] for r in rows)):
+        subset = [r for r in eligible if r["strategy"]==key]
+        best_by_strategy[key] = view(max(subset,key=lambda r:r["holdout"]["win_rate"])) if subset else None
+    return {
+        "models_tested":len(rows), "m1_candles":report.get("m1_candles"),
+        "coverage_pct":report.get("coverage_pct"),
+        "training_selected":report.get("training_selected"),
+        "by_expiry":groups,"by_strategy_observed":best_by_strategy,
+        "smc_all":smc,"exploratory_flags":flagged,
+        "note":"Post-hoc observed maxima are descriptive, not unbiased strategy validation."
+    }
+
+
 def _persist(report):
     with db.SessionLocal() as session:
         session.add(HistoricalResearchReport(
