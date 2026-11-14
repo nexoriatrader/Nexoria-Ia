@@ -246,7 +246,7 @@ def restore_demo_autopilot_consent():
                 except Exception:
                     continue
             reason=None
-            if access_control_enabled() and not access_status(sess,uid)['allowed']:
+            if not access_status(sess,uid)['allowed']:
                 reason='Acesso ao robô expirado ou ainda não ativado'
             if reason is None and (not user or not run or user.selected_mode!='demo' or user.martingale):
                 reason='Retomada bloqueada: configuração ou conta DEMO inválida'
@@ -413,7 +413,7 @@ async def autopilot_once():
                 if not user or user.selected_mode!='demo':
                     disarm_autopilot(uid,'Conta de treinamento indisponível; robô desligado')
                     continue
-                if access_control_enabled() and not access_status(sess,uid)['allowed']:
+                if not access_status(sess,uid)['allowed']:
                     disarm_autopilot(uid,'Acesso do robô expirou: novas compras bloqueadas; contratos existentes serão reconciliados')
                     continue
                 auths=sess.scalars(select(db.Session).where(db.Session.user_id==uid)
@@ -1200,7 +1200,7 @@ async def autopilot_readiness(request:Request,nexora_sid:str|None=Cookie(default
         boundary=latest_risk_session(sess,user.id)
         reason=autopilot_start_blocker(user,orders,after_order_id=boundary.after_order_id if boundary else 0)
         access=access_status(sess,user.id)
-        if access['enforced'] and access['status'] in ('EXPIRED','SUSPENDED'):
+        if access['status']=='SUSPENDED' or (access['enforced'] and access['status']=='EXPIRED'):
             reason='Acesso do robô suspenso ou expirado. Conquiste horas por indicação ou consulte o suporte.'
     return {'ready':reason is None,'reason':reason,'access':access,
             'execution':'DERIV_DEMO_ONLY','real_orders_enabled':False}
@@ -1330,7 +1330,7 @@ async def admin_access_adjust(request:Request,payload:AdminAccessAdjustment):
         sess.commit()
         updated=access_status(sess,subject.id)
     if action in ('suspend','refund_revoke','remove_hours'):
-        if updated['enforced'] and not updated['allowed'] and subject.id in autopilot_enabled:
+        if not updated['allowed'] and subject.id in autopilot_enabled:
             disarm_autopilot(subject.id,
                 'Acesso administrativo suspenso ou expirado; contratos existentes mantidos')
     return {'user_id':subject.id,'access':updated,'action':action}
@@ -1366,7 +1366,7 @@ async def autopilot_start(request:Request,payload:AutoPilotSwitch,
         if blocker:
             raise HTTPException(409,blocker)
         access=access_status(sess,user.id)
-        if access['enforced'] and access['status'] in ('EXPIRED','SUSPENDED'):
+        if access['status']=='SUSPENDED' or (access['enforced'] and access['status']=='EXPIRED'):
             raise HTTPException(403,'Acesso suspenso ou expirado. Novas entradas desabilitadas.')
     # Each manual activation starts a new durable sequence. Historical settled
     # orders still apply to cumulative stop checks but not the new progression.
