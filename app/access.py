@@ -78,11 +78,22 @@ def ensure_referral_link(session, user_id):
     return row.code
 
 
+def ensure_short_referral_slug(session,user_id):
+    """Stable ~8-character alias; server lookup maintains legacy codes."""
+    row=session.get(db.ReferralShortLink,user_id)
+    if row is None:
+        row=db.ReferralShortLink(user_id=user_id,slug=secrets.token_urlsafe(6))
+        session.add(row)
+        session.flush()
+    return row.slug
+
+
 def referral_report(session, user_id):
     code=ensure_referral_link(session,user_id)
+    slug=ensure_short_referral_slug(session,user_id)
     credits=session.scalars(select(db.ReferralCredit).where(
         db.ReferralCredit.referrer_user_id==user_id)).all()
-    return {'user_code':code,'confirmed_referrals':len(credits),
+    return {'user_code':code,'short_code':slug,'confirmed_referrals':len(credits),
             'bonus_hours':sum(c.credited_hours for c in credits)}
 
 
