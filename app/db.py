@@ -80,6 +80,17 @@ class AccessAdminEvent(Base):
     created_at=Column(DateTime(timezone=True),default=utcnow,nullable=False)
 
 
+class OwnerAdminEvent(Base):
+    """Owner-only access interventions without requiring a Deriv identity."""
+    __tablename__='owner_admin_events'
+    id=Column(Integer,primary_key=True)
+    subject_user_id=Column(Integer,ForeignKey('users.id'),nullable=False,index=True)
+    action=Column(String(32),nullable=False)
+    delta_hours=Column(Integer,nullable=True)
+    note=Column(String(255),nullable=False)
+    created_at=Column(DateTime(timezone=True),default=utcnow,nullable=False)
+
+
 class RobotPlan(Base):
     """Saved onboarding preferences; experimental progressions are NOT execution rules."""
     __tablename__ = 'robot_plans'
