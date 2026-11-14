@@ -26,6 +26,9 @@ MAX_SYMBOLS=32
 # A scan may discover several independent signals at the same M1 close.
 # Keep them briefly per user so the executor can submit each one in turn.
 _pending_signals_by_user={}
+_prepared_next_open_by_user={}
+NEXT_OPEN_WINDOW_SECONDS=3.0
+
 EXPIRY={'range_break':3,'forex':15,'step':5,'volatility':5}
 _catalog_cache={}
 _catalog_at={}
@@ -33,10 +36,10 @@ _contract_cache={}
 _last_scan={'status':'NOT_RUN','at':None,'assets':[],'selected':None}
 _log=logging.getLogger('nexora.v2')
 # Controlled DEMO comparison. Roll back without deleting the old setups.
-# Options: confluence_v23, relaxed_v22, strict_v22.
-SIGNAL_PROFILE=os.getenv('NEXORA_SIGNAL_PROFILE','confluence_v23').strip().lower()
-if SIGNAL_PROFILE not in ('confluence_v23','relaxed_v22','strict_v22'):
-    SIGNAL_PROFILE='confluence_v23'
+# Options: next_open_v24, confluence_v23, relaxed_v22, strict_v22.
+SIGNAL_PROFILE=os.getenv('NEXORA_SIGNAL_PROFILE','next_open_v24').strip().lower()
+if SIGNAL_PROFILE not in ('next_open_v24','confluence_v23','relaxed_v22','strict_v22'):
+    SIGNAL_PROFILE='next_open_v24'
 # Keep the old V2.2 function independently testable.
 V22_TEST_MODE=SIGNAL_PROFILE=='relaxed_v22'
 _log.setLevel(logging.INFO)  # Explicitly emit low-volume scanner diagnostics on Render.
@@ -44,6 +47,7 @@ _log.setLevel(logging.INFO)  # Explicitly emit low-volume scanner diagnostics on
 
 def clear_user_signals(user_key):
     """Drop cached signals when starting a fresh evaluation."""
+    _prepared_next_open_by_user.pop(user_key,None)
     _pending_signals_by_user.pop(user_key,None)
     _pending_signals_by_user.pop((user_key,True),None)
     _pending_signals_by_user.pop((user_key,'pullback_v22'),None)
@@ -77,6 +81,9 @@ def pending_queue_key(user_key, filtered=False, strategy_mode=None):
 def has_pending_signals(user_key,*,filtered=False,strategy_mode=None):
     now=time.time()
     queue_key=pending_queue_key(user_key,filtered,strategy_mode)
+    prepared=_prepared_next_open_by_user.get(user_key)
+    if prepared is not None and 0<=now-prepared['target_open_epoch']<=NEXT_OPEN_WINDOW_SECONDS:
+        return True
     return any(0 <= now-(item['last_bar_epoch']+item.get('bar_seconds',60)) <= 50
                for item in _pending_signals_by_user.get(queue_key,[]))
 
@@ -491,17 +498,68 @@ def v23_confluence_signal(item, h1, m15, now):
 
 
 
+def next_open_candidate(item,h1,m5,now):
+    """Prepare a DEMO prediction from CLOSED candles for the next 5-minute open.
+
+    Unlike v2.3, does not use the currently forming candle or claim a
+    newly closed signal. Candidate prediction is therefore one bar older.
+    """
+    if item['family']!='volatility' or len(m5)<85:
+        return None
+    target=(int(now)//300+1)*300
+    # Precompute between 40 and 5 seconds before the next open.
+    remaining=target-now
+    if not 5<=remaining<=40:
+        return None
+    last_close=m5[-1]['epoch']+300
+    if last_close!=target-300:
+        return None
+    base=v23_confluence_signal(item,h1,m5,last_close+0.1)
+    if base is None:
+        return None
+    return {**base,'strategy':'h1_m5_next_open_v24',
+            'target_open_epoch':target,
+            'deadline_epoch':target+NEXT_OPEN_WINDOW_SECONDS,
+            'reason':'Próxima vela M5, análise somente das velas já fechadas; '
+                     +base['reason']}
+
+
+def pop_prepared_next_open(user_key, excluded_symbols=(), now=None):
+    now=time.time() if now is None else now
+    candidate=_prepared_next_open_by_user.get(user_key)
+    if not candidate:
+        return None
+    if now>candidate['deadline_epoch']:
+        _prepared_next_open_by_user.pop(user_key,None)
+        return None
+    if candidate['symbol'] in excluded_symbols:
+        _prepared_next_open_by_user.pop(user_key,None)
+        return None
+    if candidate['target_open_epoch']<=now<=candidate['deadline_epoch']:
+        _prepared_next_open_by_user.pop(user_key,None)
+        return dict(candidate)
+    return None
+
+
 async def select_demo_signal(*, exclude_symbols=(), user_key=None, filtered=False, strategy_mode=None):
     """Select confirmed V2.2 H1/M15 candidates (or legacy M1) for DEMO."""
     global _last_scan
     exclude=set(exclude_symbols)
+    # 2.4 candidate is prepared beforehand and consumed at the opening.
+    if SIGNAL_PROFILE=='next_open_v24':
+        ready=pop_prepared_next_open(user_key,exclude)
+        if ready is not None:
+            return ready
+        waiting=_prepared_next_open_by_user.get(user_key)
+        if waiting is not None and time.time()<waiting['target_open_epoch']:
+            return None
     # Never reuse a setup after its 50-second post-candle freshness window.
     effective_mode=effective_strategy_mode(strategy_mode)
     market='volatility' if effective_mode=='volatility_v22' else 'forex'
     queue_key=pending_queue_key(user_key,filtered,strategy_mode)
     queued=_pending_signals_by_user.get(queue_key,[])
     now=time.time()
-    while queued:
+    while queued and SIGNAL_PROFILE!='next_open_v24':
         item=queued.pop(0)
         if item['symbol'] not in exclude and 0 <= now-(item['last_bar_epoch']+item.get('bar_seconds',60)) <= 50:
             return item
@@ -535,11 +593,13 @@ async def select_demo_signal(*, exclude_symbols=(), user_key=None, filtered=Fals
                 if effective_mode in ('pullback_v22','volatility_v22'):
                     snapshot=time.time()
                     timeframe=(300 if item['family']=='volatility' and
-                               SIGNAL_PROFILE=='confluence_v23' else 900)
+                               SIGNAL_PROFILE in ('confluence_v23','next_open_v24') else 900)
                     h1,m15=await asyncio.gather(
                         fetch_closed_timeframe(symbol,3600,105,now=snapshot),
                         fetch_closed_timeframe(symbol,timeframe,115,now=snapshot))
-                    candidate=(v23_confluence_signal(item,h1,m15,snapshot)
+                    candidate=(next_open_candidate(item,h1,m15,time.time())
+                               if SIGNAL_PROFILE=='next_open_v24' else
+                               v23_confluence_signal(item,h1,m15,snapshot)
                                if SIGNAL_PROFILE=='confluence_v23' else
                                v22_pullback_signal(item,h1,m15,snapshot))
                     candles_checked=len(m15)
@@ -569,11 +629,20 @@ async def select_demo_signal(*, exclude_symbols=(), user_key=None, filtered=Fals
     signals=[candidate for candidate,_ in result if candidate]
     signals.sort(key=lambda x:(-int(x.get('score',0)),x['symbol']))
     chosen=signals[0] if signals else None
-    _pending_signals_by_user[queue_key]=signals[1:]
+    if SIGNAL_PROFILE=='next_open_v24':
+        if chosen:
+            _prepared_next_open_by_user[user_key]=dict(chosen)
+            _log.warning('V2.4 prepared: symbol=%s score=%s target=%s lead_s=%.3f',
+                         chosen['symbol'],chosen['score'],chosen['target_open_epoch'],
+                         chosen['target_open_epoch']-time.time())
+        chosen=None  # Preparations are NEVER executable before the next bar.
+        _pending_signals_by_user[queue_key]=[]
+    else:
+        _pending_signals_by_user[queue_key]=signals[1:]
     rows=[row for _,row in result]
-    status='SIGNAL' if chosen else (
+    status='PREPARED_NEXT_OPEN' if SIGNAL_PROFILE=='next_open_v24' and signals else ('SIGNAL' if chosen else (
         'MARKET_DATA_UNAVAILABLE' if all(x['status'] in (
-            'MARKET_DATA_ERROR','CALL_PUT_OR_DURATION_UNAVAILABLE') for x in rows) else 'NO_SIGNAL')
+            'MARKET_DATA_ERROR','CALL_PUT_OR_DURATION_UNAVAILABLE') for x in rows) else 'NO_SIGNAL'))
     _last_scan={'status':status,'at':stamp,'assets':rows,
                 'selected':chosen,'catalogue_size':total,'batch_size':len(rows),
                 'next_scan_offset':None,'market':market}
