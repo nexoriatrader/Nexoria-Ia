@@ -1298,6 +1298,22 @@ def require_nexora_admin(request):
     return 'Admin'
 
 
+@app.get('/api/admin/research/volatility100-30d')
+async def admin_historical_research(request:Request):
+    """Owner-only stored research report; no broker calls or public data exposure."""
+    require_nexora_admin(request)
+    try:
+        report=await asyncio.to_thread(latest_study)
+    except Exception:
+        log.exception('Admin research read failed')
+        raise HTTPException(503,'Relatório temporariamente indisponível') from None
+    if report is None:
+        return {'state':'PENDING','symbol':'1HZ100V','message':
+                'A coleta automática ainda não produziu um relatório válido.',
+                'orders_sent':0,'execution_enabled':False}
+    return report
+
+
 class AdminAccessAdjustment(BaseModel):
     user_id:int
     action:str
