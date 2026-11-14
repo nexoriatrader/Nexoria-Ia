@@ -339,22 +339,24 @@ def v2_symbol_recovery(sess,user,orders,plan,cycle_cfg,batch):
     return entry,last
 
 
-def v24_recovery_timing(settled_at, *, now=None):
-    """Deterministic next-M5 recovery gate after confirmed broker settlement.
+def v24_recovery_timing(settled_at, *, now=None, bar_seconds=300):
+    """Next M5 (Volatility) or M15 (Forex) gate after verified settlement.
 
     Returns (target_open_epoch, ready_now, warmup_now).
     Never permit the candle already underway at the settlement timestamp.
     """
+    if bar_seconds not in (300,900):
+        raise ValueError('Timeframe de recuperação inválido')
     current=time.time() if now is None else float(now)
     if settled_at.tzinfo is None:
         settled_at=settled_at.replace(tzinfo=timezone.utc)
     settled_ts=settled_at.timestamp()
-    target=int(current//300)*300
+    target=int(current//bar_seconds)*bar_seconds
     if current>target+3:
-        target+=300
+        target+=bar_seconds
     # A recovery always follows, never precedes, confirmed settlement.
     if target<=settled_ts:
-        target=(int(settled_ts//300)+1)*300
+        target=(int(settled_ts//bar_seconds)+1)*bar_seconds
     remaining=target-current
     ready=target<=current<=target+3 and settled_ts<target
     warmup=10<=remaining<=45 and settled_ts<target
@@ -475,10 +477,12 @@ async def autopilot_once():
                     # Otherwise Martingale follows a cold OTP+WS connection and
                     # commonly misses the three-second M5 opening window.
                     if (batch and SIGNAL_PROFILE=='next_open_v24'
-                        and active_market()=='volatility'
-                        and last is not None and last.duration_minutes==5):
+                        and last is not None
+                        and last.duration_minutes in (5,15)
+                        and (active_market()=='volatility' if last.duration_minutes==5
+                             else active_market()=='forex')):
                         recovery_target,recovery_ready,should_warm=(
-                            v24_recovery_timing(settlement))
+                            v24_recovery_timing(settlement,bar_seconds=last.duration_minutes*60))
                         if should_warm:
                             warm_start=time.monotonic()
                             warmed=await prepare_demo_buy_socket(token,user.deriv_account_id)
@@ -486,7 +490,7 @@ async def autopilot_once():
                                         'ready='+str(warmed)+
                                         ' latency_s=%.3f' % (time.monotonic()-warm_start))
                         if not recovery_ready:
-                            autopilot_reasons[uid]='Recuperação aguardando abertura M5 após liquidação'
+                            autopilot_reasons[uid]='Recuperação aguardando próxima abertura M'+str(last.duration_minutes)+' após liquidação'
                             continue
                     if batch: log_v2_gate(uid,'RECOVERY_PENDING')
                     candidate={'strategy':entry.strategy or 'recuperacao',
@@ -568,7 +572,7 @@ async def autopilot_once():
                 if entry.retry and not batch and entry.symbol!=SYMBOL:
                     disarm_autopilot(uid,'O ativo anterior não está disponível para recuperação')
                     continue
-                if batch and not entry.retry and candidate.get('strategy')!='h1_m5_next_open_v24':
+                if batch and not entry.retry and candidate.get('strategy') not in ('h1_m5_next_open_v24','h1_m15_next_open_v24'):
                     # The v2.4 buy proposal itself retains payout validation.
                     # Fresh entries have two proposal checks. For recovery,
                     # skip this redundant preflight; the actual broker proposal
@@ -595,13 +599,14 @@ async def autopilot_once():
                 continue
             deadline_for_buy=None
             timed_v24=(bool(batch) and SIGNAL_PROFILE=='next_open_v24'
-                       and active_market()=='volatility'
-                       and candidate['minutes']==5)
+                       and candidate['minutes'] in (5,15)
+                       and active_market()==('volatility' if candidate['minutes']==5 else 'forex'))
             if timed_v24:
                 dispatch_at=time.time()
                 # Fresh signal uses its prepared boundary. Recoveries may only
                 # send at a five-minute opening; never invent a fresh signal.
-                target=(v24_recovery_timing(last.updated_at,now=dispatch_at)[0]
+                target=(v24_recovery_timing(last.updated_at,now=dispatch_at,
+                          bar_seconds=last.duration_minutes*60)[0]
                         if entry.retry and last is not None
                         else candidate.get('target_open_epoch'))
                 if target is None:
@@ -612,9 +617,9 @@ async def autopilot_once():
                     if not entry.retry:
                         log.warning('V2.4 skipped late candidate: symbol=%s delta_s=%.3f',
                                     candidate['symbol'],dispatch_at-target)
-                    autopilot_reasons[uid]=('Aguardando próxima abertura M5 para recuperação'
+                    autopilot_reasons[uid]=('Aguardando próxima abertura M'+str(candidate['minutes'])+' para recuperação'
                                            if entry.retry else
-                                           'Sinal M5 descartado: fora da abertura da vela')
+                                           'Sinal M'+str(candidate['minutes'])+' descartado: fora da abertura da vela')
                     continue
             autopilot_last_attempt[uid]=now
             key='auto-'+secrets.token_hex(16)
