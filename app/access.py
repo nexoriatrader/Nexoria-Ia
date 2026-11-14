@@ -1,7 +1,7 @@
 """DEMO-only robot access window. No payment credentials stored here.
 
 Enable NEXORA_ACCESS_CONTROL_ENABLED=true only after product/onboarding
-testing. One configurable trial (7 days by default, 24h for controlled testing) is issued on the first explicitly confirmed start.
+testing. Trial is 24h by default, starting with first verified Deriv registration for new users.
 All reads use server time; logout/login never renews the trial.
 """
 import os
@@ -12,11 +12,11 @@ from . import db
 
 
 def trial_duration_hours():
-    """Seven-day commercial trial; a controlled 24h pilot can set 24."""
+    """24-hour trial; optionally 7 days only when explicitly configured."""
     try:
         hours=int(os.getenv('NEXORA_TRIAL_HOURS','24'))
     except ValueError:
-        hours=168
+        hours=24
     return hours if hours in (24,168) else 24
 
 
@@ -40,13 +40,14 @@ def access_status(session, user_id, now=None):
                 'access_kind':grant.access_kind if grant else None,
                 'expires_at':utc(grant.expires_at).isoformat() if grant else None}
     if grant is None:
-        return {'enforced':True,'allowed':False,'status':'TRIAL_AVAILABLE',
+        return {'enforced':True,'allowed':True,'status':'TRIAL_AVAILABLE',
                 'access_kind':None,'expires_at':None,'trial_hours':trial_duration_hours()}
     expiry=utc(grant.expires_at)
     allowed=now<expiry and not grant.suspended
     return {'enforced':True,'allowed':allowed,
             'status':'SUSPENDED' if grant.suspended else ('ACTIVE' if allowed else 'EXPIRED'),
-            'access_kind':grant.access_kind,'suspended':bool(grant.suspended),'expires_at':expiry.isoformat()}
+            'access_kind':grant.access_kind,'suspended':bool(grant.suspended),'expires_at':expiry.isoformat(),
+            'server_time':now.isoformat(),'remaining_seconds':max(0,int((expiry-now).total_seconds())) if allowed else 0}
 
 
 def start_trial_on_first_robot_start(session,user_id,now=None):
