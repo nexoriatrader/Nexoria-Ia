@@ -453,7 +453,7 @@ button.choose-account:focus-visible{outline:3px solid #71d2ff;outline-offset:4px
       </div>
     </div>
     <div class="robot-details-content" aria-label="Análise do Robô Trader IA">
-      <p id="autopilotVersion" class="helper"><strong>Robô Trader I.A 2.2:</strong></p>
+      <p id="autopilotVersion" class="helper"><strong>Robô Trader I.A</strong></p>
       <div class="market-schedule" aria-label="Cronograma automático de mercados" role="status">
         <div class="market-schedule-row"><span class="market-schedule-dot active" id="forexScheduleDot"></span><span>Forex</span><strong id="forexScheduleStatus">Verificando horário</strong></div>
         <div class="market-schedule-row"><span class="market-schedule-dot" id="volScheduleDot"></span><span>Deriv (Volatility)</span><strong id="volScheduleStatus">Verificando horário</strong></div>
@@ -691,7 +691,7 @@ async function refreshDashboard(){
      :(status.interrupted_after_restart?'Execução interrompida. Confira o aviso antes de ativar.'
        :available?'Análises pausadas. Ative quando desejar.':'AutoPilot indisponível.');
    const isV2=status.autopilot_version==='V2_MULTI_ASSET';
-   $('autopilotVersion').textContent='Robô Trader I.A 2.2:';
+   $('autopilotVersion').textContent='Robô Trader I.A';
    // Match the server's active_market() UTC session rule, regardless of robot ON/OFF.
    const scheduleNow=new Date(), utcDay=scheduleNow.getUTCDay(), utcHour=scheduleNow.getUTCHours();
    const forexSelected=utcDay>=1&&utcDay<=5&&utcHour>=8&&utcHour<17;
@@ -708,6 +708,10 @@ async function refreshDashboard(){
      req('/api/autopilot/v2/scanner-status').then(data=>{
        if(sequence!==dashboardStatusSequence)return;
        const scan=data.scan||{};
+       $('autopilotVersion').textContent=scan.profile==='confluence_v23'
+         ?'Robô Trader I.A 2.3 · Confluência DEMO'
+         :scan.profile==='relaxed_v22'?'Robô Trader I.A 2.2 · Teste simplificado'
+         :'Robô Trader I.A 2.2';
        const at=scan.at?new Date(scan.at):null;
        const validDate=at&&!Number.isNaN(at.getTime());
        const timeText=validDate?at.toLocaleTimeString('pt-BR',{timeZone:'America/Sao_Paulo'}):'—';
