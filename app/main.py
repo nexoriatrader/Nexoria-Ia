@@ -1690,6 +1690,8 @@ async def autopilot_strategy_stats(request:Request,nexora_sid:str|None=Cookie(de
         records=session.execute(statement).all()
     summary={}
     for attribution,order in records:
+        if order.state=='CANCELLED':
+            continue  # Never transmitted to the broker; not a trade.
         item=summary.setdefault(attribution.strategy,{'strategy':attribution.strategy,
             'settled':0,'wins':0,'losses':0,'draws':0,'pending':0,'net_pnl':'0.00',
             'win_rate':None,'evidence':'EXPERIMENTAL'})
