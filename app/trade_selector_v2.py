@@ -32,8 +32,13 @@ _catalog_at={}
 _contract_cache={}
 _last_scan={'status':'NOT_RUN','at':None,'assets':[],'selected':None}
 _log=logging.getLogger('nexora.v2')
-# Temporary DEMO test; set NEXORA_V22_TEST_MODE=false to restore strict H1/M15.
-V22_TEST_MODE=os.getenv('NEXORA_V22_TEST_MODE','true').lower()=='true'
+# Controlled DEMO comparison. Roll back without deleting the old setups.
+# Options: confluence_v23, relaxed_v22, strict_v22.
+SIGNAL_PROFILE=os.getenv('NEXORA_SIGNAL_PROFILE','confluence_v23').strip().lower()
+if SIGNAL_PROFILE not in ('confluence_v23','relaxed_v22','strict_v22'):
+    SIGNAL_PROFILE='confluence_v23'
+# Keep the old V2.2 function independently testable.
+V22_TEST_MODE=SIGNAL_PROFILE=='relaxed_v22'
 _log.setLevel(logging.INFO)  # Explicitly emit low-volume scanner diagnostics on Render.
 
 
@@ -85,7 +90,8 @@ def last_scan_report():
             'catalogue_size':_last_scan.get('catalogue_size'),
             'batch_size':_last_scan.get('batch_size'),
             'next_scan_offset':_last_scan.get('next_scan_offset'),
-            'market':_last_scan.get('market')}
+            'market':_last_scan.get('market'),
+            'profile':SIGNAL_PROFILE}
 
 
 
@@ -401,6 +407,88 @@ def v22_pullback_signal(item, h1, m15, now):
     return None
 
 
+def v23_confluence_signal(item, h1, m15, now):
+    """Experimental 70/100 confluence on verified, CLOSED H1/M15 candles only.
+
+    Scores are hypotheses to evaluate against official DEMO settlements, not
+    calibrated probabilities or profitability guarantees.
+    """
+    if len(h1)<85 or len(m15)<85:
+        return None
+    if any(b['epoch']-a['epoch']!=3600 for a,b in zip(h1[-7:-1],h1[-6:])):
+        return None
+    if any(b['epoch']-a['epoch']!=900 for a,b in zip(m15[-19:-1],m15[-18:])):
+        return None
+    closed=m15[-1]['epoch']+900
+    if not 0<=now-closed<=50:
+        return None
+    moment=datetime.fromtimestamp(closed,timezone.utc)
+    if item['family']=='forex' and not (moment.weekday()<5 and 8<=moment.hour<17):
+        return None
+    eh=ema_values([b['close'] for b in h1])
+    em=ema_values([b['close'] for b in m15])
+    if len(eh)<5 or len(em)<20:
+        return None
+
+    # Mandatory 30-point H1 trend + 25-point M15 candle alignment.
+    if h1[-1]['close']>eh[-1] and eh[-1]>eh[-4]:
+        direction='CALL'
+    elif h1[-1]['close']<eh[-1] and eh[-1]<eh[-4]:
+        direction='PUT'
+    else:
+        return None
+    confirm=m15[-1]
+    aligns=(confirm['close']>confirm['open'] and confirm['close']>em[-1]
+            if direction=='CALL' else
+            confirm['close']<confirm['open'] and confirm['close']<em[-1])
+    if not aligns:
+        return None
+    ranges=[bar['high']-bar['low'] for bar in m15[-15:-1]]
+    avg_range=mean(ranges)
+    if avg_range<=0:
+        return None
+    confirm_range=confirm['high']-confirm['low']
+    # An abnormally huge entry candle is not worth chasing even in test mode.
+    if confirm_range>3*avg_range:
+        return None
+
+    # Either a pullback near M15 EMA50 OR a clear preceding high/low breakout.
+    recent_pullback=False
+    for offset in range(2,6):
+        candle=m15[-offset]
+        near=(abs(candle['low']-em[-offset])<=0.55*avg_range if direction=='CALL'
+              else abs(candle['high']-em[-offset])<=0.55*avg_range)
+        if near:
+            recent_pullback=True
+            break
+    previous=m15[-2]
+    breakout=(confirm['close']>previous['high'] if direction=='CALL'
+              else confirm['close']<previous['low'])
+    pullback_or_breakout=recent_pullback or breakout
+
+    swings=swing_structure(h1,direction)
+    close_tail=[bar['close'] for bar in m15[-15:]]
+    ema_tail=em[-15:]
+    side=[1 if c>e else (-1 if c<e else 0)
+          for c,e in zip(close_tail,ema_tail)]
+    crosses=sum(side[i]!=0 and side[i-1]!=0 and side[i]!=side[i-1]
+                for i in range(1,len(side)))
+    stable_range=crosses<=2
+    score=55+20*int(pullback_or_breakout)+15*int(swings)+10*int(stable_range)
+    if score<70:
+        return None
+    return {'symbol':item['symbol'],'display_name':item['display_name'],
+            'strategy':'h1_m15_confluence_v23','direction':direction,
+            'minutes':15,'family':item['family'],
+            'last_bar_epoch':confirm['epoch'],'bar_seconds':900,
+            'score':score,
+            'reason':('Confluência H1/M15: '+str(score)+'/100; '
+                      'EMA50 e vela alinhadas; '
+                      'pullback/rompimento='+str(pullback_or_breakout)+
+                      '; swings='+str(swings)+'; lateralização='+str(not stable_range))}
+
+
+
 async def select_demo_signal(*, exclude_symbols=(), user_key=None, filtered=False, strategy_mode=None):
     """Select confirmed V2.2 H1/M15 candidates (or legacy M1) for DEMO."""
     global _last_scan
@@ -447,7 +535,9 @@ async def select_demo_signal(*, exclude_symbols=(), user_key=None, filtered=Fals
                     h1,m15=await asyncio.gather(
                         fetch_closed_timeframe(symbol,3600,105,now=snapshot),
                         fetch_closed_timeframe(symbol,900,115,now=snapshot))
-                    candidate=v22_pullback_signal(item,h1,m15,snapshot)
+                    candidate=(v23_confluence_signal(item,h1,m15,snapshot)
+                               if SIGNAL_PROFILE=='confluence_v23' else
+                               v22_pullback_signal(item,h1,m15,snapshot))
                     candles_checked=len(m15)
                 else:
                     bars=await fetch_candles(symbol,count=120)
@@ -459,7 +549,8 @@ async def select_demo_signal(*, exclude_symbols=(), user_key=None, filtered=Fals
                                  'candles':candles_checked}
                 return candidate,{'symbol':symbol,'status':'SIGNAL',
                                   'strategy':candidate['strategy'],
-                                  'direction':candidate['direction']}
+                                  'direction':candidate['direction'],
+                                  'score':candidate.get('score')}
             except (MarketError,ValueError,TypeError,TimeoutError,OSError) as exc:
                 return None,{'symbol':symbol,'status':'MARKET_DATA_ERROR',
                              'reason':str(exc)[:160]}
@@ -472,7 +563,7 @@ async def select_demo_signal(*, exclude_symbols=(), user_key=None, filtered=Fals
         _log.warning('V2 selector: public research requests exceeded 90 seconds')
         return None
     signals=[candidate for candidate,_ in result if candidate]
-    signals.sort(key=lambda x:(0 if x['strategy']=='rompimento_m1' else 1,x['symbol']))
+    signals.sort(key=lambda x:(-int(x.get('score',0)),x['symbol']))
     chosen=signals[0] if signals else None
     _pending_signals_by_user[queue_key]=signals[1:]
     rows=[row for _,row in result]
@@ -489,8 +580,8 @@ async def select_demo_signal(*, exclude_symbols=(), user_key=None, filtered=Fals
     if not hasattr(select_demo_signal,'_last_summary_at'):
         select_demo_signal._last_summary_at=0.0
     if status!='NO_SIGNAL' or time.monotonic()-select_demo_signal._last_summary_at>=60:
-        _log.warning('V2 scan summary: market=%s mode=%s test_mode=%s assets=%s scanned=%s status=%s counts=%s',
-                  market,effective_mode,V22_TEST_MODE,total,len(rows),status,counts)
+        _log.warning('V2 scan summary: market=%s mode=%s profile=%s assets=%s scanned=%s status=%s counts=%s',
+                  market,effective_mode,SIGNAL_PROFILE,total,len(rows),status,counts)
         select_demo_signal._last_summary_at=time.monotonic()
     # Expose whether a feed failure was mistaken for a lack of setups.
     if status=='MARKET_DATA_UNAVAILABLE':
