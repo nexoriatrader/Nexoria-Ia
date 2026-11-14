@@ -1593,8 +1593,8 @@ async def status(request:Request,nexora_sid:str|None=Cookie(default=None)):
     with db.SessionLocal() as sess:
         interrupted=sess.get(db.RobotRun,user.id) is not None and user.id not in autopilot_enabled
         batch=sess.get(db.PilotValidationBatch,user.id)
-        selected_strategy='pulso_v2' if batch and v2_enabled() else 'unavailable'
-        mode='V2_PULSO' if batch and v2_enabled() else 'V2_MULTI_ASSET' if batch else 'V1_SINGLE_ASSET'
+        selected_strategy='pulso_v2' if v2_enabled() else 'unavailable'
+        mode='V2_PULSO' if v2_enabled() else 'V1_SINGLE_ASSET'
         upgrade_needed=bool(v2_enabled() and batch is None and user.id in autopilot_enabled)
     async with lock:
         engine=rt_for(user)
