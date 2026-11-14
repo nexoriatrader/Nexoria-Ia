@@ -1,7 +1,7 @@
 """Durable database. SQLite allowed only for LOCAL development; production requires Postgres."""
 import os
 from datetime import datetime, timezone
-from sqlalchemy import create_engine, Column, Integer, String, Boolean, DateTime, ForeignKey, Text, UniqueConstraint, Index
+from sqlalchemy import create_engine, Column, Integer, String, Boolean, DateTime, ForeignKey, Text, UniqueConstraint, Index, inspect, text
 from sqlalchemy.orm import declarative_base, sessionmaker
 
 DB_URL = os.getenv('DATABASE_URL', 'sqlite:///./nexora_local.db')
@@ -115,7 +115,15 @@ class PaperTrade(Base):
     __table_args__ = (Index('ix_paper_user_time','user_id','settled_at'),)
 
 
-def init_db(): Base.metadata.create_all(engine)
+def init_db():
+    Base.metadata.create_all(engine)
+    # Backwards-compatible additive migration. Never fabricate official times
+    # for existing contracts or overwrite any pre-existing stored evidence.
+    columns={col['name'] for col in inspect(engine).get_columns('demo_orders')}
+    if 'broker_purchase_at' not in columns:
+        with engine.begin() as conn:
+            conn.execute(text('ALTER TABLE demo_orders ADD COLUMN broker_purchase_at TIMESTAMP WITH TIME ZONE'))
+
 
 
 class DemoOrder(Base):
@@ -138,6 +146,7 @@ class DemoOrder(Base):
     buy_price = Column(String(20), nullable=True)
     pnl = Column(String(30), nullable=True)
     broker_status = Column(String(40), nullable=True)
+    broker_purchase_at = Column(DateTime(timezone=True), nullable=True)  # Deriv-reported, not request time
     error_summary = Column(String(255), nullable=True)
     created_at = Column(DateTime(timezone=True), default=utcnow, nullable=False)
     updated_at = Column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
