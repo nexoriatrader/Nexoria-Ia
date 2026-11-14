@@ -194,6 +194,69 @@ async def demo_proposal(token: str, account_id: str, *, symbol: str,
         raise DemoTradingError("Não foi possível consultar proposal na conta demo") from exc
 
 
+# V2.4 only: an authenticated, warmed DEMO WebSocket can be acquired
+# before a candle opens. No buy or proposal is sent during warming.
+# Memory-only: a Render restart drops all sessions.
+_demo_ready_sockets: dict[str, tuple[float,str,object]] = {}
+_demo_socket_locks: dict[str,asyncio.Lock] = {}
+
+
+def _demo_session_lock(account_id: str) -> asyncio.Lock:
+    return _demo_socket_locks.setdefault(account_id,asyncio.Lock())
+
+
+async def _close_demo_socket(account_id: str) -> None:
+    entry=_demo_ready_sockets.pop(account_id,None)
+    if entry is not None:
+        try:
+            await asyncio.wait_for(entry[2].close(),timeout=2)
+        except Exception:
+            pass
+
+
+async def prepare_demo_buy_socket(token: str, account_id: str) -> bool:
+    """Warm the official DEMO channel well BEFORE the intended entry boundary."""
+    async with _demo_session_lock(account_id):
+        old=_demo_ready_sockets.get(account_id)
+        if old and time.monotonic()-old[0]<90 and old[1]==token and not old[2].close_code:
+            return True
+        await _close_demo_socket(account_id)
+        ws=None
+        try:
+            url=await get_demo_ws_url(token,account_id)
+            ws=await asyncio.wait_for(
+                websockets.connect(url,ping_interval=20,ping_timeout=10),timeout=8)
+            currency=cached_demo_currency(account_id)
+            if currency is None:
+                _,currency=await asyncio.wait_for(_read_balance(ws,7100),timeout=6)
+                remember_demo_currency(account_id,currency)
+            _demo_ready_sockets[account_id]=(time.monotonic(),token,ws)
+            return True
+        except Exception:
+            if ws is not None:
+                try:
+                    await ws.close()
+                except Exception:
+                    pass
+            return False
+
+
+async def _take_warmed_demo_socket(token: str, account_id: str):
+    # Caller must hold _demo_session_lock. Single-use to prevent interleaved
+    # proposal and buy responses across competing automatic orders.
+    entry=_demo_ready_sockets.pop(account_id,None)
+    if not entry:
+        return None
+    created,owner,ws=entry
+    if owner==token and time.monotonic()-created<90 and not ws.close_code:
+        return ws
+    try:
+        await ws.close()
+    except Exception:
+        pass
+    return None
+
+
 async def demo_buy(token: str, account_id: str, *, symbol: str,
                    contract_type: str, stake: str, duration: int,
                    confirm: str, currency: str | None = None,
@@ -207,10 +270,17 @@ async def demo_buy(token: str, account_id: str, *, symbol: str,
     if not isinstance(symbol, str) or not re.fullmatch(r'[A-Za-z0-9_]{2,30}',symbol):
         raise DemoTradingError("Símbolo inválido")
 
-    ws_url = await get_demo_ws_url(token, account_id)
-    try:
-        async with asyncio.timeout(20):
-            async with websockets.connect(ws_url, ping_interval=20, ping_timeout=10) as ws:
+    # The timed V2.4 path consumes a session warmed while the signal was
+    # prepared. With no prepared connection it attempts a cold DEMO channel,
+    # still strictly bound by the original send deadline.
+    async with _demo_session_lock(account_id):
+        warm=await _take_warmed_demo_socket(token,account_id) if latest_buy_send_epoch is not None else None
+        ws=warm
+        try:
+            async with asyncio.timeout(20):
+                if ws is None:
+                    ws_url=await get_demo_ws_url(token,account_id)
+                    ws=await websockets.connect(ws_url,ping_interval=20,ping_timeout=10)
                 if currency is None:
                     currency=cached_demo_currency(account_id)
                     if currency is None:
@@ -270,10 +340,16 @@ async def demo_buy(token: str, account_id: str, *, symbol: str,
                         "broker_start_time": (buy.get("start_time")
                                               if isinstance(buy.get("start_time"),(int,float)) else None),
                         "demo_only": True, "bought": True}
-    except DemoTradingError:
-        raise
-    except Exception as exc:
-        raise DemoTradingError("Não foi possível comprar o contrato demo") from exc
+        except DemoTradingError:
+            raise
+        except Exception as exc:
+            raise DemoTradingError("Não foi possível comprar o contrato demo") from exc
+        finally:
+            if ws is not None:
+                try:
+                    await ws.close()
+                except Exception:
+                    pass
 
 
 async def demo_contract_status(token: str, account_id: str, contract_id: str) -> dict:
