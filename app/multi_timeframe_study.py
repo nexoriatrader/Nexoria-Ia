@@ -9,6 +9,7 @@ import hashlib
 import math
 from datetime import datetime, timezone
 from .m1_history import _read_existing, SYMBOL, MINUTE
+from .smc_study import make_smc_signals
 
 TIMEFRAMES = (1, 3, 5, 15)
 EXPIRIES = (1, 3, 5, 15)
@@ -157,6 +158,19 @@ def analyze_m1(bars):
                 holdout = score(grouped, sig, m1_close, expiry, split, end)
                 rows.append({"timeframe":f"M{tf}", "expiry_minutes":expiry,
                              "strategy":strategy, "training":train, "holdout":holdout})
+    # User-requested SMC candidate: same splits and expiry assumptions.
+    smc_definitions = []
+    for tf in (1, 5):
+        sparse, definition = make_smc_signals(bars, tf)
+        smc_definitions.append(definition)
+        grouped = aggregate(bars, tf)
+        trigger_directions = [sparse.get(bar[0] + (tf-1)*MINUTE, 0) for bar in grouped]
+        for expiry in EXPIRIES:
+            train = score(grouped, trigger_directions, m1_close, expiry, begin, split)
+            holdout = score(grouped, trigger_directions, m1_close, expiry, split, end)
+            rows.append({"timeframe":f"M{tf}", "expiry_minutes":expiry,
+                         "strategy":"smc_sweep_choch_fvg_50",
+                         "training":train, "holdout":holdout})
     # Rank by training profitability, then disclose holdout only after selection.
     eligible = [x for x in rows if x["training"]["signals"] >= 100]
     eligible.sort(key=lambda x: x["training"]["pnl_per_1_usd_at_88pct"] /
@@ -174,6 +188,7 @@ def analyze_m1(bars):
         "m1_candles": len(bars), "split": "70% / 30% chronological, strict expiry boundaries",
         "return_per_win_assumed": PAYOUT, "break_even_rate": round(BREAK_EVEN, 5),
         "models_tested": len(rows),
+        "smc_definitions": smc_definitions,
         "training_selected": {"timeframe":selected["timeframe"],
                               "expiry_minutes":selected["expiry_minutes"],
                               "strategy":selected["strategy"],
