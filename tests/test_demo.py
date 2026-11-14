@@ -8,6 +8,18 @@ from app import demo
 
 DEMO_URL = "wss://api.derivws.com/trading/v1/options/ws/demo?otp=x"
 
+@pytest.fixture(autouse=True)
+def reset_demo_runtime_caches():
+    """Keep WebSocket/currency caches from affecting independent tests."""
+    demo._demo_currency_cache.clear()
+    demo._demo_ready_sockets.clear()
+    demo._demo_socket_locks.clear()
+    yield
+    demo._demo_currency_cache.clear()
+    demo._demo_ready_sockets.clear()
+    demo._demo_socket_locks.clear()
+
+
 
 def test_demo_url_rejects_real_channel():
     with pytest.raises(demo.DemoTradingError):
@@ -127,6 +139,7 @@ def test_demo_buy_uses_demo_channel_and_returns_contract(monkeypatch):
     assert result == {
         "contract_id": "123456", "buy_price": "2.0", "symbol": "1HZ100V",
         "contract_type": "CALL", "duration_minutes": 5, "currency": "EUR",
+        "broker_purchase_time": None, "broker_start_time": None,
         "demo_only": True, "bought": True,
     }
     assert socket.sent[0] == {"balance": 1, "req_id": 7100}
@@ -152,3 +165,75 @@ def test_deriv_error_code_does_not_allow_sensitive_or_untrusted_text():
     with pytest.raises(demo.DemoTradingError) as err:
         asyncio.run(demo._response_for(socket, 7001))
     assert err.value.deriv_code == "UNSPECIFIED"
+
+
+class WarmableSocket(FakeSocket):
+    close_code=None
+    async def close(self):
+        self.close_code=1000
+
+
+class WarmableConnect:
+    def __init__(self,socket):
+        self.socket=socket
+    def __await__(self):
+        async def connect():
+            return self.socket
+        return connect().__await__()
+    async def __aenter__(self):
+        return self.socket
+    async def __aexit__(self,*args):
+        await self.socket.close()
+
+
+def test_v24_warm_demo_connection_and_dispatch_without_reconnect(monkeypatch):
+    async def fake_ws_url(token, account_id):
+        return DEMO_URL
+    socket=WarmableSocket([
+        {"req_id":7100,"balance":{"balance":1000,"currency":"USD"}},
+        {"req_id":7101,"proposal":{"id":"warm-proposal","ask_price":0.5,"payout":0.9}},
+        {"req_id":7102,"buy":{"contract_id":456789,"buy_price":0.5}},
+    ])
+    calls=[]
+    def fake_connect(*args,**kwargs):
+        calls.append(1)
+        return WarmableConnect(socket)
+    monkeypatch.setattr(demo,'get_demo_ws_url',fake_ws_url)
+    monkeypatch.setattr(demo.websockets,'connect',fake_connect)
+    now=[300.4]
+    monkeypatch.setattr(demo.time,'time',lambda:now[0])
+    async def run():
+        assert await demo.prepare_demo_buy_socket('demo-token','V777') is True
+        receipt=await demo.demo_buy('demo-token','V777',
+            symbol='1HZ100V',contract_type='CALL',stake='0.50',
+            duration=5,confirm='DEMO_ONLY',min_payout_ratio='1.50',
+            latest_buy_send_epoch=303)
+        return receipt
+    receipt=asyncio.run(run())
+    assert receipt['contract_id']=='456789'
+    assert len(calls)==1  # one WebSocket opened before the entry
+    assert socket.sent[0]['balance']==1
+    assert socket.sent[1]['proposal']==1
+    assert socket.sent[2]['buy']=='warm-proposal'
+
+
+def test_v24_never_transmits_expired_buy_on_warmed_connection(monkeypatch):
+    async def fake_ws_url(token,account_id):
+        return DEMO_URL
+    socket=WarmableSocket([
+        {"req_id":7100,"balance":{"balance":1000,"currency":"USD"}},
+        {"req_id":7101,"proposal":{"id":"late-proposal","ask_price":0.5,"payout":0.9}},
+    ])
+    monkeypatch.setattr(demo,'get_demo_ws_url',fake_ws_url)
+    monkeypatch.setattr(demo.websockets,'connect',lambda *a,**kw:WarmableConnect(socket))
+    now=[304.5]
+    monkeypatch.setattr(demo.time,'time',lambda:now[0])
+    async def run():
+        await demo.prepare_demo_buy_socket('demo-token','V777')
+        with pytest.raises(demo.DemoPreBuyDeadlineExceeded):
+            await demo.demo_buy('demo-token','V777',
+                symbol='1HZ100V',contract_type='CALL',stake='0.50',
+                duration=5,confirm='DEMO_ONLY',min_payout_ratio='1.50',
+                latest_buy_send_epoch=303)
+    asyncio.run(run())
+    assert all('buy' not in command for command in socket.sent)
