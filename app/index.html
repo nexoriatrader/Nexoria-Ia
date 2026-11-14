@@ -920,7 +920,7 @@ async function loadRobotAccess(){
     accessServerDelta=a.server_time?new Date(a.server_time).getTime()-Date.now():0;
     updateAccessCountdown();
     $('accountUserId').textContent='Meu ID NEXORA: '+String(a.user_id||'—');
-    $('referralLink').value=location.origin+'/i/'+encodeURIComponent(a.short_code);
+    $('referralLink').value=location.origin+'/i/'+encodeURIComponent(a.short_code)+'?v=2';
     $('referralSummary').textContent=(a.confirmed_referrals||0)+' indicações válidas · '+(a.bonus_hours||0)+' horas ganhas';
     if(!a.enforced){
       const expiry=a.expires_at?new Date(a.expires_at):null;
