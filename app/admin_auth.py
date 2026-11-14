@@ -4,6 +4,7 @@ Password hash and HMAC session key are provided by Render environment variables;
 never store credentials in Git, cookies, client JS or the database.
 """
 import base64
+import binascii
 import hashlib
 import hmac
 import os
@@ -74,5 +75,5 @@ def valid_session(token,now=None):
         expected=hmac.new(os.environ['NEXORA_ADMIN_SESSION_SECRET'].encode(),
                           data.encode(),hashlib.sha256).hexdigest()
         return hmac.compare_digest(signature,expected)
-    except (ValueError,UnicodeError,TypeError,OverflowError):
+    except (ValueError,UnicodeError,TypeError,OverflowError,binascii.Error):
         return False
