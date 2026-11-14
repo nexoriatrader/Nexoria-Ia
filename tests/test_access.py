@@ -32,10 +32,10 @@ def test_trial_24h_expires_without_resetting_at_login(monkeypatch):
     engine.dispose()
 
 
-def test_default_is_seven_days_and_gate_is_off(monkeypatch):
+def test_default_is_24_hours_and_gate_is_off(monkeypatch):
     monkeypatch.delenv('NEXORA_ACCESS_CONTROL_ENABLED',raising=False)
     monkeypatch.delenv('NEXORA_TRIAL_HOURS',raising=False)
-    assert access.trial_duration_hours()==168
+    assert access.trial_duration_hours()==24
     engine=create_engine('sqlite:///:memory:')
     db.Base.metadata.create_all(engine)
     factory=sessionmaker(bind=engine)
