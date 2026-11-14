@@ -287,6 +287,24 @@ async def m1_collect_loop():
     except Exception as exc:
         LOG.warning("Research PULSO V1 unavailable: %s: %s",
                     type(exc).__name__, str(exc)[:160])
+    # Fixed v2 directional/regime hypotheses, without any broker transactions.
+    try:
+        from .nexora_pulso_v2 import report as run_pulso_v2
+        v2=await asyncio.wait_for(asyncio.to_thread(run_pulso_v2),timeout=170)
+        ranked=sorted(v2["models"],key=lambda r:r["final"]["win_rate"] or 0,reverse=True)
+        LOG.warning("Research PULSO V2 complete: %s",json.dumps({
+            "models":v2["models_tested"],
+            "candidates":v2["eligible_models"],
+            "selected":v2["selected_from_first_80pct"],
+            "descriptive_best_final":ranked[:5],
+            "by_regime":v2["models"],
+            "orders_sent":0
+        },separators=(",",":")))
+    except asyncio.CancelledError:
+        raise
+    except Exception as exc:
+        LOG.warning("Research PULSO V2 unavailable: %s: %s",
+                    type(exc).__name__,str(exc)[:160])
     while True:
         succeeded = False
         try:
