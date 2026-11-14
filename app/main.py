@@ -294,7 +294,10 @@ def v2_symbol_recovery(sess,user,orders,plan,cycle_cfg,batch):
     # SQL rows have no guaranteed order unless ORDER BY is explicit. The
     # progression validator requires monotonically increasing broker ledger IDs.
     # Sort a new view; never rewrite historical rows or their outcomes.
-    historical=sorted((o for o in orders if o.id>after),key=lambda o:o.id)
+    # A timing-expired V2.4 attempt was cancelled BEFORE broker transmission.
+    # Keep it in the audit ledger but never treat it as a trade or loss.
+    historical=sorted((o for o in orders if o.id>after and o.state!='CANCELLED'),
+                      key=lambda o:o.id)
     if not historical:
         return None,None
     ids=[o.id for o in historical]
