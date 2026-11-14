@@ -164,7 +164,10 @@ async def collect_m1_30_days():
             break
         if earliest >= end:
             raise MarketError("Historical pagination did not advance")
-        end = earliest - 1
+        # Deriv candle boundaries follow the requested end epoch. Advancing
+        # by one second shifts all returned candles to :59 and corrupts M1.
+        # Keep every pagination boundary aligned to a full UTC minute.
+        end = earliest - MINUTE
         if page % 4 == 3:
             await asyncio.sleep(0.25)
     combined = {**retained, **fetched}
