@@ -33,16 +33,18 @@ async def confirmed_pulso_signal():
             return None
         raw=await public_request({
             "ticks_history":SYMBOL,"style":"candles",
-            "granularity":60,"count":140,"end":"latest"
+            "granularity":60,"count":165,"end":"latest"
         },expected="candles",timeout=18)
         data=strict_closed_bars(raw,60,now=time.time())
-        if len(data)<110:
+        if len(data)<135:
             return None
         latest=data[-1]
         # The last completed minute must end at this exact current boundary.
         if latest["epoch"]+60 != bucket:
             return None
-        tail=data[-110:]
+        # Historical V2 must see >110 closed bars: its loop begins
+        # at index 110. Truncating to 110 made every live signal zero.
+        tail=data[-135:]
         if any(tail[i]["epoch"]-tail[i-1]["epoch"]!=60 for i in range(1,len(tail))):
             return None
         rows=[[x["epoch"],x["open"],x["high"],x["low"],x["close"]] for x in tail]
