@@ -10,7 +10,7 @@ from urllib.parse import urlsplit
 import httpx
 import websockets
 from fastapi import FastAPI, HTTPException, Cookie, Request
-from fastapi.responses import FileResponse, RedirectResponse, JSONResponse
+from fastapi.responses import FileResponse, RedirectResponse, JSONResponse, Response
 from pydantic import BaseModel
 from sqlalchemy import select, delete, func
 
@@ -781,6 +781,13 @@ async def short_referral_redirect(slug:str):
         if not original:
             raise HTTPException(404,'Convite não encontrado')
         return RedirectResponse('/?ref='+original.code,status_code=302)
+
+
+@app.get('/social-preview.png')
+async def social_preview_png():
+    from .social_preview import create_social_preview
+    return Response(create_social_preview(),media_type='image/png',
+                    headers={'Cache-Control':'public, max-age=3600'})
 
 
 @app.get('/favicon.svg')
