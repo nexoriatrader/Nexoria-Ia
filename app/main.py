@@ -1565,6 +1565,14 @@ async def perform_demo_buy(user, token, payload:DemoBuy, *, attribution:dict|Non
             if time.time()>latest_buy_send_epoch:
                 raise DemoPreBuyDeadlineExceeded('Janela de compra DEMO expirada')
         receipt=await demo_buy(token, user.deriv_account_id, **buy_kwargs)
+        if latest_buy_send_epoch is not None:
+            target=latest_buy_send_epoch-3.0
+            purchase=receipt.get('broker_purchase_time')
+            start=receipt.get('broker_start_time')
+            log.warning('V2.4 DEMO broker timing: order=%s purchase_offset=%s start_offset=%s',
+                        order_id,
+                        ('%.3f' % (float(purchase)-target)) if purchase is not None else 'UNAVAILABLE',
+                        ('%.3f' % (float(start)-target)) if start is not None else 'UNAVAILABLE')
     except DemoPreBuyDeadlineExceeded:
         # Never sent to broker: safely release reserved DB slot.
         with db.SessionLocal() as s:
