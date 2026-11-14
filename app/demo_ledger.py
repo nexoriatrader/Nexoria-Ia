@@ -1,6 +1,7 @@
 """Fail-closed, demo-only order ledger. No access to real account execution."""
 from __future__ import annotations
 from decimal import Decimal, InvalidOperation
+from datetime import datetime, timezone
 import hashlib
 import re
 from sqlalchemy import select, func
@@ -21,11 +22,25 @@ def money(s):
         raise OrderGuardError('Valor financeiro inválido')
     return d
 
+
+def official_broker_epoch(value):
+    """Convert a broker-provided Unix epoch. Return None for absent/invalid data."""
+    if isinstance(value,bool) or not isinstance(value,(int,float,str)):
+        return None
+    try:
+        numeric=Decimal(str(value))
+        if not numeric.is_finite() or numeric<Decimal('946684800') or numeric>Decimal('4102444800'):
+            return None
+        return datetime.fromtimestamp(float(numeric),timezone.utc)
+    except (InvalidOperation,ValueError,TypeError,OverflowError,OSError):
+        return None
+
 def public_order(o):
     return {'id':o.id,'state':o.state,'contract_id':o.contract_id,
             'symbol':o.symbol,'direction':o.direction,'stake':o.stake,
             'buy_price':o.buy_price,'pnl':o.pnl,'broker_status':o.broker_status,
-            'created_at':o.created_at.isoformat() if o.created_at else None}
+            'created_at':o.created_at.isoformat() if o.created_at else None,
+            'broker_purchase_at':o.broker_purchase_at.isoformat() if o.broker_purchase_at else None}
 
 def order_guard(user, orders, stake, *, after_order_id=0,
                 parallel=False, symbol=None):
@@ -113,6 +128,13 @@ def confirmed(session, order, receipt):
         raise OrderGuardError('Estado de compra inesperado')
     order.contract_id=str(receipt['contract_id'])
     order.buy_price=str(receipt['buy_price'])
+    # Keep only time reported by the broker. Local reservation time is never
+    # a substitute for execution time.
+    instant=official_broker_epoch(receipt.get('broker_purchase_time'))
+    if instant is None:
+        instant=official_broker_epoch(receipt.get('broker_start_time'))
+    if instant is not None:
+        order.broker_purchase_at=instant
     order.state='CONFIRMED'
     session.commit()
 
@@ -128,6 +150,14 @@ def settle(session, order, broker_contract):
         raise OrderGuardError('Contrato sem confirmação para liquidar')
     if str(broker_contract.get('contract_id',''))!=order.contract_id:
         raise OrderGuardError('Identificador retornado não corresponde ao contrato')
+    # Broker contract status may supply the authoritative start time even
+    # when the original buy response omitted it. Backfill only from Deriv.
+    if order.broker_purchase_at is None:
+        instant=official_broker_epoch(broker_contract.get('purchase_time'))
+        if instant is None:
+            instant=official_broker_epoch(broker_contract.get('date_start'))
+        if instant is not None:
+            order.broker_purchase_at=instant
     sold=broker_contract.get('is_sold')
     if sold not in (True, 1, '1'):
         return False
