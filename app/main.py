@@ -542,14 +542,26 @@ async def autopilot_once():
                         continue
             if uid not in autopilot_enabled:
                 continue
-            if candidate.get('strategy')=='h1_m5_next_open_v24':
+            deadline_for_buy=None
+            timed_v24=(bool(batch) and SIGNAL_PROFILE=='next_open_v24'
+                       and active_market()=='volatility'
+                       and candidate['minutes']==5)
+            if timed_v24:
                 dispatch_at=time.time()
-                target=candidate['target_open_epoch']
-                deadline=candidate['deadline_epoch']
-                if not target<=dispatch_at<=deadline:
-                    log.warning('V2.4 skipped late candidate: symbol=%s delta_s=%.3f',
-                                candidate['symbol'],dispatch_at-target)
-                    autopilot_reasons[uid]='Sinal M5 descartado: fora da abertura da vela'
+                # Fresh signal uses its prepared boundary. Recoveries may only
+                # send at a five-minute opening; never invent a fresh signal.
+                target=(int(dispatch_at)//300)*300 if entry.retry else candidate.get('target_open_epoch')
+                if target is None:
+                    log.warning('V2.4 missing prepared opening: symbol=%s',candidate['symbol'])
+                    continue
+                deadline_for_buy=target+3.0
+                if not target<=dispatch_at<=deadline_for_buy:
+                    if not entry.retry:
+                        log.warning('V2.4 skipped late candidate: symbol=%s delta_s=%.3f',
+                                    candidate['symbol'],dispatch_at-target)
+                    autopilot_reasons[uid]=('Aguardando próxima abertura M5 para recuperação'
+                                           if entry.retry else
+                                           'Sinal M5 descartado: fora da abertura da vela')
                     continue
             autopilot_last_attempt[uid]=now
             key='auto-'+secrets.token_hex(16)
@@ -564,9 +576,7 @@ async def autopilot_once():
                                  'gale_multiplier':(plan.requested_multiplier if plan else '2.00'),
                                  'cycle_multiplier':(cycle_cfg.multiplier if cycle_cfg else '2.00')},
                     stake_override=entry.stake,
-                    latest_buy_send_epoch=(candidate.get('deadline_epoch')
-                        if candidate.get('strategy')=='h1_m5_next_open_v24'
-                        else None))
+                    latest_buy_send_epoch=deadline_for_buy)
                 autopilot_reasons[uid]='Contrato DEMO #'+str(result['id'])+' confirmado; aguardando liquidação'
             except HTTPException as exc:
                 msg=str(exc.detail)
