@@ -16,7 +16,8 @@ from sqlalchemy import select, delete
 
 from . import db
 from .demo import (DemoTradingError, DemoPreBuyDeadlineExceeded, demo_account_balance,
-                   demo_contract_status, demo_buy, demo_proposal)
+                   demo_contract_status, demo_buy, demo_proposal,
+                   prepare_demo_buy_socket)
 from .demo_ledger import OrderGuardError, reserve, public_order, confirmed, unknown, settle
 from .autopilot import analyze, quote_assessment
 from .engine import Engine, Settings
@@ -483,6 +484,13 @@ async def autopilot_once():
                         if candidate is None:
                             state=last_scan_report()
                             status=state.get('status','UNKNOWN')
+                            if status=='PREPARED_NEXT_OPEN' and SIGNAL_PROFILE=='next_open_v24':
+                                # Warm connection while the signal is queued; never
+                                # transmit any buy before the opening deadline.
+                                warm_start=time.monotonic()
+                                warmed=await prepare_demo_buy_socket(token,user.deriv_account_id)
+                                log.warning('V2.4 Deriv warmup: ready=%s latency_s=%.3f',
+                                            warmed,time.monotonic()-warm_start)
                             log_v2_gate(uid,'SCAN_'+status,'market='+str(state.get('market','?')))
                             if status=='OUTSIDE_TRADING_SESSION':
                                 autopilot_reasons[uid]='AutoPilot 2.2: fora do horário de análise (05h às 14h, Brasília)'
