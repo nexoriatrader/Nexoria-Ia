@@ -783,6 +783,11 @@ async def short_referral_redirect(slug:str):
         return RedirectResponse('/?ref='+original.code,status_code=302)
 
 
+@app.get('/favicon.svg')
+async def favicon_svg():
+    return FileResponse(Path(__file__).parent/'static'/'favicon.svg',media_type='image/svg+xml')
+
+
 @app.get('/brand/logo.png')
 async def brand_logo(): return FileResponse(Path(__file__).parent/'static'/'logo-nexora.png', media_type='image/png')
 
