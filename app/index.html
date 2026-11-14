@@ -342,7 +342,7 @@ body.marketing-mode .section-foot{margin-top:0}
 .lp-strip{border:1px solid #c99f47;background:linear-gradient(100deg,#3b3b31aa,#0e2b3e,#393a31aa);border-radius:24px;display:grid;grid-template-columns:repeat(3,1fr);margin:37px 7px;padding:24px;box-shadow:0 0 20px #f8bd4e2c}
 .lp-strip>div{display:flex;align-items:center;justify-content:center;gap:14px;font-size:16px;font-weight:700;padding:5px 15px}
 .lp-strip>div+div{border-left:1px solid #c19b57}.lp-strip span{font-size:28px;color:#f4c45c}
-.lp-final{display:flex;align-items:center;justify-content:space-between;gap:27px;padding:45px 38px 36px}
+.lp-final{position:relative;z-index:3;display:flex;align-items:center;justify-content:space-between;gap:27px;padding:45px 38px 36px}.lp-final .lp-button{position:relative;z-index:4;pointer-events:auto;touch-action:manipulation}
 .lp-final h2{font-size:clamp(27px,3.5vw,45px);line-height:1.15;letter-spacing:-.04em}.lp-final h2 strong{color:#f5c25a}
 .lp-disclaimer{color:#8faabc;font-size:12px;text-align:center;padding:15px 25px;border-top:1px solid #27516a}
 @media(max-width:1050px){.lp-logo img{width:190px}.lp-links{gap:16px}.lp-hero{gap:17px}.lp-card{padding:22px 17px}.lp-card h3{font-size:19px}}
@@ -391,7 +391,7 @@ body.marketing-mode .section-foot{margin-top:0}
    <h1 id="landingHeading">O robô trader automático <em>mais fácil de usar</em></h1>
    <p class="lp-subtitle">Experimente o NEXORA IA gratuitamente por 24 horas. Configure suas estratégias, e deixe que o robô trabalhe sozinho.</p>
    <div class="lp-actions">
-    <a class="lp-button lp-button-primary" href="/auth/deriv/start">Teste grátis por 24h <span aria-hidden="true">➜</span></a>
+    <a id="lpHeroTrialButton" class="lp-button lp-button-primary" href="/auth/deriv/start" onclick="startNexoraTrial(event)">Teste grátis por 24h <span aria-hidden="true">➜</span></a>
    </div>
    <div class="lp-proof"><span><b aria-hidden="true">✓</b> Conexão oficial Deriv</span><span><b aria-hidden="true">ϟ</b> Ativação em poucos passos</span><span><b aria-hidden="true">▥</b> Gestão de risco</span></div>
   </div>
@@ -403,11 +403,11 @@ body.marketing-mode .section-foot{margin-top:0}
     <div class="lp-mock-control"><div class="lp-mock-start">LIGAR ROBÔ</div><div class="lp-mock-status"><strong><span class="lp-mock-dot"></span>ROBÔ OFFLINE</strong><p>Análises pausadas. Ative quando desejar.</p></div></div>
    </div>
    <div class="lp-mock-metrics" aria-label="Ambientes de operação">
-     <div class="lp-mock-metric lp-mock-environment"><small><span class="lp-mock-metric-symbol" aria-hidden="true">▥</span> Ambiente</small><strong>Treinamento</strong><p>Pratique estratégias com saldo virtual</p></div>
-     <div class="lp-mock-metric lp-mock-environment"><small><span class="lp-mock-metric-symbol" aria-hidden="true">↗</span> Ambiente</small><strong>Conta Real</strong><p>Planejado para a próxima etapa</p></div>
+     <div class="lp-mock-metric lp-mock-environment"><small><span class="lp-mock-metric-symbol" aria-hidden="true">▥</span> Ambiente</small><strong>Treinamento</strong><p>Teste e ajuste suas estratégias</p></div>
+     <div class="lp-mock-metric lp-mock-environment"><small><span class="lp-mock-metric-symbol" aria-hidden="true">↗</span> Ambiente</small><strong>Conta Real</strong><p>Automação e estratégias na sua conta</p></div>
    </div>
    <div class="lp-mock-capabilities"><span>▥ Scanner IA</span><span>◎ Estratégias personalizadas</span></div>
-   <p class="lp-preview-disclaimer">Prévia ilustrativa · Automação disponível atualmente apenas em treinamento DEMO</p>
+   <p class="lp-preview-disclaimer">Painel ilustrativo · Os controles reais estão disponíveis após habilitação</p>
   </div>
  </div>
  <section id="recursos" class="lp-section" aria-labelledby="lpFeaturesTitle">
@@ -432,7 +432,7 @@ body.marketing-mode .section-foot{margin-top:0}
   <div><span aria-hidden="true">▥</span> Painel intuitivo</div>
   <div><span aria-hidden="true">▥</span> Resultados registrados</div>
  </div>
- <div class="lp-final"><h2>Comece agora com <br><strong>24 horas grátis</strong></h2><a class="lp-button lp-button-primary" href="/auth/deriv/start">Quero testar o NEXORA IA <span aria-hidden="true">➜</span></a></div>
+ <div class="lp-final"><h2>Comece agora com <br><strong>24 horas grátis</strong></h2><a id="lpFinalTrialButton" class="lp-button lp-button-primary" href="/auth/deriv/start" onclick="startNexoraTrial(event)" aria-label="Iniciar teste gratuito NEXORA IA de 24 horas">Quero testar o NEXORA IA <span aria-hidden="true">➜</span></a></div>
  <p class="lp-disclaimer">NEXORA IA é uma plataforma de automação em fase de testes. Operações envolvem riscos e não há garantia de lucro. A execução automática disponível é em conta DEMO.</p>
 </section>
 <section id="setup" class="robot-setup hidden" aria-labelledby="setupTitle">
@@ -685,6 +685,15 @@ function updateResultsPolling(){
 function go(v){toggleMenu(false);page(v);updateResultsPolling();window.scrollTo({top:0,behavior:'smooth'});if(v==='setup')loadOnboarding();if(v==='dashboard')refreshDashboard();if(v==='results'){loadDemoOrders();}if(v==='account'){loadDemoBalance();loadRobotAccess()}if(v==='settings')loadSettings()}
 function fail(msg){$('error').textContent=msg||''}
 async function req(path,opts={}){const r=await fetch(path,{credentials:'same-origin',...opts});let data;try{data=await r.json()}catch{throw Error('Resposta inválida do servidor')}if(!r.ok)throw Error(data.detail||'Falha na conexão');return data}
+function startNexoraTrial(event){
+ // Both landing CTA buttons share the same validated destination.
+ if(event&&event.button!==undefined&&event.button!==0)return;
+ if(event&&(event.ctrlKey||event.metaKey||event.shiftKey||event.altKey))return;
+ if(event)event.preventDefault();
+ const ref=new URLSearchParams(window.location.search).get('ref');
+ const url='/auth/deriv/start'+(ref&&/^[A-Za-z0-9_-]{8,32}$/.test(ref)?'?ref='+encodeURIComponent(ref):'');
+ window.location.assign(url);
+}
 async function init(){
  const ref=new URLSearchParams(location.search).get('ref');
  if(ref&&/^[A-Za-z0-9_-]{8,32}$/.test(ref)){
