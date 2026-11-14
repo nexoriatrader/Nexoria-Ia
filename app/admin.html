@@ -52,7 +52,7 @@ tr[data-id]{cursor:pointer}tr[data-id]:hover,tr[data-id].selected{background:#20
 <div class="research-warning" style="margin-top:12px" id="m1Coverage" role="status">Histórico M1: consultando cobertura da Deriv...</div>
 <div class="card" style="margin-top:14px;background:#0b1c2b;border-color:#32506b">
 <h3 style="margin:0 0 10px;font-size:15px">Estudo M1 · M3 · M5 · M15</h3>
-<p class="small-note">96 combinações exploratórias: 4 tempos gráficos × 4 expirações × 6 estratégias. Apenas simulação; pagamentos históricos não verificados.</p>
+<p class="small-note">104 combinações exploratórias: 96 testes técnicos e aleatórios + 8 testes da estratégia H1/M15 + Sweep + CHoCH + reteste (M1/M5). Sem ordens; payout histórico não verificado.</p>
 <div class="buttons"><button class="secondary" type="button" onclick="loadMultiResearch()">VER ESTUDO MULTITIMEFRAME</button></div>
 <div id="multiStatus" class="small-note" role="status" style="margin-top:10px">Aguardando consulta...</div>
 <div id="multiBody" hidden>
@@ -108,7 +108,8 @@ async function loadMultiResearch(){
   $('multiRows').replaceChildren();
   for(const item of sorted.slice(0,30)){
    const tr=document.createElement('tr'),v=item.holdout||{};
-   const values=[item.timeframe,item.expiry_minutes+' min',item.strategy,v.signals,fmtPct(v.win_rate),v.pnl_per_1_usd_at_88pct];
+   const name=item.strategy==='smc_sweep_choch_fvg_50'?'SMC: Sweep + CHoCH + FVG/50%':item.strategy;
+   const values=[item.timeframe,item.expiry_minutes+' min',name,v.signals,fmtPct(v.win_rate),v.pnl_per_1_usd_at_88pct];
    values.forEach((value,index)=>{const td=document.createElement('td');td.textContent=String(value??'—');
    if(index===5)td.className=Number(value)>=0?'positive':'negative';tr.append(td)});
    $('multiRows').append(tr);
