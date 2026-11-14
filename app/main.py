@@ -24,7 +24,8 @@ from .market import MarketError, discover_symbols, discover_contracts, indicativ
 from .strategy_lab import run_lab
 from .asset_scanner import scan_assets
 from .trade_selector_v2 import (select_demo_signal, last_scan_report, has_pending_signals,
-                                active_market, catalogue, supported, fetch_closed_timeframe)
+                                active_market, catalogue, supported, fetch_closed_timeframe,
+                                SIGNAL_PROFILE)
 from .progression import next_entry, ProgressionHalt, NextEntry
 from .security import CLIENT_ID, REDIRECT, TOKEN_URL, build_authorize_url, make_login, make_session_id, hashsecret, encrypt, decrypt, cookie_options
 
@@ -598,7 +599,7 @@ async def autopilot_loop():
         except asyncio.CancelledError:
             raise
         except Exception as exc:
-            log.warning('AutoPilot loop error: %s',type(exc).__name__)
+            log.exception('AutoPilot loop error')
         await asyncio.sleep(1)
 
 
