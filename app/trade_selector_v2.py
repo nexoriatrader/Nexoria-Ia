@@ -498,30 +498,36 @@ def v23_confluence_signal(item, h1, m15, now):
 
 
 
-def next_open_candidate(item,h1,m5,now):
-    """Prepare a DEMO prediction from CLOSED candles for the next 5-minute open.
+def next_open_candidate(item,h1,bars,now):
+    """Prepare next-bar DEMO forecast from CLOSED candles only.
 
-    Unlike v2.3, does not use the currently forming candle or claim a
-    newly closed signal. Candidate prediction is therefore one bar older.
+    Volatility: H1/M5; Forex: H1/M15 during the allowed UTC trading session.
+    The currently forming bar is never read, and no order is placed here.
     """
-    if item['family']!='volatility' or len(m5)<85:
+    family=item['family']
+    if family not in ('volatility','forex') or len(bars)<85:
         return None
-    target=(int(now)//300+1)*300
-    # Precompute between 40 and 5 seconds before the next open.
+    seconds=300 if family=='volatility' else 900
+    target=(int(now)//seconds+1)*seconds
     remaining=target-now
     if not 5<=remaining<=40:
         return None
-    last_close=m5[-1]['epoch']+300
-    if last_close!=target-300:
+    if bars[-1]['epoch']+seconds!=target-seconds:
         return None
-    base=v23_confluence_signal(item,h1,m5,last_close+0.1)
+    if family=='forex':
+        moment=datetime.fromtimestamp(target,timezone.utc)
+        if not (moment.weekday()<5 and 8<=moment.hour<17):
+            return None
+    base=v23_confluence_signal(item,h1,bars,bars[-1]['epoch']+seconds+0.1)
     if base is None:
         return None
-    return {**base,'strategy':'h1_m5_next_open_v24',
+    return {**base,
+            'strategy':('h1_m5_next_open_v24' if family=='volatility'
+                        else 'h1_m15_next_open_v24'),
             'target_open_epoch':target,
             'deadline_epoch':target+NEXT_OPEN_WINDOW_SECONDS,
-            'reason':'Próxima vela M5, análise somente das velas já fechadas; '
-                     +base['reason']}
+            'reason':'Próxima vela M'+str(seconds//60)+
+                     ', análise apenas de candles fechados; '+base['reason']}
 
 
 def pop_prepared_next_open(user_key, excluded_symbols=(), now=None):
@@ -546,9 +552,9 @@ async def select_demo_signal(*, exclude_symbols=(), user_key=None, filtered=Fals
     global _last_scan
     exclude=set(exclude_symbols)
     # 2.4 candidate is prepared beforehand and consumed at the opening.
-    if SIGNAL_PROFILE=='next_open_v24' and active_market()=='volatility':
+    if SIGNAL_PROFILE=='next_open_v24':
         ready=pop_prepared_next_open(user_key,exclude)
-        if ready is not None:
+        if ready is not None and ready.get('family')==active_market():
             return ready
         waiting=_prepared_next_open_by_user.get(user_key)
         if waiting is not None and time.time()<waiting['target_open_epoch']:
@@ -556,7 +562,7 @@ async def select_demo_signal(*, exclude_symbols=(), user_key=None, filtered=Fals
     # Never reuse a setup after its 50-second post-candle freshness window.
     effective_mode=effective_strategy_mode(strategy_mode)
     market='volatility' if effective_mode=='volatility_v22' else 'forex'
-    next_open_mode=SIGNAL_PROFILE=='next_open_v24' and market=='volatility'
+    next_open_mode=SIGNAL_PROFILE=='next_open_v24'
     queue_key=pending_queue_key(user_key,filtered,strategy_mode)
     queued=_pending_signals_by_user.get(queue_key,[])
     now=time.time()
