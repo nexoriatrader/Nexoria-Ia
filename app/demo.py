@@ -265,6 +265,10 @@ async def demo_buy(token: str, account_id: str, *, symbol: str,
                         "buy_price": str(buy.get("buy_price", ask_price)),
                         "symbol": symbol, "contract_type": contract_type,
                         "duration_minutes": duration, "currency": currency,
+                        "broker_purchase_time": (buy.get("purchase_time")
+                                                 if isinstance(buy.get("purchase_time"),(int,float)) else None),
+                        "broker_start_time": (buy.get("start_time")
+                                              if isinstance(buy.get("start_time"),(int,float)) else None),
                         "demo_only": True, "bought": True}
     except DemoTradingError:
         raise
