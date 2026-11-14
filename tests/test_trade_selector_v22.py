@@ -188,3 +188,73 @@ def test_v23_volatility_selector_requests_m5_and_five_minute_contract(monkeypatc
     assert signal['strategy']=='h1_m5_confluence_v23'
     check.assert_awaited_once_with('1HZ100V',5)
     assert sorted(requests)==[300,3600]
+
+
+def test_v24_prepares_previous_closed_m5_and_never_buys_before_open(monkeypatch):
+    item,h,_,close=setup(monkeypatch)
+    item={'symbol':'1HZ100V','display_name':'Volatility 100 (1s)','family':'volatility'}
+    m=bars(300,110,int(close)-300)
+    em=selector.ema_values([c['close'] for c in m])
+    m[-3]['low']=em[-3]
+    m[-1]['close']+=.0003
+    m[-1]['high']=m[-1]['close']+.00005
+    now=close+260  # 40 seconds before the next five-minute open
+    candidate=selector.next_open_candidate(item,h,m,now)
+    assert candidate is not None
+    assert candidate['target_open_epoch']==close+300
+    assert candidate['deadline_epoch']==close+303
+    assert candidate['strategy']=='h1_m5_next_open_v24'
+    assert candidate['minutes']==5
+    monkeypatch.setattr(selector,'_prepared_next_open_by_user',{97:candidate})
+    assert selector.pop_prepared_next_open(97,now=close+299.999) is None
+    assert selector.pop_prepared_next_open(97,now=close+300.4) is not None
+    assert selector.pop_prepared_next_open(97,now=close+300.5) is None
+    monkeypatch.setattr(selector,'_prepared_next_open_by_user',{97:candidate})
+    assert selector.pop_prepared_next_open(97,now=close+303.001) is None
+    assert 97 not in selector._prepared_next_open_by_user
+
+
+def test_v24_no_lookahead_and_old_bar_is_rejected(monkeypatch):
+    item,h,_,close=setup(monkeypatch)
+    item={'symbol':'R_10','display_name':'Volatility 10','family':'volatility'}
+    m=bars(300,110,int(close)-300)
+    em=selector.ema_values([c['close'] for c in m])
+    m[-3]['low']=em[-3]
+    m[-1]['close']+=.0003
+    m[-1]['high']=m[-1]['close']+.00005
+    assert selector.next_open_candidate(item,h,m,close+290) is not None
+    assert selector.next_open_candidate(item,h,m,close+296) is None  # too late to prepare
+    assert selector.next_open_candidate(item,h,m,close+301) is None
+    # A candle from the wrong five-minute boundary must never be predicted.
+    m[-1]['epoch']-=300
+    assert selector.next_open_candidate(item,h,m,close+290) is None
+
+
+def test_v24_scanner_prepares_without_returning_executable_signal(monkeypatch):
+    item,h,_,close=setup(monkeypatch)
+    item={'symbol':'1HZ100V','display_name':'Volatility 100 (1s)','family':'volatility'}
+    m=bars(300,110,int(close)-300)
+    em=selector.ema_values([c['close'] for c in m])
+    m[-3]['low']=em[-3]
+    m[-1]['close']+=.0003
+    m[-1]['high']=m[-1]['close']+.00005
+    clock=[close+270]
+    monkeypatch.setattr(selector,'SIGNAL_PROFILE','next_open_v24')
+    monkeypatch.setattr(selector,'active_market',lambda now=None:'volatility')
+    monkeypatch.setattr(selector,'_prepared_next_open_by_user',{})
+    monkeypatch.setattr(selector,'_pending_signals_by_user',{})
+    monkeypatch.setattr(selector.time,'time',lambda:clock[0])
+    monkeypatch.setattr(selector,'catalogue',AsyncMock(return_value=[item]))
+    monkeypatch.setattr(selector,'supported',AsyncMock(return_value=True))
+    async def fake_fetch(symbol,seconds,count,*,now):
+        return h if seconds==3600 else m
+    monkeypatch.setattr(selector,'fetch_closed_timeframe',fake_fetch)
+    assert asyncio.run(selector.select_demo_signal(
+        user_key=88,strategy_mode='pullback_v22')) is None
+    assert selector.last_scan_report()['status']=='PREPARED_NEXT_OPEN'
+    assert selector._prepared_next_open_by_user[88]['target_open_epoch']==close+300
+    clock[0]=close+300.7
+    ready=asyncio.run(selector.select_demo_signal(
+        user_key=88,strategy_mode='pullback_v22'))
+    assert ready is not None and ready['strategy']=='h1_m5_next_open_v24'
+    assert ready['deadline_epoch']==close+303
