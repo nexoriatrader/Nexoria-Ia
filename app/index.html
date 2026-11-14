@@ -324,7 +324,7 @@ body.marketing-mode .section-foot{margin-top:0}
 .lp-mock-dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:#94a9bb;margin-right:5px}
 .lp-mock-metrics{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px}
 .lp-mock-metric{border:1px solid #325776;background:#0c2235;border-radius:12px;padding:15px 12px}
-.lp-mock-metric small{font-size:11px;color:#becfdc}.lp-mock-metric strong{display:block;font-size:20px;margin:5px 0 1px}.lp-mock-metric p{font-size:10px;color:#a6bfd1}
+.lp-mock-metric small{font-size:11px;color:#becfdc}.lp-mock-metric-symbol{color:#f4c45c;font-size:17px;margin-right:3px}.lp-mock-metric strong{display:block;font-size:20px;margin:5px 0 1px}.lp-mock-metric p{font-size:10px;color:#a6bfd1}
 .lp-preview-disclaimer{font-size:10px;color:#91aab9;text-align:right;margin-top:8px}
 .lp-section{padding:27px 7px 12px;scroll-margin-top:24px}
 .lp-section-title{text-align:center;display:flex;align-items:center;justify-content:center;gap:22px;font-size:clamp(24px,3vw,36px);line-height:1.2;letter-spacing:-.03em;margin-bottom:33px}
@@ -332,7 +332,7 @@ body.marketing-mode .section-foot{margin-top:0}
 .lp-section-title::after{transform:rotate(180deg)}
 .lp-cards{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:16px}
 .lp-card{padding:27px 23px 25px;min-height:216px;background:linear-gradient(145deg,#102c43,#091d30);border:1px solid #245a78;border-radius:19px;box-shadow:inset 0 1px #4e819044}
-.lp-icon{width:51px;height:51px;display:grid;place-items:center;font-size:29px;color:#fbc756;text-shadow:0 0 12px #ffcb6c99}
+.lp-icon{width:51px;height:51px;display:grid;place-items:center;color:#fbc756;filter:drop-shadow(0 0 8px #ffcb6c66)} .lp-icon svg{display:block;max-width:100%}
 .lp-card h3{font-size:21px;line-height:1.2;letter-spacing:-.025em;margin:14px 0 10px}.lp-card p{font-size:14px;color:#c4d3df;line-height:1.5}
 .lp-steps{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:28px}
 .lp-step{min-height:137px;display:flex;gap:17px;align-items:center;padding:21px;background:linear-gradient(140deg,#11334a,#0b2033);border:1px solid #34718b;border-radius:18px}
@@ -386,12 +386,11 @@ body.marketing-mode .section-foot{margin-top:0}
  </nav>
  <div id="inicio" class="lp-hero">
   <div>
-   <div class="lp-eyebrow">Automação inteligente · Deriv DEMO</div>
+   <div class="lp-eyebrow">Nexoria - robô inteligente</div>
    <h1 id="landingHeading">O robô trader automático <em>mais fácil de usar</em></h1>
-   <p class="lp-subtitle">Experimente o NEXORA IA gratuitamente por 24 horas. Configure suas estratégias, acompanhe as análises e conheça a plataforma na prática.</p>
+   <p class="lp-subtitle">Experimente o NEXORA IA gratuitamente por 24 horas. Configure suas estratégias, e deixe que o robô trabalhe sozinho.</p>
    <div class="lp-actions">
     <a class="lp-button lp-button-primary" href="/auth/deriv/start">Teste grátis por 24h <span aria-hidden="true">➜</span></a>
-    <a class="lp-button lp-button-outline" href="/auth/deriv/start">Acessar plataforma <span aria-hidden="true">↗</span></a>
    </div>
    <div class="lp-proof"><span><b aria-hidden="true">◇</b> Conexão oficial Deriv</span><span><b aria-hidden="true">ϟ</b> Ativação em poucos passos</span><span><b aria-hidden="true">▥</b> Gestão de risco</span></div>
   </div>
@@ -403,19 +402,19 @@ body.marketing-mode .section-foot{margin-top:0}
     <div class="lp-mock-control"><div class="lp-mock-start">LIGAR ROBÔ</div><div class="lp-mock-status"><strong><span class="lp-mock-dot"></span>ROBÔ OFFLINE</strong><p>Análises pausadas. Ative quando desejar.</p></div></div>
    </div>
    <div class="lp-mock-metrics">
-     <div class="lp-mock-metric"><small>Saldo Treinamento</small><strong>DEMO</strong><p>Saldo virtual na Deriv</p></div>
-     <div class="lp-mock-metric"><small>Conta Real</small><strong>INATIVA</strong><p>Operações reais indisponíveis</p></div>
+     <div class="lp-mock-metric"><small><span class="lp-mock-metric-symbol" aria-hidden="true">▥</span> Análise de mercado</small><strong>Scanner IA</strong><p>Leitura de tendências e oportunidades</p></div>
+     <div class="lp-mock-metric"><small><span class="lp-mock-metric-symbol" aria-hidden="true">◎</span> Gestão de operações</small><strong>Estratégias</strong><p>Controles e parâmetros personalizados</p></div>
    </div>
-   <p class="lp-preview-disclaimer">Prévia ilustrativa · Sem resultados financeiros simulados</p>
+   <p class="lp-preview-disclaimer">Ilustração da interface · Não representa operações ou resultados reais</p>
   </div>
  </div>
  <section id="recursos" class="lp-section" aria-labelledby="lpFeaturesTitle">
   <h2 class="lp-section-title" id="lpFeaturesTitle">Principais benefícios</h2>
   <div class="lp-cards">
-   <article class="lp-card"><div class="lp-icon" aria-hidden="true">♧</div><h3>Operações automáticas</h3><p>Monitore oportunidades e ative o AutoPilot para operar na conta de treinamento.</p></article>
-   <article class="lp-card"><div class="lp-icon" aria-hidden="true">▥</div><h3>Análise em tempo real</h3><p>Acompanhe as condições do mercado e os sinais analisados pelo robô.</p></article>
-   <article class="lp-card"><div class="lp-icon" aria-hidden="true">♢</div><h3>Gestão de risco</h3><p>Personalize entradas, Stop Win e Stop Loss; operar envolve riscos.</p></article>
-   <article class="lp-card"><div class="lp-icon" aria-hidden="true">♔</div><h3>Acesso grátis por 24h</h3><p>Conheça a plataforma na DEMO e ganhe mais 24h por indicação válida.</p></article>
+   <article class="lp-card"><div class="lp-icon"><svg viewBox="0 0 48 48" width="42" height="42" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6v36M24 6v36M39 6v36"/><rect x="5" y="15" width="8" height="15" rx="2" fill="currentColor" fill-opacity=".18"/><rect x="20" y="9" width="8" height="18" rx="2" fill="currentColor" fill-opacity=".18"/><rect x="35" y="22" width="8" height="14" rx="2" fill="currentColor" fill-opacity=".18"/></svg></div><h3>Operações automáticas</h3><p>Monitore oportunidades e ative o Robô Nexora para operar na sua conta.</p></article>
+   <article class="lp-card"><div class="lp-icon"><svg viewBox="0 0 48 48" width="42" height="42" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 38h38M8 33l11-11 8 6 13-17M31 11h9v9"/><circle cx="19" cy="22" r="2" fill="currentColor"/><circle cx="27" cy="28" r="2" fill="currentColor"/></svg></div><h3>Análise em tempo real</h3><p>Acompanhe as condições do mercado e os sinais analisados pelo robô.</p></article>
+   <article class="lp-card"><div class="lp-icon"><svg viewBox="0 0 48 48" width="42" height="42" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M24 4l17 7v12c0 11-7 18-17 22C14 41 7 34 7 23V11z"/><path d="M15 24l6 6 13-14"/></svg></div><h3>Gestão de risco</h3><p>Personalize entradas, Stop Win e Stop Loss; operar envolve riscos.</p></article>
+   <article class="lp-card"><div class="lp-icon"><svg viewBox="0 0 48 48" width="42" height="42" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="24" cy="24" r="18"/><path d="M24 13v12l9 5"/><path d="M36 5v10M31 10h10"/></svg></div><h3>Acesso grátis por 24h</h3><p>Conheça a plataforma na DEMO e ganhe mais 24h por indicação válida.</p></article>
   </div>
  </section>
  <section id="como-funciona" class="lp-section" aria-labelledby="lpStepsTitle">
@@ -423,7 +422,7 @@ body.marketing-mode .section-foot{margin-top:0}
   <div class="lp-steps">
    <article class="lp-step"><span class="lp-step-num" aria-hidden="true">1</span><div><h3>Conecte sua conta</h3><p>Entre com o login oficial da Deriv, sem compartilhar sua senha.</p></div></article>
    <article class="lp-step"><span class="lp-step-num" aria-hidden="true">2</span><div><h3>Configure o robô</h3><p>Defina os parâmetros e limites das operações em poucos cliques.</p></div></article>
-   <article class="lp-step"><span class="lp-step-num" aria-hidden="true">3</span><div><h3>Ative o AutoPilot</h3><p>Ligue quando quiser e acompanhe o treinamento automatizado.</p></div></article>
+   <article class="lp-step"><span class="lp-step-num" aria-hidden="true">3</span><div><h3>Ative o Robô Nexora</h3><p>Ligue quando quiser e acompanhe os resultados.</p></div></article>
   </div>
  </section>
  <div id="resultados" class="lp-strip" aria-label="Mais vantagens">
