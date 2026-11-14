@@ -509,6 +509,10 @@ button.choose-account:focus-visible{outline:3px solid #71d2ff;outline-offset:4px
 </section>
 <section id="account" class="hidden">
   <div class="section-heading"><div><h1>Minha conta</h1></div></div>
+  <div class="card"><div class="surface-heading">Acesso ao robô</div>
+    <p class="muted" id="robotAccessInfo">Consultando a validade da assinatura...</p>
+    <p class="helper">O acesso controla novas entradas. Contratos já comprados na Deriv continuam até a liquidação.</p>
+  </div>
   <div class="card"><div class="surface-heading">Deriv Demo <span class="pill"><span class="dot"></span>CONECTADA</span></div>
     <p class="muted">Saldo oficial da Deriv Demo</p><div class="metric-value" id="accountBalance">—</div>
     <div class="actions"><button class="outline" onclick="logout()">DESCONECTAR</button></div>
@@ -622,7 +626,7 @@ function updateResultsPolling(){
    },3000);
  }
 }
-function go(v){toggleMenu(false);page(v);updateResultsPolling();window.scrollTo({top:0,behavior:'smooth'});if(v==='choose')loadVerifiedAccounts();if(v==='realPreview'){$('realPreviewStatus').textContent=detectedRealAccounts.length?'A Deriv identificou '+detectedRealAccounts.length+' conta(s) real(is) vinculada(s).':'Não foi possível confirmar uma conta real nesta autorização.';}if(v==='setup')loadOnboarding();if(v==='dashboard')refreshDashboard();if(v==='results'){loadDemoOrders();}if(v==='account')loadDemoBalance();if(v==='settings')loadSettings()}
+function go(v){toggleMenu(false);page(v);updateResultsPolling();window.scrollTo({top:0,behavior:'smooth'});if(v==='choose')loadVerifiedAccounts();if(v==='realPreview'){$('realPreviewStatus').textContent=detectedRealAccounts.length?'A Deriv identificou '+detectedRealAccounts.length+' conta(s) real(is) vinculada(s).':'Não foi possível confirmar uma conta real nesta autorização.';}if(v==='setup')loadOnboarding();if(v==='dashboard')refreshDashboard();if(v==='results'){loadDemoOrders();}if(v==='account'){loadDemoBalance();loadRobotAccess()}if(v==='settings')loadSettings()}
 function fail(msg){$('error').textContent=msg||''}
 async function req(path,opts={}){const r=await fetch(path,{credentials:'same-origin',...opts});let data;try{data=await r.json()}catch{throw Error('Resposta inválida do servidor')}if(!r.ok)throw Error(data.detail||'Falha na conexão');return data}
 async function init(){try{const s=await req('/api/session');if(!s.authenticated){page('welcome');return}const justConnected=new URLSearchParams(window.location.search).get('login')==='ok';if(justConnected){window.history.replaceState({},'',window.location.pathname);const account=s.demo_accounts&&s.demo_accounts[0];$('demoInfo').textContent=account?'Conectada à Deriv · '+safe(account.account_id):'Conta conectada à Deriv';page('choose');applyAccountSelection();loadVerifiedAccounts()}else{page('dashboard');refreshDashboard()}refreshTimer=setInterval(()=>{if(activePage==='dashboard'||activePage==='results')refreshDashboard()},30000)}catch(e){fail(e.message);page('welcome')}}
@@ -812,6 +816,24 @@ async function loadRealBalance(){
    value.textContent='—';
    reason.textContent='Não foi possível atualizar o saldo real';
  }
+}
+async function loadRobotAccess(){
+  const target=$('robotAccessInfo');
+  if(!target)return;
+  try{
+    const a=await req('/api/access/status');
+    if(!a.enforced){target.textContent='Ambiente de testes DEMO · controle de assinatura ainda não ativado';return;}
+    if(a.status==='TRIAL_AVAILABLE'){
+      target.textContent='Teste disponível: '+(a.trial_hours===24?'24 horas':'7 dias')+
+        '. O prazo começa quando você ligar o robô pela primeira vez.';
+      return;
+    }
+    const until=a.expires_at?new Date(a.expires_at):null;
+    const when=until&&!Number.isNaN(until.getTime())
+      ?until.toLocaleString('pt-BR',{timeZone:'America/Sao_Paulo'}):'indisponível';
+    target.textContent=(a.allowed?'Acesso ativo':'Acesso expirado')+
+      ' · validade até '+when+' (Brasília)';
+  }catch(e){target.textContent='Não foi possível consultar a validade do acesso'}
 }
 async function loadDemoBalance(){try{const b=await req('/api/demo/balance');demoBalance=b;$('balanceMetric').textContent=money(b.balance,b.currency);$('accountBalance').textContent=money(b.balance,b.currency);return b}catch(e){$('balanceMetric').textContent='Indisponível';$('accountBalance').textContent='Indisponível';throw e}}
 async function loadDemoOrders(){try{const data=await req('/api/demo/orders');demoOrders=data.items||[];const last=demoOrders[0];$('lastOrder').textContent=last?last.symbol+' · '+last.direction+' · M'+last.duration_minutes+' · '+money(last.stake)+(last.pnl===null?' · Aguardando resultado':' · Resultado '+money(last.pnl)):'Nenhum contrato oficial ainda.';renderOrders();return data}catch(e){$('ordersBody').innerHTML='<tr><td colspan="11" class="empty">Não foi possível carregar o histórico.</td></tr>';throw e}}
