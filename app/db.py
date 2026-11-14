@@ -51,6 +51,14 @@ class ReferralLink(Base):
     created_at=Column(DateTime(timezone=True),default=utcnow,nullable=False)
 
 
+class ReferralShortLink(Base):
+    """Stable compact referral code. Existing referral links remain valid."""
+    __tablename__='referral_short_links'
+    user_id=Column(Integer,ForeignKey('users.id'),primary_key=True)
+    slug=Column(String(12),nullable=False,unique=True,index=True)
+    created_at=Column(DateTime(timezone=True),default=utcnow,nullable=False)
+
+
 class ReferralCredit(Base):
     """At most one reward per invited account, committed atomically with expiry."""
     __tablename__='referral_credits'
