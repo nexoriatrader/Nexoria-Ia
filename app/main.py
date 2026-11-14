@@ -266,8 +266,8 @@ def restore_demo_autopilot_consent():
                 if reason is None:
                     try:
                         batch=sess.get(db.PilotValidationBatch,uid)
-                        if batch:
-                            # V2 progression is independent per active symbol.
+                        if batch and not v2_enabled():
+                            # Old progression is never evaluated for PULSO V2.
                             v2_symbol_recovery(sess,user,orders,
                                 sess.get(db.RobotPlan,uid),
                                 sess.get(db.RobotCycleParams,uid),batch)
@@ -441,9 +441,9 @@ async def autopilot_once():
                 plan=sess.get(db.RobotPlan,uid)
                 cycle_cfg=sess.get(db.RobotCycleParams,uid)
                 batch=sess.get(db.PilotValidationBatch,uid)
-                strategy_choice=sess.get(db.PilotStrategyChoice,uid)
-                pulso_active=bool(batch and strategy_choice and
-                                  strategy_choice.strategy=='pulso_v2')
+                # PULSO V2 replaces the legacy scanner for every manually
+                # armed DEMO evaluation; no extra strategy-selection button.
+                pulso_active=bool(batch and v2_enabled())
                 if not batch and not connected:
                     continue
                 # The goal of 50 trades is informational, NOT an execution cap.
@@ -1516,6 +1516,8 @@ async def autopilot_start(request:Request,payload:AutoPilotSwitch,
         raise HTTPException(403,'Confirme o modo automático de treinamento')
     if not autopilot_allowed():
         raise HTTPException(503,'AutoPilot DEMO não habilitado no servidor')
+    if not v2_enabled():
+        raise HTTPException(503,'PULSO V2 DEMO indisponível nesta configuração do servidor')
     if user.selected_mode!='demo':
         raise HTTPException(403,'Somente conta demonstrativa')
     if user.martingale:
@@ -1546,24 +1548,24 @@ async def autopilot_start(request:Request,payload:AutoPilotSwitch,
             if v2_enabled():
                 batch=sess.get(db.PilotValidationBatch,user.id)
                 if batch is None:
-                    # New users start with the current 2.2 H1/M15 scanner.
-                    # Existing orders remain outside this first evaluation.
+                    # New evaluations run PULSO V2 only, with existing
+                    # historical Deriv orders preserved in their ledger.
                     sess.add(db.PilotValidationBatch(
                         user_id=user.id,after_order_id=latest or 0,max_orders=200))
                 elif batch.max_orders<200:
-                    # The UI is 2.2: never silently run the older M1 scanner.
-                    # Preserve this evaluation's original after_order_id,
-                    # orders, official results, and risk-session boundary.
+                    # Keep existing ledger, risk-session boundaries and results.
+                    # This value is metadata, not a cap on PULSO signals.
                     batch.max_orders=200
             if not sess.get(db.AutoPilotResumeConsent,user.id):
                 sess.add(db.AutoPilotResumeConsent(user_id=user.id))
             sess.commit()
         autopilot_last_attempt.pop(user.id,None)
         v2_last_scan.pop(user.id,None)
+        from .trade_selector_v2 import clear_user_signals
+        clear_user_signals(user.id)
         autopilot_enabled.add(user.id)
-        log.warning('AutoPilot armed: scan_mode=%s; market=automatic; execution=DEMO',
-                 'V2.2_H1_M15' if v2_enabled() else 'LEGACY')
-    autopilot_reasons[user.id]='AutoPilot ligado; aguardando oportunidade oficial na Deriv Demo'
+        log.warning('AutoPilot armed: scan_mode=PULSO_V2; symbol=1HZ100V; direction=CALL; duration=5m; execution=DEMO')
+    autopilot_reasons[user.id]='PULSO V2 ativo na DEMO; aguardando CALL confirmado com volatilidade estável'
     return {'running':True,'access':access,'execution':'DERIV_DEMO_ONLY','real_orders_enabled':False}
 
 
@@ -1591,9 +1593,8 @@ async def status(request:Request,nexora_sid:str|None=Cookie(default=None)):
     with db.SessionLocal() as sess:
         interrupted=sess.get(db.RobotRun,user.id) is not None and user.id not in autopilot_enabled
         batch=sess.get(db.PilotValidationBatch,user.id)
-        choice=sess.get(db.PilotStrategyChoice,user.id)
-        selected_strategy=(choice.strategy if choice else 'standard')
-        mode='V2_PULSO' if batch and selected_strategy=='pulso_v2' else 'V2_MULTI_ASSET' if batch else 'V1_SINGLE_ASSET'
+        selected_strategy='pulso_v2' if batch and v2_enabled() else 'unavailable'
+        mode='V2_PULSO' if batch and v2_enabled() else 'V2_MULTI_ASSET' if batch else 'V1_SINGLE_ASSET'
         upgrade_needed=bool(v2_enabled() and batch is None and user.id in autopilot_enabled)
     async with lock:
         engine=rt_for(user)
