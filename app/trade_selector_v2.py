@@ -546,7 +546,7 @@ async def select_demo_signal(*, exclude_symbols=(), user_key=None, filtered=Fals
     global _last_scan
     exclude=set(exclude_symbols)
     # 2.4 candidate is prepared beforehand and consumed at the opening.
-    if SIGNAL_PROFILE=='next_open_v24':
+    if SIGNAL_PROFILE=='next_open_v24' and active_market()=='volatility':
         ready=pop_prepared_next_open(user_key,exclude)
         if ready is not None:
             return ready
@@ -556,10 +556,11 @@ async def select_demo_signal(*, exclude_symbols=(), user_key=None, filtered=Fals
     # Never reuse a setup after its 50-second post-candle freshness window.
     effective_mode=effective_strategy_mode(strategy_mode)
     market='volatility' if effective_mode=='volatility_v22' else 'forex'
+    next_open_mode=SIGNAL_PROFILE=='next_open_v24' and market=='volatility'
     queue_key=pending_queue_key(user_key,filtered,strategy_mode)
     queued=_pending_signals_by_user.get(queue_key,[])
     now=time.time()
-    while queued and SIGNAL_PROFILE!='next_open_v24':
+    while queued and not next_open_mode:
         item=queued.pop(0)
         if item['symbol'] not in exclude and 0 <= now-(item['last_bar_epoch']+item.get('bar_seconds',60)) <= 50:
             return item
@@ -598,9 +599,9 @@ async def select_demo_signal(*, exclude_symbols=(), user_key=None, filtered=Fals
                         fetch_closed_timeframe(symbol,3600,105,now=snapshot),
                         fetch_closed_timeframe(symbol,timeframe,115,now=snapshot))
                     candidate=(next_open_candidate(item,h1,m15,time.time())
-                               if SIGNAL_PROFILE=='next_open_v24' else
+                               if next_open_mode else
                                v23_confluence_signal(item,h1,m15,snapshot)
-                               if SIGNAL_PROFILE=='confluence_v23' else
+                               if SIGNAL_PROFILE in ('confluence_v23','next_open_v24') else
                                v22_pullback_signal(item,h1,m15,snapshot))
                     candles_checked=len(m15)
                 else:
@@ -629,7 +630,7 @@ async def select_demo_signal(*, exclude_symbols=(), user_key=None, filtered=Fals
     signals=[candidate for candidate,_ in result if candidate]
     signals.sort(key=lambda x:(-int(x.get('score',0)),x['symbol']))
     chosen=signals[0] if signals else None
-    if SIGNAL_PROFILE=='next_open_v24':
+    if next_open_mode:
         if chosen:
             _prepared_next_open_by_user[user_key]=dict(chosen)
             _log.warning('V2.4 prepared: symbol=%s score=%s target=%s lead_s=%.3f',
@@ -640,7 +641,7 @@ async def select_demo_signal(*, exclude_symbols=(), user_key=None, filtered=Fals
     else:
         _pending_signals_by_user[queue_key]=signals[1:]
     rows=[row for _,row in result]
-    status='PREPARED_NEXT_OPEN' if SIGNAL_PROFILE=='next_open_v24' and signals else ('SIGNAL' if chosen else (
+    status='PREPARED_NEXT_OPEN' if next_open_mode and signals else ('SIGNAL' if chosen else (
         'MARKET_DATA_UNAVAILABLE' if all(x['status'] in (
             'MARKET_DATA_ERROR','CALL_PUT_OR_DURATION_UNAVAILABLE') for x in rows) else 'NO_SIGNAL'))
     _last_scan={'status':status,'at':stamp,'assets':rows,
