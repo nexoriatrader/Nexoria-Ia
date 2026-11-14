@@ -449,7 +449,16 @@ async def autopilot_once():
                 # The goal of 50 trades is informational, NOT an execution cap.
                 # Risk stops and broker-uncertainty safeguards remain mandatory.
                 try:
-                    if batch:
+                    if pulso_active:
+                        # PULSO is independent of legacy V2 recovery, cycles,
+                        # Martingale and legacy trend scanner. Fixed stake only.
+                        active=[o for o in orders if o.state in ('PENDING','CONFIRMED','UNKNOWN')]
+                        if active:
+                            autopilot_reasons[uid]='PULSO DEMO: aguardando liquidação e reconciliação do contrato anterior'
+                            continue
+                        entry=NextEntry(stake=Decimal(str(user.stake)),cycle=0,gale=0,retry=False)
+                        last=None
+                    elif batch:
                         active=[o for o in orders if o.state in ('PENDING','CONFIRMED','UNKNOWN')]
                         if any(o.state in ('PENDING','UNKNOWN') for o in active):
                             log_v2_gate(uid,'PENDING_OR_UNKNOWN_CONTRACT')
@@ -470,13 +479,6 @@ async def autopilot_once():
                         continue
                     disarm_autopilot(uid,reason)
                     continue
-                if pulso_active:
-                    # Fixed-stake independent evaluation: neither Martingale
-                    # nor cycle escalation is permitted for PULSO.
-                    if any(o.state in ('PENDING','CONFIRMED','UNKNOWN') for o in orders):
-                        autopilot_reasons[uid]='PULSO DEMO: aguardando liquidação oficial do contrato anterior'
-                        continue
-                    entry=NextEntry(stake=Decimal(str(user.stake)),cycle=0,gale=0,retry=False)
                 if entry.retry:
                     # V2 recovery is not held by the 60s fresh-scan cooldown.
                     # It can start promptly AFTER verified official settlement.
