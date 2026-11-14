@@ -1216,6 +1216,104 @@ async def my_access_status(request:Request,nexora_sid:str|None=Cookie(default=No
         return {**status,**referral}
 
 
+def is_nexora_admin(user):
+    """Server-only allowlist; a client cannot grant itself admin rights."""
+    allowed={x.strip() for x in os.getenv('NEXORA_ADMIN_DERIV_ACCOUNT_IDS','').split(',')
+             if x.strip()}
+    return bool(allowed) and user.deriv_account_id in allowed
+
+
+def require_nexora_admin(request,sid):
+    user=active_user(request,sid)
+    if not is_nexora_admin(user):
+        raise HTTPException(403,'Acesso administrativo não autorizado')
+    return user
+
+
+class AdminAccessAdjustment(BaseModel):
+    user_id:int
+    action:str
+    hours:int=0
+    note:str
+
+
+@app.get('/api/admin/access/users')
+async def admin_access_users(request:Request,nexora_sid:str|None=Cookie(default=None)):
+    admin=require_nexora_admin(request,nexora_sid)
+    with db.SessionLocal() as sess:
+        users=sess.scalars(select(db.User).order_by(db.User.id.desc()).limit(100)).all()
+        result=[]
+        for target in users:
+            access=access_status(sess,target.id)
+            link=sess.get(db.ReferralLink,target.id)
+            result.append({'user_id':target.id,'deriv_account_id':target.deriv_account_id,
+                           'referral_code':link.code if link else None,
+                           'access':access})
+        return {'items':result,'admin_user_id':admin.id}
+
+
+@app.post('/api/admin/access/adjust')
+async def admin_access_adjust(request:Request,payload:AdminAccessAdjustment,
+                              nexora_sid:str|None=Cookie(default=None)):
+    admin=require_nexora_admin(request,nexora_sid)
+    action=payload.action
+    if action not in ('add_hours','remove_hours','suspend','resume','refund_revoke'):
+        raise HTTPException(422,'Ação administrativa inválida')
+    if len(payload.note.strip())<5 or len(payload.note)>255:
+        raise HTTPException(422,'Informe motivo com 5 a 255 caracteres')
+    if action in ('add_hours','remove_hours') and not 1<=payload.hours<=2160:
+        raise HTTPException(422,'Informe horas entre 1 e 2160')
+    if action not in ('add_hours','remove_hours') and payload.hours!=0:
+        raise HTTPException(422,'Esta ação não recebe horas')
+    if action in ('suspend','refund_revoke') and admin.id==payload.user_id:
+        raise HTTPException(409,'Não é permitido suspender a própria conta administrativa')
+    with db.SessionLocal() as sess:
+        subject=sess.get(db.User,payload.user_id)
+        if not subject: raise HTTPException(404,'Usuário não encontrado')
+        now=db.utcnow()
+        grant=sess.get(db.RobotAccess,subject.id)
+        if grant is None:
+            grant=db.RobotAccess(user_id=subject.id,access_kind='admin_exception',
+                                  starts_at=now,expires_at=now)
+            sess.add(grant);sess.flush()
+        if action=='add_hours':
+            grant.expires_at=max(now,utc(grant.expires_at))+timedelta(hours=payload.hours)
+        elif action=='remove_hours':
+            grant.expires_at=max(now,utc(grant.expires_at)-timedelta(hours=payload.hours))
+        elif action=='suspend':
+            grant.suspended=True
+        elif action=='resume':
+            grant.suspended=False
+        elif action=='refund_revoke':
+            # Revoke access and prevent referral credits from re-enabling it.
+            # Never erase financial/audit history or broker contracts.
+            grant.suspended=True
+            grant.expires_at=now
+        sess.add(db.AccessAdminEvent(admin_user_id=admin.id,
+                     subject_user_id=subject.id,action=action,
+                     delta_hours=(payload.hours if action=='add_hours'
+                                   else -payload.hours if action=='remove_hours' else None),
+                     note=payload.note.strip()))
+        sess.commit()
+        updated=access_status(sess,subject.id)
+    if action in ('suspend','refund_revoke','remove_hours'):
+        if updated['enforced'] and not updated['allowed'] and subject.id in autopilot_enabled:
+            disarm_autopilot(subject.id,'Acesso administrativo suspenso ou expirado; contratos existentes mantidos')
+    return {'user_id':subject.id,'access':updated,'action':action}
+
+
+@app.get('/api/admin/access/audit')
+async def admin_access_audit(request:Request,nexora_sid:str|None=Cookie(default=None)):
+    require_nexora_admin(request,nexora_sid)
+    with db.SessionLocal() as sess:
+        events=sess.scalars(select(db.AccessAdminEvent).order_by(
+            db.AccessAdminEvent.id.desc()).limit(100)).all()
+        return {'items':[{'at':e.created_at.isoformat(),
+                          'admin_user_id':e.admin_user_id,
+                          'user_id':e.subject_user_id,'action':e.action,
+                          'hours':e.delta_hours,'note':e.note} for e in events]}
+
+
 @app.post('/api/autopilot/start')
 async def autopilot_start(request:Request,payload:AutoPilotSwitch,
                           nexora_sid:str|None=Cookie(default=None)):
