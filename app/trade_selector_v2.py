@@ -26,7 +26,7 @@ MAX_SYMBOLS=32
 # A scan may discover several independent signals at the same M1 close.
 # Keep them briefly per user so the executor can submit each one in turn.
 _pending_signals_by_user={}
-EXPIRY={'range_break':3,'forex':15,'step':5,'volatility':15}
+EXPIRY={'range_break':3,'forex':15,'step':5,'volatility':5}
 _catalog_cache={}
 _catalog_at={}
 _contract_cache={}
@@ -294,7 +294,7 @@ def strict_closed_bars(message, granularity, *, now):
 
 
 async def fetch_closed_timeframe(symbol, seconds, count, *, now):
-    if seconds not in (900,3600):
+    if seconds not in (300,900,3600):
         raise MarketError('Timeframe não autorizado')
     payload=await public_request({
         'ticks_history':symbol,'style':'candles','granularity':seconds,
@@ -408,18 +408,20 @@ def v22_pullback_signal(item, h1, m15, now):
 
 
 def v23_confluence_signal(item, h1, m15, now):
-    """Experimental 70/100 confluence on verified, CLOSED H1/M15 candles only.
+    """Experimental confluence: Forex H1/M15, Volatility H1/M5, CLOSED bars only.
 
     Scores are hypotheses to evaluate against official DEMO settlements, not
     calibrated probabilities or profitability guarantees.
     """
+    signal_seconds=300 if item['family']=='volatility' else 900
+    signal_minutes=signal_seconds//60
     if len(h1)<85 or len(m15)<85:
         return None
     if any(b['epoch']-a['epoch']!=3600 for a,b in zip(h1[-7:-1],h1[-6:])):
         return None
-    if any(b['epoch']-a['epoch']!=900 for a,b in zip(m15[-19:-1],m15[-18:])):
+    if any(b['epoch']-a['epoch']!=signal_seconds for a,b in zip(m15[-19:-1],m15[-18:])):
         return None
-    closed=m15[-1]['epoch']+900
+    closed=m15[-1]['epoch']+signal_seconds
     if not 0<=now-closed<=50:
         return None
     moment=datetime.fromtimestamp(closed,timezone.utc)
@@ -478,11 +480,11 @@ def v23_confluence_signal(item, h1, m15, now):
     if score<70:
         return None
     return {'symbol':item['symbol'],'display_name':item['display_name'],
-            'strategy':'h1_m15_confluence_v23','direction':direction,
-            'minutes':15,'family':item['family'],
-            'last_bar_epoch':confirm['epoch'],'bar_seconds':900,
+            'strategy':('h1_m5_confluence_v23' if signal_minutes==5 else 'h1_m15_confluence_v23'),'direction':direction,
+            'minutes':signal_minutes,'family':item['family'],
+            'last_bar_epoch':confirm['epoch'],'bar_seconds':signal_seconds,
             'score':score,
-            'reason':('Confluência H1/M15: '+str(score)+'/100; '
+            'reason':('Confluência H1/M'+str(signal_minutes)+': '+str(score)+'/100; '
                       'EMA50 e vela alinhadas; '
                       'pullback/rompimento='+str(pullback_or_breakout)+
                       '; swings='+str(swings)+'; lateralização='+str(not stable_range))}
@@ -532,9 +534,11 @@ async def select_demo_signal(*, exclude_symbols=(), user_key=None, filtered=Fals
                                  'duration_minutes':EXPIRY[item['family']]}
                 if effective_mode in ('pullback_v22','volatility_v22'):
                     snapshot=time.time()
+                    timeframe=(300 if item['family']=='volatility' and
+                               SIGNAL_PROFILE=='confluence_v23' else 900)
                     h1,m15=await asyncio.gather(
                         fetch_closed_timeframe(symbol,3600,105,now=snapshot),
-                        fetch_closed_timeframe(symbol,900,115,now=snapshot))
+                        fetch_closed_timeframe(symbol,timeframe,115,now=snapshot))
                     candidate=(v23_confluence_signal(item,h1,m15,snapshot)
                                if SIGNAL_PROFILE=='confluence_v23' else
                                v22_pullback_signal(item,h1,m15,snapshot))
@@ -580,8 +584,8 @@ async def select_demo_signal(*, exclude_symbols=(), user_key=None, filtered=Fals
     if not hasattr(select_demo_signal,'_last_summary_at'):
         select_demo_signal._last_summary_at=0.0
     if status!='NO_SIGNAL' or time.monotonic()-select_demo_signal._last_summary_at>=60:
-        _log.warning('V2 scan summary: market=%s mode=%s profile=%s assets=%s scanned=%s status=%s counts=%s',
-                  market,effective_mode,SIGNAL_PROFILE,total,len(rows),status,counts)
+        _log.warning('V2 scan summary: market=%s mode=%s profile=%s expiry=%sm assets=%s scanned=%s status=%s counts=%s',
+                  market,effective_mode,SIGNAL_PROFILE,EXPIRY[market],total,len(rows),status,counts)
         select_demo_signal._last_summary_at=time.monotonic()
     # Expose whether a feed failure was mistaken for a lack of setups.
     if status=='MARKET_DATA_UNAVAILABLE':
