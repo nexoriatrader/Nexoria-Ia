@@ -27,6 +27,7 @@ from .market import MarketError, discover_symbols, discover_contracts, indicativ
 from .strategy_lab import run_lab
 from .single_asset_study import run_single_asset_study
 from .research_persistence import research_loop, latest_study  # isolated research, no broker trades
+from .m1_history import m1_collect_loop, history_status
 from .asset_scanner import scan_assets
 from .trade_selector_v2 import (select_demo_signal, last_scan_report, has_pending_signals,
                                 active_market, catalogue, supported, fetch_closed_timeframe,
@@ -46,6 +47,7 @@ reconcile_task = None
 autopilot_task = None
 market_selfcheck_task = None
 research_worker_task = None
+m1_research_task = None
 # Runtime state is volatile; explicit DEMO resume intent is persisted separately.
 autopilot_enabled: set[int] = set()
 autopilot_last_attempt: dict[int,float] = {}
@@ -736,7 +738,7 @@ async def reconcile_confirmed_loop():
 
 @asynccontextmanager
 async def lifespan(app):
-    global market_task, reconcile_task, autopilot_task, research_worker_task
+    global market_task, reconcile_task, autopilot_task, research_worker_task, m1_research_task
     if os.getenv('NEXORA_PUBLIC_URL','').startswith('https://') and db.DB_URL.startswith('sqlite:'):
         raise RuntimeError('Não usar SQLite efêmero em implantação pública: configure DATABASE_URL de Postgres')
     db.init_db()
@@ -746,9 +748,10 @@ async def lifespan(app):
     autopilot_task=asyncio.create_task(autopilot_loop())
     market_selfcheck_task=asyncio.create_task(public_market_selfcheck_once())
     research_worker_task=asyncio.create_task(research_loop(),name='research-1hz100v-daily')
+    m1_research_task=asyncio.create_task(m1_collect_loop(),name='research-1hz100v-m1-history')
     yield
     autopilot_enabled.clear()
-    tasks=[task for task in (market_task,reconcile_task,autopilot_task,market_selfcheck_task,research_worker_task) if task]
+    tasks=[task for task in (market_task,reconcile_task,autopilot_task,market_selfcheck_task,research_worker_task,m1_research_task) if task]
     for task in tasks:
         task.cancel()
     await asyncio.gather(*tasks,return_exceptions=True)
@@ -1296,6 +1299,17 @@ def require_nexora_admin(request):
     if not admin_auth.valid_session(request.cookies.get('nexora_admin_sid')):
         raise HTTPException(401,'Entre no painel Admin para continuar')
     return 'Admin'
+
+
+@app.get('/api/admin/research/m1-history')
+async def admin_m1_history(request:Request):
+    """Owner-only read-only coverage status; never exposes trading controls."""
+    require_nexora_admin(request)
+    try:
+        return await asyncio.to_thread(history_status)
+    except Exception:
+        log.exception('Admin M1 status read failed')
+        raise HTTPException(503, 'Histórico M1 temporariamente indisponível') from None
 
 
 @app.get('/api/admin/research/volatility100-30d')
