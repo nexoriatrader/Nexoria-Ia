@@ -1213,7 +1213,7 @@ async def my_access_status(request:Request,nexora_sid:str|None=Cookie(default=No
         status=access_status(sess,user.id)
         referral=referral_report(sess,user.id)
         sess.commit()
-        return {**status,**referral}
+        return {**status,**referral,'user_id':'NXR-'+str(user.id).zfill(6)}
 
 
 from . import admin_auth
