@@ -49,6 +49,7 @@ tr[data-id]{cursor:pointer}tr[data-id]:hover,tr[data-id].selected{background:#20
 <p>Pesquisa privada do Admin. Histórico da Deriv, sem Martingale, ciclos ou execução de ordens.</p>
 <div class="buttons"><button class="secondary" type="button" id="researchReload" onclick="loadResearch()">CONSULTAR RELATÓRIO</button><span class="research-tag">Somente leitura · M5</span></div>
 <div id="researchStatus" role="status" class="small-note" style="margin-top:12px">Consultando relatório armazenado...</div>
+<div class="research-warning" style="margin-top:12px" id="m1Coverage" role="status">Histórico M1: consultando cobertura da Deriv...</div>
 <div id="researchResults" hidden>
 <div class="research-metrics">
 <div class="research-metric"><span class="small-note">Velas de 5 min</span><strong id="researchCandles">—</strong></div>
@@ -69,7 +70,7 @@ tr[data-id]{cursor:pointer}tr[data-id]:hover,tr[data-id].selected{background:#20
 const $=id=>document.getElementById(id);
 async function call(url,opts={}){const r=await fetch(url,{credentials:'same-origin',...opts});
  const d=await r.json();if(!r.ok)throw Error(d.detail||'Falha de comunicação');return d;}
-async function show(){try{const s=await call('/api/admin/session');$('login').hidden=s.authenticated;$('panel').hidden=!s.authenticated;if(s.authenticated){await Promise.all([refresh(),loadResearch()]);}}catch(e){$('error').textContent=e.message}}
+async function show(){try{const s=await call('/api/admin/session');$('login').hidden=s.authenticated;$('panel').hidden=!s.authenticated;if(s.authenticated){await Promise.all([refresh(),loadResearch(),loadM1Coverage()]);}}catch(e){$('error').textContent=e.message}}
 $('loginForm').addEventListener('submit',async e=>{e.preventDefault();$('error').textContent='';
  try{await call('/api/admin/login',{method:'POST',headers:{'Content-Type':'application/json'},
  body:JSON.stringify({login:$('loginName').value,password:$('loginPassword').value})});
@@ -78,6 +79,15 @@ async function logout(){await call('/api/admin/logout',{method:'POST'});$('panel
 function fmtPct(v){return typeof v==='number'?(v*100).toFixed(2).replace('.',',')+'%':'—'}
 function researchName(s){return ({ema50_trend:'EMA 50 · Tendência',bollinger_reversal:'Bollinger · Reversão',channel_breakout:'Rompimento · Canal',random_control:'Controle aleatório'})[s]||String(s)}
 function researchDate(v){return v?new Date(v).toLocaleString('pt-BR',{timeZone:'America/Sao_Paulo'}):'—'}
+async function loadM1Coverage(){
+ try{
+  const r=await call('/api/admin/research/m1-history');
+  const count=Number(r.candles||0).toLocaleString('pt-BR');
+  const period=r.first_utc&&r.last_utc?' · '+r.first_utc.slice(0,10)+' até '+r.last_utc.slice(0,10):'';
+  const state=r.complete?'Histórico M1 disponível':'Histórico M1 ainda não concluído';
+  $('m1Coverage').textContent=state+' · '+count+' velas'+period+(r.complete?' · M3/M5/M15 podem ser reconstruídos':' · coleta automática solicitada à Deriv');
+ }catch(e){$('m1Coverage').textContent='Histórico M1: não foi possível consultar a cobertura ('+e.message+').'}
+}
 async function loadResearch(){
  const button=$('researchReload');button.disabled=true;$('researchStatus').textContent='Consultando estudo no banco...';
  try{
@@ -99,7 +109,7 @@ async function loadResearch(){
   $('researchStatus').textContent='Relatório histórico disponível. Nenhuma estratégia é ativada por esta página.';
   $('researchResults').hidden=false;
  }catch(e){$('researchResults').hidden=true;$('researchStatus').textContent='Não foi possível carregar o estudo: '+e.message}
- finally{button.disabled=false}
+ finally{button.disabled=false;loadM1Coverage()}
 }
 function actionUI(){$('daysField').hidden=!['add_hours','remove_hours'].includes($('action').value)}
 function formatNexoraId(id){return 'NXR-'+String(id).padStart(6,'0')}
