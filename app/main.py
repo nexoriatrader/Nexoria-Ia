@@ -785,6 +785,11 @@ async def short_referral_redirect(slug:str):
 
 @app.get('/social-preview.png')
 async def social_preview_png():
+    # Serve the approved, original social card unchanged when present.
+    approved=Path(__file__).parent/'static'/'social-preview-approved.png'
+    if approved.is_file():
+        return FileResponse(approved,media_type='image/png',
+                            headers={'Cache-Control':'public, max-age=3600'})
     from .social_preview import create_social_preview
     return Response(create_social_preview(),media_type='image/png',
                     headers={'Cache-Control':'public, max-age=3600'})
