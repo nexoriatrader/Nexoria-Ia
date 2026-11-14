@@ -184,6 +184,23 @@ async def m1_collect_loop():
     while True:
         try:
             await asyncio.wait_for(collect_m1_30_days(), timeout=480)
+            # Keep all market access read-only. Analysis runs on persisted M1
+            # and uses no broker trading session or order placement calls.
+            from .multi_timeframe_study import run_multitimeframe_backtest
+            from .research_persistence import persist_multitimeframe_study
+            report = await asyncio.wait_for(
+                asyncio.to_thread(run_multitimeframe_backtest), timeout=180)
+            report["generated_at"] = datetime.now(timezone.utc).isoformat()
+            await asyncio.to_thread(persist_multitimeframe_study, report)
+            selected = report.get("training_selected") or {}
+            LOG.warning("Research M1-M15 backtest complete: %s", json.dumps({
+                "models_tested": report["models_tested"],
+                "m1_candles": report["m1_candles"],
+                "training_selected": selected,
+                "exploratory_passes": sum(
+                    bool(row["passed_exploratory_threshold"]) for row in report["results"]),
+                "orders_sent": 0
+            }, separators=(",", ":")))
         except asyncio.CancelledError:
             raise
         except Exception as exc:
