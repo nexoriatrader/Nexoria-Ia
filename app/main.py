@@ -1287,19 +1287,34 @@ class AdminAccessAdjustment(BaseModel):
     note:str
 
 
+def nexora_user_code(user_id:int)->str:
+    return 'NXR-'+str(user_id).zfill(6)
+
+
 @app.get('/api/admin/access/users')
-async def admin_access_users(request:Request):
+async def admin_access_users(request:Request,q:str=''):
     require_nexora_admin(request)
+    q=q.strip()
+    if len(q)>100:
+        raise HTTPException(422,'Busca muito longa')
     with db.SessionLocal() as sess:
-        users=sess.scalars(select(db.User).order_by(db.User.id.desc()).limit(100)).all()
+        query=select(db.User)
+        if q:
+            match=re.fullmatch(r'(?i)NXR-?(\d{1,12})',q)
+            if match:
+                query=query.where(db.User.id==int(match.group(1)))
+            elif q.isdecimal():
+                query=query.where(db.User.id==int(q))
+            else:
+                query=query.where(db.User.deriv_account_id.ilike('%'+q.replace('\\','\\\\').replace('%','\\%').replace('_','\\_')+'%',escape='\\'))
+        users=sess.scalars(query.order_by(db.User.id.desc()).limit(100)).all()
         result=[]
         for target in users:
             access=access_status(sess,target.id)
-            link=sess.get(db.ReferralLink,target.id)
             count=sess.scalar(select(func.count(db.ReferralCredit.invitee_user_id)).where(
                 db.ReferralCredit.referrer_user_id==target.id)) or 0
-            result.append({'user_id':target.id,'deriv_account_id':target.deriv_account_id,
-                           'referral_code':link.code if link else None,
+            result.append({'user_id':target.id,'nexora_id':nexora_user_code(target.id),
+                           'deriv_account_id':target.deriv_account_id,
                            'referrals':count,'access':access})
         return {'items':result}
 
