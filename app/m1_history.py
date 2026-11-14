@@ -95,7 +95,7 @@ def history_status():
         return {"state": "PENDING", "symbol": SYMBOL, "candles": 0,
                 "timeframe": "M1", "complete": False}
     epochs = sorted(candles)
-    gaps = sum(b - a != MINUTE for a, b in zip(epochs, epochs[1:]))
+    gaps = sum((b - a) // MINUTE - 1 for a, b in zip(epochs, epochs[1:]))
     return {
         "state": "COMPLETE" if not gaps and len(epochs) >= 43100 else "PARTIAL",
         "symbol": SYMBOL,
@@ -104,6 +104,7 @@ def history_status():
         "first_utc": datetime.fromtimestamp(epochs[0], timezone.utc).isoformat(),
         "last_utc": datetime.fromtimestamp(epochs[-1], timezone.utc).isoformat(),
         "missing_intervals": gaps,
+        "coverage_pct": round(100 * len(epochs) / (len(epochs) + gaps), 5),
         "complete": gaps == 0 and len(epochs) >= 43100,
         "derived_timeframes_available": ["M3", "M5", "M15"] if gaps == 0 and len(epochs) >= 43100 else [],
         "source": "Deriv public ticks_history candles granularity=60",
@@ -173,13 +174,18 @@ async def collect_m1_30_days():
             await asyncio.sleep(0.25)
     combined = {**retained, **fetched}
     expected = (last_closed - first) // MINUTE + 1
-    if len(combined) != expected or min(combined, default=0) != first or max(combined, default=0) != last_closed:
-        raise MarketError(f"Historical M1 coverage incomplete: {len(combined)}/{expected} minutes")
-    if any(b - a != MINUTE for a, b in zip(sorted(combined), sorted(combined)[1:])):
-        raise MarketError("M1 historical series contains gaps")
+    missing = expected - len(combined)
+    # Permit a small genuine gap rate. Never fabricate prices or bridge gaps.
+    # A partially covered study must disclose missing minutes and omit impacted setups.
+    if (not combined or missing < 0 or missing > max(30, int(expected * .001)) or
+            min(combined) != first or max(combined) != last_closed):
+        raise MarketError(f"Historical M1 coverage insufficient: {len(combined)}/{expected} minutes")
     await asyncio.to_thread(_store, combined, first)
     status = await asyncio.to_thread(history_status)
-    LOG.warning("Research M1 1HZ100V complete: %s", json.dumps(status, separators=(",", ":")))
+    status["expected_minutes"] = expected
+    status["missing_minutes"] = missing
+    status["coverage_pct"] = round(100 * len(combined) / expected, 5)
+    LOG.warning("Research M1 1HZ100V usable: %s", json.dumps(status, separators=(",", ":")))
     return status
 
 
