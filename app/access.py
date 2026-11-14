@@ -1,12 +1,21 @@
 """DEMO-only robot access window. No payment credentials stored here.
 
 Enable NEXORA_ACCESS_CONTROL_ENABLED=true only after product/onboarding
-testing. One 24-hour trial is issued on the first explicitly confirmed start.
+testing. One configurable trial (7 days by default, 24h for controlled testing) is issued on the first explicitly confirmed start.
 All reads use server time; logout/login never renews the trial.
 """
 import os
 from datetime import datetime, timedelta, timezone
 from . import db
+
+
+def trial_duration_hours():
+    """Seven-day commercial trial; a controlled 24h pilot can set 24."""
+    try:
+        hours=int(os.getenv('NEXORA_TRIAL_HOURS','168'))
+    except ValueError:
+        hours=168
+    return hours if hours in (24,168) else 168
 
 
 def access_control_enabled():
@@ -28,7 +37,7 @@ def access_status(session, user_id, now=None):
                 'expires_at':utc(grant.expires_at).isoformat() if grant else None}
     if grant is None:
         return {'enforced':True,'allowed':False,'status':'TRIAL_AVAILABLE',
-                'access_kind':None,'expires_at':None}
+                'access_kind':None,'expires_at':None,'trial_hours':trial_duration_hours()}
     expiry=utc(grant.expires_at)
     allowed=now<expiry
     return {'enforced':True,'allowed':allowed,
@@ -47,8 +56,8 @@ def start_trial_on_first_robot_start(session,user_id,now=None):
     now=utc(now or db.utcnow())
     grant=session.get(db.RobotAccess,user_id)
     if grant is None:
-        grant=db.RobotAccess(user_id=user_id,access_kind='trial_24h',
-                             starts_at=now,expires_at=now+timedelta(hours=24))
+        grant=db.RobotAccess(user_id=user_id,access_kind='trial_'+str(trial_duration_hours())+'h',
+                             starts_at=now,expires_at=now+timedelta(hours=trial_duration_hours()))
         session.add(grant)
         session.flush()
     return access_status(session,user_id,now)
