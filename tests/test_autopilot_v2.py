@@ -518,3 +518,44 @@ def test_v24_recovery_does_not_advance_past_latest_settlement():
     assert (target,ready,warm)==(3300,False,True)
     target,ready,warm=main.v24_recovery_timing(settled,now=3300+1)
     assert (target,ready,warm)==(3300,True,False)
+
+
+def test_deriv_purchase_time_is_distinct_from_signal_and_reservation(tmp_path,monkeypatch):
+    client,factory,engine,uid=prepare(tmp_path,monkeypatch,stop_loss='0.00')
+    try:
+        purchase_epoch=1794668102  # broker reports an actual second +2
+        with factory() as sess:
+            user=sess.get(db.User,uid)
+            o,_=reserve(sess,user,request_key='broker-time-01',
+                        symbol='R_75',direction='CALL',minutes=5,parallel=True)
+            assert o.broker_purchase_at is None
+            confirmed(sess,o,{'contract_id':'900100','buy_price':'0.50',
+                              'broker_purchase_time':purchase_epoch})
+            assert int(o.broker_purchase_at.timestamp())==purchase_epoch
+            details=main.order_result_details(o)
+            assert details['time_source']=='DERIV'
+            assert details['broker_purchase_at'] is not None
+            assert details['started_at_brasilia'] is not None
+            assert details['started_at_brasilia']!=o.created_at.isoformat()
+    finally:
+        cleanup(engine)
+
+
+def test_unknown_broker_purchase_time_must_not_use_local_created_at(tmp_path,monkeypatch):
+    client,factory,engine,uid=prepare(tmp_path,monkeypatch,stop_loss='0.00')
+    try:
+        with factory() as sess:
+            user=sess.get(db.User,uid)
+            o,_=reserve(sess,user,request_key='broker-time-02',
+                        symbol='R_10',direction='PUT',minutes=5,parallel=True)
+            confirmed(sess,o,{'contract_id':'900101','buy_price':'0.50'})
+            details=main.order_result_details(o)
+            assert details['broker_purchase_at'] is None
+            assert details['started_at_brasilia'] is None
+            assert details['time_source']=='NOT_REPORTED'
+            assert settle(sess,o,{'contract_id':'900101','is_sold':1,
+                                  'profit':'-0.50','date_start':1794668401})
+            assert int(o.broker_purchase_at.timestamp())==1794668401
+            assert main.order_result_details(o)['outcome']=='LOSS'
+    finally:
+        cleanup(engine)
