@@ -112,6 +112,10 @@ def score(bars, signal, m1_close, expiry, start_epoch, end_epoch):
         exit_price = m1_close.get(exit_epoch)
         if entry is None or exit_price is None:
             continue
+        # Exclude even an intracontract missing minute. No reconstructed
+        # prices, no assumption that the unknown path was continuous.
+        if any(entry_epoch + k*MINUTE not in m1_close for k in range(expiry+1)):
+            continue
         delta = exit_price - entry
         if delta == 0:
             draws += 1
@@ -141,8 +145,12 @@ def score(bars, signal, m1_close, expiry, start_epoch, end_epoch):
 
 
 def analyze_m1(bars):
-    if not bars or any(b[0] - a[0] != MINUTE for a,b in zip(bars, bars[1:])) or len(bars) < 43000:
-        raise ValueError("M1 continuity or coverage insufficient for research")
+    if not bars or len(bars) < 43000:
+        raise ValueError("M1 coverage insufficient for research")
+    gaps = sum((b[0]-a[0])//MINUTE-1 for a,b in zip(bars,bars[1:]))
+    expected = (bars[-1][0]-bars[0][0])//MINUTE + 1
+    if gaps < 0 or gaps > max(30, int(expected*.001)):
+        raise ValueError("M1 gaps exceed the 0.1% exploratory threshold")
     m1_close = {bar[0]: bar[4] for bar in bars}
     begin = bars[0][0]
     end = bars[-1][0] + MINUTE
@@ -151,6 +159,15 @@ def analyze_m1(bars):
     for tf in TIMEFRAMES:
         grouped = aggregate(bars, tf)
         directions = make_signals(grouped)
+        # Warm up 60 *consecutive* closed timeframe bars after a missing
+        # bar. Indicator windows may not silently cross data gaps.
+        last_break = 0
+        for k in range(1, len(grouped)):
+            if grouped[k][0]-grouped[k-1][0] != tf*MINUTE:
+                last_break = k
+            if k-last_break < 60:
+                for name in directions:
+                    directions[name][k] = 0
         for expiry in EXPIRIES:
             for strategy in STRATEGIES:
                 sig = directions[strategy]
@@ -165,6 +182,18 @@ def analyze_m1(bars):
         smc_definitions.append(definition)
         grouped = aggregate(bars, tf)
         trigger_directions = [sparse.get(bar[0] + (tf-1)*MINUTE, 0) for bar in grouped]
+        # HTF order-block zones use up to eight H1 bars. Skip setups in
+        # the 8 hours after any missing minute to avoid stale zones.
+        gap_epochs = [b[0] for a,b in zip(bars,bars[1:]) if b[0]-a[0] != MINUTE]
+        gap_idx = 0
+        last_gap_epoch = -10**16
+        for j, bar in enumerate(grouped):
+            close_epoch = bar[0] + (tf-1)*MINUTE
+            while gap_idx < len(gap_epochs) and gap_epochs[gap_idx] <= close_epoch:
+                last_gap_epoch = gap_epochs[gap_idx]
+                gap_idx += 1
+            if close_epoch - last_gap_epoch < 8*3600:
+                trigger_directions[j] = 0
         for expiry in EXPIRIES:
             train = score(grouped, trigger_directions, m1_close, expiry, begin, split)
             holdout = score(grouped, trigger_directions, m1_close, expiry, split, end)
@@ -185,7 +214,10 @@ def analyze_m1(bars):
         "state": "RESEARCH_ONLY", "symbol": SYMBOL,
         "period_from": datetime.fromtimestamp(begin, timezone.utc).isoformat(),
         "period_to": datetime.fromtimestamp(end, timezone.utc).isoformat(),
-        "m1_candles": len(bars), "split": "70% / 30% chronological, strict expiry boundaries",
+        "m1_candles": len(bars), "missing_m1_minutes": gaps,
+        "expected_m1_minutes": expected,
+        "coverage_pct": round(100*len(bars)/expected, 5),
+        "split": "70% / 30% chronological, strict expiry boundaries",
         "return_per_win_assumed": PAYOUT, "break_even_rate": round(BREAK_EVEN, 5),
         "models_tested": len(rows),
         "smc_definitions": smc_definitions,
@@ -197,7 +229,8 @@ def analyze_m1(bars):
         "results": rows,
         "orders_sent": 0, "execution_enabled": False,
         "payout_actual_verified": False,
-        "warning": ("Exploratory directional M1 closing-price simulations only, not Deriv settled contracts. "
+        "warning": ("Exploratory analysis tolerates <=0.1% missing M1 minutes, excludes affected indicators and contract paths; no invented prices. "
+                    "Directional M1 closing-price simulations only, not Deriv settled contracts. "
                     "The 88% net payout is hypothetical, and prices at actual order execution differ. "
                     "Multi-model selection risks overfitting; positive holdouts require independent forward validation. "
                     "No Martingale or cycles. No live trading authorized.")
