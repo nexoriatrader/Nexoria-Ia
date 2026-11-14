@@ -38,6 +38,33 @@ def latest_study():
         return json.loads(row.payload_json) if row else None
 
 
+MULTI_RESEARCH_KEY = "1HZ100V_M1_M15_30D_V1"
+
+
+def latest_multitimeframe_study():
+    with db.SessionLocal() as session:
+        row = session.scalars(
+            select(HistoricalResearchReport)
+            .where(HistoricalResearchReport.research_key == MULTI_RESEARCH_KEY)
+            .order_by(HistoricalResearchReport.created_at.desc())
+            .limit(1)
+        ).first()
+        return json.loads(row.payload_json) if row else None
+
+
+def persist_multitimeframe_study(report):
+    """Store immutable research snapshots; never alter broker orders."""
+    with db.SessionLocal() as session:
+        session.add(HistoricalResearchReport(
+            research_key=MULTI_RESEARCH_KEY,
+            created_at=datetime.now(timezone.utc),
+            period_from=datetime.fromisoformat(report["period_from"]),
+            period_to=datetime.fromisoformat(report["period_to"]),
+            payload_json=json.dumps(report, separators=(",", ":"), allow_nan=False)
+        ))
+        session.commit()
+
+
 def _persist(report):
     with db.SessionLocal() as session:
         session.add(HistoricalResearchReport(
