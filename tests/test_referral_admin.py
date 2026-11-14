@@ -39,6 +39,25 @@ def test_referral_24h_once_per_first_oauth(monkeypatch):
     engine.dispose()
 
 
+def test_short_referral_code_is_stable_and_maps_to_original(monkeypatch):
+    monkeypatch.delenv('NEXORA_ACCESS_CONTROL_ENABLED',raising=False)
+    engine,factory=make_db()
+    with factory() as session:
+        user=db.User(deriv_account_id='V-SHORT-REF')
+        session.add(user);session.flush()
+        original=access.ensure_referral_link(session,user.id)
+        short=access.ensure_short_referral_slug(session,user.id)
+        session.commit()
+        assert len(short)==8
+        assert short==access.ensure_short_referral_slug(session,user.id)
+        assert original==access.ensure_referral_link(session,user.id)
+        from sqlalchemy import select
+        resolved=session.scalar(select(db.ReferralShortLink).where(
+            db.ReferralShortLink.slug==short))
+        assert resolved.user_id==user.id
+    engine.dispose()
+
+
 def test_self_referral_and_unknown_code_never_credit(monkeypatch):
     monkeypatch.delenv('NEXORA_ACCESS_CONTROL_ENABLED',raising=False)
     engine,factory=make_db()
