@@ -559,3 +559,12 @@ def test_unknown_broker_purchase_time_must_not_use_local_created_at(tmp_path,mon
             assert main.order_result_details(o)['outcome']=='LOSS'
     finally:
         cleanup(engine)
+
+
+def test_v24_forex_recovery_uses_m15_not_m5():
+    settled=datetime.fromtimestamp(9000+12,tz=timezone.utc)
+    assert main.v24_recovery_timing(settled,now=9900-30,bar_seconds=900)==(9900,False,True)
+    assert main.v24_recovery_timing(settled,now=9900+2,bar_seconds=900)==(9900,True,False)
+    assert main.v24_recovery_timing(settled,now=9900+3.01,bar_seconds=900)==(10800,False,False)
+    with pytest.raises(ValueError):
+        main.v24_recovery_timing(settled,now=9902,bar_seconds=60)
