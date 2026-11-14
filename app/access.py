@@ -14,10 +14,10 @@ from . import db
 def trial_duration_hours():
     """Seven-day commercial trial; a controlled 24h pilot can set 24."""
     try:
-        hours=int(os.getenv('NEXORA_TRIAL_HOURS','168'))
+        hours=int(os.getenv('NEXORA_TRIAL_HOURS','24'))
     except ValueError:
         hours=168
-    return hours if hours in (24,168) else 168
+    return hours if hours in (24,168) else 24
 
 
 def access_control_enabled():
@@ -41,10 +41,10 @@ def access_status(session, user_id, now=None):
         return {'enforced':True,'allowed':False,'status':'TRIAL_AVAILABLE',
                 'access_kind':None,'expires_at':None,'trial_hours':trial_duration_hours()}
     expiry=utc(grant.expires_at)
-    allowed=now<expiry
+    allowed=now<expiry and not grant.suspended
     return {'enforced':True,'allowed':allowed,
-            'status':'ACTIVE' if allowed else 'EXPIRED',
-            'access_kind':grant.access_kind,'expires_at':expiry.isoformat()}
+            'status':'SUSPENDED' if grant.suspended else ('ACTIVE' if allowed else 'EXPIRED'),
+            'access_kind':grant.access_kind,'suspended':bool(grant.suspended),'expires_at':expiry.isoformat()}
 
 
 def start_trial_on_first_robot_start(session,user_id,now=None):
@@ -114,6 +114,8 @@ def register_first_login(session, user, *, created_new, referred_code=None, now=
                               starts_at=now,expires_at=now)
         session.add(access)
         session.flush()
+    if access.suspended:
+        return  # A suspended referrer cannot gain access via referrals.
     baseline=max(now,utc(access.expires_at))
     access.expires_at=baseline+timedelta(hours=24)
     session.add(db.ReferralCredit(invitee_user_id=user.id,
