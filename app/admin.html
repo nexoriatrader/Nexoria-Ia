@@ -123,8 +123,10 @@ async function loadM1Coverage(){
   const r=await call('/api/admin/research/m1-history');
   const count=Number(r.candles||0).toLocaleString('pt-BR');
   const period=r.first_utc&&r.last_utc?' · '+r.first_utc.slice(0,10)+' até '+r.last_utc.slice(0,10):'';
-  const state=r.complete?'Histórico M1 disponível':'Histórico M1 ainda não concluído';
-  $('m1Coverage').textContent=state+' · '+count+' velas'+period+(r.complete?' · M3/M5/M15 podem ser reconstruídos':' · coleta automática solicitada à Deriv');
+  const usable=Number(r.candles)>=43000 && Number(r.coverage_pct)>=99.9;
+  const state=r.complete?'Histórico M1 completo':usable?'Histórico M1 utilizável com pequenas lacunas':'Histórico M1 ainda não concluído';
+  const gapInfo=Number.isFinite(Number(r.missing_intervals))?' · '+r.missing_intervals+' minuto(s) ausente(s)':'';
+  $('m1Coverage').textContent=state+' · '+count+' velas'+period+gapInfo+(usable?' · testes ignoram as lacunas; sem preços inventados':' · coleta automática solicitada à Deriv');
  }catch(e){$('m1Coverage').textContent='Histórico M1: não foi possível consultar a cobertura ('+e.message+').'}
 }
 async function loadResearch(){
