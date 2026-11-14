@@ -336,55 +336,10 @@ button.choose-account:focus-visible{outline:3px solid #71d2ff;outline-offset:4px
   <div class="landing-steps"><span>COMO FUNCIONA</span><div><b>01</b> Conecte sua conta <i>→</i> <b>02</b> Confira os limites <i>→</i> <b>03</b> Ative o AutoPilot</div></div>
   
 </section>
-<section id="choose" class="account-choose hidden" aria-labelledby="chooseHeading">
-  <div class="choose-glow" aria-hidden="true"></div>
-  <div class="choose-intro">
-    <div class="choose-overline"><span class="choose-overline-dot"></span> SUA JORNADA COMEÇA AQUI</div>
-    <h1 id="chooseHeading">A um passo do <span>seu sucesso.</span></h1>
-    <p>Escolha a conta para continuar sua experiência com o NEXORA AutoPilot.</p>
-  </div>
-  <div class="choose-accounts" role="group" aria-label="Selecione o tipo de conta">
-    <button type="button" class="choose-account choose-account-demo chosen" id="chooseDemo" aria-pressed="true" onclick="selectDemoAccount()">
-      <span class="choose-account-top"><span class="choose-symbol choose-symbol-demo" aria-hidden="true">◉</span><span class="choose-account-tag">SELECIONADO</span></span>
-      <span class="choose-account-name">Treinamento</span>
-      <span class="choose-account-desc">Conheça o robô e teste suas estratégias usando saldo virtual.</span>
-      <span class="choose-account-meta" id="demoInfo">Verificando conta conectada...</span>
-      <span class="choose-account-check" aria-hidden="true">✓</span>
-    </button>
-    <button type="button" class="choose-account choose-account-real" id="chooseReal" aria-pressed="false" onclick="selectRealAccount()">
-      <span class="choose-account-top"><span class="choose-symbol choose-symbol-real" aria-hidden="true">◇</span><span class="choose-account-tag choose-account-tag-muted">SALDO REAL</span></span>
-      <span class="choose-account-name">Conta real</span>
-      <span class="choose-account-desc">Ambiente para operações com seu próprio capital.</span>
-      <span class="choose-account-meta" id="realInfo">Verificando conta real vinculada à Deriv...</span>
-      <span class="choose-account-check choose-account-check-off" aria-hidden="true">—</span>
-    </button>
-  </div>
-  <div class="choose-advice" role="note"><div class="choose-advice-icon" aria-hidden="true">✧</div><div>
-    <strong>Comece com confiança.</strong>
-    <p>Recomendamos utilizar o treinamento por algumas horas para conhecer o robô, ajustar suas configurações e compreender os riscos antes de operar com capital próprio. Para o NEXORA, proteger seu capital começa com decisões conscientes.</p>
-    <p class="choose-advice-small">As contas reais podem ser identificadas e pré-visualizadas. Compras automáticas reais só serão habilitadas após a validação operacional.</p>
-  </div></div>
-  <button type="button" class="choose-continue" id="chooseContinue" onclick="continueAccount()">CONTINUAR <span aria-hidden="true">→</span></button>
-  <div class="choose-footnote"><span aria-hidden="true">⌑</span> <span id="chooseModeNotice">Modo de treinamento selecionado. As operações usam apenas saldo virtual.</span></div>
-  <button type="button" class="choose-signout" onclick="logout()">Sair desta conta</button>
-</section>
-<section id="realPreview" class="robot-setup hidden" aria-labelledby="realPreviewTitle">
-  <div class="setup-aura" aria-hidden="true"></div>
-  <div class="setup-heading">
-    <div class="choose-overline"><span class="choose-overline-dot"></span> CONTA REAL · PREPARAÇÃO</div>
-    <h1 id="realPreviewTitle">Sua conta real, <span>sob seu controle.</span></h1>
-    <p>O NEXORA já permite selecionar o modo real e consultar a presença de contas vinculadas à Deriv. A execução real permanece bloqueada até a validação final.</p>
-  </div>
-  <div class="setup-panel">
-    <div class="setup-panel-title"><span class="setup-icon" aria-hidden="true">◇</span><div><h2>Conta real selecionada</h2><p id="realPreviewStatus">Verificando sua conexão...</p></div></div>
-    <p class="setup-hint">Nenhum contrato com saldo real será comprado nesta etapa. Para testar o robô e as configurações operacionais, selecione Treinamento.</p>
-    <div class="actions" style="margin-top:22px"><button type="button" class="gold" onclick="selectDemoAccount();go('setup')">USAR TREINAMENTO</button><button type="button" class="outline" onclick="go('choose')">VOLTAR E ESCOLHER CONTA</button></div>
-  </div>
-</section>
 <section id="setup" class="robot-setup hidden" aria-labelledby="setupTitle">
   <div class="setup-aura" aria-hidden="true"></div>
   <div class="setup-heading">
-    <div class="choose-overline"><span class="choose-overline-dot"></span> CONFIGURAÇÃO INICIAL · ETAPA 3</div>
+    <div class="choose-overline"><span class="choose-overline-dot"></span> CONFIGURAÇÃO INICIAL</div>
     <h1 id="setupTitle">É hora de <span>configurar seu robô.</span></h1>
     <p>Defina os valores de entrada e os limites que orientarão as operações do NEXORA AutoPilot.</p>
   </div>
@@ -429,7 +384,6 @@ button.choose-account:focus-visible{outline:3px solid #71d2ff;outline-offset:4px
     <div class="setup-note"><span aria-hidden="true">✧</span><div><strong>Configure com atenção.</strong><p>Você poderá revisar esses parâmetros depois. Salvar configurações não inicia o robô: a ativação continua sob seu controle no painel.</p></div></div>
     <p class="setup-feedback" id="setupFeedback" role="status"></p>
     <button class="setup-submit" id="setupSubmit" type="submit">FINALIZAR CONFIGURAÇÃO E IR PARA O PAINEL <span aria-hidden="true">→</span></button>
-    <button class="setup-back" type="button" onclick="go('choose')">Voltar à seleção de conta</button>
   </form>
 </section>
 <section id="dashboard" class="hidden">
@@ -564,39 +518,6 @@ function updateAccessCountdown(){
 setInterval(updateAccessCountdown,1000);
 const money=(n,currency='USD')=>{const value=Number(n);return Number.isFinite(value)?value.toLocaleString('pt-BR',{style:'currency',currency:currency||'USD'}):'—'};
 const safe=(v)=>v===null||v===undefined?'—':String(v);
-let selectedAccountMode='demo';
-let detectedRealAccounts=[];
-function applyAccountSelection(){
- const real=selectedAccountMode==='real';
- for(const [id,isSelected] of [['chooseDemo',!real],['chooseReal',real]]){
-   const el=$(id);el.classList.toggle('chosen',isSelected);
-   el.setAttribute('aria-pressed',String(isSelected));
-   const mark=el.querySelector('.choose-account-check');
-   if(mark){mark.textContent=isSelected?'✓':'—';mark.classList.toggle('choose-account-check-off',!isSelected);}
- }
- const subtitle=$('chooseModeNotice');
- if(subtitle)subtitle.textContent=real
-   ?'Modo real selecionado para preparação. As operações de compra continuam bloqueadas.'
-   :'Modo de treinamento selecionado. As operações usam apenas saldo virtual.';
-}
-async function loadVerifiedAccounts(){
- try{
-   const accounts=await req('/api/accounts/available');
-   detectedRealAccounts=accounts.real_accounts||[];
-   $('realInfo').textContent=detectedRealAccounts.length
-      ?'Identificada na Deriv · '+detectedRealAccounts.length+' conta(s) real(is) · compras ainda bloqueadas.'
-      :'Nenhuma conta real identificada nesta autorização. Você pode visualizar o modo sem operar.';
- }catch(e){
-   detectedRealAccounts=[];
-   $('realInfo').textContent='Não foi possível verificar contas reais nesta conexão.';
- }
-}
-function selectDemoAccount(){selectedAccountMode='demo';applyAccountSelection()}
-function selectRealAccount(){selectedAccountMode='real';applyAccountSelection()}
-function continueAccount(){
- if(selectedAccountMode==='real'){go('realPreview');return;}
- go('setup');
-}
 function toggleSetupMartingale(){
  const enabled=$('setupMg').checked;
  $('setupGaleFields').classList.toggle('hidden',!enabled);
@@ -645,7 +566,7 @@ async function saveOnboarding(event){
  }catch(e){$('setupFeedback').textContent='Não foi possível salvar: '+e.message;fail('')}
  finally{btn.disabled=false}
 }
-function page(v){for(const name of ['welcome','choose','realPreview','setup','dashboard','results','settings','account'])$(name).classList.toggle('hidden',name!==v);activePage=v;const logged=!['welcome','choose'].includes(v);$('accountBadge').classList.toggle('hidden',!logged);$('menuButton').classList.toggle('hidden',!logged);document.querySelectorAll('.nav[data-view]').forEach(b=>b.classList.toggle('active',b.dataset.view===v))}
+function page(v){for(const name of ['welcome','setup','dashboard','results','settings','account'])$(name).classList.toggle('hidden',name!==v);activePage=v;const logged=v!=='welcome';$('accountBadge').classList.toggle('hidden',!logged);$('menuButton').classList.toggle('hidden',!logged);document.querySelectorAll('.nav[data-view]').forEach(b=>b.classList.toggle('active',b.dataset.view===v))}
 function toggleMenu(open){$('drawer').classList.toggle('hidden',!open);$('menuOverlay').classList.toggle('hidden',!open);$('menuButton').setAttribute('aria-expanded',String(open))}
 function updateResultsPolling(){
  if(resultsRefreshTimer){clearInterval(resultsRefreshTimer);resultsRefreshTimer=null;}
@@ -662,7 +583,7 @@ function updateResultsPolling(){
    },3000);
  }
 }
-function go(v){toggleMenu(false);page(v);updateResultsPolling();window.scrollTo({top:0,behavior:'smooth'});if(v==='choose')loadVerifiedAccounts();if(v==='realPreview'){$('realPreviewStatus').textContent=detectedRealAccounts.length?'A Deriv identificou '+detectedRealAccounts.length+' conta(s) real(is) vinculada(s).':'Não foi possível confirmar uma conta real nesta autorização.';}if(v==='setup')loadOnboarding();if(v==='dashboard')refreshDashboard();if(v==='results'){loadDemoOrders();}if(v==='account'){loadDemoBalance();loadRobotAccess()}if(v==='settings')loadSettings()}
+function go(v){toggleMenu(false);page(v);updateResultsPolling();window.scrollTo({top:0,behavior:'smooth'});if(v==='setup')loadOnboarding();if(v==='dashboard')refreshDashboard();if(v==='results'){loadDemoOrders();}if(v==='account'){loadDemoBalance();loadRobotAccess()}if(v==='settings')loadSettings()}
 function fail(msg){$('error').textContent=msg||''}
 async function req(path,opts={}){const r=await fetch(path,{credentials:'same-origin',...opts});let data;try{data=await r.json()}catch{throw Error('Resposta inválida do servidor')}if(!r.ok)throw Error(data.detail||'Falha na conexão');return data}
 async function init(){
@@ -671,7 +592,7 @@ async function init(){
    const login=document.querySelector('a[href="/auth/deriv/start"]');
    if(login)login.href='/auth/deriv/start?ref='+encodeURIComponent(ref);
  }
- try{const s=await req('/api/session');if(!s.authenticated){page('welcome');return}const justConnected=new URLSearchParams(window.location.search).get('login')==='ok';if(justConnected){window.history.replaceState({},'',window.location.pathname);const account=s.demo_accounts&&s.demo_accounts[0];$('demoInfo').textContent=account?'Conectada à Deriv · '+safe(account.account_id):'Conta conectada à Deriv';page('choose');applyAccountSelection();loadVerifiedAccounts()}else{page('dashboard');refreshDashboard()}refreshTimer=setInterval(()=>{if(activePage==='dashboard'||activePage==='results')refreshDashboard()},30000)}catch(e){fail(e.message);page('welcome')}}
+ try{const s=await req('/api/session');if(!s.authenticated){page('welcome');return}const justConnected=new URLSearchParams(window.location.search).get('login')==='ok';if(justConnected){window.history.replaceState({},'',window.location.pathname);go('setup')}else{page('dashboard');refreshDashboard()}refreshTimer=setInterval(()=>{if(activePage==='dashboard'||activePage==='results')refreshDashboard()},30000)}catch(e){fail(e.message);page('welcome')}}
 function showRobotNotice(reason){
  const box=$('robotStartNotice'),title=$('robotNoticeTitle'),body=$('robotNoticeText'),options=$('robotNoticeOptions');
  if(!reason){box.hidden=true;title.textContent='';body.textContent='';options.hidden=true;return}
