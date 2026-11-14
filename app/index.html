@@ -708,7 +708,9 @@ async function refreshDashboard(){
      req('/api/autopilot/v2/scanner-status').then(data=>{
        if(sequence!==dashboardStatusSequence)return;
        const scan=data.scan||{};
-       $('autopilotVersion').textContent=scan.profile==='confluence_v23'
+       $('autopilotVersion').textContent=scan.profile==='next_open_v24'
+         ?'Robô Trader I.A 2.4 · Abertura M5 DEMO'
+         :scan.profile==='confluence_v23'
          ?'Robô Trader I.A 2.3 · Confluência DEMO'
          :scan.profile==='relaxed_v22'?'Robô Trader I.A 2.2 · Teste simplificado'
          :'Robô Trader I.A 2.2';
