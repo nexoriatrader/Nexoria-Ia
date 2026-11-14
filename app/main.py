@@ -1703,9 +1703,9 @@ _single_asset_cache=None
 _single_asset_cache_at=0.0
 
 @app.get('/api/research/volatility100-30d')
-async def single_asset_research_route(request:Request,nexora_sid:str|None=Cookie(default=None)):
-    """Authenticated read-only historical study; zero broker buys."""
-    active_user(request,nexora_sid)
+async def single_asset_research_route(request:Request):
+    """Owner-only read-only historical study; zero broker buys."""
+    require_nexora_admin(request)
     global _single_asset_cache, _single_asset_cache_at
     async with _single_asset_lock:
         now=asyncio.get_running_loop().time()
