@@ -258,3 +258,54 @@ def test_v24_scanner_prepares_without_returning_executable_signal(monkeypatch):
         user_key=88,strategy_mode='pullback_v22'))
     assert ready is not None and ready['strategy']=='h1_m5_next_open_v24'
     assert ready['deadline_epoch']==close+303
+
+
+def test_v24_forex_prepares_next_m15_only_from_closed_candles(monkeypatch):
+    item,h,m,close=setup(monkeypatch)
+    # H1 trend and M15 confirmation are based on already closed candles.
+    now=close+900-25
+    candidate=selector.next_open_candidate(item,h,m,now)
+    assert candidate is not None
+    assert candidate['family']=='forex'
+    assert candidate['strategy']=='h1_m15_next_open_v24'
+    assert candidate['minutes']==15
+    assert candidate['target_open_epoch']==close+900
+    assert candidate['deadline_epoch']==close+903
+    assert selector.next_open_candidate(item,h,m,close+900-4) is None
+    assert selector.next_open_candidate(item,h,m,close+900+1) is None
+    # Current forming M15 may NOT be supplied as a completed confirmation.
+    m[-1]['epoch']+=900
+    assert selector.next_open_candidate(item,h,m,now) is None
+
+
+def test_v24_forex_scanner_prepares_and_releases_on_open(monkeypatch):
+    item,h,m,close=setup(monkeypatch)
+    now=[close+900-28]
+    monkeypatch.setattr(selector,'SIGNAL_PROFILE','next_open_v24')
+    monkeypatch.setattr(selector,'active_market',lambda now=None:'forex')
+    monkeypatch.setattr(selector,'_prepared_next_open_by_user',{})
+    monkeypatch.setattr(selector,'_pending_signals_by_user',{})
+    monkeypatch.setattr(selector.time,'time',lambda:now[0])
+    monkeypatch.setattr(selector,'catalogue',AsyncMock(return_value=[item]))
+    monkeypatch.setattr(selector,'supported',AsyncMock(return_value=True))
+    async def fake_fetch(symbol,seconds,count,*,now):
+        return h if seconds==3600 else m
+    monkeypatch.setattr(selector,'fetch_closed_timeframe',fake_fetch)
+    assert asyncio.run(selector.select_demo_signal(user_key=721,
+        strategy_mode='pullback_v22')) is None
+    assert selector.last_scan_report()['status']=='PREPARED_NEXT_OPEN'
+    assert selector._prepared_next_open_by_user[721]['minutes']==15
+    now[0]=close+900+1.2
+    result=asyncio.run(selector.select_demo_signal(user_key=721,
+        strategy_mode='pullback_v22'))
+    assert result is not None
+    assert result['strategy']=='h1_m15_next_open_v24'
+    assert result['deadline_epoch']==close+903
+
+
+def test_v24_forex_rejects_outside_forex_trading_session(monkeypatch):
+    item,h,m,close=setup(monkeypatch)
+    shift=5*3600
+    for b in h+m:
+        b['epoch']+=shift
+    assert selector.next_open_candidate(item,h,m,close+shift+900-30) is None
