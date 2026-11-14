@@ -15,7 +15,8 @@ from pydantic import BaseModel
 from sqlalchemy import select, delete
 
 from . import db
-from .access import access_control_enabled, access_status, start_trial_on_first_robot_start
+from .access import (access_control_enabled, access_status, start_trial_on_first_robot_start,
+                     register_first_login, referral_report, utc)
 from .demo import (DemoTradingError, DemoPreBuyDeadlineExceeded, demo_account_balance,
                    demo_contract_status, demo_buy, demo_proposal,
                    prepare_demo_buy_socket)
@@ -858,11 +859,13 @@ async def health():
             'manual_demo_purchase_enabled':enabled,'real_orders_enabled':False}
 
 @app.get('/auth/deriv/start')
-async def login_start():
+async def login_start(ref:str|None=None):
     state,verifier=make_login()
+    if ref and not re.fullmatch(r'[A-Za-z0-9_-]{8,32}',ref):
+        ref=None
     with db.SessionLocal() as s:
         # expiry handled at consumption; old flows can be pruned in maintenance
-        s.add(db.LoginFlow(state_hash=hashsecret(state),verifier_encrypted=encrypt(verifier)));s.commit()
+        s.add(db.LoginFlow(state_hash=hashsecret(state),verifier_encrypted=encrypt(verifier),referral_code=ref));s.commit()
     response=RedirectResponse(build_authorize_url(state,verifier),302)
     response.set_cookie('nexora_state',state,max_age=600,**cookie_options())
     return response
@@ -877,6 +880,7 @@ async def callback(code:str|None=None,state:str|None=None,error:str|None=None,
         if not obj:raise HTTPException(400,'Solicitação expirada ou já utilizada')
         age=db.utcnow()- (obj.created_at.replace(tzinfo=timezone.utc) if obj.created_at.tzinfo is None else obj.created_at)
         verifier=decrypt(obj.verifier_encrypted)
+        referral_code=obj.referral_code
         s.delete(obj);s.commit()
     if age.total_seconds()>600:raise HTTPException(400,'Solicitação de login expirada')
     if error:return RedirectResponse('/?login=cancelled',303)
@@ -899,8 +903,10 @@ async def callback(code:str|None=None,state:str|None=None,error:str|None=None,
     session_id=make_session_id()
     with db.SessionLocal() as s:
         user=s.execute(select(db.User).where(db.User.deriv_account_id==account)).scalar_one_or_none()
-        if user is None:
+        created_new=user is None
+        if created_new:
             user=db.User(deriv_account_id=account);s.add(user);s.flush()
+        register_first_login(s,user,created_new=created_new,referred_code=referral_code)
         autopilot_enabled.discard(user.id)
         old_consent=s.get(db.AutoPilotResumeConsent,user.id)
         if old_consent:s.delete(old_consent)
@@ -1194,8 +1200,8 @@ async def autopilot_readiness(request:Request,nexora_sid:str|None=Cookie(default
         boundary=latest_risk_session(sess,user.id)
         reason=autopilot_start_blocker(user,orders,after_order_id=boundary.after_order_id if boundary else 0)
         access=access_status(sess,user.id)
-        if access['enforced'] and access['status']=='EXPIRED':
-            reason='Acesso de teste expirado. Renove para liberar novas entradas.'
+        if access['enforced'] and access['status'] in ('EXPIRED','SUSPENDED'):
+            reason='Acesso do robô suspenso ou expirado. Conquiste horas por indicação ou consulte o suporte.'
     return {'ready':reason is None,'reason':reason,'access':access,
             'execution':'DERIV_DEMO_ONLY','real_orders_enabled':False}
 
@@ -1204,7 +1210,10 @@ async def autopilot_readiness(request:Request,nexora_sid:str|None=Cookie(default
 async def my_access_status(request:Request,nexora_sid:str|None=Cookie(default=None)):
     user=active_user(request,nexora_sid)
     with db.SessionLocal() as sess:
-        return access_status(sess,user.id)
+        status=access_status(sess,user.id)
+        referral=referral_report(sess,user.id)
+        sess.commit()
+        return {**status,**referral}
 
 
 @app.post('/api/autopilot/start')
@@ -1226,8 +1235,8 @@ async def autopilot_start(request:Request,payload:AutoPilotSwitch,
         if blocker:
             raise HTTPException(409,blocker)
         access=access_status(sess,user.id)
-        if access['enforced'] and access['status']=='EXPIRED':
-            raise HTTPException(403,'Acesso de teste expirado. Novas entradas desabilitadas.')
+        if access['enforced'] and access['status'] in ('EXPIRED','SUSPENDED'):
+            raise HTTPException(403,'Acesso suspenso ou expirado. Novas entradas desabilitadas.')
     # Each manual activation starts a new durable sequence. Historical settled
     # orders still apply to cumulative stop checks but not the new progression.
     async with autopilot_lock:
