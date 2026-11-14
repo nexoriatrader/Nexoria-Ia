@@ -63,6 +63,33 @@ def _read_existing() -> dict[int, list]:
         return candles
 
 
+def _checkpoint(rows: dict[int, list]):
+    """Save raw, validated pages without deleting already collected UTC days."""
+    if not rows:
+        return
+    by_day = {}
+    for epoch, value in rows.items():
+        day = datetime.fromtimestamp(epoch, timezone.utc).strftime("%Y-%m-%d")
+        by_day.setdefault(day, []).append(value)
+    with db.SessionLocal() as session:
+        for day, additions in by_day.items():
+            current = session.scalars(
+                select(M1HistoryDay).where(
+                    M1HistoryDay.symbol == SYMBOL,
+                    M1HistoryDay.utc_day == day
+                ).limit(1)
+            ).first()
+            values = {int(x[0]): x for x in _decode(current.compressed_candles)} if current else {}
+            values.update({int(x[0]): x for x in additions})
+            if current is None:
+                current = M1HistoryDay(symbol=SYMBOL, utc_day=day,
+                                       compressed_candles="", saved_at=datetime.now(timezone.utc))
+                session.add(current)
+            current.compressed_candles = _encode([values[k] for k in sorted(values)])
+            current.saved_at = datetime.now(timezone.utc)
+        session.commit()
+
+
 def _store(candles: dict[int, list], cutoff: int):
     days = {}
     for epoch, row in sorted(candles.items()):
@@ -125,17 +152,33 @@ async def collect_m1_30_days():
     if valid_prefix:
         times = sorted(retained)
         valid_prefix = all(b - a == MINUTE for a, b in zip(times, times[1:]))
-    stop_at = max(retained) if valid_prefix else first - MINUTE
+    stop_at = first - MINUTE
     fetched = {}
+    # Resume backward from previously saved contiguous recent suffix.
+    # If recent coverage is stale, fetch the new tail first.
     end = last_closed + MINUTE
+    if retained and max(retained) >= last_closed - 5*MINUTE:
+        keys = sorted(retained)
+        suffix_start = keys[-1]
+        for idx in range(len(keys)-1, 0, -1):
+            if keys[idx] - keys[idx-1] != MINUTE:
+                break
+            suffix_start = keys[idx-1]
+        end = suffix_start
+        LOG.warning("Research M1 resuming from UTC minute %s", end)
     for page in range(MAX_PAGES):
-        response = await public_request({
-            "ticks_history": SYMBOL,
+        try:
+            response = await public_request({
+                "ticks_history": SYMBOL,
             "style": "candles",
             "granularity": MINUTE,
             "count": PAGE_SIZE,
             "end": str(end)
-        }, expected="candles", timeout=25)
+            }, expected="candles", timeout=25)
+        except Exception:
+            # Even rate-limited runs keep all already validated pages.
+            await asyncio.to_thread(_checkpoint, fetched)
+            raise
         raw = response.get("candles")
         if not isinstance(raw, list) or not raw:
             raise MarketError("Deriv did not return M1 candles")
@@ -171,8 +214,12 @@ async def collect_m1_30_days():
         # Preserve exact minute alignment; never use earliest-1 second.
         end = earliest
         if page % 4 == 3:
-            await asyncio.sleep(0.25)
-    combined = {**retained, **fetched}
+            await asyncio.to_thread(_checkpoint, fetched)
+            fetched.clear()
+            await asyncio.sleep(0.7)
+    await asyncio.to_thread(_checkpoint, fetched)
+    latest = await asyncio.to_thread(_read_existing)
+    combined = {**retained, **{t:r for t,r in latest.items() if first <= t <= last_closed}}
     expected = (last_closed - first) // MINUTE + 1
     missing = expected - len(combined)
     # Permit a small genuine gap rate. Never fabricate prices or bridge gaps.
