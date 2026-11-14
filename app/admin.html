@@ -14,7 +14,8 @@ button.secondary{background:#1a3c55;color:#effaff;border:1px solid #41647a}butto
 table{width:100%;border-collapse:collapse;white-space:nowrap}th,td{padding:11px;border-bottom:1px solid #294356;text-align:left;font-size:13px}
 tr[data-id]{cursor:pointer}tr[data-id]:hover,tr[data-id].selected{background:#203a50} .small-note{font-size:12px;color:#aabed0}.scroll{overflow:auto}
 #feedback{color:#d7e9b7;margin-top:12px;min-height:18px}#audit{white-space:pre-line;color:#b6cddd;font-size:13px}
-[hidden]{display:none!important}@media(max-width:600px){.grid{grid-template-columns:1fr}.card{padding:15px}}
+.research-metrics{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin:14px 0}.research-metric{background:#071827;border:1px solid #294356;border-radius:12px;padding:12px}.research-metric strong{display:block;font-size:20px;color:#ffdb91}.research-tag{display:inline-block;padding:3px 9px;border-radius:20px;background:#244458;color:#d2eaff;font-size:12px}.negative{color:#ff9fa7}.positive{color:#a8efc5}.research-warning{padding:12px;border:1px solid #755c36;background:#2c281f;border-radius:10px;color:#ffe6b0;font-size:13px}.research-table td:first-child{font-weight:700}
+[hidden]{display:none!important}@media(max-width:600px){.grid,.research-metrics{grid-template-columns:1fr}.card{padding:15px}}
 </style></head><body><main>
 <h1>NEXORA IA · Admin</h1><p>Acesso exclusivo para gerenciar prazos, suspensões e estornos. Operações financeiras não são executadas aqui.</p>
 <section id="login" class="card">
@@ -43,6 +44,23 @@ tr[data-id]{cursor:pointer}tr[data-id]:hover,tr[data-id].selected{background:#20
 <div class="buttons"><button onclick="save()">SALVAR ALTERAÇÃO</button></div>
 <div id="feedback" role="status"></div>
 </div>
+<section class="card" id="strategyLab" aria-labelledby="strategyTitle">
+<h2 id="strategyTitle">Laboratório de Estratégias · Volatility 100 (1s)</h2>
+<p>Pesquisa privada do Admin. Histórico da Deriv, sem Martingale, ciclos ou execução de ordens.</p>
+<div class="buttons"><button class="secondary" type="button" id="researchReload" onclick="loadResearch()">CONSULTAR RELATÓRIO</button><span class="research-tag">Somente leitura · M5</span></div>
+<div id="researchStatus" role="status" class="small-note" style="margin-top:12px">Consultando relatório armazenado...</div>
+<div id="researchResults" hidden>
+<div class="research-metrics">
+<div class="research-metric"><span class="small-note">Velas de 5 min</span><strong id="researchCandles">—</strong></div>
+<div class="research-metric"><span class="small-note">Período UTC</span><strong id="researchPeriod" style="font-size:12px;line-height:1.6">—</strong></div>
+<div class="research-metric"><span class="small-note">Última coleta</span><strong id="researchUpdated" style="font-size:13px">—</strong></div>
+</div>
+<h3 style="font-size:14px;margin:18px 0 7px">Validação fora da amostra (30% finais)</h3>
+<div class="scroll"><table class="research-table"><thead><tr><th>Estratégia</th><th>Sinais</th><th>Vitórias</th><th>Derrotas</th><th>Acerto</th><th>Expectativa*</th></tr></thead><tbody id="researchRows"></tbody></table></div>
+<p class="small-note" style="margin-top:12px" id="researchTraining">—</p>
+<div class="research-warning" id="researchDisclaimer">* Retorno líquido hipotético de 88% por vitória. Não representa execução, payout real ou lucro comprovado.</div>
+</div>
+</section>
 <details class="card"><summary>Histórico administrativo</summary><p id="audit">—</p></details>
 </section>
 <div id="error" role="alert" style="color:#ff9fa7"></div>
@@ -51,12 +69,38 @@ tr[data-id]{cursor:pointer}tr[data-id]:hover,tr[data-id].selected{background:#20
 const $=id=>document.getElementById(id);
 async function call(url,opts={}){const r=await fetch(url,{credentials:'same-origin',...opts});
  const d=await r.json();if(!r.ok)throw Error(d.detail||'Falha de comunicação');return d;}
-async function show(){try{const s=await call('/api/admin/session');$('login').hidden=s.authenticated;$('panel').hidden=!s.authenticated;if(s.authenticated)await refresh();}catch(e){$('error').textContent=e.message}}
+async function show(){try{const s=await call('/api/admin/session');$('login').hidden=s.authenticated;$('panel').hidden=!s.authenticated;if(s.authenticated){await Promise.all([refresh(),loadResearch()]);}}catch(e){$('error').textContent=e.message}}
 $('loginForm').addEventListener('submit',async e=>{e.preventDefault();$('error').textContent='';
  try{await call('/api/admin/login',{method:'POST',headers:{'Content-Type':'application/json'},
  body:JSON.stringify({login:$('loginName').value,password:$('loginPassword').value})});
  $('loginPassword').value='';await show()}catch(e){$('error').textContent=e.message}});
-async function logout(){await call('/api/admin/logout',{method:'POST'});$('panel').hidden=true;$('login').hidden=false}
+async function logout(){await call('/api/admin/logout',{method:'POST'});$('panel').hidden=true;$('login').hidden=false;$('researchResults').hidden=true}
+function fmtPct(v){return typeof v==='number'?(v*100).toFixed(2).replace('.',',')+'%':'—'}
+function researchName(s){return ({ema50_trend:'EMA 50 · Tendência',bollinger_reversal:'Bollinger · Reversão',channel_breakout:'Rompimento · Canal',random_control:'Controle aleatório'})[s]||String(s)}
+function researchDate(v){return v?new Date(v).toLocaleString('pt-BR',{timeZone:'America/Sao_Paulo'}):'—'}
+async function loadResearch(){
+ const button=$('researchReload');button.disabled=true;$('researchStatus').textContent='Consultando estudo no banco...';
+ try{
+  const data=await call('/api/admin/research/volatility100-30d');
+  if(data.state==='PENDING'){$('researchResults').hidden=true;$('researchStatus').textContent=data.message;return}
+  if(data.state!=='RESEARCH_ONLY'||!Array.isArray(data.strategies)||data.symbol!=='1HZ100V')throw Error('Formato de relatório inválido');
+  $('researchCandles').textContent=Number(data.candles).toLocaleString('pt-BR');
+  $('researchPeriod').textContent=(data.period_from||'').slice(0,10)+' até '+(data.period_to||'').slice(0,10);
+  $('researchUpdated').textContent=researchDate(data.generated_at);
+  $('researchRows').replaceChildren();
+  for(const item of data.strategies){
+   const v=item.holdout||{},tr=document.createElement('tr');
+   const values=[researchName(item.strategy),v.signals??'—',v.wins??'—',v.losses??'—',fmtPct(v.win_rate_excluding_draws),fmtPct(v.illustrative_ev_at_88pct)];
+   values.forEach((value,i)=>{const td=document.createElement('td');td.textContent=String(value);if(i===5)td.className=typeof v.illustrative_ev_at_88pct==='number'&&v.illustrative_ev_at_88pct<0?'negative':'positive';tr.append(td)});
+   $('researchRows').append(tr);
+  }
+  $('researchTraining').textContent='Treinamento: 70% iniciais · Validação: 30% finais · '+data.strategies.length+' métodos · Ordens enviadas: '+data.orders_sent+'.';
+  $('researchDisclaimer').textContent='* '+(data.warning||'Expectativa com retorno líquido hipotético de 88%; não representa contratos liquidados da Deriv. Nenhuma estratégia está aprovada para operação automática.');
+  $('researchStatus').textContent='Relatório histórico disponível. Nenhuma estratégia é ativada por esta página.';
+  $('researchResults').hidden=false;
+ }catch(e){$('researchResults').hidden=true;$('researchStatus').textContent='Não foi possível carregar o estudo: '+e.message}
+ finally{button.disabled=false}
+}
 function actionUI(){$('daysField').hidden=!['add_hours','remove_hours'].includes($('action').value)}
 function formatNexoraId(id){return 'NXR-'+String(id).padStart(6,'0')}
 function parseNexoraId(raw){
