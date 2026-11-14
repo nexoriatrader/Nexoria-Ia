@@ -475,10 +475,10 @@ button.choose-account:focus-visible{outline:3px solid #71d2ff;outline-offset:4px
   </div>
 </section>
 <section id="results" class="hidden">
-  <div class="section-heading"><div><h1>Resultados</h1><p>Histórico de operações DEMO.</p></div></div>
+  <div class="section-heading"><div><h1>Resultados</h1><p>Somente contratos confirmados pela Deriv DEMO entram no placar. Horários sem confirmação da corretora aparecem como —.</p></div></div>
   <div class="card"><div class="surface-heading">HISTÓRICO COMPLETO DO ROBÔ</div>
     <div class="actions" style="align-items:center"><button class="outline" type="button" onclick="go('dashboard')">VOLTAR AO PAINEL DO ROBÔ</button><span class="helper" id="resultsLiveStatus" role="status">Atualização automática 🟢</span></div>
-    <div class="table-wrap"><table><thead><tr><th>Data (Brasília)</th><th>Horário</th><th>Conta</th><th>Ativo</th><th>Direção</th><th>Entrada</th><th>Expiração</th><th>Etapa</th><th>Situação</th><th>WIN / LOSS</th><th>Resultado</th></tr></thead><tbody id="ordersBody"><tr><td colspan="11" class="empty">Carregando contratos...</td></tr></tbody></table></div>
+    <div class="table-wrap"><table><thead><tr><th>Data da compra (Deriv · Brasília)</th><th>Horário da compra (Deriv)</th><th>Conta</th><th>Ativo</th><th>Direção</th><th>Entrada</th><th>Expiração</th><th>Etapa</th><th>Situação</th><th>WIN / LOSS</th><th>Resultado</th></tr></thead><tbody id="ordersBody"><tr><td colspan="11" class="empty">Carregando contratos...</td></tr></tbody></table></div>
   </div>
 </section>
 <section id="settings" class="hidden">
@@ -842,7 +842,7 @@ function renderOrders(){
  }
  for(const o of demoOrders){
    const row=document.createElement('tr');
-   const [date,time]=brasilDateTime(o.started_at_brasilia||o.created_at);
+   const [date,time]=brasilDateTime(o.started_at_brasilia||o.broker_purchase_at);
    const result=o.outcome||'PENDING';
    const outcome=result==='WIN'?'WIN':result==='LOSS'?'LOSS':result==='DRAW'?'EMPATE':result==='UNKNOWN'?'INDEFINIDO':'PENDENTE';
    const columns=[date,time,o.account_mode==='demo'?'Treinamento':o.account_mode==='real'?'Real':'Não registrada',
