@@ -787,7 +787,7 @@ async function refreshDashboard(){
    $('autopilotVersion').textContent='Robô Trader I.A';
    // Match the server's active_market() UTC session rule, regardless of robot ON/OFF.
    const scheduleNow=new Date(), utcDay=scheduleNow.getUTCDay(), utcHour=scheduleNow.getUTCHours();
-   const forexSelected=utcDay>=1&&utcDay<=5&&utcHour>=8&&utcHour<17;
+   const forexSelected=!pulsoSelected&&utcDay>=1&&utcDay<=5&&utcHour>=8&&utcHour<17;
    $('forexScheduleStatus').textContent=forexSelected?'SELECIONADO':'EM ESPERA';
    $('volScheduleStatus').textContent=forexSelected?'EM ESPERA':'SELECIONADO';
    $('forexScheduleDot').classList.toggle('active',forexSelected);
@@ -800,7 +800,11 @@ async function refreshDashboard(){
    $('robotButton').setAttribute('aria-disabled',String($('robotButton').disabled));
    $('robotButton').style.background=robotRunning?'linear-gradient(135deg,#fa9b9d,#dc5269)':'';
    if(robotRunning)showRobotNotice('');
-   if(status.v2_available){
+   if(pulsoSelected){
+     $('autopilotVersion').textContent='NEXORA PULSO V2 · CALL · 5 min · DEMO';
+     $('v2ScannerHealth').textContent='Scanner PULSO: somente Volatility 100 (1s) e volatilidade estável';
+     $('v2Opportunity').textContent='● Oportunidade encontrada: aguarde confirmação no fechamento da vela M1';
+   }else if(status.v2_available){
      req('/api/autopilot/v2/scanner-status').then(data=>{
        if(sequence!==dashboardStatusSequence)return;
        const scan=data.scan||{};
