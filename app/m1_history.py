@@ -145,10 +145,18 @@ async def collect_m1_30_days():
                 prices = [float(candle[key]) for key in ("open", "high", "low", "close")]
             except (KeyError, TypeError, ValueError, OverflowError):
                 raise MarketError("Malformed M1 candle") from None
-            if (epoch % MINUTE or not all(isfinite(p) and p > 0 for p in prices)
-                    or not prices[2] <= min(prices[0], prices[3])
-                    <= max(prices[0], prices[3]) <= prices[1]):
-                raise MarketError("Invalid historical OHLC or timestamp")
+            # A response may contain an in-progress candle outside our closed window.
+            # Discard it before validation; do not silently repair broker OHLC.
+            if epoch > last_closed or epoch < first:
+                earliest = min(earliest, epoch)
+                continue
+            if epoch % MINUTE:
+                raise MarketError(f"M1 candle epoch misaligned: epoch={epoch}, remainder={epoch % MINUTE}")
+            if not all(isfinite(p) and p > 0 for p in prices):
+                raise MarketError(f"M1 candle nonpositive/nonfinite: epoch={epoch}")
+            if not (prices[2] <= prices[0] <= prices[1] and
+                    prices[2] <= prices[3] <= prices[1]):
+                raise MarketError(f"M1 OHLC inconsistent: epoch={epoch}, o={prices[0]}, h={prices[1]}, l={prices[2]}, c={prices[3]}")
             earliest = min(earliest, epoch)
             if first <= epoch <= last_closed:
                 fetched[epoch] = [epoch, *prices]
