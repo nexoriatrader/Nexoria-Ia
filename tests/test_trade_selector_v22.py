@@ -18,6 +18,8 @@ def bars(granularity, count, last_epoch):
 
 
 def setup(monkeypatch):
+    monkeypatch.setattr(selector,'SIGNAL_PROFILE','strict_v22')
+    monkeypatch.setattr(selector,'V22_TEST_MODE',False)
     close=datetime(2026,11,13,12,0,tzinfo=timezone.utc).timestamp()
     h=bars(3600,100,int(close)-3600)
     m=bars(900,110,int(close)-900)
@@ -89,3 +91,50 @@ def test_v22_selector_isolated_queue_and_uses_h1_m15(monkeypatch):
     assert 2022 not in selector._pending_signals_by_user
     selector.clear_user_signals(2022)
     assert (2022,'pullback_v22') not in selector._pending_signals_by_user
+
+
+def test_v23_confluence_scores_and_uses_closed_bars(monkeypatch):
+    item,h,m,close=setup(monkeypatch)
+    # Breakout and swing should clear 70 even with the range filter absent.
+    signal=selector.v23_confluence_signal(item,h,m,close+5)
+    assert signal is not None
+    assert signal['strategy']=='h1_m15_confluence_v23'
+    assert signal['minutes']==15
+    assert 70<=signal['score']<=100
+    assert selector.v23_confluence_signal(item,h,m,close-1) is None
+    assert selector.v23_confluence_signal(item,h,m,close+51) is None
+
+
+def test_v23_requires_confirmed_m15_and_score(monkeypatch):
+    item,h,m,close=setup(monkeypatch)
+    # A bullish H1 alone is insufficient.
+    m[-1]['open']=m[-1]['close']+.00001
+    m[-1]['high']=m[-1]['open']+.00005
+    assert selector.v23_confluence_signal(item,h,m,close+5) is None
+    # Missing optional confluence must not yield a trade.
+    item,h,m,close=setup(monkeypatch)
+    monkeypatch.setattr(selector,'swing_structure',lambda *a,**kw:False)
+    m[-1]['close']=m[-2]['close']+.00001
+    m[-1]['high']=m[-1]['close']+.00002
+    m[-3]['low']=m[-3]['close']-.00005
+    assert selector.v23_confluence_signal(item,h,m,close+5) is None
+
+
+def test_v23_scanner_selects_highest_score(monkeypatch):
+    item,h,m,close=setup(monkeypatch)
+    monkeypatch.setattr(selector,'SIGNAL_PROFILE','confluence_v23')
+    monkeypatch.setattr(selector,'_pending_signals_by_user',{})
+    monkeypatch.setattr(selector.time,'time',lambda:close+5)
+    one=dict(item)
+    two={**item,'symbol':'frxGBPUSD','display_name':'GBP/USD'}
+    monkeypatch.setattr(selector,'catalogue',AsyncMock(return_value=[one,two]))
+    monkeypatch.setattr(selector,'supported',AsyncMock(return_value=True))
+    async def fake_fetch(symbol,seconds,count,*,now):
+        return h if seconds==3600 else m
+    monkeypatch.setattr(selector,'fetch_closed_timeframe',fake_fetch)
+    result=asyncio.run(selector.select_demo_signal(user_key=400,
+         strategy_mode='pullback_v22'))
+    assert result is not None
+    assert result['strategy']=='h1_m15_confluence_v23'
+    assert result['score']>=70
+    assert len(selector._pending_signals_by_user[(400,'pullback_v22')])==1
