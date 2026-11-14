@@ -20,6 +20,7 @@ def bars(granularity, count, last_epoch):
 def setup(monkeypatch):
     monkeypatch.setattr(selector,'SIGNAL_PROFILE','strict_v22')
     monkeypatch.setattr(selector,'V22_TEST_MODE',False)
+    monkeypatch.setattr(selector,'active_market',lambda now=None:'forex')
     close=datetime(2026,11,13,12,0,tzinfo=timezone.utc).timestamp()
     h=bars(3600,100,int(close)-3600)
     m=bars(900,110,int(close)-900)
@@ -77,7 +78,6 @@ def test_v22_excludes_unclosed_candles():
 def test_v22_selector_isolated_queue_and_uses_h1_m15(monkeypatch):
     item,h,m,close=setup(monkeypatch)
     monkeypatch.setattr(selector,'_pending_signals_by_user',{})
-    monkeypatch.setattr(selector,'_scan_offset',0)
     monkeypatch.setattr(selector.time,'time',lambda:close+5)
     monkeypatch.setattr(selector,'catalogue',AsyncMock(return_value=[item]))
     monkeypatch.setattr(selector,'supported',AsyncMock(return_value=True))
