@@ -507,6 +507,7 @@ body.marketing-mode .section-foot{margin-top:0}
     <div class="hero-top"><div class="hero-title">Nexora Robô Automático</div><span id="robotState" class="hero-state">DESLIGADO</span></div>
     <div class="robot-control-row">
       <button id="robotButton" class="hero-action" disabled aria-disabled="true" onclick="toggleRobot()">LIGAR ROBÔ</button>
+      <button id="pulsoSelectButton" class="outline" type="button" onclick="choosePulsoV2()" style="font-size:12px;padding:10px">USAR PULSO V2 · DEMO</button>
       <div id="robotLiveCard" class="robot-live-card offline" role="status" aria-live="polite" aria-atomic="true">
         <div class="robot-live-heading"><span class="robot-live-dot" aria-hidden="true"></span><span id="robotLiveLabel">ROBÔ OFFLINE</span></div>
         <p id="robotLiveCopy" class="robot-live-copy">Pronto para buscar novas oportunidades quando você ativar.</p>
@@ -791,6 +792,9 @@ async function refreshDashboard(){
    $('volScheduleStatus').textContent=forexSelected?'EM ESPERA':'SELECIONADO';
    $('forexScheduleDot').classList.toggle('active',forexSelected);
    $('volScheduleDot').classList.toggle('active',!forexSelected);
+   const pulsoSelected=status.selected_strategy==='pulso_v2';
+   $('pulsoSelectButton').textContent=pulsoSelected?'PULSO V2 SELECIONADO · DEMO':'USAR PULSO V2 · DEMO';
+   $('pulsoSelectButton').disabled=robotRunning||pulsoSelected;
    $('robotButton').textContent=robotRunning?'DESLIGAR ROBÔ':'LIGAR ROBÔ';
    $('robotButton').disabled=(!robotRunning&&!available)||$('robotButton').dataset.commandPending==='true';
    $('robotButton').setAttribute('aria-disabled',String($('robotButton').disabled));
@@ -839,6 +843,20 @@ async function refreshDashboard(){
    // Keep the last known status; do not imply that the server stopped trading.
    return null;
  }
+}
+async function choosePulsoV2(){
+  if(robotRunning){showRobotNotice('Desligue o robô antes de mudar para PULSO V2.');return}
+  if(!window.confirm('Selecionar PULSO V2 apenas na conta DEMO? Usa CALL, Volatility 100 (1s), expiração de 5 minutos, valor fixo e stops existentes. Não liga o robô automaticamente.'))return;
+  const b=$('pulsoSelectButton');b.disabled=true;
+  try{
+    const result=await req('/api/autopilot/pulso-v2/select',{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({confirm:'SELECT_PULSO_V2_DEMO'})
+    });
+    showRobotNotice(result.message);
+    await refreshDashboard();
+  }catch(e){showRobotNotice('Não foi possível selecionar PULSO V2: '+e.message)}
+  finally{b.disabled=false}
 }
 async function toggleRobot(){
  const button=$('robotButton');
