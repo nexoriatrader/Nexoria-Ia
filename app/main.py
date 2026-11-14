@@ -15,6 +15,7 @@ from pydantic import BaseModel
 from sqlalchemy import select, delete
 
 from . import db
+from .access import access_control_enabled, access_status, start_trial_on_first_robot_start
 from .demo import (DemoTradingError, DemoPreBuyDeadlineExceeded, demo_account_balance,
                    demo_contract_status, demo_buy, demo_proposal,
                    prepare_demo_buy_socket)
@@ -244,13 +245,15 @@ def restore_demo_autopilot_consent():
                 except Exception:
                     continue
             reason=None
-            if not user or not run or user.selected_mode!='demo' or user.martingale:
+            if access_control_enabled() and not access_status(sess,uid)['allowed']:
+                reason='Acesso ao robô expirado ou ainda não ativado'
+            if reason is None and (not user or not run or user.selected_mode!='demo' or user.martingale):
                 reason='Retomada bloqueada: configuração ou conta DEMO inválida'
-            elif not valid_auth:
+            elif reason is None and not valid_auth:
                 reason='Retomada bloqueada: sessão Deriv expirada ou indisponível'
-            elif any(o.state in ('PENDING','UNKNOWN') for o in orders):
+            elif reason is None and any(o.state in ('PENDING','UNKNOWN') for o in orders):
                 reason='Retomada bloqueada: contrato pendente ou incerto; confira os resultados'
-            else:
+            elif reason is None:
                 boundary=latest_risk_session(sess,uid)
                 reason=autopilot_start_blocker(
                     user,orders,after_order_id=boundary.after_order_id if boundary else 0)
@@ -408,6 +411,9 @@ async def autopilot_once():
                 user=sess.get(db.User,uid)
                 if not user or user.selected_mode!='demo':
                     disarm_autopilot(uid,'Conta de treinamento indisponível; robô desligado')
+                    continue
+                if access_control_enabled() and not access_status(sess,uid)['allowed']:
+                    disarm_autopilot(uid,'Acesso do robô expirou: novas compras bloqueadas; contratos existentes serão reconciliados')
                     continue
                 auths=sess.scalars(select(db.Session).where(db.Session.user_id==uid)
                                  .order_by(db.Session.created_at.desc())).all()
@@ -1187,8 +1193,18 @@ async def autopilot_readiness(request:Request,nexora_sid:str|None=Cookie(default
         orders=sess.scalars(select(db.DemoOrder).where(db.DemoOrder.user_id==user.id)).all()
         boundary=latest_risk_session(sess,user.id)
         reason=autopilot_start_blocker(user,orders,after_order_id=boundary.after_order_id if boundary else 0)
-    return {'ready':reason is None,'reason':reason,
+        access=access_status(sess,user.id)
+        if access['enforced'] and access['status']=='EXPIRED':
+            reason='Acesso de teste expirado. Renove para liberar novas entradas.'
+    return {'ready':reason is None,'reason':reason,'access':access,
             'execution':'DERIV_DEMO_ONLY','real_orders_enabled':False}
+
+
+@app.get('/api/access/status')
+async def my_access_status(request:Request,nexora_sid:str|None=Cookie(default=None)):
+    user=active_user(request,nexora_sid)
+    with db.SessionLocal() as sess:
+        return access_status(sess,user.id)
 
 
 @app.post('/api/autopilot/start')
@@ -1209,10 +1225,16 @@ async def autopilot_start(request:Request,payload:AutoPilotSwitch,
         blocker=autopilot_start_blocker(user,orders,after_order_id=boundary.after_order_id if boundary else 0)
         if blocker:
             raise HTTPException(409,blocker)
+        access=access_status(sess,user.id)
+        if access['enforced'] and access['status']=='EXPIRED':
+            raise HTTPException(403,'Acesso de teste expirado. Novas entradas desabilitadas.')
     # Each manual activation starts a new durable sequence. Historical settled
     # orders still apply to cumulative stop checks but not the new progression.
     async with autopilot_lock:
         with db.SessionLocal() as sess:
+            access=start_trial_on_first_robot_start(sess,user.id)
+            if access['enforced'] and not access['allowed']:
+                raise HTTPException(403,'Acesso do robô expirado. Renove antes de ligar.')
             existing=sess.get(db.RobotRun,user.id)
             latest=sess.scalars(select(db.DemoOrder.id).where(
                 db.DemoOrder.user_id==user.id).order_by(db.DemoOrder.id.desc()).limit(1)).first()
@@ -1241,7 +1263,7 @@ async def autopilot_start(request:Request,payload:AutoPilotSwitch,
         log.warning('AutoPilot armed: scan_mode=%s; market=automatic; execution=DEMO',
                  'V2.2_H1_M15' if v2_enabled() else 'LEGACY')
     autopilot_reasons[user.id]='AutoPilot ligado; aguardando oportunidade oficial na Deriv Demo'
-    return {'running':True,'execution':'DERIV_DEMO_ONLY','real_orders_enabled':False}
+    return {'running':True,'access':access,'execution':'DERIV_DEMO_ONLY','real_orders_enabled':False}
 
 
 @app.post('/api/autopilot/stop')
