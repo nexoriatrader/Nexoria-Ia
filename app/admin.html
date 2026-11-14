@@ -50,6 +50,21 @@ tr[data-id]{cursor:pointer}tr[data-id]:hover,tr[data-id].selected{background:#20
 <div class="buttons"><button class="secondary" type="button" id="researchReload" onclick="loadResearch()">CONSULTAR RELATÓRIO</button><span class="research-tag">Somente leitura · M5</span></div>
 <div id="researchStatus" role="status" class="small-note" style="margin-top:12px">Consultando relatório armazenado...</div>
 <div class="research-warning" style="margin-top:12px" id="m1Coverage" role="status">Histórico M1: consultando cobertura da Deriv...</div>
+<div class="card" style="margin-top:14px;background:#0b1c2b;border-color:#32506b">
+<h3 style="margin:0 0 10px;font-size:15px">Estudo M1 · M3 · M5 · M15</h3>
+<p class="small-note">96 combinações exploratórias: 4 tempos gráficos × 4 expirações × 6 estratégias. Apenas simulação; pagamentos históricos não verificados.</p>
+<div class="buttons"><button class="secondary" type="button" onclick="loadMultiResearch()">VER ESTUDO MULTITIMEFRAME</button></div>
+<div id="multiStatus" class="small-note" role="status" style="margin-top:10px">Aguardando consulta...</div>
+<div id="multiBody" hidden>
+<div class="research-metrics">
+<div class="research-metric"><span class="small-note">M1 verificadas</span><strong id="multiCandles">—</strong></div>
+<div class="research-metric"><span class="small-note">Combinações</span><strong id="multiModels">—</strong></div>
+<div class="research-metric"><span class="small-note">Selecionado no treino</span><strong id="multiSelected" style="font-size:12px">—</strong></div>
+</div>
+<div class="scroll"><table><thead><tr><th>Tempo</th><th>Expiração</th><th>Estratégia</th><th>Sinais de validação</th><th>Acertos</th><th>P&L hipotético / US$ 1</th></tr></thead><tbody id="multiRows"></tbody></table></div>
+<p class="research-warning" style="margin-top:12px">A tabela pode conter resultados positivos por acaso devido às várias comparações. Somente o modelo selecionado no treinamento deve orientar uma avaliação fora da amostra; nenhum resultado autoriza operações.</p>
+</div>
+</div>
 <div id="researchResults" hidden>
 <div class="research-metrics">
 <div class="research-metric"><span class="small-note">Velas de 5 min</span><strong id="researchCandles">—</strong></div>
@@ -70,7 +85,7 @@ tr[data-id]{cursor:pointer}tr[data-id]:hover,tr[data-id].selected{background:#20
 const $=id=>document.getElementById(id);
 async function call(url,opts={}){const r=await fetch(url,{credentials:'same-origin',...opts});
  const d=await r.json();if(!r.ok)throw Error(d.detail||'Falha de comunicação');return d;}
-async function show(){try{const s=await call('/api/admin/session');$('login').hidden=s.authenticated;$('panel').hidden=!s.authenticated;if(s.authenticated){await Promise.all([refresh(),loadResearch(),loadM1Coverage()]);}}catch(e){$('error').textContent=e.message}}
+async function show(){try{const s=await call('/api/admin/session');$('login').hidden=s.authenticated;$('panel').hidden=!s.authenticated;if(s.authenticated){await Promise.all([refresh(),loadResearch(),loadM1Coverage(),loadMultiResearch()]);}}catch(e){$('error').textContent=e.message}}
 $('loginForm').addEventListener('submit',async e=>{e.preventDefault();$('error').textContent='';
  try{await call('/api/admin/login',{method:'POST',headers:{'Content-Type':'application/json'},
  body:JSON.stringify({login:$('loginName').value,password:$('loginPassword').value})});
@@ -79,6 +94,29 @@ async function logout(){await call('/api/admin/logout',{method:'POST'});$('panel
 function fmtPct(v){return typeof v==='number'?(v*100).toFixed(2).replace('.',',')+'%':'—'}
 function researchName(s){return ({ema50_trend:'EMA 50 · Tendência',bollinger_reversal:'Bollinger · Reversão',channel_breakout:'Rompimento · Canal',random_control:'Controle aleatório'})[s]||String(s)}
 function researchDate(v){return v?new Date(v).toLocaleString('pt-BR',{timeZone:'America/Sao_Paulo'}):'—'}
+async function loadMultiResearch(){
+ $('multiStatus').textContent='Consultando relatório M1-M15...';
+ try{
+  const data=await call('/api/admin/research/multi-timeframe');
+  if(data.state==='PENDING'){$('multiBody').hidden=true;$('multiStatus').textContent=data.message;return}
+  if(data.state!=='RESEARCH_ONLY'||!Array.isArray(data.results))throw Error('Formato inesperado');
+  $('multiCandles').textContent=Number(data.m1_candles).toLocaleString('pt-BR');
+  $('multiModels').textContent=String(data.models_tested);
+  const winner=data.training_selected;
+  $('multiSelected').textContent=winner?winner.timeframe+' / '+winner.expiry_minutes+' min / '+winner.strategy:'Nenhum';
+  const sorted=data.results.slice().sort((a,b)=>(b.holdout?.pnl_per_1_usd_at_88pct??-1e9)-(a.holdout?.pnl_per_1_usd_at_88pct??-1e9));
+  $('multiRows').replaceChildren();
+  for(const item of sorted.slice(0,30)){
+   const tr=document.createElement('tr'),v=item.holdout||{};
+   const values=[item.timeframe,item.expiry_minutes+' min',item.strategy,v.signals,fmtPct(v.win_rate),v.pnl_per_1_usd_at_88pct];
+   values.forEach((value,index)=>{const td=document.createElement('td');td.textContent=String(value??'—');
+   if(index===5)td.className=Number(value)>=0?'positive':'negative';tr.append(td)});
+   $('multiRows').append(tr);
+  }
+  $('multiBody').hidden=false;
+  $('multiStatus').textContent='Histórico '+data.period_from.slice(0,10)+' a '+data.period_to.slice(0,10)+' · Melhor do treinamento: '+(winner?fmtPct(winner.holdout.win_rate)+' na validação':'não identificado')+'.';
+ }catch(e){$('multiBody').hidden=true;$('multiStatus').textContent='Falha ao consultar: '+e.message}
+}
 async function loadM1Coverage(){
  try{
   const r=await call('/api/admin/research/m1-history');
