@@ -42,6 +42,31 @@ class RobotAccess(Base):
     updated_at=Column(DateTime(timezone=True),default=utcnow,onupdate=utcnow,nullable=False)
 
 
+class ReferralLink(Base):
+    """Opaque public referral code; never expose Deriv identifiers."""
+    __tablename__='referral_links'
+    user_id=Column(Integer,ForeignKey('users.id'),primary_key=True)
+    code=Column(String(32),nullable=False,unique=True,index=True)
+    created_at=Column(DateTime(timezone=True),default=utcnow,nullable=False)
+
+
+class ReferralCredit(Base):
+    """At most one reward per invited account, committed atomically with expiry."""
+    __tablename__='referral_credits'
+    invitee_user_id=Column(Integer,ForeignKey('users.id'),primary_key=True)
+    referrer_user_id=Column(Integer,ForeignKey('users.id'),nullable=False,index=True)
+    credited_hours=Column(Integer,nullable=False,default=24)
+    created_at=Column(DateTime(timezone=True),default=utcnow,nullable=False)
+
+
+class ReferralAttribution(Base):
+    """Durable first-visit OAuth attribution without exposing private tokens."""
+    __tablename__='referral_attributions'
+    invitee_user_id=Column(Integer,ForeignKey('users.id'),primary_key=True)
+    referrer_user_id=Column(Integer,ForeignKey('users.id'),nullable=False,index=True)
+    created_at=Column(DateTime(timezone=True),default=utcnow,nullable=False)
+
+
 class RobotPlan(Base):
     """Saved onboarding preferences; experimental progressions are NOT execution rules."""
     __tablename__ = 'robot_plans'
@@ -103,6 +128,7 @@ class LoginFlow(Base):
     __tablename__ = 'login_flows'
     state_hash = Column(String(64), primary_key=True)
     verifier_encrypted = Column(Text, nullable=False)
+    referral_code = Column(String(32), nullable=True)
     created_at = Column(DateTime(timezone=True), default=utcnow)
 
 class Session(Base):
@@ -137,6 +163,10 @@ def init_db():
     if 'broker_purchase_at' not in columns:
         with engine.begin() as conn:
             conn.execute(text('ALTER TABLE demo_orders ADD COLUMN broker_purchase_at TIMESTAMP WITH TIME ZONE'))
+    flow_columns={col['name'] for col in inspect(engine).get_columns('login_flows')}
+    if 'referral_code' not in flow_columns:
+        with engine.begin() as conn:
+            conn.execute(text('ALTER TABLE login_flows ADD COLUMN referral_code VARCHAR(32)'))
 
 
 
