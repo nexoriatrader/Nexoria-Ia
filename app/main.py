@@ -768,6 +768,21 @@ async def headers(request:Request, call_next):
 @app.get('/')
 async def index(): return FileResponse(Path(__file__).parent/'index.html')
 
+@app.get('/i/{slug}')
+async def short_referral_redirect(slug:str):
+    """First-party shortener preserves the original OAuth attribution path."""
+    if not re.fullmatch(r'[A-Za-z0-9_-]{8}',slug):
+        raise HTTPException(404,'Convite não encontrado')
+    with db.SessionLocal() as sess:
+        link=sess.scalar(select(db.ReferralShortLink).where(db.ReferralShortLink.slug==slug))
+        if not link:
+            raise HTTPException(404,'Convite não encontrado')
+        original=sess.get(db.ReferralLink,link.user_id)
+        if not original:
+            raise HTTPException(404,'Convite não encontrado')
+        return RedirectResponse('/?ref='+original.code,status_code=302)
+
+
 @app.get('/brand/logo.png')
 async def brand_logo(): return FileResponse(Path(__file__).parent/'static'/'logo-nexora.png', media_type='image/png')
 
