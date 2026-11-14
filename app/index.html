@@ -325,6 +325,7 @@ body.marketing-mode .section-foot{margin-top:0}
 .lp-mock-metrics{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px}
 .lp-mock-metric{border:1px solid #325776;background:#0c2235;border-radius:12px;padding:15px 12px}
 .lp-mock-metric small{font-size:11px;color:#becfdc}.lp-mock-metric-symbol{color:#f4c45c;font-size:17px;margin-right:3px}.lp-mock-metric strong{display:block;font-size:20px;margin:5px 0 1px}.lp-mock-metric p{font-size:10px;color:#a6bfd1}
+.lp-mock-environment strong{font-size:clamp(15px,1.65vw,20px);white-space:nowrap}.lp-mock-capabilities{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;padding:12px 4px 1px;font-size:11px;font-weight:750;color:#f7c55b}
 .lp-preview-disclaimer{font-size:10px;color:#91aab9;text-align:right;margin-top:8px}
 .lp-section{padding:27px 7px 12px;scroll-margin-top:24px}
 .lp-section-title{text-align:center;display:flex;align-items:center;justify-content:center;gap:22px;font-size:clamp(24px,3vw,36px);line-height:1.2;letter-spacing:-.03em;margin-bottom:33px}
@@ -401,11 +402,12 @@ body.marketing-mode .section-foot{margin-top:0}
     <div class="lp-mock-paneltop"><span>Nexora Robô Automático</span><span class="lp-mock-tag">PRONTO</span></div>
     <div class="lp-mock-control"><div class="lp-mock-start">LIGAR ROBÔ</div><div class="lp-mock-status"><strong><span class="lp-mock-dot"></span>ROBÔ OFFLINE</strong><p>Análises pausadas. Ative quando desejar.</p></div></div>
    </div>
-   <div class="lp-mock-metrics">
-     <div class="lp-mock-metric"><small><span class="lp-mock-metric-symbol" aria-hidden="true">▥</span> Análise de mercado</small><strong>Scanner IA</strong><p>Leitura de tendências e oportunidades</p></div>
-     <div class="lp-mock-metric"><small><span class="lp-mock-metric-symbol" aria-hidden="true">◎</span> Gestão de operações</small><strong>Estratégias</strong><p>Controles e parâmetros personalizados</p></div>
+   <div class="lp-mock-metrics" aria-label="Ambientes de operação">
+     <div class="lp-mock-metric lp-mock-environment"><small><span class="lp-mock-metric-symbol" aria-hidden="true">▥</span> Ambiente</small><strong>Treinamento</strong><p>Pratique estratégias com saldo virtual</p></div>
+     <div class="lp-mock-metric lp-mock-environment"><small><span class="lp-mock-metric-symbol" aria-hidden="true">↗</span> Ambiente</small><strong>Conta Real</strong><p>Planejado para a próxima etapa</p></div>
    </div>
-   <p class="lp-preview-disclaimer">Ilustração da interface · Não representa operações ou resultados reais</p>
+   <div class="lp-mock-capabilities"><span>▥ Scanner IA</span><span>◎ Estratégias personalizadas</span></div>
+   <p class="lp-preview-disclaimer">Prévia ilustrativa · Automação disponível atualmente apenas em treinamento DEMO</p>
   </div>
  </div>
  <section id="recursos" class="lp-section" aria-labelledby="lpFeaturesTitle">
