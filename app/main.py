@@ -1,5 +1,5 @@
 """NEXORA IA. Official Deriv DEMO orders and read-only AutoPilot research."""
-import asyncio, json, logging, os, secrets, re
+import asyncio, json, logging, os, secrets, re, time
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation
 from zoneinfo import ZoneInfo
@@ -15,7 +15,8 @@ from pydantic import BaseModel
 from sqlalchemy import select, delete
 
 from . import db
-from .demo import DemoTradingError, demo_account_balance, demo_contract_status, demo_buy, demo_proposal
+from .demo import (DemoTradingError, DemoPreBuyDeadlineExceeded, demo_account_balance,
+                   demo_contract_status, demo_buy, demo_proposal)
 from .demo_ledger import OrderGuardError, reserve, public_order, confirmed, unknown, settle
 from .autopilot import analyze, quote_assessment
 from .engine import Engine, Settings
@@ -516,7 +517,8 @@ async def autopilot_once():
                 if entry.retry and not batch and entry.symbol!=SYMBOL:
                     disarm_autopilot(uid,'O ativo anterior não está disponível para recuperação')
                     continue
-                if batch and not entry.retry:
+                if batch and not entry.retry and candidate.get('strategy')!='h1_m5_next_open_v24':
+                    # The v2.4 buy proposal itself retains payout validation.
                     # Fresh entries have two proposal checks. For recovery,
                     # skip this redundant preflight; the actual broker proposal
                     # is STILL checked for min payout immediately before buy.
@@ -540,6 +542,15 @@ async def autopilot_once():
                         continue
             if uid not in autopilot_enabled:
                 continue
+            if candidate.get('strategy')=='h1_m5_next_open_v24':
+                dispatch_at=time.time()
+                target=candidate['target_open_epoch']
+                deadline=candidate['deadline_epoch']
+                if not target<=dispatch_at<=deadline:
+                    log.warning('V2.4 skipped late candidate: symbol=%s delta_s=%.3f',
+                                candidate['symbol'],dispatch_at-target)
+                    autopilot_reasons[uid]='Sinal M5 descartado: fora da abertura da vela'
+                    continue
             autopilot_last_attempt[uid]=now
             key='auto-'+secrets.token_hex(16)
             autopilot_reasons[uid]='Enviando contrato de treinamento: '+str(entry.stake)+' USD'
@@ -552,7 +563,10 @@ async def autopilot_once():
                                  'cycle_index':entry.cycle,'gale_index':entry.gale,
                                  'gale_multiplier':(plan.requested_multiplier if plan else '2.00'),
                                  'cycle_multiplier':(cycle_cfg.multiplier if cycle_cfg else '2.00')},
-                    stake_override=entry.stake)
+                    stake_override=entry.stake,
+                    latest_buy_send_epoch=(candidate.get('deadline_epoch')
+                        if candidate.get('strategy')=='h1_m5_next_open_v24'
+                        else None))
                 autopilot_reasons[uid]='Contrato DEMO #'+str(result['id'])+' confirmado; aguardando liquidação'
             except HTTPException as exc:
                 msg=str(exc.detail)
@@ -1494,7 +1508,7 @@ async def demo_proposal_route(request:Request, payload:DemoProposal,
     except DemoTradingError as e:
         raise HTTPException(502,str(e)) from None
 
-async def perform_demo_buy(user, token, payload:DemoBuy, *, attribution:dict|None=None, stake_override=None):
+async def perform_demo_buy(user, token, payload:DemoBuy, *, attribution:dict|None=None, stake_override=None, latest_buy_send_epoch=None):
     """Single guarded broker purchase path for both manual and AutoPilot DEMO orders."""
     if payload.confirm != 'DEMO_ONLY':
         raise HTTPException(403,'Confirmação de conta demo obrigatória')
@@ -1536,7 +1550,22 @@ async def perform_demo_buy(user, token, payload:DemoBuy, *, attribution:dict|Non
                     'stake':order.stake,'duration':payload.minutes,'confirm':'DEMO_ONLY'}
         if attribution and attribution.get('v2'):
             buy_kwargs['min_payout_ratio']='1.50'
+        if latest_buy_send_epoch is not None:
+            buy_kwargs['latest_buy_send_epoch']=latest_buy_send_epoch
+            if time.time()>latest_buy_send_epoch:
+                raise DemoPreBuyDeadlineExceeded('Janela de compra DEMO expirada')
         receipt=await demo_buy(token, user.deriv_account_id, **buy_kwargs)
+    except DemoPreBuyDeadlineExceeded:
+        # Never sent to broker: safely release reserved DB slot.
+        with db.SessionLocal() as s:
+            pending=s.get(db.DemoOrder,order_id)
+            if pending and pending.state=='PENDING':
+                pending.state='CANCELLED'
+                pending.active_slot=None
+                pending.error_summary='V2.4: janela expirada antes do envio'
+                s.commit()
+        log.warning('V2.4 expired pre-buy: order=%s',order_id)
+        raise HTTPException(409,'Sinal expirou antes do envio. Nenhuma compra realizada.') from None
     except Exception as exc:
         log.warning('Demo buy outcome unknown: order=%s error=%s',order_id,type(exc).__name__)
         try:
