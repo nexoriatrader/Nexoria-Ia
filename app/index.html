@@ -380,7 +380,19 @@ body.marketing-mode .section-foot{margin-top:0}
 @media(prefers-reduced-motion:reduce){.lp-button{transition:none}}
 
 </style>
-</head>
+<style>
+.auto-config{margin:18px 0;border-color:#37556f}.auto-steps{display:grid;gap:13px}
+.auto-step{display:flex;align-items:center;gap:10px;margin-top:8px}
+.auto-step span{display:inline-flex;align-items:center;justify-content:center;width:31px;height:31px;border-radius:9px;background:#173f59;color:#74c9f4;font-weight:800;font-size:12px}
+.auto-options{display:grid;grid-template-columns:repeat(auto-fit,minmax(205px,1fr));gap:9px}
+.auto-choice{display:block;padding:13px 14px;border:1px solid #35536a;border-radius:12px;background:rgba(16,39,60,.55);font-weight:600;line-height:1.5}
+.auto-choice input,.auto-symbols input{accent-color:#18a6dc;margin-right:7px}.auto-choice small{display:block;font-weight:400;opacity:.75;margin:2px 0 0 24px;font-size:12px}
+.auto-disabled{opacity:.62}.auto-symbols{display:grid;grid-template-columns:repeat(auto-fit,minmax(185px,1fr));gap:8px;max-height:245px;overflow:auto}
+.auto-symbols label{display:block;padding:10px;background:rgba(16,39,60,.65);border:1px solid #35536a;border-radius:10px;font-size:13px}
+.auto-summary{border:1px solid #37546b;border-radius:10px;padding:12px;background:#112f41;font-size:13px}
+.auto-guide{display:grid;grid-template-columns:repeat(auto-fit,minmax(270px,1fr));gap:15px;margin-bottom:18px}.auto-guide p{line-height:1.6}
+@media(max-width:540px){.auto-options,.auto-symbols,.auto-guide{grid-template-columns:1fr}}
+</style></head>
 <body>
 <div class="shell">
 <header>
@@ -392,6 +404,8 @@ body.marketing-mode .section-foot{margin-top:0}
   <div class="drawer-head"><strong>Menu NEXORA</strong><button class="iconbutton" aria-label="Fechar menu" onclick="toggleMenu(false)">×</button></div>
   <button class="nav active" data-view="dashboard" onclick="go('dashboard')">⌂　Painel principal</button>
   <button class="nav" data-view="results" onclick="go('results')">▤　Resultados</button>
+  <button class="nav" data-view="features" onclick="go('features')">✦　FUNCIONALIDADES DO ROBÔ</button>
+  <button class="nav" data-view="strategies" onclick="go('strategies')">▥　ESTRATÉGIAS DO ROBÔ</button>
   <button class="nav" data-view="settings" onclick="go('settings')">⚙　Configurações</button>
   <button class="nav" data-view="account" onclick="go('account')">◉　Minha conta</button>
 </nav>
@@ -502,7 +516,7 @@ body.marketing-mode .section-foot{margin-top:0}
   </form>
 </section>
 <section id="dashboard" class="hidden">
-  <div class="section-heading"><div><h1>Meu robô</h1></div></div>
+  <div class="section-heading"><div><div class="eyebrow">AUTOMAÇÃO PERSONALIZADA</div><h1>Meu robô</h1><p>Você define os ativos, a estratégia e as regras de risco. O NEXORA automatiza somente as configurações disponíveis.</p></div></div>
   <div class="card hero">
     <div class="hero-top"><div class="hero-title">Nexora Robô Automático</div><span id="robotState" class="hero-state">DESLIGADO</span></div>
     <div class="robot-control-row">
@@ -522,7 +536,7 @@ body.marketing-mode .section-foot{margin-top:0}
         <p class="helper">O histórico oficial e o saldo Deriv não podem ser apagados pelo painel. Os limites de segurança permanecem ativos.</p>
       </div>
     </div>
-    <div class="robot-details-content" aria-label="Análise do Robô Trader IA">
+    <div class="robot-details-content hidden" aria-label="Análise do Robô Trader IA">
       <p id="autopilotVersion" class="helper"><strong>Robô Trader I.A</strong></p>
       <div class="market-schedule" aria-label="Cronograma automático de mercados" role="status">
         <div class="market-schedule-row"><span class="market-schedule-dot active" id="forexScheduleDot"></span><span>Forex</span><strong id="forexScheduleStatus">Verificando horário</strong></div>
@@ -533,6 +547,55 @@ body.marketing-mode .section-foot{margin-top:0}
       <p id="v2Opportunity" class="helper" role="status">● Oportunidade encontrada: Nenhuma no momento</p>
     </div>
     <div hidden aria-hidden="true"><span id="robotMessage"></span><span id="riskSessionMetric"></span><span id="feedState"></span></div>
+  </div>
+  <div class="card auto-config" id="automationConfigCard">
+    <div class="surface-heading">CONFIGURE SUA AUTOMAÇÃO</div>
+    <p class="helper">Selecione e salve as opções antes de ligar o robô. Salvar não envia ordens à corretora.</p>
+    <div class="auto-steps">
+      <div class="auto-step"><span>01</span><strong>Conta e mercado</strong></div>
+      <div class="auto-options">
+        <label class="auto-choice"><input type="radio" name="autoMode" value="demo" checked> Treinamento DEMO <small>Disponível</small></label>
+        <label class="auto-choice auto-disabled"><input type="radio" name="autoMode" value="real" disabled> Conta REAL <small>Em preparação</small></label>
+      </div>
+      <div class="auto-options">
+        <label class="auto-choice"><input type="radio" name="autoMarket" value="volatility" checked> Índices Volatility <small>Disponível na DEMO</small></label>
+        <label class="auto-choice auto-disabled"><input type="radio" name="autoMarket" value="forex" disabled> Forex <small>Em desenvolvimento</small></label>
+      </div>
+      <div class="auto-step"><span>02</span><strong>Ativos autorizados pelo usuário</strong></div>
+      <p class="helper">O scanner só poderá negociar os ativos selecionados. Lista consultada no catálogo oficial da Deriv.</p>
+      <div class="actions" style="margin:4px 0 10px">
+        <button type="button" class="outline" onclick="selectAutomationAssets(true)">SELECIONAR TODOS</button>
+        <button type="button" class="outline" onclick="selectAutomationAssets(false)">LIMPAR</button>
+      </div>
+      <div id="automationSymbols" class="auto-symbols"><p class="helper">Carregando ativos...</p></div>
+      <div class="auto-step"><span>03</span><strong>Estratégia de análise</strong></div>
+      <div class="auto-options">
+        <label class="auto-choice"><input type="radio" name="autoStrategy" value="pulso_v2" checked> PULSO V2 <small>Pressão direcional + volatilidade estável · CALL · M5</small></label>
+        <label class="auto-choice auto-disabled"><input type="radio" name="autoStrategy" value="trend" disabled> Tendência e pullback <small>Em desenvolvimento</small></label>
+        <label class="auto-choice auto-disabled"><input type="radio" name="autoStrategy" value="rsi" disabled> Reversão RSI <small>Em desenvolvimento</small></label>
+      </div>
+      <p class="helper"><a href="#" onclick="event.preventDefault();go('strategies')">Como funcionam as estratégias?</a></p>
+      <div class="auto-step"><span>04</span><strong>Entradas e gerenciamento de risco</strong></div>
+      <div class="settings-grid">
+        <div class="field"><label for="autoStake">Entrada (USD)</label><input id="autoStake" type="number" min="0.50" step="0.01" value="0.50"></div>
+        <div class="field"><label for="autoExpiry">Expiração</label><select id="autoExpiry"><option value="5">5 minutos · PULSO V2</option></select></div>
+        <div class="field"><label for="autoWin">Stop Win (USD)</label><input id="autoWin" type="number" min="0" step="0.01" value="0"></div>
+        <div class="field"><label for="autoLoss">Stop Loss (USD)</label><input id="autoLoss" type="number" min="0" step="0.01" value="0"></div>
+        <div class="field"><label for="autoDailyLimit">Máx. de operações por dia (0 = sem limite)</label><input id="autoDailyLimit" type="number" min="0" max="100" step="1" value="0"></div>
+      </div>
+      <label class="auto-choice auto-disabled"><input type="checkbox" disabled> Martingale e ciclos <small>Disponíveis como preferências antigas; ainda não executados no PULSO V2</small></label>
+      <div class="auto-step"><span>05</span><strong>Filtros e proteções</strong></div>
+      <label class="auto-choice"><input type="checkbox" id="autoNews" onchange="showAutomationNews()"> Filtro de notícias econômicas <small>Em preparação. Se ativado, bloqueia a partida até a integração ficar pronta.</small></label>
+      <div id="autoNewsWindows" class="settings-grid hidden">
+        <div class="field"><label for="autoNewsBefore">Pausar antes</label><select id="autoNewsBefore"><option value="15">15 minutos</option><option value="30" selected>30 minutos</option><option value="60">60 minutos</option></select></div>
+        <div class="field"><label for="autoNewsAfter">Retomar depois</label><select id="autoNewsAfter"><option value="15">15 minutos</option><option value="30" selected>30 minutos</option><option value="60">60 minutos</option></select></div>
+      </div>
+      <p class="helper">O PULSO mantém a checagem de payout mínimo de 88%, reconciliação e proteção contra contratos incertos.</p>
+      <div id="autoConfigSummary" class="auto-summary">Selecione os ativos para configurar o robô.</div>
+      <button type="button" class="gold" id="autoSaveButton" onclick="saveAutomationProfile()">SALVAR MINHA AUTOMAÇÃO</button>
+      <p class="helper" id="autoConfigFeedback" role="status"></p>
+    </div>
+    <div class="actions"><button class="outline" type="button" onclick="go('features')">FUNCIONALIDADES DO ROBÔ</button><button class="outline" type="button" onclick="go('strategies')">ESTRATÉGIAS DO ROBÔ</button></div>
   </div>
   <div class="metric-grid">
     <div class="card metric"><div class="metric-label">Saldo Treinamento</div><div class="metric-value" id="balanceMetric">—</div><div class="metric-sub">Saldo virtual oficial · Deriv</div></div>
@@ -558,6 +621,29 @@ body.marketing-mode .section-foot{margin-top:0}
     <p id="pulsoAuditDuplicates" class="helper"></p>
     <p class="helper">Somente resultados liquidados da estratégia PULSO V2 na sua conta DEMO. Não altera entradas, ativos, stops ou operações em andamento. Amostras pequenas não validam um índice.</p>
   </div>
+</section>
+<section id="features" class="hidden">
+  <div class="section-heading"><div><div class="eyebrow">GUIA DO NEXORA</div><h1>Funcionalidades do Robô</h1><p>Entenda os recursos, limitações e o que já está disponível.</p></div></div>
+  <div class="auto-guide">
+    <div class="card"><div class="surface-heading">Ligar e desligar</div><p>Ativa ou interrompe novas entradas. Desligar não cancela contratos que já foram comprados.</p><p class="helper">Disponível na DEMO</p></div>
+    <div class="card"><div class="surface-heading">Ativos personalizados</div><p>Você escolhe os índices Volatility que o PULSO poderá analisar, usando a lista consultada na Deriv.</p><p class="helper">Disponível · PULSO V2 DEMO</p></div>
+    <div class="card"><div class="surface-heading">Valor por entrada</div><p>Define o valor fixo da compra de cada contrato, sujeito aos limites do NEXORA e da corretora.</p><p class="helper">Disponível · DEMO</p></div>
+    <div class="card"><div class="surface-heading">Stop Win e Stop Loss</div><p>Interrompem novas entradas quando os limites definidos forem atingidos a partir dos resultados liquidados da sessão. Não garantem perda máxima exata.</p><p class="helper">Disponível · DEMO</p></div>
+    <div class="card"><div class="surface-heading">Martingale</div><p>Aumenta a aposta depois de uma perda, de acordo com um multiplicador. Pode ampliar muito os prejuízos e não melhora a precisão dos sinais.</p><p class="helper">Ainda NÃO executado no PULSO V2</p></div>
+    <div class="card"><div class="surface-heading">Ciclos</div><p>Repetem sequências de tentativas conforme limites definidos. Não garantem recuperar perdas.</p><p class="helper">Ainda NÃO executados no PULSO V2</p></div>
+    <div class="card"><div class="surface-heading">Limite diário</div><p>Permite limitar o número de operações DEMO enviadas em um dia no horário de Brasília.</p><p class="helper">Disponível · DEMO</p></div>
+    <div class="card"><div class="surface-heading">Filtro de notícias</div><p>Planejado para bloquear entradas perto de notícias econômicas relevantes. Sem calendário validado, ativar a opção impede que o robô inicie.</p><p class="helper">Em preparação · sem feed conectado</p></div>
+    <div class="card"><div class="surface-heading">Integração Deriv</div><p>O NEXORA consulta ativos, tipos de contratos, propostas e liquidações por meio da API. Novos recursos devem ser liberados após validação.</p><p class="helper">Integração parcial ativa · DEMO</p></div>
+  </div><div class="actions"><button class="gold" onclick="go('dashboard')">VOLTAR PARA MINHA AUTOMAÇÃO</button></div>
+</section>
+<section id="strategies" class="hidden">
+  <div class="section-heading"><div><div class="eyebrow">BIBLIOTECA DE ESTRATÉGIAS</div><h1>Estratégias do Robô</h1><p>Entenda as regras e saiba quais estratégias realmente podem executar operações.</p></div></div>
+  <div class="auto-guide">
+    <div class="card"><div class="surface-heading">PULSO V2 · Disponível DEMO</div><p>Analisa velas M1 fechadas e procura pressão compradora com volatilidade relativa estável. Se houver sinal, pode comprar CALL com expiração de 5 minutos nos índices selecionados.</p><p class="helper">Experimental; sem Martingale ou ciclos, e sem garantia de lucro.</p></div>
+    <div class="card"><div class="surface-heading">Tendência + pullback · Em desenvolvimento</div><p>Hipótese de aguardar tendência e recuo confirmado para entrada. Os parâmetros e as regras de execução ainda precisam ser implementados e testados.</p></div>
+    <div class="card"><div class="surface-heading">Reversão com RSI · Em desenvolvimento</div><p>Hipótese de buscar condições de exaustão e confirmação de reversão. RSI sobrecomprado ou sobrevendido, isoladamente, não determina direção futura.</p></div>
+    <div class="card"><div class="surface-heading">Forex com filtro econômico · Em desenvolvimento</div><p>Poderá considerar sessões, notícias e contexto de mercado. Ainda não está conectado ao motor de execução atual.</p></div>
+  </div><div class="actions"><button class="gold" onclick="go('dashboard')">CONFIGURAR MINHA AUTOMAÇÃO</button></div>
 </section>
 <section id="settings" class="hidden">
   <div class="section-heading"><div><div class="eyebrow">SEU CONTROLE</div><h1>Configurações</h1><p>Personalize entradas, stop e progressões. O AutoPilot deve estar desligado para salvar.</p></div></div>
@@ -689,7 +775,7 @@ async function saveOnboarding(event){
  }catch(e){$('setupFeedback').textContent='Não foi possível salvar: '+e.message;fail('')}
  finally{btn.disabled=false}
 }
-function page(v){document.body.classList.toggle('marketing-mode',v==='welcome');for(const name of ['welcome','setup','dashboard','results','settings','account'])$(name).classList.toggle('hidden',name!==v);activePage=v;const logged=v!=='welcome';$('accountBadge').classList.toggle('hidden',!logged);$('menuButton').classList.toggle('hidden',!logged);document.querySelectorAll('.nav[data-view]').forEach(b=>b.classList.toggle('active',b.dataset.view===v))}
+function page(v){document.body.classList.toggle('marketing-mode',v==='welcome');for(const name of ['welcome','setup','dashboard','results','settings','account','features','strategies'])$(name).classList.toggle('hidden',name!==v);activePage=v;const logged=v!=='welcome';$('accountBadge').classList.toggle('hidden',!logged);$('menuButton').classList.toggle('hidden',!logged);document.querySelectorAll('.nav[data-view]').forEach(b=>b.classList.toggle('active',b.dataset.view===v))}
 function toggleMenu(open){$('drawer').classList.toggle('hidden',!open);$('menuOverlay').classList.toggle('hidden',!open);$('menuButton').setAttribute('aria-expanded',String(open))}
 function updateResultsPolling(){
  if(resultsRefreshTimer){clearInterval(resultsRefreshTimer);resultsRefreshTimer=null;}
@@ -706,7 +792,7 @@ function updateResultsPolling(){
    },3000);
  }
 }
-function go(v){toggleMenu(false);page(v);updateResultsPolling();window.scrollTo({top:0,behavior:'smooth'});if(v==='setup')loadOnboarding();if(v==='dashboard')refreshDashboard();if(v==='results'){loadDemoOrders();}if(v==='account'){loadDemoBalance();loadRobotAccess()}if(v==='settings')loadSettings()}
+function go(v){toggleMenu(false);page(v);updateResultsPolling();window.scrollTo({top:0,behavior:'smooth'});if(v==='setup')loadOnboarding();if(v==='dashboard'){refreshDashboard();loadAutomationProfile();}if(v==='results'){loadDemoOrders();}if(v==='account'){loadDemoBalance();loadRobotAccess()}if(v==='settings')loadSettings()}
 function fail(msg){$('error').textContent=msg||''}
 async function req(path,opts={}){const r=await fetch(path,{credentials:'same-origin',...opts});let data;try{data=await r.json()}catch{throw Error('Resposta inválida do servidor')}if(!r.ok)throw Error(data.detail||'Falha na conexão');return data}
 function startNexoraTrial(event){
@@ -725,7 +811,7 @@ async function init(){
      login.href='/auth/deriv/start?ref='+encodeURIComponent(ref);
    });
  }
- try{const s=await req('/api/session');if(!s.authenticated){page('welcome');return}const justConnected=new URLSearchParams(window.location.search).get('login')==='ok';if(justConnected){window.history.replaceState({},'',window.location.pathname);go('setup')}else{page('dashboard');refreshDashboard()}refreshTimer=setInterval(()=>{if(activePage==='dashboard'||activePage==='results')refreshDashboard()},30000)}catch(e){fail(e.message);page('welcome')}}
+ try{const s=await req('/api/session');if(!s.authenticated){page('welcome');return}const justConnected=new URLSearchParams(window.location.search).get('login')==='ok';if(justConnected){window.history.replaceState({},'',window.location.pathname);go('setup')}else{page('dashboard');refreshDashboard();loadAutomationProfile()}refreshTimer=setInterval(()=>{if(activePage==='dashboard'||activePage==='results')refreshDashboard()},30000)}catch(e){fail(e.message);page('welcome')}}
 function showRobotNotice(reason){
  const box=$('robotStartNotice'),title=$('robotNoticeTitle'),body=$('robotNoticeText'),options=$('robotNoticeOptions');
  if(!reason){box.hidden=true;title.textContent='';body.textContent='';options.hidden=true;return}
