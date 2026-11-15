@@ -58,27 +58,42 @@ autopilot_reasons: dict[int,str] = {}
 # Read-only progress snapshots. Only real scanner callbacks update symbols.
 automation_scan_progress: dict[int,dict] = {}
 
-def record_automation_scan(uid:int, event:str, symbol:str|None, total:int):
+def record_automation_scan(uid:int, event:str, symbol:str|None, total:int, reason:str|None=None):
+    """In-memory diagnostics of real market checks, not synthetic activity."""
     if uid not in autopilot_enabled:
         return
     now=datetime.now(timezone.utc).isoformat()
     state=automation_scan_progress.setdefault(uid,{
         'stage':'waiting','last_symbol':None,'active_symbol':None,
         'checked':0,'total':0,'last_checked_at':None,'last_scan_at':None,
-        'cycle':0,'gale':0})
+        'cycle':0,'gale':0,'reason_counts':{},'last_reason':None,
+        'last_rejected_symbol':None,'last_rejected_at':None})
     if event=='start':
         state.update(stage='scanning',checked=0,total=total,
-                     active_symbol=None,last_scan_at=now)
+                     active_symbol=None,last_scan_at=now,
+                     reason_counts={},last_reason=None,last_rejected_symbol=None)
     elif event=='checking':
         state.update(stage='scanning',active_symbol=symbol)
     elif event=='checked':
         state.update(last_symbol=symbol,last_checked_at=now,
                      checked=min(state.get('checked',0)+1,total))
+        if reason:
+            counts=state.setdefault('reason_counts',{})
+            counts[reason]=counts.get(reason,0)+1
+            if reason!='sinal_confirmado':
+                state.update(last_reason=reason,last_rejected_symbol=symbol,
+                             last_rejected_at=now)
+    elif event=='window':
+        # Outside closed-candle entry window: no market scan took place.
+        if not state.get('last_scan_at'):
+            state.update(stage='waiting',last_reason=reason)
     elif event=='cached':
         if state.get('stage')=='scanning':
-            state['stage']='waiting'
+            state.update(stage='waiting',active_symbol=None)
     elif event=='timeout':
-        state.update(stage='waiting',active_symbol=None)
+        state.update(stage='waiting',active_symbol=None,last_reason='tempo_esgotado')
+        counts=state.setdefault('reason_counts',{})
+        counts['tempo_esgotado']=counts.get('tempo_esgotado',0)+1
     elif event=='signal':
         state.update(stage='signal',last_symbol=symbol,last_checked_at=now,
                      active_symbol=None)
@@ -586,11 +601,11 @@ async def autopilot_once():
                             from .automation_signals import confirmed_automation_signal
                             candidate=await confirmed_automation_signal(
                                 profile,
-                                scan_event=lambda event,symbol,total: record_automation_scan(
-                                    uid,event,symbol,total))
+                                scan_event=lambda event,symbol,total,reason=None: record_automation_scan(
+                                    uid,event,symbol,total,reason))
                         except (MarketError,ValueError,TimeoutError,OSError) as exc:
                             state=automation_scan_progress.get(uid)
-                            if state: state.update(stage='waiting',active_symbol=None)
+                            if state: state.update(stage='waiting',active_symbol=None,last_reason='dados_indisponiveis')
                             autopilot_reasons[uid]='PULSO V2: cotações DEMO indisponíveis; sem compra'
                             log.warning('PULSO live data unavailable: %s',type(exc).__name__)
                             continue
@@ -598,6 +613,10 @@ async def autopilot_once():
                             state=automation_scan_progress.get(uid)
                             if state and state.get('stage')=='scanning':
                                 state.update(stage='waiting',active_symbol=None)
+                            if state and state.get('last_scan_at') and state.get('checked')==state.get('total') and state.get('total'):
+                                counts=state.get('reason_counts',{})
+                                log_v2_gate(uid,'SCAN_REASONS',detail=' '.join(
+                                    k+'='+str(v) for k,v in sorted(counts.items())))
                             autopilot_reasons[uid]='Aguardando sinal confirmado na estratégia selecionada'
                             continue
                     elif batch:
