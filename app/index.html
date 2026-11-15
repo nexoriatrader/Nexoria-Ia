@@ -595,6 +595,11 @@ html,body{max-width:100%;overflow-x:clip}
 </style><style>
 #robot-config .auto-indicator-recommendation{margin-top:8px;padding:10px 12px;border:1px solid #386a83;border-radius:11px;background:#12364a;color:#c0e6f4;font-size:12px;line-height:1.6}
 #robot-config #autoIndicators label:has(input:checked){border-color:#56a4c2;background:#1a4056}
+</style><style>
+#robot-config #autoIndicators .auto-core-indicator{border-color:#4da9be;background:#153c4d}
+#robot-config #autoIndicators .auto-core-indicator input:disabled{opacity:1;cursor:default}
+#robot-config #autoIndicators .auto-indicator-note{display:block;margin:5px 0 0 26px;font-size:10px;color:#9ee4dc;font-weight:800}
+#robot-config #autoIndicators label[hidden]{display:none}
 </style></head>
 <body>
 <div class="shell">
@@ -831,7 +836,7 @@ html,body{max-width:100%;overflow-x:clip}
       </div>
       <p class="helper"><a href="#" onclick="event.preventDefault();go('strategies')">Como funcionam as estratégias?</a></p>
       <div class="field"><label for="autoDirection">Direção das entradas</label><select id="autoDirection"><option value="AUTO">Automática conforme estratégia</option><option value="CALL">Somente CALL / Alta</option><option value="PUT">Somente PUT / Baixa</option></select></div>
-      <div class="field"><label>Indicadores selecionados</label><p class="helper">Os indicadores são sugeridos automaticamente para cada estratégia. Você pode alterar a seleção.</p><p id="autoIndicatorRecommendation" class="auto-indicator-recommendation" role="status"></p></div>
+      <div class="field"><label>Indicadores selecionados</label><p class="helper">Os indicadores essenciais ficam sempre ativos. Somente complementos compatíveis podem ser selecionados.</p><p id="autoIndicatorRecommendation" class="auto-indicator-recommendation" role="status"></p></div>
       <div class="auto-symbols" id="autoIndicators">
         <label><input type="checkbox" value="EMA"> Média móvel exponencial (EMA)</label>
         <label><input type="checkbox" value="SMA"> Média móvel simples (SMA)</label>
@@ -1678,23 +1683,56 @@ document.querySelectorAll('input[name="autoMode"]').forEach(x=>x.addEventListene
  changeAutomationAccount();renderAutomationSummary();
 }));
 const automationStrategyDefaults={
- pulso_v2:{indicators:['ATR'],label:'PULSO V2 · ATR para acompanhar a volatilidade; pressão direcional e estabilidade fazem parte da estratégia.'},
- trend:{indicators:['EMA','MACD'],label:'Tendência + Pullback · EMA 20/50 identifica direção e MACD complementa a confirmação.'},
- rsi:{indicators:['RSI'],label:'Reversão RSI · RSI 14 e confirmação por vela fechada.'}
+ pulso_v2:{
+  indicators:['ATR'],required:['ATR'],allowed:['ATR','BOLLINGER'],
+  label:'PULSO V2: ATR é parte obrigatória; Bollinger pode ser adicionado como confirmação.'
+ },
+ trend:{
+  indicators:['EMA','MACD'],required:['EMA'],
+  allowed:['EMA','SMA','MACD','ATR','ADX','SUPPORT_RESISTANCE','CANDLE_PATTERNS'],
+  label:'Tendência + Pullback: EMA 20/50 obrigatória e MACD recomendado.'
+ },
+ rsi:{
+  indicators:['RSI'],required:['RSI'],
+  allowed:['RSI','STOCHASTIC','BOLLINGER','ATR','CANDLE_PATTERNS'],
+  label:'Reversão RSI: RSI obrigatório; escolha apenas filtros adicionais compatíveis.'
+ }
 };
 function updateStrategyIndicators(selection){
  const preset=automationStrategyDefaults[automationRadio('autoStrategy')]||automationStrategyDefaults.pulso_v2;
+ const allowed=new Set(preset.allowed),required=new Set(preset.required);
  const values=new Set(Array.isArray(selection)?selection:preset.indicators);
- document.querySelectorAll('#autoIndicators input[type="checkbox"]').forEach(input=>input.checked=values.has(input.value));
- $('autoIndicatorRecommendation').textContent=Array.isArray(selection)?
-  'Seleção personalizada carregada. Você pode modificar os indicadores.':
-  'Indicadores recomendados: '+preset.label;
+ for(const value of required)values.add(value);
+ document.querySelectorAll('#autoIndicators input[type="checkbox"]').forEach(input=>{
+  const value=input.value;
+  const compatible=allowed.has(value);
+  const fixed=required.has(value);
+  input.checked=compatible&&values.has(value);
+  input.disabled=!compatible||fixed;
+  const label=input.closest('label');
+  if(label){
+   label.classList.toggle('auto-incompatible',!compatible);
+   label.classList.toggle('auto-core-indicator',fixed);
+   label.hidden=!compatible;
+   let indicatorNote=label.querySelector('.auto-indicator-note');
+   if(fixed){
+    if(!indicatorNote){indicatorNote=document.createElement('small');indicatorNote.className='auto-indicator-note';label.append(indicatorNote)}
+    indicatorNote.textContent='Essencial · sempre ativo';
+   }else if(indicatorNote){indicatorNote.remove()}
+  }
+ });
+ $('autoIndicatorRecommendation').textContent=preset.label;
  renderAutomationSummary();
 }
 document.querySelectorAll('#autoIndicators input[type="checkbox"]').forEach(input=>{
  input.addEventListener('change',()=>{
+  const preset=automationStrategyDefaults[automationRadio('autoStrategy')];
+  if(!preset.allowed.includes(input.value)||preset.required.includes(input.value)){
+   updateStrategyIndicators([...document.querySelectorAll('#autoIndicators input:checked')].map(x=>x.value));
+   return;
+  }
   automationProfileSaved=false;
-  $('autoIndicatorRecommendation').textContent='Seleção personalizada: '+([...document.querySelectorAll('#autoIndicators input:checked')].map(x=>x.value).join(', ')||'sem filtros adicionais');
+  $('autoIndicatorRecommendation').textContent='Indicadores compatíveis selecionados: '+([...document.querySelectorAll('#autoIndicators input:checked')].map(x=>x.value).join(', '));
   renderAutomationSummary();
  });
 });
