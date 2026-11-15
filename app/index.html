@@ -592,6 +592,9 @@ html,body{max-width:100%;overflow-x:clip}
 #robot-config .auto-field-error{color:#ff9ba4;font-size:12px;font-weight:700;line-height:1.5;margin:5px 0 9px}
 #robot-config .auto-symbols.auto-invalid{border-radius:12px;min-height:55px;padding:9px}
 #robot-config input:focus-visible,#robot-config select:focus-visible{outline:2px solid #80dbff;outline-offset:2px}
+</style><style>
+#robot-config .auto-indicator-recommendation{margin-top:8px;padding:10px 12px;border:1px solid #386a83;border-radius:11px;background:#12364a;color:#c0e6f4;font-size:12px;line-height:1.6}
+#robot-config #autoIndicators label:has(input:checked){border-color:#56a4c2;background:#1a4056}
 </style></head>
 <body>
 <div class="shell">
@@ -828,7 +831,7 @@ html,body{max-width:100%;overflow-x:clip}
       </div>
       <p class="helper"><a href="#" onclick="event.preventDefault();go('strategies')">Como funcionam as estratégias?</a></p>
       <div class="field"><label for="autoDirection">Direção das entradas</label><select id="autoDirection"><option value="AUTO">Automática conforme estratégia</option><option value="CALL">Somente CALL / Alta</option><option value="PUT">Somente PUT / Baixa</option></select></div>
-      <div class="field"><label>Indicadores selecionados</label></div>
+      <div class="field"><label>Indicadores selecionados</label><p class="helper">Os indicadores são sugeridos automaticamente para cada estratégia. Você pode alterar a seleção.</p><p id="autoIndicatorRecommendation" class="auto-indicator-recommendation" role="status"></p></div>
       <div class="auto-symbols" id="autoIndicators">
         <label><input type="checkbox" value="EMA"> Média móvel exponencial (EMA)</label>
         <label><input type="checkbox" value="SMA"> Média móvel simples (SMA)</label>
@@ -1674,7 +1677,30 @@ document.querySelectorAll('input[name="autoMarket"]').forEach(x=>x.addEventListe
 document.querySelectorAll('input[name="autoMode"]').forEach(x=>x.addEventListener('change',()=>{
  changeAutomationAccount();renderAutomationSummary();
 }));
-document.querySelectorAll('input[name="autoStrategy"]').forEach(x=>x.addEventListener('change',renderAutomationSummary));
+const automationStrategyDefaults={
+ pulso_v2:{indicators:['ATR'],label:'PULSO V2 · ATR para acompanhar a volatilidade; pressão direcional e estabilidade fazem parte da estratégia.'},
+ trend:{indicators:['EMA','MACD'],label:'Tendência + Pullback · EMA 20/50 identifica direção e MACD complementa a confirmação.'},
+ rsi:{indicators:['RSI'],label:'Reversão RSI · RSI 14 e confirmação por vela fechada.'}
+};
+function updateStrategyIndicators(selection){
+ const preset=automationStrategyDefaults[automationRadio('autoStrategy')]||automationStrategyDefaults.pulso_v2;
+ const values=new Set(Array.isArray(selection)?selection:preset.indicators);
+ document.querySelectorAll('#autoIndicators input[type="checkbox"]').forEach(input=>input.checked=values.has(input.value));
+ $('autoIndicatorRecommendation').textContent=Array.isArray(selection)?
+  'Seleção personalizada carregada. Você pode modificar os indicadores.':
+  'Indicadores recomendados: '+preset.label;
+ renderAutomationSummary();
+}
+document.querySelectorAll('#autoIndicators input[type="checkbox"]').forEach(input=>{
+ input.addEventListener('change',()=>{
+  automationProfileSaved=false;
+  $('autoIndicatorRecommendation').textContent='Seleção personalizada: '+([...document.querySelectorAll('#autoIndicators input:checked')].map(x=>x.value).join(', ')||'sem filtros adicionais');
+  renderAutomationSummary();
+ });
+});
+document.querySelectorAll('input[name="autoStrategy"]').forEach(x=>x.addEventListener('change',()=>{
+ updateStrategyIndicators();automationProfileSaved=false;
+}));
 ['autoStake','autoWin','autoLoss','autoExpiry','autoDailyLimit','autoDirection','autoPayout'].forEach(id=>$(id)?.addEventListener('change',renderAutomationSummary));
 
 function toggleAutomationProgressions(){
@@ -1743,7 +1769,7 @@ async function loadAutomationProfile(){
   $('autoDailyLimit').value=String(profile.max_daily_orders);
   $('autoPayout').value=String(profile.min_payout_pct??88);
   $('autoDirection').value=profile.direction||'AUTO';
-  document.querySelectorAll('#autoIndicators input').forEach(input=>input.checked=(profile.indicators||[]).includes(input.value));
+  updateStrategyIndicators(profile.configured?(profile.indicators||[]):undefined);
   $('autoStake').value=risk.stake;
   $('autoWin').value=risk.stop_win;
   $('autoLoss').value=risk.stop_loss;
@@ -1788,6 +1814,7 @@ async function saveAutomationProfile(){
    'Filtro de notícias salvo.':
    'Preferências registradas.');
   renderAutomationSummary();fail('');
+  go('dashboard');
  }catch(e){automationProfileSaved=false;feedback.textContent='Não foi possível concluir a configuração: '+e.message}
  finally{button.disabled=false}
 }
