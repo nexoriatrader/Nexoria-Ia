@@ -579,6 +579,13 @@ html,body{max-width:100%;overflow-x:clip}
 .primary-nav .nav-broker-link:hover{background:#1e526b;color:#fff;border-color:#64bad6}
 .primary-nav .nav-broker-link:focus-visible{outline:2px solid #74d5ff}
 @media(max-width:550px){.nexora-logo-only{padding:0 0 9px}.nexora-logo-only .brand img{width:89px;height:62px}.primary-nav .nav-broker-link{padding:10px 12px;min-height:45px}}
+</style><style>
+/* Dedicated robot-configuration page, separate from the dashboard */
+.robot-config-page-heading{gap:16px;flex-wrap:wrap}
+.robot-config-page-heading .robot-back-button{flex:none;min-height:44px;font-size:12px}
+#robot-config .auto-config{margin:0 0 22px}
+#dashboard .dash-control-card,#dashboard .dash-realtime-card{margin-bottom:14px}
+@media(max-width:600px){.robot-config-page-heading{align-items:stretch}.robot-config-page-heading .robot-back-button{width:100%}#robot-config .auto-config{padding:16px}}
 </style></head>
 <body>
 <div class="shell">
@@ -591,7 +598,7 @@ html,body{max-width:100%;overflow-x:clip}
   <button class="nav-link" data-view="features" type="button" onclick="go('features')">Entenda as Funcionalidades</button>
   <button class="nav-link" data-view="strategies" type="button" onclick="go('strategies')">Conheça os Indicadores e Estratégias</button>
   <button class="nav-link" data-view="account" type="button" onclick="go('account')">Minha Conta</button>
-  <button class="nav-link" data-view="settings" type="button" onclick="go('settings')">Configurações</button>
+  <button class="nav-link" data-view="robot-config" type="button" onclick="go('robot-config')">Configurar Robô</button>
 </nav>
 
 <main>
@@ -711,7 +718,7 @@ html,body{max-width:100%;overflow-x:clip}
       <div class="dash-control-main">
         <button id="robotButton" class="hero-action" disabled aria-disabled="true" onclick="toggleRobot()">LIGAR ROBÔ</button>
         <div class="dash-control-actions">
-          <button id="configureRobotButton" class="dash-configure-button" type="button" onclick="toggleRobotConfiguration()">⚙ CONFIGURAR ROBÔ <span id="configureRobotChevron" aria-hidden="true">⌄</span></button>
+          <button id="configureRobotButton" class="dash-configure-button" type="button" onclick="go('robot-config')">⚙ CONFIGURAR ROBÔ</button>
           <div class="dash-access">
             <span>Tempo disponível Robô</span>
             <strong id="dashboardAccessCountdown">Consultando...</strong>
@@ -774,7 +781,13 @@ html,body{max-width:100%;overflow-x:clip}
       <button class="outline" type="button" onclick="go('results')">VER TODOS OS RESULTADOS</button>
     </div>
   </div>
-  <div class="card auto-config hidden" id="automationConfigCard">
+  </section>
+<section id="robot-config" class="hidden">
+  <div class="section-heading robot-config-page-heading">
+    <div><div class="eyebrow">PERSONALIZAÇÃO DO ROBÔ</div><h1>Configurar Robô</h1><p>Escolha o modo de operação, mercado, ativos, estratégias e regras de automação.</p></div>
+    <button class="outline robot-back-button" type="button" onclick="go('dashboard')">← VOLTAR AO PAINEL</button>
+  </div>
+  <div class="card auto-config" id="automationConfigCard">
     <div class="surface-heading">CONFIGURE SUA AUTOMAÇÃO</div>
     <p class="helper">Selecione e salve as opções antes de ligar o robô. Salvar não envia ordens à corretora.</p>
     <div class="auto-steps">
@@ -851,7 +864,6 @@ html,body{max-width:100%;overflow-x:clip}
     </div>
     <div class="actions"><button class="outline" type="button" onclick="go('features')">FUNCIONALIDADES DO ROBÔ</button><button class="outline" type="button" onclick="go('strategies')">ESTRATÉGIAS DO ROBÔ</button></div>
   </div>
-  
 </section>
 <section id="results" class="hidden">
   <div class="section-heading"><div><h1>Resultados</h1><p>Somente contratos confirmados pela Deriv DEMO entram no placar. Horários sem confirmação da corretora aparecem como —.</p></div></div>
@@ -990,7 +1002,7 @@ html,body{max-width:100%;overflow-x:clip}
       <details><summary>O que é expiração?</summary><p>É o prazo estabelecido para o encerramento do contrato. No configurador você escolhe a duração disponível para sua automação.</p></details>
     </div>
   </div>
-  <div class="learning-cta"><div><strong>Pronto para personalizar seu robô?</strong><p>Escolha seus ativos, indicadores e estratégia no painel principal.</p></div><button type="button" class="gold" onclick="go('dashboard');toggleRobotConfiguration(true)">CONFIGURAR MEU ROBÔ</button></div>
+  <div class="learning-cta"><div><strong>Pronto para personalizar seu robô?</strong><p>Escolha seus ativos, indicadores e estratégia no painel principal.</p></div><button type="button" class="gold" onclick="go('robot-config')">CONFIGURAR MEU ROBÔ</button></div>
 </section>
 <section id="settings" class="hidden">
   <div class="section-heading"><div><div class="eyebrow">SEU CONTROLE</div><h1>Configurações</h1><p>Personalize entradas, stop e progressões. O AutoPilot deve estar desligado para salvar.</p></div></div>
@@ -1122,7 +1134,7 @@ async function saveOnboarding(event){
  }catch(e){$('setupFeedback').textContent='Não foi possível salvar: '+e.message;fail('')}
  finally{btn.disabled=false}
 }
-function page(v){document.body.classList.toggle('marketing-mode',v==='welcome');$('primaryNavigation').classList.toggle('hidden',v==='welcome'||v==='setup');for(const name of ['welcome','setup','dashboard','results','settings','account','features','strategies'])$(name).classList.toggle('hidden',name!==v);activePage=v;document.querySelectorAll('.nav-link[data-view]').forEach(b=>b.classList.toggle('active',b.dataset.view===v))}
+function page(v){document.body.classList.toggle('marketing-mode',v==='welcome');$('primaryNavigation').classList.toggle('hidden',v==='welcome'||v==='setup');for(const name of ['welcome','setup','dashboard','robot-config','results','settings','account','features','strategies'])$(name).classList.toggle('hidden',name!==v);activePage=v;document.querySelectorAll('.nav-link[data-view]').forEach(b=>b.classList.toggle('active',b.dataset.view===v))}
 
 function updateResultsPolling(){
  if(resultsRefreshTimer){clearInterval(resultsRefreshTimer);resultsRefreshTimer=null;}
@@ -1140,7 +1152,7 @@ function updateResultsPolling(){
    },activePage==='dashboard'?7000:3000);
  }
 }
-function go(v){page(v);updateResultsPolling();window.scrollTo({top:0,behavior:'smooth'});if(v==='setup')loadOnboarding();if(v==='dashboard'){refreshDashboard();loadAutomationProfile();loadDemoOrders().catch(()=>{});}if(v==='results'){loadDemoOrders();}if(v==='account'){loadDemoBalance();loadRobotAccess()}if(v==='settings')loadSettings()}
+function go(v){page(v);updateResultsPolling();window.scrollTo({top:0,behavior:'smooth'});if(v==='setup')loadOnboarding();if(v==='dashboard'){refreshDashboard();loadDemoOrders().catch(()=>{});}if(v==='robot-config'){loadAutomationProfile();}if(v==='results'){loadDemoOrders();}if(v==='account'){loadDemoBalance();loadRobotAccess()}if(v==='settings')loadSettings()}
 function fail(msg){$('error').textContent=msg||''}
 async function req(path,opts={}){const r=await fetch(path,{credentials:'same-origin',...opts});let data;try{data=await r.json()}catch{throw Error('Resposta inválida do servidor')}if(!r.ok)throw Error(data.detail||'Falha na conexão');return data}
 function startNexoraTrial(event){
@@ -1159,7 +1171,7 @@ async function init(){
      login.href='/auth/deriv/start?ref='+encodeURIComponent(ref);
    });
  }
- try{const s=await req('/api/session');if(!s.authenticated){page('welcome');return}const justConnected=new URLSearchParams(window.location.search).get('login')==='ok';if(justConnected){window.history.replaceState({},'',window.location.pathname);go('setup')}else{page('dashboard');refreshDashboard();loadAutomationProfile();loadDemoOrders().catch(()=>{});updateResultsPolling()}refreshTimer=setInterval(()=>{if(activePage==='dashboard'||activePage==='results')refreshDashboard()},30000)}catch(e){fail(e.message);page('welcome')}}
+ try{const s=await req('/api/session');if(!s.authenticated){page('welcome');return}const justConnected=new URLSearchParams(window.location.search).get('login')==='ok';if(justConnected){window.history.replaceState({},'',window.location.pathname);go('setup')}else{page('dashboard');refreshDashboard();loadDemoOrders().catch(()=>{});updateResultsPolling()}refreshTimer=setInterval(()=>{if(activePage==='dashboard'||activePage==='results')refreshDashboard()},30000)}catch(e){fail(e.message);page('welcome')}}
 function showRobotNotice(reason){
  const box=$('robotStartNotice'),title=$('robotNoticeTitle'),body=$('robotNoticeText'),options=$('robotNoticeOptions');
  if(!reason){box.hidden=true;title.textContent='';body.textContent='';options.hidden=true;return}
@@ -1415,16 +1427,6 @@ function setEducationTab(tab){
   button.setAttribute('aria-pressed',String(active));
  });
  for(const id of groups.all)$(id).classList.toggle('hidden',!groups[tab].includes(id));
-}
-function toggleRobotConfiguration(force){
- const card=$('automationConfigCard'),button=$('configureRobotButton');
- const visible=typeof force==='boolean'?force:card.classList.contains('hidden');
- card.classList.toggle('hidden',!visible);
- button.setAttribute('aria-expanded',String(visible));
- $('configureRobotChevron').textContent=visible?'⌃':'⌄';
- if(visible){
-  card.scrollIntoView({behavior:'smooth',block:'start'});
- }
 }
 function renderRealtimeOrders(){
  const list=$('dashRealtimeOrders');
