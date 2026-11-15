@@ -659,6 +659,10 @@ html,body{max-width:100%;overflow-x:clip}
 .dash-scan-caption{color:#b6cbd9;font-size:11px;line-height:1.5;margin-top:9px}
 @keyframes nexoraDot{0%,100%{opacity:1}50%{opacity:.35}}
 @media(prefers-reduced-motion:reduce){.dash-scan-monitor.scanning .dash-scan-dot{animation:none}}
+</style><style>
+.dash-scan-diagnosis{padding:10px 11px;border:1px solid #35566b;border-radius:10px;background:#0b2030;margin-top:12px}
+.dash-scan-diagnosis>strong{display:block;color:#c1deef;font-size:12px;margin-bottom:5px}
+.dash-scan-diagnosis p{font-size:12px;color:#b7cedb;line-height:1.55;overflow-wrap:anywhere}
 </style></head>
 <body>
 <div class="shell">
@@ -871,6 +875,10 @@ html,body{max-width:100%;overflow-x:clip}
       </div>
       <div class="dash-scan-track"><span id="dashScanFill"></span></div>
       <p class="dash-scan-caption" id="dashScanCaption">Aguardando ativação do robô.</p>
+      <div class="dash-scan-diagnosis" id="dashScanDiagnosis" role="status">
+        <strong>Diagnóstico da última varredura</strong>
+        <p id="dashScanReasons">Os motivos serão mostrados após a primeira análise.</p>
+      </div>
     </div>
     <div class="dash-realtime-list" id="dashRealtimeOrders" aria-live="polite" aria-label="Operações recentes">
       <p class="muted">Carregando operações...</p>
@@ -1370,6 +1378,33 @@ function renderScanMonitor(status){
   data&&(Number(data.cycle)>0||Number(data.gale)>0)?
    'Ciclo '+Number(data.cycle||0)+' · Gale '+Number(data.gale||0):
    'Sem progressão';
+ const reasonNames={
+  estrategia_sem_sinal:'Estratégia sem sinal confirmado',
+  indicadores_nao_confirmados:'Indicadores não confirmaram',
+  velas_insuficientes:'Velas recentes insuficientes',
+  velas_incompletas:'Sequência de velas incompleta',
+  dados_indisponiveis:'Dados da Deriv indisponíveis',
+  ativo_incompativel:'Ativo ou duração incompatível',
+  janela_expirada:'Janela de entrada encerrada',
+  tempo_esgotado:'Tempo da varredura esgotado',
+  sinal_confirmado:'Sinal confirmado',
+  aguardando_fechamento_m1:'Aguardando fechamento M1',
+  nao_classificado:'Verificação sem classificação'
+ };
+ const counts=running&&data?.reason_counts?Object.entries(data.reason_counts).filter(([reason,n])=>Number(n)>0):[];
+ const diagnostic=$('dashScanReasons');
+ if(!running){
+  diagnostic.textContent='Robô desligado. Nenhuma varredura em andamento.';
+ }else if(!data?.last_scan_at){
+  diagnostic.textContent='Aguardando a primeira análise de uma vela M1 fechada.';
+ }else if(!fresh){
+  diagnostic.textContent='Última análise antiga. Ainda não há uma nova leitura confirmada. '+(status.reason||'');
+ }else if(counts.length){
+  diagnostic.textContent=counts.map(([key,count])=>(reasonNames[key]||key)+': '+count).join(' · ')+
+   (data.last_rejected_symbol?' · Última rejeição: '+data.last_rejected_symbol:'');
+ }else{
+  diagnostic.textContent='Análise em andamento. O motivo aparecerá após a verificação de cada ativo.';
+ }
  $('dashScanFill').style.width=running&&data?.total?
   Math.min(100,100*Number(data.checked||0)/Number(data.total))+'%':'0%';
 }
