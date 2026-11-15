@@ -551,6 +551,19 @@ html,body{max-width:100%;overflow-x:clip}
 .auto-account-options .auto-choice input,.auto-market-options .auto-choice input{width:17px;height:17px;vertical-align:middle}
 @media(max-width:540px){.auto-account-options{grid-template-columns:repeat(2,minmax(0,1fr))}.auto-account-options .auto-choice{font-size:12px;padding:13px 10px;min-height:87px}.auto-account-options .auto-choice small{margin-left:0;margin-top:6px;font-size:11px}.auto-market-options{grid-template-columns:1fr 1fr}.auto-market-options .auto-choice{padding:12px 10px;font-size:12px}.auto-market-options .auto-choice small{margin-left:0;font-size:11px}}
 @media(max-width:360px){.auto-market-options{grid-template-columns:1fr}}
+</style><style>
+/* Quick account funding and demo reset actions */
+.dash-balance-tile{min-height:176px}
+.dash-balance-tile strong{margin:8px 0}
+.dash-balance-tile small{overflow-wrap:anywhere}
+.dash-balance-action{display:flex;align-items:center;justify-content:center;gap:5px;min-height:42px;padding:9px 9px;margin-top:auto;border-radius:10px;border:1px solid #3b7392;background:#183e59;color:#eaf9ff;font-size:10px;font-weight:900;text-decoration:none;text-align:center;line-height:1.35;letter-spacing:.01em;transition:background .15s,border-color .15s}
+.dash-balance-action:hover{background:#245570;border-color:#5fc0e3}
+.dash-balance-action:focus-visible{outline:2px solid #74dbff;outline-offset:3px}
+.dash-real-action{background:#3a3427;border-color:#8c7445;color:#ffe1a0}
+.dash-real-action:hover{background:#514530;border-color:#d7aa57}
+.dash-balance-action span{font-size:14px}
+@media(max-width:550px){.dash-balance-tile{min-height:184px;padding:13px 9px}.dash-balance-action{font-size:9px;min-height:44px;padding:8px 5px;letter-spacing:0}.dash-balance-action span{font-size:12px}}
+@media(max-width:360px){.dash-balance-action{font-size:8.5px;flex-wrap:wrap}}
 </style></head>
 <body>
 <div class="shell">
@@ -700,8 +713,18 @@ html,body{max-width:100%;overflow-x:clip}
         </div>
       </div>
       <div class="dash-balance-grid">
-        <div class="dash-balance-tile"><span class="dash-balance-label">Saldo conta DEMO</span><strong id="balanceMetric">—</strong><small>Saldo de treinamento · Deriv</small></div>
-        <div class="dash-balance-tile"><span class="dash-balance-label">Saldo conta REAL</span><strong id="realBalanceMetric">—</strong><small id="realBalanceReason">Consultando saldo...</small></div>
+        <div class="dash-balance-tile">
+          <span class="dash-balance-label">Saldo conta DEMO</span>
+          <strong id="balanceMetric">—</strong>
+          <small>Saldo de treinamento · Deriv</small>
+          <a class="dash-balance-action dash-demo-action" href="https://home.deriv.com/dashboard" target="_blank" rel="noopener noreferrer" title="Abrir a Deriv, selecionar conta DEMO e repor o saldo virtual">↻ ATUALIZAR SALDO FICTÍCIO <span aria-hidden="true">↗</span></a>
+        </div>
+        <div class="dash-balance-tile">
+          <span class="dash-balance-label">Saldo conta REAL</span>
+          <strong id="realBalanceMetric">—</strong>
+          <small id="realBalanceReason">Consultando saldo...</small>
+          <a class="dash-balance-action dash-real-action" href="https://home.deriv.com/dashboard/deposit?from=portfolio&amp;depositSheet=1&amp;returnTo=%2Fportfolio&amp;currency=USD" target="_blank" rel="noopener noreferrer" title="Abrir a página de depósito da Deriv">＋ RECARREGAR SALDO <span aria-hidden="true">↗</span></a>
+        </div>
       </div>
     </div>
     <div id="robotStartNotice" class="robot-notice" role="alert" aria-live="polite" hidden>
