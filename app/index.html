@@ -392,6 +392,58 @@ body.marketing-mode .section-foot{margin-top:0}
 .auto-summary{border:1px solid #37546b;border-radius:10px;padding:12px;background:#112f41;font-size:13px}
 .auto-guide{display:grid;grid-template-columns:repeat(auto-fit,minmax(270px,1fr));gap:15px;margin-bottom:18px}.auto-guide p{line-height:1.6}
 @media(max-width:540px){.auto-options,.auto-symbols,.auto-guide{grid-template-columns:1fr}}
+</style><style>
+/* NEXORA dashboard v3: clean top-level control and live execution */
+.primary-nav{position:sticky;top:0;z-index:17;display:flex;align-items:center;gap:5px;padding:9px 10px;margin:0 0 12px;border:1px solid #264456;border-radius:13px;background:rgba(7,20,34,.97);backdrop-filter:blur(16px);overflow-x:auto;scrollbar-width:thin;box-shadow:0 9px 28px #01061055}
+.primary-nav .nav-link{flex:1 0 auto;white-space:nowrap;min-height:41px;padding:10px 13px;border:1px solid transparent;border-radius:9px;background:transparent;color:#b6cbde;font-weight:760;font-size:12px}
+.primary-nav .nav-link.active,.primary-nav .nav-link:hover{background:#1b3a54;border-color:#35617f;color:#f6fbff}
+.primary-nav .nav-link:focus-visible{outline:2px solid #70c4ea;outline-offset:-2px}
+body.marketing-mode .primary-nav{display:none!important}
+.compact-dash-heading{margin:18px 0 13px}
+.dash-control-card{padding:22px;background:linear-gradient(145deg,#132c43,#0b192a 80%);border-color:#35526a}
+.dash-control-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:20px}
+.dash-robot-name{display:flex;align-items:center;gap:12px;min-width:0}
+.dash-robot-icon{display:grid;place-items:center;width:48px;height:48px;background:linear-gradient(145deg,#1d5870,#13354d);border:1px solid #427a91;border-radius:15px;color:#a9edff;font-size:27px}
+.dash-robot-name strong{display:block;font-size:17px;font-weight:950;letter-spacing:.03em}
+.dash-robot-name span:not(.dash-robot-icon){display:block;font-size:11px;color:#a6bbcc}
+.dash-control-grid{display:grid;grid-template-columns:minmax(250px,.9fr) minmax(0,1.1fr);gap:16px;align-items:stretch}
+.dash-control-main{display:flex;flex-direction:column;gap:13px}
+.dash-control-main .hero-action{max-width:none;min-height:76px;flex:none}
+.dash-control-actions{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,.82fr);gap:11px;flex:1}
+.dash-configure-button{border:1px solid #437492;background:#1a425b;color:#e2f6ff;border-radius:13px;padding:12px 10px;font-size:12px;font-weight:900}
+.dash-configure-button:hover{background:#225574}
+.dash-configure-button[aria-expanded="true"]{border-color:#d7b45c;color:#ffdf8d}
+.dash-access{display:flex;flex-direction:column;align-items:center;justify-content:center;border:1px solid #314e61;border-radius:13px;padding:8px 6px;text-align:center;background:#102638}
+.dash-access span{font-size:10px;color:#9cb5c9}
+.dash-access strong{font-size:clamp(13px,1.8vw,18px);letter-spacing:.02em;font-variant-numeric:tabular-nums}
+.dash-balance-grid{display:grid;grid-template-columns:1fr 1fr;gap:11px}
+.dash-balance-tile{background:linear-gradient(145deg,#152e43,#102237);border:1px solid #32526b;border-radius:15px;padding:19px 13px;min-width:0;display:flex;flex-direction:column;justify-content:center}
+.dash-balance-label{font-size:12px;color:#b1c9dc;font-weight:750}
+.dash-balance-tile strong{font-size:clamp(18px,2.45vw,25px);font-weight:900;letter-spacing:-.025em;margin:9px 0;overflow-wrap:anywhere}
+.dash-balance-tile small{font-size:10px;color:#91aabe;line-height:1.5}
+.dash-realtime-card{padding:22px}
+.dash-realtime-header{display:flex;justify-content:space-between;align-items:flex-start;gap:12px}
+.dash-realtime-header .surface-heading{margin:0 0 3px}
+.dash-realtime-header p{font-size:12px;color:#9db6c9}
+.dash-realtime-live{display:flex;align-items:center;gap:8px;padding:8px 11px;border:1px solid #376d60;border-radius:99px;color:#8aebbe;font-size:10px;letter-spacing:.055em;white-space:nowrap}
+.dash-realtime-live.offline{color:#afc2ce;border-color:#455b6d}
+.dash-live-pulse{height:8px;width:8px;border-radius:50%;background:#54e8ac;box-shadow:0 0 0 4px #43e6a421;animation:robot-live-pulse 1.8s ease-in-out infinite}
+.dash-realtime-live.offline .dash-live-pulse{animation:none;background:#7a92a7;box-shadow:none}
+.dash-realtime-status{background:#10283a;border:1px solid #254d62;border-radius:11px;margin:17px 0 10px;padding:12px 13px;font-size:12px;color:#b9d1e4}
+.dash-realtime-list{display:grid;gap:8px;min-height:75px}
+.dash-trade{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 13px;background:#0c1e2f;border:1px solid #2b475a;border-radius:12px}
+.dash-trade-main{min-width:0}
+.dash-trade-main strong{font-size:13px;display:block}
+.dash-trade-main small{display:block;color:#91b0c5;font-size:11px;margin-top:3px}
+.dash-trade-outcome{flex:none;display:flex;align-items:flex-end;flex-direction:column;gap:3px;font-size:11px;font-weight:800}
+.dash-trade-outcome strong{font-size:13px}
+.dash-trade-outcome.win{color:#4bd5a2}.dash-trade-outcome.loss{color:#ff929c}.dash-trade-outcome.pending{color:#f6c56d}
+.dash-realtime-footer{display:flex;align-items:center;justify-content:space-between;gap:12px;border-top:1px solid #263f55;margin-top:15px;padding-top:13px}
+.dash-realtime-footer span{color:#819eb5;font-size:10px}
+.dash-realtime-footer .outline{font-size:11px;padding:9px 13px}
+.auto-config{scroll-margin-top:94px}
+@media(max-width:880px){.primary-nav .nav-link{flex:0 0 auto}.dash-control-grid{grid-template-columns:1fr}.dash-control-main{display:grid;grid-template-columns:1.2fr 1fr}.dash-control-actions{grid-template-columns:1fr}.dash-control-main .hero-action{height:100%;min-height:110px}}
+@media(max-width:550px){.shell{padding:13px 12px 35px}.primary-nav{margin:0 -1px 10px;padding:7px}.primary-nav .nav-link{font-size:11px;padding:9px}.dash-control-card,.dash-realtime-card{padding:16px;border-radius:18px}.dash-control-head{margin-bottom:15px}.dash-robot-icon{width:39px;height:39px;font-size:23px}.dash-robot-name strong{font-size:15px}.dash-control-main{grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px}.dash-control-main .hero-action{min-height:117px;font-size:14px;padding:8px}.dash-control-actions{gap:7px}.dash-configure-button{font-size:11px;padding:8px 4px}.dash-access strong{font-size:13px}.dash-balance-grid{gap:8px}.dash-balance-tile{padding:13px 10px;border-radius:12px}.dash-balance-tile strong{font-size:clamp(17px,4.8vw,21px)}.dash-realtime-header .surface-heading{font-size:16px}.dash-realtime-header p{font-size:11px}.dash-realtime-live{padding:6px 8px;font-size:9px}.dash-realtime-footer .outline{font-size:10px}.compact-dash-heading{margin-top:15px}}
 </style></head>
 <body>
 <div class="shell">
@@ -399,6 +451,14 @@ body.marketing-mode .section-foot{margin-top:0}
   <div class="brand"><img src="/brand/logo-nexora-v21.svg" alt="NEXORA IA — Robô Trader"><div><div class="brand-title">NEXORA IA</div><div class="brand-tag">ROBÔ TRADER AUTOMÁTICO</div></div></div>
   <div class="header-actions"><a id="accountBadge" class="broker-link hidden" href="https://t.deriv.link?t=HR6MZB6Q499Z" target="_blank" rel="noopener noreferrer" aria-label="Acessar corretora Deriv em nova aba" title="Abrir site oficial da Deriv para consultar operações e movimentar sua conta">ACESSAR CORRETORA <span aria-hidden="true">↗</span></a><button id="menuButton" class="iconbutton hidden" aria-label="Abrir menu" aria-expanded="false" onclick="toggleMenu(true)">☰</button></div>
 </header>
+<nav id="primaryNavigation" class="primary-nav hidden" aria-label="Navegação principal">
+  <button class="nav-link" data-view="dashboard" type="button" onclick="go('dashboard')">Painel do Robô</button>
+  <button class="nav-link" data-view="results" type="button" onclick="go('results')">Resultados do Robô</button>
+  <button class="nav-link" data-view="features" type="button" onclick="go('features')">Entenda as Funcionalidades</button>
+  <button class="nav-link" data-view="strategies" type="button" onclick="go('strategies')">Conheça os Indicadores e Estratégias</button>
+  <button class="nav-link" data-view="account" type="button" onclick="go('account')">Minha Conta</button>
+</nav>
+
 <div id="menuOverlay" class="menu-overlay hidden" onclick="toggleMenu(false)"></div>
 <nav id="drawer" class="drawer hidden" aria-label="Menu principal">
   <div class="drawer-head"><strong>Menu NEXORA</strong><button class="iconbutton" aria-label="Fechar menu" onclick="toggleMenu(false)">×</button></div>
@@ -516,17 +576,27 @@ body.marketing-mode .section-foot{margin-top:0}
   </form>
 </section>
 <section id="dashboard" class="hidden">
-  <div class="section-heading"><div><div class="eyebrow">AUTOMAÇÃO PERSONALIZADA</div><h1>Meu robô</h1><p>Você define os ativos, a estratégia e as regras de risco. O NEXORA automatiza somente as configurações disponíveis.</p></div></div>
-  <div class="card hero">
-    <div class="hero-top"><div class="hero-title">Nexora Robô Automático</div><span id="robotState" class="hero-state">DESLIGADO</span></div>
-    <div class="robot-control-row">
-      <button id="robotButton" class="hero-action" disabled aria-disabled="true" onclick="toggleRobot()">LIGAR ROBÔ</button>
-      <div id="robotLiveCard" class="robot-live-card offline" role="status" aria-live="polite" aria-atomic="true">
-        <div class="robot-live-heading"><span class="robot-live-dot" aria-hidden="true"></span><span id="robotLiveLabel">ROBÔ OFFLINE</span></div>
-        <p id="robotLiveCopy" class="robot-live-copy">Pronto para buscar novas oportunidades quando você ativar.</p>
+  <div class="section-heading compact-dash-heading"><div><div class="eyebrow">VISÃO GERAL</div><h1>Painel do Robô</h1></div></div>
+  <div class="card dash-control-card">
+    <div class="dash-control-head">
+      <div class="dash-robot-name"><span class="dash-robot-icon" aria-hidden="true">◈</span><div><strong>NEXORA IA</strong><span>Automatizador de operações</span></div></div>
+      <span id="robotState" class="hero-state">DESLIGADO</span>
+    </div>
+    <div class="dash-control-grid">
+      <div class="dash-control-main">
+        <button id="robotButton" class="hero-action" disabled aria-disabled="true" onclick="toggleRobot()">LIGAR ROBÔ</button>
+        <div class="dash-control-actions">
+          <button id="configureRobotButton" class="dash-configure-button" type="button" onclick="toggleRobotConfiguration()">⚙ CONFIGURAR ROBÔ <span id="configureRobotChevron" aria-hidden="true">⌄</span></button>
+          <div class="dash-access">
+            <span>Tempo disponível</span><strong id="dashboardAccessCountdown">Consultando...</strong>
+          </div>
+        </div>
+      </div>
+      <div class="dash-balance-grid">
+        <div class="dash-balance-tile"><span class="dash-balance-label">Saldo conta DEMO</span><strong id="balanceMetric">—</strong><small>Saldo de treinamento · Deriv</small></div>
+        <div class="dash-balance-tile"><span class="dash-balance-label">Saldo conta REAL</span><strong id="realBalanceMetric">—</strong><small id="realBalanceReason">Consultando saldo...</small></div>
       </div>
     </div>
-    <p class="helper" style="margin-top:10px">Acesso disponível: <strong id="dashboardAccessCountdown">consultando...</strong> · <a href="#" onclick="event.preventDefault();go('account')">Minha conta</a></p>
     <div id="robotStartNotice" class="robot-notice" role="alert" aria-live="polite" hidden>
       <strong id="robotNoticeTitle"></strong>
       <p id="robotNoticeText"></p>
@@ -536,7 +606,10 @@ body.marketing-mode .section-foot{margin-top:0}
         <p class="helper">O histórico oficial e o saldo Deriv não podem ser apagados pelo painel. Os limites de segurança permanecem ativos.</p>
       </div>
     </div>
-    <div class="robot-details-content hidden" aria-label="Análise do Robô Trader IA">
+    
+    <div class="dash-hidden-runtime hidden">
+      <div id="robotLiveCard" class="robot-live-card offline"><span id="robotLiveLabel">ROBÔ OFFLINE</span><span id="robotLiveCopy">Aguardando ativação</span></div>
+      <div class="robot-details-content hidden" aria-label="Análise do Robô Trader IA">
       <p id="autopilotVersion" class="helper"><strong>Automatizador NEXORA IA</strong></p>
       <div class="market-schedule" aria-label="Cronograma automático de mercados" role="status">
         <div class="market-schedule-row"><span class="market-schedule-dot active" id="forexScheduleDot"></span><span>Forex</span><strong id="forexScheduleStatus">Verificando horário</strong></div>
@@ -547,8 +620,25 @@ body.marketing-mode .section-foot{margin-top:0}
       <p id="v2Opportunity" class="helper" role="status">● Oportunidade encontrada: Nenhuma no momento</p>
     </div>
     <div hidden aria-hidden="true"><span id="robotMessage"></span><span id="riskSessionMetric"></span><span id="feedState"></span></div>
+      <span id="robotMessage"></span><span id="riskSessionMetric"></span><span id="feedState"></span>
+      <span id="lastOrder"></span>
+    </div>
   </div>
-  <div class="card auto-config" id="automationConfigCard">
+  <div class="card dash-realtime-card">
+    <div class="dash-realtime-header">
+      <div><div class="surface-heading">Análise em Tempo Real</div><p>Acompanhe as operações e o andamento do robô.</p></div>
+      <div class="dash-realtime-live"><span class="dash-live-pulse" aria-hidden="true"></span><strong id="dashRealtimeState">AGUARDANDO</strong></div>
+    </div>
+    <div class="dash-realtime-status" id="dashRealtimeDescription" role="status">Consultando o estado do robô...</div>
+    <div class="dash-realtime-list" id="dashRealtimeOrders" aria-live="polite" aria-label="Operações recentes">
+      <p class="muted">Carregando operações...</p>
+    </div>
+    <div class="dash-realtime-footer">
+      <span id="dashRealtimeSynced">Sincronizando com a Deriv...</span>
+      <button class="outline" type="button" onclick="go('results')">VER TODOS OS RESULTADOS</button>
+    </div>
+  </div>
+  <div class="card auto-config hidden" id="automationConfigCard">
     <div class="surface-heading">CONFIGURE SUA AUTOMAÇÃO</div>
     <p class="helper">Selecione e salve as opções antes de ligar o robô. Salvar não envia ordens à corretora.</p>
     <div class="auto-steps">
@@ -622,15 +712,7 @@ body.marketing-mode .section-foot{margin-top:0}
     </div>
     <div class="actions"><button class="outline" type="button" onclick="go('features')">FUNCIONALIDADES DO ROBÔ</button><button class="outline" type="button" onclick="go('strategies')">ESTRATÉGIAS DO ROBÔ</button></div>
   </div>
-  <div class="metric-grid">
-    <div class="card metric"><div class="metric-label">Saldo Treinamento</div><div class="metric-value" id="balanceMetric">—</div><div class="metric-sub">Saldo virtual oficial · Deriv</div></div>
-    <div class="card metric balance-real"><div class="metric-label">Saldo Conta Real</div><div class="metric-value" id="realBalanceMetric">—</div><div class="metric-sub" id="realBalanceReason">Consultando saldo...</div></div>
-  </div>
-  <div class="card">
-    <div class="surface-heading">Última operação</div>
-    <p id="lastOrder" class="muted">Buscando contrato mais recente...</p>
-    <div class="actions"><button class="outline" onclick="go('results')">VER TODOS OS RESULTADOS</button></div>
-  </div>
+  
 </section>
 <section id="results" class="hidden">
   <div class="section-heading"><div><h1>Resultados</h1><p>Somente contratos confirmados pela Deriv DEMO entram no placar. Horários sem confirmação da corretora aparecem como —.</p></div></div>
@@ -800,21 +882,22 @@ async function saveOnboarding(event){
  }catch(e){$('setupFeedback').textContent='Não foi possível salvar: '+e.message;fail('')}
  finally{btn.disabled=false}
 }
-function page(v){document.body.classList.toggle('marketing-mode',v==='welcome');for(const name of ['welcome','setup','dashboard','results','settings','account','features','strategies'])$(name).classList.toggle('hidden',name!==v);activePage=v;const logged=v!=='welcome';$('accountBadge').classList.toggle('hidden',!logged);$('menuButton').classList.toggle('hidden',!logged);document.querySelectorAll('.nav[data-view]').forEach(b=>b.classList.toggle('active',b.dataset.view===v))}
+function page(v){document.body.classList.toggle('marketing-mode',v==='welcome');$('primaryNavigation').classList.toggle('hidden',v==='welcome'||v==='setup');for(const name of ['welcome','setup','dashboard','results','settings','account','features','strategies'])$(name).classList.toggle('hidden',name!==v);activePage=v;const logged=v!=='welcome';$('accountBadge').classList.toggle('hidden',!logged);$('menuButton').classList.toggle('hidden',!logged);document.querySelectorAll('.nav[data-view],.nav-link[data-view]').forEach(b=>b.classList.toggle('active',b.dataset.view===v))}
 function toggleMenu(open){$('drawer').classList.toggle('hidden',!open);$('menuOverlay').classList.toggle('hidden',!open);$('menuButton').setAttribute('aria-expanded',String(open))}
 function updateResultsPolling(){
  if(resultsRefreshTimer){clearInterval(resultsRefreshTimer);resultsRefreshTimer=null;}
- if(activePage==='results'){
+ if(activePage==='results'||activePage==='dashboard'){
    resultsRefreshTimer=setInterval(async()=>{
      if(resultsRequestBusy)return;
      resultsRequestBusy=true;
      try{
        await loadDemoOrders();
-       $('resultsLiveStatus').textContent='Atualização automática 🟢';
+       if(activePage==='results')$('resultsLiveStatus').textContent='Atualização automática 🟢';
      }catch(e){
-       $('resultsLiveStatus').textContent='○ Tentando sincronizar com a Deriv...';
+       if(activePage==='results')$('resultsLiveStatus').textContent='○ Tentando sincronizar com a Deriv...';
+       if(activePage==='dashboard')$('dashRealtimeSynced').textContent='Tentando sincronizar operações...';
      }finally{resultsRequestBusy=false;}
-   },3000);
+   },activePage==='dashboard'?7000:3000);
  }
 }
 function go(v){toggleMenu(false);page(v);updateResultsPolling();window.scrollTo({top:0,behavior:'smooth'});if(v==='setup')loadOnboarding();if(v==='dashboard'){refreshDashboard();loadAutomationProfile();}if(v==='results'){loadDemoOrders();}if(v==='account'){loadDemoBalance();loadRobotAccess()}if(v==='settings')loadSettings()}
@@ -836,7 +919,7 @@ async function init(){
      login.href='/auth/deriv/start?ref='+encodeURIComponent(ref);
    });
  }
- try{const s=await req('/api/session');if(!s.authenticated){page('welcome');return}const justConnected=new URLSearchParams(window.location.search).get('login')==='ok';if(justConnected){window.history.replaceState({},'',window.location.pathname);go('setup')}else{page('dashboard');refreshDashboard();loadAutomationProfile()}refreshTimer=setInterval(()=>{if(activePage==='dashboard'||activePage==='results')refreshDashboard()},30000)}catch(e){fail(e.message);page('welcome')}}
+ try{const s=await req('/api/session');if(!s.authenticated){page('welcome');return}const justConnected=new URLSearchParams(window.location.search).get('login')==='ok';if(justConnected){window.history.replaceState({},'',window.location.pathname);go('setup')}else{page('dashboard');refreshDashboard();loadAutomationProfile();updateResultsPolling()}refreshTimer=setInterval(()=>{if(activePage==='dashboard'||activePage==='results')refreshDashboard()},30000)}catch(e){fail(e.message);page('welcome')}}
 function showRobotNotice(reason){
  const box=$('robotStartNotice'),title=$('robotNoticeTitle'),body=$('robotNoticeText'),options=$('robotNoticeOptions');
  if(!reason){box.hidden=true;title.textContent='';body.textContent='';options.hidden=true;return}
@@ -897,6 +980,12 @@ async function refreshDashboard(){
    const liveCard=$('robotLiveCard');
    liveCard.classList.toggle('offline',!robotRunning);
    $('robotLiveLabel').textContent=robotRunning?'ROBÔ ONLINE':'ROBÔ OFFLINE';
+   $('dashRealtimeState').textContent=robotRunning?'ROBÔ ONLINE':'ROBÔ OFFLINE';
+   $('dashRealtimeState').parentElement.classList.toggle('offline',!robotRunning);
+   $('dashRealtimeDescription').textContent=robotRunning
+    ?(status.reason||'Buscando oportunidades nos ativos selecionados.')
+    :(status.reason||'Robô desligado. Ative para iniciar as análises.');
+   if(!demoOrders.length)renderRealtimeOrders();
    $('robotLiveCopy').textContent=robotRunning
      ?'Análise em tempo real'
      :(status.interrupted_after_restart?'Execução interrompida. Confira o aviso antes de ativar.'
@@ -1076,7 +1165,51 @@ async function loadRobotAccess(){
   }catch(e){target.textContent='Não foi possível consultar a validade do acesso'}
 }
 async function loadDemoBalance(){try{const b=await req('/api/demo/balance');demoBalance=b;$('balanceMetric').textContent=money(b.balance,b.currency);$('accountBalance').textContent=money(b.balance,b.currency);return b}catch(e){$('balanceMetric').textContent='Indisponível';$('accountBalance').textContent='Indisponível';throw e}}
-async function loadDemoOrders(){try{const data=await req('/api/demo/orders');demoOrders=data.items||[];const last=demoOrders[0];$('lastOrder').textContent=last?last.symbol+' · '+last.direction+' · M'+last.duration_minutes+' · '+money(last.stake)+(last.pnl===null?' · Aguardando resultado':' · Resultado '+money(last.pnl)):'Nenhum contrato oficial ainda.';renderOrders();return data}catch(e){$('ordersBody').innerHTML='<tr><td colspan="11" class="empty">Não foi possível carregar o histórico.</td></tr>';throw e}}
+function toggleRobotConfiguration(force){
+ const card=$('automationConfigCard'),button=$('configureRobotButton');
+ const visible=typeof force==='boolean'?force:card.classList.contains('hidden');
+ card.classList.toggle('hidden',!visible);
+ button.setAttribute('aria-expanded',String(visible));
+ $('configureRobotChevron').textContent=visible?'⌃':'⌄';
+ if(visible){
+  card.scrollIntoView({behavior:'smooth',block:'start'});
+ }
+}
+function renderRealtimeOrders(){
+ const list=$('dashRealtimeOrders');
+ if(!list)return;
+ list.replaceChildren();
+ if(!demoOrders.length){
+  const empty=document.createElement('p');
+  empty.className='muted';
+  empty.textContent=robotRunning?'Robô monitorando oportunidades. Nenhuma operação registrada neste histórico.':'Nenhuma operação recente.';
+  list.append(empty);return;
+ }
+ for(const order of demoOrders.slice(0,6)){
+  const tile=document.createElement('div');tile.className='dash-trade';
+  const main=document.createElement('div');main.className='dash-trade-main';
+  const title=document.createElement('strong');
+  title.textContent=(order.symbol||'Ativo')+' · '+(order.direction||'—');
+  const sub=document.createElement('small');
+  const dateTime=brasilDateTime(order.started_at_brasilia||order.broker_purchase_at);
+  sub.textContent=dateTime[1]+' · '+dateTime[0]+' · '+(order.duration_minutes?'M'+order.duration_minutes:'—')+' · '+money(order.stake);
+  main.append(title,sub);
+  const outcome=document.createElement('div');
+  const state=(order.outcome||'').toUpperCase();
+  const settled=order.state==='SETTLED';
+  const value=document.createElement('strong');
+  const label=document.createElement('span');
+  if(settled&&state==='WIN'){outcome.className='dash-trade-outcome win';label.textContent='WIN';value.textContent=money(order.pnl);}
+  else if(settled&&state==='LOSS'){outcome.className='dash-trade-outcome loss';label.textContent='LOSS';value.textContent=money(order.pnl);}
+  else if(settled){outcome.className='dash-trade-outcome';label.textContent='ENCERRADA';value.textContent=order.pnl===null?'—':money(order.pnl);}
+  else {outcome.className='dash-trade-outcome pending';label.textContent=order.state==='UNKNOWN'?'CONFERINDO':'EM ANDAMENTO';value.textContent='Aguardando';}
+  outcome.append(label,value);tile.append(main,outcome);list.append(tile);
+ }
+ $('dashRealtimeSynced').textContent='Atualizado '+new Intl.DateTimeFormat('pt-BR',{
+  timeZone:'America/Sao_Paulo',hour:'2-digit',minute:'2-digit',second:'2-digit'
+ }).format(new Date())+' · Brasília';
+}
+async function loadDemoOrders(){try{const data=await req('/api/demo/orders');demoOrders=data.items||[];const last=demoOrders[0];$('lastOrder').textContent=last?last.symbol+' · '+last.direction+' · M'+last.duration_minutes+' · '+money(last.stake)+(last.pnl===null?' · Aguardando resultado':' · Resultado '+money(last.pnl)):'Nenhum contrato oficial ainda.';renderOrders();renderRealtimeOrders();return data}catch(e){$('ordersBody').innerHTML='<tr><td colspan="11" class="empty">Não foi possível carregar o histórico.</td></tr>';throw e}}
 const brasilDateTime=(iso)=>{
  if(!iso)return ['—','—'];
  const d=new Date(iso);
