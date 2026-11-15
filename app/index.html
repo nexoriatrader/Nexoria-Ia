@@ -936,7 +936,7 @@ function updateResultsPolling(){
    },activePage==='dashboard'?7000:3000);
  }
 }
-function go(v){toggleMenu(false);page(v);updateResultsPolling();window.scrollTo({top:0,behavior:'smooth'});if(v==='setup')loadOnboarding();if(v==='dashboard'){refreshDashboard();loadAutomationProfile();}if(v==='results'){loadDemoOrders();}if(v==='account'){loadDemoBalance();loadRobotAccess()}if(v==='settings')loadSettings()}
+function go(v){toggleMenu(false);page(v);updateResultsPolling();window.scrollTo({top:0,behavior:'smooth'});if(v==='setup')loadOnboarding();if(v==='dashboard'){refreshDashboard();loadAutomationProfile();loadDemoOrders().catch(()=>{});}if(v==='results'){loadDemoOrders();}if(v==='account'){loadDemoBalance();loadRobotAccess()}if(v==='settings')loadSettings()}
 function fail(msg){$('error').textContent=msg||''}
 async function req(path,opts={}){const r=await fetch(path,{credentials:'same-origin',...opts});let data;try{data=await r.json()}catch{throw Error('Resposta inválida do servidor')}if(!r.ok)throw Error(data.detail||'Falha na conexão');return data}
 function startNexoraTrial(event){
@@ -955,7 +955,7 @@ async function init(){
      login.href='/auth/deriv/start?ref='+encodeURIComponent(ref);
    });
  }
- try{const s=await req('/api/session');if(!s.authenticated){page('welcome');return}const justConnected=new URLSearchParams(window.location.search).get('login')==='ok';if(justConnected){window.history.replaceState({},'',window.location.pathname);go('setup')}else{page('dashboard');refreshDashboard();loadAutomationProfile();updateResultsPolling()}refreshTimer=setInterval(()=>{if(activePage==='dashboard'||activePage==='results')refreshDashboard()},30000)}catch(e){fail(e.message);page('welcome')}}
+ try{const s=await req('/api/session');if(!s.authenticated){page('welcome');return}const justConnected=new URLSearchParams(window.location.search).get('login')==='ok';if(justConnected){window.history.replaceState({},'',window.location.pathname);go('setup')}else{page('dashboard');refreshDashboard();loadAutomationProfile();loadDemoOrders().catch(()=>{});updateResultsPolling()}refreshTimer=setInterval(()=>{if(activePage==='dashboard'||activePage==='results')refreshDashboard()},30000)}catch(e){fail(e.message);page('welcome')}}
 function showRobotNotice(reason){
  const box=$('robotStartNotice'),title=$('robotNoticeTitle'),body=$('robotNoticeText'),options=$('robotNoticeOptions');
  if(!reason){box.hidden=true;title.textContent='';body.textContent='';options.hidden=true;return}
