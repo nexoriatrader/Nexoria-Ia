@@ -61,7 +61,7 @@ async def _candidate_for_symbol(symbol, bucket, *, deadline, direction="AUTO", m
     }
 
 
-async def confirmed_pulso_signal(allowed_symbols=None, direction="AUTO", minutes=5, indicators=()):
+async def confirmed_pulso_signal(allowed_symbols=None, direction="AUTO", minutes=5, indicators=(), scan_event=None):
     """Scan all Deriv-listed Volatility symbols (or single-symbol fallback).
 
     Return at most ONE live candidate per closed M1 bar. Fail closed on
@@ -77,6 +77,7 @@ async def confirmed_pulso_signal(allowed_symbols=None, direction="AUTO", minutes
         key=(direction,minutes,tuple(sorted(set(indicators))),tuple(sorted(set(allowed_symbols))) if allowed_symbols is not None else None)
         cached=_cache.get(key)
         if cached and cached["last_bucket"]==bucket:
+            if scan_event: scan_event('cached', None, len(allowed_symbols or []))
             return dict(cached["candidate"]) if cached["candidate"] else None
         _cache[key]={"last_bucket":bucket,"candidate":None}
         # Bound memory across different user-selected portfolios.
@@ -100,14 +101,18 @@ async def confirmed_pulso_signal(allowed_symbols=None, direction="AUTO", minutes
             symbols=[symbol for symbol in symbols if symbol in set(allowed_symbols)]
         if not symbols:
             return None
+        if scan_event: scan_event('start', None, len(symbols))
         sem=asyncio.Semaphore(5)
         async def examine(symbol):
             async with sem:
+                if scan_event: scan_event('checking',symbol,len(symbols))
                 try:
                     return await _candidate_for_symbol(symbol,bucket,deadline=deadline,direction=direction,minutes=minutes,indicators=indicators)
                 except (MarketError,TimeoutError,OSError,TypeError,ValueError) as exc:
                     _log.info("PULSO M1 ignored symbol=%s error_type=%s",symbol,type(exc).__name__)
                     return None
+                finally:
+                    if scan_event: scan_event('checked',symbol,len(symbols))
         # Execute bounded asynchronous calls, never beyond candle entry window.
         remaining=deadline-time.time()
         if remaining<=1:
@@ -118,6 +123,7 @@ async def confirmed_pulso_signal(allowed_symbols=None, direction="AUTO", minutes
                 timeout=max(.5,remaining-0.4))
         except TimeoutError:
             _log.warning("PULSO M1 scan deadline exceeded; skip candle")
+            if scan_event: scan_event('timeout',None,len(symbols))
             return None
         candidates=[item for item in results if item]
         if candidates and time.time()<deadline:
@@ -126,6 +132,7 @@ async def confirmed_pulso_signal(allowed_symbols=None, direction="AUTO", minutes
             candidates.sort(key=lambda x:x["symbol"])
             chosen=candidates[(bucket//60)%len(candidates)]
             _cache[key]["candidate"]=chosen
+            if scan_event: scan_event('signal',chosen["symbol"],len(symbols))
             _log.info("PULSO ready: eligible_symbols=%s signals=%s chosen=%s",
                       len(symbols),len(candidates),chosen["symbol"])
             return dict(chosen)
