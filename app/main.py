@@ -15,6 +15,7 @@ from pydantic import BaseModel
 from sqlalchemy import select, delete, func
 
 from . import db
+from .automation_markets import GROUPS as AUTOMATION_GROUPS, instruments_by_group
 from .access import (access_control_enabled, access_status, start_trial_on_first_robot_start,
                      register_first_login, referral_report, utc)
 from .demo import (DemoTradingError, DemoPreBuyDeadlineExceeded, demo_account_balance,
@@ -533,7 +534,7 @@ async def autopilot_once():
                         allowed_symbols=None
                         if profile is not None:
                             if (profile.account_mode!='demo' or profile.strategy!='pulso_v2'
-                                or profile.market!='volatility' or profile.expiry_minutes!=5
+                                or profile.market not in ('derived','volatility') or profile.expiry_minutes!=5
                                 or profile.news_filter):
                                 autopilot_reasons[uid]='Configuração incompatível ou filtro de notícias indisponível; sem novas entradas'
                                 continue
@@ -1187,12 +1188,12 @@ async def save_automation_profile(request:Request,payload:AutomationProfileReque
     user=active_user(request,nexora_sid)
     if payload.account_mode not in ('demo','real'):
         raise HTTPException(422,'Modo de conta inválido')
-    if payload.market not in ('volatility','forex') or payload.strategy not in ('pulso_v2','trend','rsi'):
+    if payload.market not in (*AUTOMATION_GROUPS, 'volatility') or payload.strategy not in ('pulso_v2','trend','rsi'):
         raise HTTPException(422,'Mercado ou estratégia inválidos')
     if payload.expiry_minutes not in (1,3,5,15):
         raise HTTPException(422,'Expiração inválida')
-    if not 1<=len(payload.symbols)<=25 or len(payload.symbols)!=len(set(payload.symbols)):
-        raise HTTPException(422,'Selecione de 1 a 25 ativos diferentes')
+    if not 1<=len(payload.symbols)<=50 or len(payload.symbols)!=len(set(payload.symbols)):
+        raise HTTPException(422,'Selecione de 1 a 50 ativos diferentes')
     if any(not re.fullmatch(r'[A-Za-z0-9_]{2,30}',x) for x in payload.symbols):
         raise HTTPException(422,'Símbolo inválido')
     if payload.news_minutes_before not in (0,15,30,60) or payload.news_minutes_after not in (0,15,30,60):
@@ -1201,7 +1202,7 @@ async def save_automation_profile(request:Request,payload:AutomationProfileReque
         raise HTTPException(422,'Máximo diário fora do limite permitido')
     # Validate membership in the actual broker catalog, not a fabricated list.
     try:
-        instruments=await catalogue(payload.market)
+        instruments=await instruments_by_group('derived' if payload.market=='volatility' else payload.market)
         available={item['symbol'] for item in instruments}
     except (MarketError,TimeoutError,OSError):
         raise HTTPException(503,'Catálogo da Deriv indisponível; configuração não salva') from None
@@ -1227,7 +1228,7 @@ async def save_automation_profile(request:Request,payload:AutomationProfileReque
             session.commit()
             result=automation_profile_result(profile)
     return {**result,'saved':True,'running':False,
-        'ready_to_start':(payload.account_mode=='demo' and payload.market=='volatility'
+        'ready_to_start':(payload.account_mode=='demo' and payload.market in ('volatility','derived')
                           and payload.strategy=='pulso_v2' and payload.expiry_minutes==5
                           and not payload.news_filter),
         'note':'Preferências registradas. A ativação é um comando separado.'}
@@ -1237,17 +1238,15 @@ async def save_automation_profile(request:Request,payload:AutomationProfileReque
 async def automation_catalogue(request:Request,market:str='volatility',
                                nexora_sid:str|None=Cookie(default=None)):
     active_user(request,nexora_sid)
-    if market not in ('volatility','forex'):
+    if market not in (*AUTOMATION_GROUPS,'volatility'):
         raise HTTPException(422,'Mercado inválido')
     try:
-        items=await catalogue(market)
+        items=await instruments_by_group('derived' if market=='volatility' else market)
     except (MarketError,TimeoutError,OSError):
         raise HTTPException(503,'Não foi possível consultar os ativos Deriv') from None
-    return {'market':market,
-            'items':[{'symbol':x['symbol'],'name':x.get('name') or x.get('display_name') or x['symbol']}
-                     for x in items],
-            'source':'DERIV_PUBLIC_CATALOG',
-            'execution':'DEMO_ONLY'}
+    return {'market':market,'markets':AUTOMATION_GROUPS,
+            'items':[{'symbol':x['symbol'],'name':x['name'],'group':x['group']} for x in items],
+            'source':'DERIV_PUBLIC_CATALOG'}
 
 
 class AutoPilotSwitch(BaseModel):
@@ -1660,7 +1659,7 @@ async def autopilot_start(request:Request,payload:AutoPilotSwitch,
         if profile is None:
             raise HTTPException(409,'Configure e salve os ativos no novo painel antes de ligar o robô')
         if profile is not None:
-            if (profile.account_mode!='demo' or profile.market!='volatility'
+            if (profile.account_mode!='demo' or profile.market not in ('derived','volatility')
                 or profile.strategy!='pulso_v2' or profile.expiry_minutes!=5):
                 raise HTTPException(409,'Configuração de automação ainda não executável')
             if profile.news_filter:
