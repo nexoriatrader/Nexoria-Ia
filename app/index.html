@@ -1660,7 +1660,9 @@ async function presetBalance(){
  try{
   const response=await req(mode==='real'?'/api/real/balance':'/api/demo/balance');
   const n=Number(response.balance);
-  if(response.currency!=='USD'||!Number.isFinite(n)||n<=0||(mode==='real'&&!response.available))return null;
+  if(response.currency!=='USD'||!Number.isFinite(n)||n<=0)return null;
+  if(mode==='real'&&(!response.available||!$('autoRealAccount').value||
+    response.account_id!==$('autoRealAccount').value))return null;
   return n;
  }catch{return null}
 }
