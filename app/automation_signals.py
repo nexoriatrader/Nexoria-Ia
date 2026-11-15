@@ -141,7 +141,7 @@ async def confirmed_automation_signal(profile):
     indicators=json.loads(profile.indicators_json or '[]')
     direction=profile.direction
     if profile.strategy=='pulso_v2':
-        return await confirmed_pulso_signal(symbols,direction=direction,minutes=profile.expiry_minutes)
+        return await confirmed_pulso_signal(symbols,direction=direction,minutes=profile.expiry_minutes,indicators=indicators)
 
     now=time.time()
     if now%60>12:
