@@ -168,6 +168,8 @@ class AutomationProfile(Base):
     news_minutes_after=Column(Integer,nullable=False,default=30)
     min_payout=Column(String(12),nullable=False,default='88')
     max_daily_orders=Column(Integer,nullable=False,default=0)
+    indicators_json=Column(Text,nullable=False,default='[]')
+    direction=Column(String(10),nullable=False,default='AUTO')
     updated_at=Column(DateTime(timezone=True),default=utcnow,onupdate=utcnow,nullable=False)
 
 
@@ -225,6 +227,13 @@ def init_db():
     if 'referral_code' not in flow_columns:
         with engine.begin() as conn:
             conn.execute(text('ALTER TABLE login_flows ADD COLUMN referral_code VARCHAR(32)'))
+    profile_columns={col['name'] for col in inspect(engine).get_columns('automation_profiles')}
+    if 'indicators_json' not in profile_columns:
+        with engine.begin() as conn:
+            conn.execute(text("ALTER TABLE automation_profiles ADD COLUMN indicators_json TEXT NOT NULL DEFAULT '[]'"))
+    if 'direction' not in profile_columns:
+        with engine.begin() as conn:
+            conn.execute(text("ALTER TABLE automation_profiles ADD COLUMN direction VARCHAR(10) NOT NULL DEFAULT 'AUTO'"))
     access_columns={col['name'] for col in inspect(engine).get_columns('robot_access')}
     if 'suspended' not in access_columns:
         with engine.begin() as conn:
