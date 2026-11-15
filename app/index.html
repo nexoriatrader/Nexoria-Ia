@@ -547,8 +547,16 @@ body.marketing-mode .section-foot{margin-top:0}
 <section id="results" class="hidden">
   <div class="section-heading"><div><h1>Resultados</h1><p>Somente contratos confirmados pela Deriv DEMO entram no placar. Horários sem confirmação da corretora aparecem como —.</p></div></div>
   <div class="card"><div class="surface-heading">HISTÓRICO COMPLETO DO ROBÔ</div>
-    <div class="actions" style="align-items:center"><button class="outline" type="button" onclick="go('dashboard')">VOLTAR AO PAINEL DO ROBÔ</button><span class="helper" id="resultsLiveStatus" role="status">Atualização automática 🟢</span></div>
+    <div class="actions" style="align-items:center"><button class="outline" type="button" onclick="go('dashboard')">VOLTAR AO PAINEL DO ROBÔ</button><button class="outline" type="button" onclick="loadPulsoAudit()">AUDITORIA PULSO POR ATIVO</button><span class="helper" id="resultsLiveStatus" role="status">Atualização automática 🟢</span></div>
     <div class="table-wrap"><table><thead><tr><th>Data da compra (Deriv · Brasília)</th><th>Horário da compra (Deriv)</th><th>Conta</th><th>Ativo</th><th>Direção</th><th>Entrada</th><th>Expiração</th><th>Etapa</th><th>Situação</th><th>WIN / LOSS</th><th>Resultado</th></tr></thead><tbody id="ordersBody"><tr><td colspan="11" class="empty">Carregando contratos...</td></tr></tbody></table></div>
+  </div>
+  <div id="pulsoAuditCard" class="card hidden" style="margin-top:16px">
+    <div class="surface-heading">AUDITORIA PULSO V2 · DERIV DEMO</div>
+    <p id="pulsoAuditStatus" class="helper" role="status">Consultando operações oficiais...</p>
+    <p id="pulsoAuditOverall" class="helper"></p>
+    <div class="table-wrap"><table><thead><tr><th>Ativo</th><th>Operações</th><th>WIN</th><th>LOSS</th><th>Acerto</th><th>Resultado</th></tr></thead><tbody id="pulsoAuditBody"></tbody></table></div>
+    <p id="pulsoAuditDuplicates" class="helper"></p>
+    <p class="helper">Somente resultados liquidados da estratégia PULSO V2 na sua conta DEMO. Não altera entradas, ativos, stops ou operações em andamento. Amostras pequenas não validam um índice.</p>
   </div>
 </section>
 <section id="settings" class="hidden">
@@ -966,6 +974,36 @@ function tradeStage(o){
  if(!Number.isInteger(cycle)||cycle<0||!Number.isInteger(gale)||gale<0)return 'Não registrado';
  const prefix=cycle>0?'Ciclo '+cycle:'Ciclo inicial';
  return prefix+' · '+(gale>0?'Martingale '+gale:'Entrada inicial');
+}
+async function loadPulsoAudit(){
+  $('pulsoAuditCard').classList.remove('hidden');
+  $('pulsoAuditStatus').textContent='Lendo histórico oficial da estratégia PULSO V2...';
+  $('pulsoAuditBody').replaceChildren();
+  try{
+    const report=await req('/api/autopilot/pulso-v2/audit');
+    const summary=report.overall||{};
+    $('pulsoAuditOverall').textContent='Total: '+(summary.settled||0)+' liquidadas · '+(summary.wins||0)+' WIN / '+(summary.losses||0)+' LOSS · Líquido '+money(summary.net_pnl||'0');
+    const assets=Array.isArray(report.assets)?report.assets:[];
+    assets.sort((a,b)=>b.settled-a.settled);
+    for(const item of assets){
+      const row=document.createElement('tr');
+      const columns=[item.symbol,item.settled,item.wins,item.losses,
+        item.win_rate===null?'—':(item.win_rate*100).toFixed(2)+'%',
+        money(item.net_pnl)];
+      for(let i=0;i<columns.length;i++){
+        const cell=document.createElement('td');
+        cell.textContent=String(columns[i]);
+        if(i===5)cell.className=Number(item.net_pnl)>=0?'positive':'negative';
+        row.append(cell);
+      }
+      $('pulsoAuditBody').append(row);
+    }
+    const overlaps=Array.isArray(report.potential_overlaps)?report.potential_overlaps:[];
+    $('pulsoAuditDuplicates').textContent=overlaps.length
+      ?'Possíveis sobreposições temporais: '+overlaps.length+' · '+overlaps.map(x=>x.symbol+' (#'+x.earlier_order_id+' e #'+x.later_order_id+')').join('; ')
+      :'Nenhuma sobreposição temporal aparente entre compras PULSO V2 no mesmo ativo.';
+    $('pulsoAuditStatus').textContent=assets.length+' ativo(s) · histórico oficial PULSO V2 · consulta somente leitura';
+  }catch(e){$('pulsoAuditStatus').textContent='Não foi possível gerar a auditoria: '+e.message}
 }
 function renderOrders(){
  const tbody=$('ordersBody');tbody.replaceChildren();
