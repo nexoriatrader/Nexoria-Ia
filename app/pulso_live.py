@@ -29,8 +29,6 @@ async def _candidate_for_symbol(symbol, bucket, *, deadline, direction="AUTO", m
         return None
     if time.time()>=deadline:
         return reject('janela_expirada')
-    if not await supported(symbol, minutes=minutes):
-        return reject('ativo_incompativel')
     # Historical signal warm-up requires >110 bars. Do not infer gaps.
     raw=await public_request({
         "ticks_history":symbol,"style":"candles",
@@ -56,12 +54,24 @@ async def _candidate_for_symbol(symbol, bucket, *, deadline, direction="AUTO", m
         from .automation_signals import _indicators_agree
         if not _indicators_agree(tail,side,indicators,"pulso_v2"):
             return reject('indicadores_nao_confirmados')
+    expiries=(1,3,5,15) if minutes==0 else (minutes,)
+    supported_expiries=[]
+    for expiry in expiries:
+        if time.time()>=deadline:
+            return reject('janela_expirada')
+        try:
+            if await supported(symbol,minutes=expiry):
+                supported_expiries.append(expiry)
+        except (MarketError,TimeoutError,OSError,ValueError,TypeError):
+            continue
+    if not supported_expiries:
+        return reject('ativo_incompativel')
     return {
-        "strategy":f"nexora_pulso_v2_stable_{side.lower()}_{minutes}m",
+        "strategy":f"nexora_pulso_v2_stable_{side.lower()}_auto",
         "direction":side,"symbol":symbol,
-        "minutes":minutes,"bar_seconds":60,
+        "minutes":supported_expiries[0],"expiry_options":supported_expiries,"bar_seconds":60,
         "last_bar_epoch":bars[-1]["epoch"],
-        "reason":"PULSO V2: pressão eficiente + volatilidade estável; CALL M1/5min",
+        "reason":"PULSO V2: pressão eficiente + volatilidade estável; expiração escolhida pela proposta DEMO",
         "score":1,
     }
 
