@@ -54,18 +54,10 @@ async def _candidate_for_symbol(symbol, bucket, *, deadline, direction="AUTO", m
         from .automation_signals import _indicators_agree
         if not _indicators_agree(tail,side,indicators,"pulso_v2"):
             return reject('indicadores_nao_confirmados')
-    expiries=(1,3,5,15) if minutes==0 else (minutes,)
-    supported_expiries=[]
-    for expiry in expiries:
-        if time.time()>=deadline:
-            return reject('janela_expirada')
-        try:
-            if await supported(symbol,minutes=expiry):
-                supported_expiries.append(expiry)
-        except (MarketError,TimeoutError,OSError,ValueError,TypeError):
-            continue
-    if not supported_expiries:
-        return reject('ativo_incompativel')
+    # Duration availability and payout are verified with actual DEMO proposals
+    # AFTER a confirmed directional signal; do not make four extra contract
+    # catalogue calls inside the narrow closed-candle scanner window.
+    supported_expiries=[1,3,5,15] if minutes==0 else [minutes]
     return {
         "strategy":f"nexora_pulso_v2_stable_{side.lower()}_auto",
         "direction":side,"symbol":symbol,
@@ -101,7 +93,7 @@ async def confirmed_pulso_signal(allowed_symbols=None, direction="AUTO", minutes
             for k in list(_cache):
                 if _cache[k]["last_bucket"]<bucket-120:
                     _cache.pop(k,None)
-        deadline=bucket+12
+        deadline=bucket+8
         if allowed_symbols is not None:
             # Only symbols the user explicitly selected from the broker catalogue.
             symbols=sorted(set(allowed_symbols))
