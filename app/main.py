@@ -1162,6 +1162,7 @@ class AutomationProfileRequest(BaseModel):
     direction:str='AUTO'
     real_account_id:str|None=None
     min_payout_pct:int=88
+    preset_mode:str='custom'
 
 
 def automation_profile_result(profile):
@@ -1172,7 +1173,7 @@ def automation_profile_result(profile):
             'news_filter':False,'news_minutes_before':30,
             'news_minutes_after':30,'max_daily_orders':0,
             'indicators':[],'direction':'AUTO','real_account_id':None,
-            'min_payout_pct':88,
+            'min_payout_pct':88,'preset_mode':'custom',
             'configured':False,'execution':'DERIV_DEMO_ONLY'
         }
     return {
@@ -1187,6 +1188,7 @@ def automation_profile_result(profile):
         'direction':profile.direction,
         'real_account_id':profile.real_account_id,
         'min_payout_pct':int(Decimal(profile.min_payout)),
+        'preset_mode':profile.preset_mode,
         'configured':True,'execution':'DERIV_DEMO_ONLY'
     }
 
@@ -1220,6 +1222,8 @@ async def save_automation_profile(request:Request,payload:AutomationProfileReque
         raise HTTPException(422,'Direção inválida')
     if not 0<=payload.min_payout_pct<=200:
         raise HTTPException(422,'Payout mínimo fora do intervalo')
+    if payload.preset_mode not in ('conservative','aggressive','custom'):
+        raise HTTPException(422,'Perfil de configuração inválido')
     indicator_options={'EMA','SMA','RSI','MACD','BOLLINGER','ATR','ADX','STOCHASTIC','SUPPORT_RESISTANCE','CANDLE_PATTERNS'}
     if len(payload.indicators)!=len(set(payload.indicators)) or not set(payload.indicators).issubset(indicator_options):
         raise HTTPException(422,'Seleção de indicadores inválida')
@@ -1279,6 +1283,7 @@ async def save_automation_profile(request:Request,payload:AutomationProfileReque
             profile.direction=payload.direction
             profile.real_account_id=payload.real_account_id if payload.account_mode=='real' else None
             profile.min_payout=str(payload.min_payout_pct)
+            profile.preset_mode=payload.preset_mode
             session.commit()
             result=automation_profile_result(profile)
     return {**result,'saved':True,'running':False,
