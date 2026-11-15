@@ -597,6 +597,10 @@ async def autopilot_once():
                             if not allowed_symbols:
                                 autopilot_reasons[uid]='Nenhum ativo habilitado'
                                 continue
+                        # Expiração automática também vale para perfis antigos, sem
+                        # exigir que o usuário refaça a configuração.
+                        if profile is not None:
+                            profile.expiry_minutes=0
                         try:
                             from .automation_signals import confirmed_automation_signal
                             candidate=await confirmed_automation_signal(
@@ -698,14 +702,12 @@ async def autopilot_once():
                     # than picking a duration at random. No eligible offer means no buy.
                     selected_ratio=(Decimal('1')+Decimal(str(profile.min_payout))/Decimal('100')
                                     if pulso_active and profile is not None else Decimal('1.50'))
-                    auto_expiry=bool(pulso_active and profile is not None and profile.expiry_minutes==0)
+                    auto_expiry=bool(pulso_active and profile is not None)
                     durations=tuple(candidate.get('expiry_options',(candidate['minutes'],))) if auto_expiry else (candidate['minutes'],)
                     best_offer=None
                     cutoff=(candidate.get('last_bar_epoch',0)+60+12
                             if pulso_active and not entry.retry else None)
-                    for duration in durations:
-                        if cutoff is not None and time.time()>=cutoff-1:
-                            break
+                    async def inspect_expiry(duration):
                         try:
                             quote=await demo_proposal(token,user.deriv_account_id,
                                 symbol=candidate['symbol'],contract_type=candidate['direction'],
@@ -714,13 +716,27 @@ async def autopilot_once():
                             payout=Decimal(str(quote['payout']))
                             if (not ask.is_finite() or not payout.is_finite()
                                 or ask<=0 or ask>entry.stake or payout<ask*selected_ratio):
-                                continue
-                            ratio=payout/ask
-                            if best_offer is None or ratio>best_offer[0]:
-                                best_offer=(ratio,duration)
+                                return None
+                            return (payout/ask,duration)
                         except (DemoTradingError,InvalidOperation,KeyError,ValueError,TypeError) as exc:
                             log.info('NEXORA expiry offer unavailable: symbol=%s duration=%s error=%s',
                                      candidate['symbol'],duration,type(exc).__name__)
+                            return None
+                    timeout=max(0.0,min(4.0,cutoff-time.time()-0.5)) if cutoff else 4.0
+                    if timeout>0:
+                        tasks=[asyncio.create_task(inspect_expiry(duration)) for duration in durations]
+                        try:
+                            done,pending=await asyncio.wait(tasks,timeout=timeout)
+                            for task in pending: task.cancel()
+                            offers=[task.result() for task in done if not task.cancelled()
+                                    and task.exception() is None and task.result() is not None]
+                            if offers:
+                                # Highest actual quoted return; tie-breaker favors
+                                # longer durations, never an invented accuracy score.
+                                best_offer=max(offers,key=lambda offer:(offer[0],offer[1]))
+                        finally:
+                            for task in tasks:
+                                if not task.done(): task.cancel()
                     if best_offer is None:
                         autopilot_reasons[uid]='Nenhuma expiração com proposta DEMO e payout mínimo válidos'
                         log_v2_gate(uid,'NO_VALID_EXPIRY',detail='symbol='+str(candidate['symbol']))
@@ -1248,7 +1264,7 @@ def automation_profile_result(profile):
     return {
         'account_mode':profile.account_mode,'market':profile.market,
         'symbols':json.loads(profile.symbols_json),
-        'strategy':profile.strategy,'expiry_minutes':profile.expiry_minutes,
+        'strategy':profile.strategy,'expiry_minutes':0,
         'news_filter':profile.news_filter,
         'news_minutes_before':profile.news_minutes_before,
         'news_minutes_after':profile.news_minutes_after,
@@ -1342,7 +1358,7 @@ async def save_automation_profile(request:Request,payload:AutomationProfileReque
             profile.account_mode=payload.account_mode
             profile.symbols_json=json.dumps(sorted(payload.symbols))
             profile.strategy=payload.strategy
-            profile.expiry_minutes=payload.expiry_minutes
+            profile.expiry_minutes=0
             profile.news_filter=payload.news_filter
             profile.news_minutes_before=payload.news_minutes_before
             profile.news_minutes_after=payload.news_minutes_after
