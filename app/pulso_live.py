@@ -18,7 +18,7 @@ STRATEGY="nexora_pulso_v2_stable_call_5m"
 # Rollback without code edits: NEXORA_PULSO_SYMBOLS_MODE=single
 SYMBOLS_MODE=os.getenv("NEXORA_PULSO_SYMBOLS_MODE","all").strip().lower()
 _log=logging.getLogger("nexora.pulso")
-_cache={"last_bucket":None,"candidate":None}
+_cache={}
 _cache_lock=asyncio.Lock()
 
 
@@ -53,7 +53,7 @@ async def _candidate_for_symbol(symbol, bucket, *, deadline):
     }
 
 
-async def confirmed_pulso_signal():
+async def confirmed_pulso_signal(allowed_symbols=None):
     """Scan all Deriv-listed Volatility symbols (or single-symbol fallback).
 
     Return at most ONE live candidate per closed M1 bar. Fail closed on
@@ -66,9 +66,16 @@ async def confirmed_pulso_signal():
     async with _cache_lock:
         now=time.time()
         bucket=int(now//60)*60
-        if _cache["last_bucket"]==bucket:
-            return dict(_cache["candidate"]) if _cache["candidate"] else None
-        _cache.update(last_bucket=bucket,candidate=None)
+        key=tuple(sorted(set(allowed_symbols))) if allowed_symbols is not None else None
+        cached=_cache.get(key)
+        if cached and cached["last_bucket"]==bucket:
+            return dict(cached["candidate"]) if cached["candidate"] else None
+        _cache[key]={"last_bucket":bucket,"candidate":None}
+        # Bound memory across different user-selected portfolios.
+        if len(_cache)>200:
+            for k in list(_cache):
+                if _cache[k]["last_bucket"]<bucket-120:
+                    _cache.pop(k,None)
         deadline=bucket+12
         if SYMBOLS_MODE=="single":
             symbols=[SYMBOL]
@@ -79,6 +86,10 @@ async def confirmed_pulso_signal():
             if not symbols:
                 _log.warning("PULSO market catalogue empty; no DEMO signals")
                 return None
+        if allowed_symbols is not None:
+            symbols=[symbol for symbol in symbols if symbol in set(allowed_symbols)]
+        if not symbols:
+            return None
         sem=asyncio.Semaphore(5)
         async def examine(symbol):
             async with sem:
@@ -104,7 +115,7 @@ async def confirmed_pulso_signal():
             # from 1HZ100V into claims about other assets.
             candidates.sort(key=lambda x:x["symbol"])
             chosen=candidates[(bucket//60)%len(candidates)]
-            _cache["candidate"]=chosen
+            _cache[key]["candidate"]=chosen
             _log.info("PULSO ready: eligible_symbols=%s signals=%s chosen=%s",
                       len(symbols),len(candidates),chosen["symbol"])
             return dict(chosen)
