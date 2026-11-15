@@ -1705,6 +1705,13 @@ async function save(){
 }
 async function logout(){try{await req('/api/logout',{method:'POST'});if(refreshTimer)clearInterval(refreshTimer);if(resultsRefreshTimer)clearInterval(resultsRefreshTimer);toggleMenu(false);page('welcome');demoOrders=[];demoBalance=null;fail('')}catch(e){fail(e.message)}}
 document.addEventListener('keydown',e=>{if(e.key==='Escape')toggleMenu(false)});
+// When a user returns from the Deriv account page, read both balances again.
+let derivReturnRefreshAt=0;
+window.addEventListener('focus',()=>{
+ if(activePage!=='dashboard'||Date.now()-derivReturnRefreshAt<4000)return;
+ derivReturnRefreshAt=Date.now();
+ Promise.allSettled([loadDemoBalance(),loadRealBalance()]);
+});
 init();
 </script>
 </body></html>
