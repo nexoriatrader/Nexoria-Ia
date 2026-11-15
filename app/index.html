@@ -1208,7 +1208,7 @@ function updateResultsPolling(){
    },activePage==='dashboard'?7000:3000);
  }
 }
-function go(v){page(v);updateResultsPolling();window.scrollTo({top:0,behavior:'smooth'});if(v==='setup')loadOnboarding();if(v==='dashboard'){refreshDashboard();loadDemoOrders().catch(()=>{});}if(v==='robot-config'){loadAutomationProfile();}if(v==='results'){loadDemoOrders();}if(v==='account'){loadDemoBalance();loadRobotAccess()}if(v==='settings')loadSettings()}
+function go(v){page(v);updateResultsPolling();window.scrollTo({top:0,behavior:'smooth'});if(v==='setup')loadOnboarding();if(v==='dashboard'){refreshDashboard();loadDemoOrders().catch(()=>{});}if(v==='robot-config'){initAutomationWizard();setAutomationWizardStep(1);loadAutomationProfile();}if(v==='results'){loadDemoOrders();}if(v==='account'){loadDemoBalance();loadRobotAccess()}if(v==='settings')loadSettings()}
 function fail(msg){$('error').textContent=msg||''}
 async function req(path,opts={}){const r=await fetch(path,{credentials:'same-origin',...opts});let data;try{data=await r.json()}catch{throw Error('Resposta inválida do servidor')}if(!r.ok)throw Error(data.detail||'Falha na conexão');return data}
 function startNexoraTrial(event){
@@ -1592,6 +1592,128 @@ function renderOrders(){
  }
 }
 let automationAssets=[],automationSelected=new Set(),automationProfileSaved=false,automationMarketRequest=0;
+
+let autoWizardStep=1,autoWizardReady=false,autoPresetMode='custom',autoPresetApplying=false;
+function setAutomationPresetMode(mode,notice){
+ autoPresetMode=mode;
+ document.querySelectorAll('.auto-preset-button').forEach(button=>{
+  const active=button.dataset.preset===mode;
+  button.classList.toggle('active',active);
+  button.setAttribute('aria-pressed',String(active));
+ });
+ $('autoPresetStatus').textContent=notice||({
+  conservative:'Conservadora · limites proporcionais ao saldo',
+  aggressive:'Arriscada · progressões ativadas, sem stops',
+  custom:'Personalizada · ajuste os parâmetros livremente'
+ }[mode]);
+}
+function markAutomationCustomized(){
+ if(autoPresetApplying||autoPresetMode==='custom')return;
+ setAutomationPresetMode('custom','Personalizada · você ajustou os valores do perfil automático.');
+ automationProfileSaved=false;
+}
+function initAutomationWizard(){
+ if(autoWizardReady)return;
+ const container=$('automationConfigCard').querySelector('.auto-steps');
+ const contents=[...container.children],headers=contents.filter(el=>el.matches('.auto-step'));
+ if(headers.length!==6)throw Error('Etapas de configuração incompletas');
+ let group=null,number=0;
+ for(const child of contents){
+  if(child.matches('.auto-step')){
+   number++;
+   group=document.createElement('div');group.className='auto-wizard-step';
+   group.dataset.wizardStep=String(number);
+   container.insertBefore(group,child);
+  }
+  if(group)group.appendChild(child);
+ }
+ autoWizardReady=true;
+ setAutomationWizardStep(1);
+}
+function setAutomationWizardStep(step){
+ autoWizardStep=Math.min(6,Math.max(1,step));
+ for(const element of document.querySelectorAll('.auto-wizard-step')){
+  element.hidden=Number(element.dataset.wizardStep)!==autoWizardStep;
+ }
+ $('autoWizardProgress').textContent='Etapa '+autoWizardStep+' de 6';
+ $('autoWizardFill').style.width=(autoWizardStep/6*100)+'%';
+ $('autoWizardBack').hidden=autoWizardStep===1;
+ $('autoWizardNext').hidden=autoWizardStep===6;
+}
+function changeAutomationWizardStep(delta){
+ if(delta>0){
+  if(autoWizardStep===1&&automationRadio('autoMode')==='real'&&!$('autoRealAccount').value){
+   focusAutomationInvalid(markAutomationInvalid('autoRealAccount','Selecione sua conta real para continuar.'));
+   return;
+  }
+  if(autoWizardStep===3&&!automationSelected.size){
+   focusAutomationInvalid(markAutomationInvalid('automationSymbols','Selecione pelo menos um ativo.'));
+   return;
+  }
+ }
+ setAutomationWizardStep(autoWizardStep+delta);
+ $('automationConfigCard').scrollIntoView({behavior:'smooth',block:'start'});
+}
+function presetMoney(value){return Math.max(0,Math.round(value*100)/100).toFixed(2)}
+async function presetBalance(){
+ const mode=automationRadio('autoMode');
+ try{
+  const response=await req(mode==='real'?'/api/real/balance':'/api/demo/balance');
+  const n=Number(response.balance);
+  if(response.currency!=='USD'||!Number.isFinite(n)||n<=0||(mode==='real'&&!response.available))return null;
+  return n;
+ }catch{return null}
+}
+async function applyAutomationPreset(mode){
+ if(!['conservative','aggressive','custom'].includes(mode))return;
+ if(mode==='custom'){
+  setAutomationPresetMode('custom','Personalizada · os valores atuais foram mantidos para você editar.');
+  return;
+ }
+ const conservative=mode==='conservative';
+ autoPresetApplying=true;
+ const initialMode=automationRadio('autoMode');
+ try{
+  setAutomationPresetMode(mode,conservative?'Consultando o saldo para calcular 5% de Stop Win e 3% de Stop Loss...':
+   'Arriscada · sem stops, com Martingale e ciclos. Maior exposição a perdas.');
+  const balance=await presetBalance();
+  if(automationRadio('autoMode')!==initialMode){
+   setAutomationPresetMode('custom','A conta mudou. Selecione novamente o perfil desejado.');
+   return;
+  }
+  if(conservative&&balance===null){
+   setAutomationPresetMode('custom','Para calcular Stop Win de 5% e Stop Loss de 3%, é necessário consultar o saldo USD da conta. Verifique a conexão com a Deriv ou configure manualmente.');
+   return;
+  }
+  setAutomationRadio('autoStrategy',conservative?'trend':'rsi');
+  updateStrategyIndicators();
+  $('autoDirection').value='AUTO';
+  $('autoExpiry').value=conservative?'5':'1';
+  $('autoStake').value=presetMoney(conservative?Math.max(0.5,Math.min(100,balance*0.005)):Math.max(0.5,Math.min(100,(balance||50)*0.01)));
+  $('autoWin').value=conservative?presetMoney(balance*0.05):'0.00';
+  $('autoLoss').value=conservative?presetMoney(balance*0.03):'0.00';
+  $('autoDailyLimit').value=conservative?'5':'0';
+  $('autoPayout').value=conservative?'90':'75';
+  $('autoMg').checked=!conservative;
+  $('autoGales').value=conservative?'1':'2';
+  $('autoMultiplier').value=conservative?'2.00':'2.00';
+  $('autoCycles').value=conservative?'0':'2';
+  $('autoCycleMultiplier').value='2.00';
+  $('autoNews').checked=false;
+  toggleAutomationProgressions();showAutomationNews();
+  clearAutomationErrors();
+  automationProfileSaved=false;
+  setAutomationPresetMode(mode,conservative?
+   'Conservadora · Stop Win 5% e Stop Loss 3% do saldo USD '+money(balance,'USD')+'; entrada 0,5%, até US$ 100; sem Martingale ou ciclos.':
+   'Arriscada · Stop Win e Stop Loss desligados, Martingale até 2 tentativas e 2 ciclos. Esse perfil pode causar perdas elevadas.');
+  renderAutomationSummary();
+ }finally{autoPresetApplying=false}
+}
+document.querySelectorAll('#robot-config input,#robot-config select').forEach(field=>{
+ if(field.closest('.auto-preset-layout'))return;
+ for(const eventName of ['input','change'])field.addEventListener(eventName,markAutomationCustomized);
+});
+
 // Five broker-listed suggestions per market; code matches are preferences, never fabricated assets.
 const automationMarketFavourites={
  forex:['frxEURUSD','frxGBPUSD','frxUSDJPY','frxAUDUSD','frxUSDCAD'],
@@ -1860,6 +1982,10 @@ async function loadAutomationProfile(){
   $('autoCycleMultiplier').value=String(risk.cycle_multiplier||'2.00');
   renderAutomationAssets();showAutomationNews();toggleAutomationProgressions();
   automationProfileSaved=Boolean(profile.configured);
+  setAutomationPresetMode(profile.preset_mode||'custom',
+   profile.preset_mode==='conservative'?'Conservadora · parâmetros salvos. Revise os percentuais ao mudar o saldo.':
+   profile.preset_mode==='aggressive'?'Arriscada · parâmetros salvos. Revise antes de iniciar.':
+   'Personalizada · configuração carregada para edição.');
   feedback.textContent=profile.configured?'Configuração carregada. Salve novamente após fazer alterações.':
    automationSelected.size+' ativos principais selecionados automaticamente. Revise e salve sua automação.';
  }catch(e){feedback.textContent='Configurador indisponível: '+e.message}
@@ -1880,7 +2006,8 @@ async function saveAutomationProfile(){
    indicators:[...document.querySelectorAll('#autoIndicators input:checked')].map(x=>x.value),
    direction:$('autoDirection').value,
    min_payout_pct:Number($('autoPayout').value),
-   real_account_id:automationRadio('autoMode')==='real'?$('autoRealAccount').value:null};
+   real_account_id:automationRadio('autoMode')==='real'?$('autoRealAccount').value:null,
+   preset_mode:autoPresetMode};
   await req('/api/automation/profile',{method:'POST',headers:{'Content-Type':'application/json'},
    body:JSON.stringify(profile)});
   const mg=$('autoMg').checked,cycles=$('autoCycles').value;
