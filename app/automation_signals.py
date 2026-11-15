@@ -177,9 +177,6 @@ async def confirmed_automation_signal(profile, scan_event=None):
                     if time.time()>=deadline:
                         reason='janela_expirada'
                         return None
-                    if not await supported(symbol,minutes=profile.expiry_minutes):
-                        reason='ativo_incompativel'
-                        return None
                     raw=await public_request({
                         'ticks_history':symbol,'style':'candles','granularity':60,
                         'count':115,'end':'latest'
@@ -203,11 +200,24 @@ async def confirmed_automation_signal(profile, scan_event=None):
                     if time.time()>=deadline:
                         reason='janela_expirada'
                         return None
+                    expiry_options=[]
+                    for expiry in ((1,3,5,15) if profile.expiry_minutes==0 else (profile.expiry_minutes,)):
+                        if time.time()>=deadline:
+                            reason='janela_expirada'
+                            return None
+                        try:
+                            if await supported(symbol,minutes=expiry):
+                                expiry_options.append(expiry)
+                        except (MarketError,TimeoutError,OSError,ValueError,TypeError):
+                            continue
+                    if not expiry_options:
+                        reason='ativo_incompativel'
+                        return None
                     reason='sinal_confirmado'
                     return {
-                        'strategy':'nexora_'+profile.strategy+'_m1',
+                        'strategy':'nexora_'+profile.strategy+'_m1_auto',
                         'direction':side,'symbol':symbol,
-                        'minutes':profile.expiry_minutes,'bar_seconds':60,
+                        'minutes':expiry_options[0],'expiry_options':expiry_options,'bar_seconds':60,
                         'last_bar_epoch':rows[-1]['epoch'],
                         'reason':profile.strategy+' · fechamento M1 · '+','.join(indicators),
                         'score':1
