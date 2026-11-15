@@ -1115,6 +1115,88 @@ function renderOrders(){
    tbody.append(row);
  }
 }
+let automationAssets=[],automationSelected=new Set(),automationProfileSaved=false;
+function showAutomationNews(){
+ $('autoNewsWindows').classList.toggle('hidden',!$('autoNews').checked);
+ renderAutomationSummary();
+}
+function selectAutomationAssets(all){
+ automationSelected=new Set(all?automationAssets.map(x=>x.symbol):[]);
+ renderAutomationAssets();
+ renderAutomationSummary();
+ automationProfileSaved=false;
+}
+function renderAutomationAssets(){
+ const box=$('automationSymbols');box.replaceChildren();
+ if(!automationAssets.length){box.textContent='Nenhum ativo disponível. Verifique a conexão com a Deriv.';return}
+ for(const item of automationAssets){
+  const label=document.createElement('label'),input=document.createElement('input');
+  input.type='checkbox';input.checked=automationSelected.has(item.symbol);
+  input.addEventListener('change',()=>{
+   if(input.checked)automationSelected.add(item.symbol);else automationSelected.delete(item.symbol);
+   renderAutomationSummary();automationProfileSaved=false;
+  });
+  label.append(input,document.createTextNode(' '+(item.name||item.symbol)+' · '+item.symbol));
+  box.append(label);
+ }
+}
+function renderAutomationSummary(){
+ const node=$('autoConfigSummary');if(!node)return;
+ node.textContent='DEMO · PULSO V2 · CALL · M5 · '+automationSelected.size+
+  ' ativo(s) · entrada US$ '+$('autoStake').value+
+  ' · stop win US$ '+$('autoWin').value+' · stop loss US$ '+$('autoLoss').value+
+  ' · notícias: '+($('autoNews').checked?'solicitado (bloqueia ativação)':'desligado');
+}
+async function loadAutomationProfile(){
+ const feedback=$('autoConfigFeedback');
+ try{
+  const [profile,catalogue,risk]=await Promise.all([
+   req('/api/automation/profile'),req('/api/automation/catalogue'),req('/api/onboarding/config')
+  ]);
+  automationAssets=catalogue.items||[];
+  automationSelected=new Set(profile.configured?profile.symbols:automationAssets.map(x=>x.symbol));
+  $('autoNews').checked=Boolean(profile.news_filter);
+  $('autoNewsBefore').value=String(profile.news_minutes_before);
+  $('autoNewsAfter').value=String(profile.news_minutes_after);
+  $('autoDailyLimit').value=String(profile.max_daily_orders);
+  $('autoStake').value=risk.stake;
+  $('autoWin').value=risk.stop_win;
+  $('autoLoss').value=risk.stop_loss;
+  renderAutomationAssets();showAutomationNews();
+  automationProfileSaved=Boolean(profile.configured);
+  feedback.textContent=profile.configured?'Configuração carregada. Salve novamente após fazer alterações.':
+   'Escolha os ativos e salve sua automação antes de ligar o robô.';
+ }catch(e){feedback.textContent='Configurador indisponível: '+e.message}
+}
+async function saveAutomationProfile(){
+ const feedback=$('autoConfigFeedback'),button=$('autoSaveButton');
+ if(robotRunning){feedback.textContent='Desligue o robô antes de editar sua automação.';return}
+ if(!automationSelected.size){feedback.textContent='Selecione pelo menos um ativo.';return}
+ const stake=Number($('autoStake').value),win=Number($('autoWin').value),loss=Number($('autoLoss').value);
+ const cap=Number($('autoDailyLimit').value);
+ if(!Number.isFinite(stake)||stake<.5||!Number.isFinite(win)||win<0||!Number.isFinite(loss)||loss<0||!Number.isInteger(cap)||cap<0||cap>100){
+  feedback.textContent='Revise entrada, stops e limite diário.';return;
+ }
+ button.disabled=true;feedback.textContent='Validando e salvando suas preferências...';
+ try{
+  const profile={account_mode:'demo',market:'volatility',symbols:[...automationSelected],
+   strategy:'pulso_v2',expiry_minutes:5,news_filter:$('autoNews').checked,
+   news_minutes_before:Number($('autoNewsBefore').value),news_minutes_after:Number($('autoNewsAfter').value),
+   max_daily_orders:cap};
+  await req('/api/automation/profile',{method:'POST',headers:{'Content-Type':'application/json'},
+   body:JSON.stringify(profile)});
+  const current=await req('/api/onboarding/config');
+  const risk={stake:String(stake),stop_win:String(win),stop_loss:String(loss),
+   martingale:false,gale_count:0,multiplier:'2.00',cycles:'0',cycle_multiplier:'2.00'};
+  await req('/api/onboarding/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(risk)});
+  automationProfileSaved=true;
+  feedback.textContent='Configuração salva no servidor. '+(profile.news_filter?
+   'Filtro de notícias solicitado: ativação bloqueada até a integração ficar pronta.':
+   'Agora você pode ligar o robô em DEMO.');
+  renderAutomationSummary();fail('');
+ }catch(e){automationProfileSaved=false;feedback.textContent='Não foi possível concluir a configuração: '+e.message}
+ finally{button.disabled=false}
+}
 async function loadSettings(){
  $('configFeedback').textContent='';
  try{
