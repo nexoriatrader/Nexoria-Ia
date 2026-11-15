@@ -625,6 +625,24 @@ html,body{max-width:100%;overflow-x:clip}
 </style><style>
 #robot-config .auto-preset-layout[hidden],#robot-config .auto-preset-status[hidden]{display:none!important}
 #robot-config .auto-assets-tip{padding:9px 12px;border-left:3px solid #49b6d4;background:#102c40;border-radius:0 9px 9px 0}
+</style><style>
+.nexora-start-overlay{position:fixed;inset:0;z-index:1200;background:#020812dc;display:flex;align-items:center;justify-content:center;padding:16px;overscroll-behavior:contain}
+.nexora-start-dialog{width:min(590px,100%);max-height:min(90dvh,850px);overflow-y:auto;overscroll-behavior:contain;border-radius:19px;border:1px solid #3e6078;background:#0e2030;color:#eaf5ff;padding:23px;box-shadow:0 18px 70px #000a}
+.nexora-start-dialog-head{display:flex;align-items:start;justify-content:space-between;gap:14px}
+.nexora-start-dialog-head h2{font-size:20px;margin-top:5px}
+.nexora-start-close{background:#223c50;border:1px solid #4a6881;border-radius:10px;color:#fff;font-size:24px;line-height:1;width:38px;height:38px;flex:none}
+#robotStartDialogNote{margin:12px 0;color:#b6d0e0}
+.nexora-start-details{display:grid;gap:13px;margin:14px 0}
+.nexora-review-group{border:1px solid #304b61;border-radius:12px;padding:12px;background:#132b3e}
+.nexora-review-group>strong{display:block;color:#f6cf74;font-size:12px;text-transform:uppercase;letter-spacing:.06em;margin-bottom:7px}
+.nexora-review-row{display:flex;justify-content:space-between;align-items:start;gap:12px;font-size:13px;padding:6px 0;border-bottom:1px solid #2e4759}
+.nexora-review-row:last-child{border-bottom:0}
+.nexora-review-label{color:#a9c5d8;flex:0 0 40%}
+.nexora-review-value{text-align:right;overflow-wrap:anywhere;flex:1;white-space:pre-line}
+.nexora-start-warning{font-size:12px;line-height:1.5;color:#e4c898;padding:10px 12px;background:#3b2d1b;border-radius:10px}
+.nexora-start-actions{display:flex;gap:10px;margin-top:14px;position:sticky;bottom:-23px;background:#0e2030;padding:12px 0 6px}
+.nexora-start-actions button{flex:1;min-height:46px;font-size:12px;font-weight:800}
+@media(max-width:520px){.nexora-start-dialog{padding:16px;max-height:92dvh}.nexora-start-actions{bottom:-16px}.nexora-review-label{flex-basis:37%}.nexora-start-dialog-head h2{font-size:18px}}
 </style></head>
 <body>
 <div class="shell">
@@ -640,6 +658,21 @@ html,body{max-width:100%;overflow-x:clip}
   <button class="nav-link" data-view="strategies" type="button" onclick="go('strategies')">Conheça os Indicadores e Estratégias</button>
 </nav>
 
+<div id="robotStartDialog" class="nexora-start-overlay hidden" role="presentation">
+  <section class="nexora-start-dialog" role="dialog" aria-modal="true" aria-labelledby="robotStartDialogTitle" aria-describedby="robotStartDialogNote" tabindex="-1">
+    <div class="nexora-start-dialog-head">
+      <div><span class="eyebrow">CONFIRMAÇÃO DE INÍCIO</span><h2 id="robotStartDialogTitle">Conferir automação NEXORA</h2></div>
+      <button type="button" class="nexora-start-close" onclick="resolveRobotStartDialog(false)" aria-label="Fechar confirmação">×</button>
+    </div>
+    <p id="robotStartDialogNote" class="helper">Estas são as configurações realmente salvas na sua conta. Confira todos os detalhes antes de ligar o robô.</p>
+    <div id="robotStartDialogDetails" class="nexora-start-details"></div>
+    <p class="nexora-start-warning">A ativação autoriza novas operações na conta DEMO conforme os parâmetros salvos. Indicadores e estratégias não garantem resultados.</p>
+    <div class="nexora-start-actions">
+      <button type="button" class="outline" onclick="resolveRobotStartDialog(false)">CANCELAR</button>
+      <button type="button" class="gold" id="robotStartConfirmButton" onclick="resolveRobotStartDialog(true)">CONFIRMAR E LIGAR ROBÔ</button>
+    </div>
+  </section>
+</div>
 <main>
 <section id="welcome" class="lp hidden" aria-labelledby="landingHeading">
  <nav class="lp-nav" aria-label="Navegação inicial">
@@ -1362,27 +1395,122 @@ async function refreshDashboard(){
    return null;
  }
 }
+let robotStartDialogResolver=null,robotStartDialogPreviousFocus=null;
+function resolveRobotStartDialog(accepted){
+ if(!robotStartDialogResolver)return;
+ const resolve=robotStartDialogResolver;robotStartDialogResolver=null;
+ $('robotStartDialog').classList.add('hidden');
+ if(robotStartDialogPreviousFocus?.focus)robotStartDialogPreviousFocus.focus();
+ robotStartDialogPreviousFocus=null;
+ resolve(Boolean(accepted));
+}
+document.addEventListener('keydown',event=>{
+ if(event.key==='Escape'&&robotStartDialogResolver){
+  event.preventDefault();resolveRobotStartDialog(false);
+ }
+});
+function addRobotReviewGroup(container,title,rows){
+ const group=document.createElement('section');group.className='nexora-review-group';
+ const heading=document.createElement('strong');heading.textContent=title;group.append(heading);
+ for(const [label,value] of rows){
+  const row=document.createElement('div');row.className='nexora-review-row';
+  const key=document.createElement('span');key.className='nexora-review-label';key.textContent=label;
+  const val=document.createElement('span');val.className='nexora-review-value';
+  val.textContent=String(value);
+  row.append(key,val);group.append(row);
+ }
+ container.append(group);
+}
+function reviewAmount(value){
+ const number=Number(value);
+ return Number.isFinite(number)?money(number,'USD'):'Valor indisponível';
+}
+function askRobotStartConfirmation(profile,risk,catalogue){
+ if(robotStartDialogResolver)return Promise.resolve(false);
+ const box=$('robotStartDialogDetails');box.replaceChildren();
+ const marketNames={derived:'Índices derivados',volatility:'Índices derivados',
+  forex:'Forex',stocks_indices:'Ações e índices',commodities:'Matérias-primas'};
+ const strategyNames={pulso_v2:'PULSO V2',trend:'Tendência e Pullback',rsi:'Reversão RSI'};
+ const presetNames={conservative:'Conservadora',aggressive:'Arriscada',custom:'Personalizada'};
+ const indicatorNames={EMA:'EMA (média exponencial)',SMA:'SMA (média simples)',
+  RSI:'RSI',MACD:'MACD',BOLLINGER:'Bandas de Bollinger',ATR:'ATR',
+  ADX:'ADX',STOCHASTIC:'Estocástico',SUPPORT_RESISTANCE:'Suporte e resistência',
+  CANDLE_PATTERNS:'Padrões de velas'};
+ const symbols=Array.isArray(profile.symbols)?profile.symbols:[];
+ const symbolNames=new Map(catalogue.map(item=>[item.symbol,item.name||item.symbol]));
+ const indicators=(profile.indicators||[]).map(item=>indicatorNames[item]||item);
+ const stopAmount=(value)=>Number(value)>0?reviewAmount(value):'Desativado';
+ addRobotReviewGroup(box,'Conta e mercado',[
+  ['Modo de operação','Treinamento · conta DEMO (saldo fictício)'],
+  ['Perfil',presetNames[profile.preset_mode]||'Personalizada'],
+  ['Mercado',marketNames[profile.market]||profile.market],
+  ['Ativos selecionados',symbols.length+' ativo(s)'],
+  ['Lista de ativos',symbols.map(symbol=>(symbolNames.get(symbol)||symbol)+' ('+symbol+')').join('\n')||'Nenhum']
+ ]);
+ addRobotReviewGroup(box,'Estratégia e análise',[
+  ['Estratégia',strategyNames[profile.strategy]||profile.strategy],
+  ['Indicadores',indicators.join(', ')||'Nenhum filtro complementar'],
+  ['Direção',({AUTO:'Automática',CALL:'Somente alta (CALL)',PUT:'Somente baixa (PUT)'})[profile.direction]||profile.direction],
+  ['Expiração',profile.expiry_minutes+' minuto(s)'],
+  ['Payout mínimo',(profile.min_payout_pct??88)+'%']
+ ]);
+ addRobotReviewGroup(box,'Entradas e proteção',[
+  ['Valor por operação',reviewAmount(risk.stake)],
+  ['Stop Win',stopAmount(risk.stop_win)],
+  ['Stop Loss',stopAmount(risk.stop_loss)],
+  ['Martingale',risk.martingale?'Ativo · '+risk.gale_count+' tentativa(s) · '+risk.multiplier+'×':'Desativado'],
+  ['Ciclos',Number(risk.cycles)>0?'Ativos · '+risk.cycles+' ciclo(s) · '+risk.cycle_multiplier+'×':'Desativados']
+ ]);
+ addRobotReviewGroup(box,'Filtros adicionais',[
+  ['Filtro de notícias',profile.news_filter?'Ativado':'Desativado'],
+  ['Pausa antes de notícias',profile.news_filter?profile.news_minutes_before+' minuto(s)':'Não se aplica'],
+  ['Retomada após notícias',profile.news_filter?profile.news_minutes_after+' minuto(s)':'Não se aplica']
+ ]);
+ robotStartDialogPreviousFocus=document.activeElement;
+ $('robotStartDialog').classList.remove('hidden');
+ $('robotStartConfirmButton').focus();
+ return new Promise(resolve=>{robotStartDialogResolver=resolve});
+}
 async function toggleRobot(){
  const button=$('robotButton');
  if(button.dataset.commandPending==='true')return;
  const wasRunning=robotRunning;
+ button.dataset.commandPending='true';
+ button.disabled=true;
  if(!wasRunning){
-   const mode=automationRadio('autoMode');
-   if(mode==='real'){
-      showRobotNotice('A conta REAL foi configurada. O mecanismo de envio de ordens reais precisa de integração própria com o canal REAL da Deriv.');
-      return;
+  try{
+   const [profile,risk]=await Promise.all([
+    req('/api/automation/profile'),req('/api/onboarding/config')
+   ]);
+   if(!profile.configured){
+    showRobotNotice('Configure e salve sua automação antes de ligar o robô.');
+    return;
    }
-   if(!window.confirm(`Iniciar automação NEXORA na conta DEMO?
-
-Mercado: ${automationRadio('autoMarket')}
-Estratégia: ${automationRadio('autoStrategy')}
-Ativos selecionados: ${automationSelected.size}
-Expiração: ${$('autoExpiry').value} minuto(s)
-Entrada: US$ ${$('autoStake').value}
-
-Confira as opções salvas antes de confirmar.`))return;
+   if(profile.account_mode!=='demo'){
+    showRobotNotice('Esta automação está configurada para conta REAL. O envio de ordens reais ainda não está disponível. Escolha Treinamento na configuração.');
+    return;
+   }
+   let catalogue=[];
+   try{
+    const response=await req('/api/automation/catalogue?market='+encodeURIComponent(profile.market));
+    catalogue=response.items||[];
+   }catch(e){
+    // The saved symbols are still shown verbatim when broker labels cannot be loaded.
+   }
+   if(!await askRobotStartConfirmation(profile,risk,catalogue))return;
+  }catch(e){
+   showRobotNotice('Não foi possível conferir as configurações salvas: '+e.message+'. Nenhuma operação foi iniciada.');
+   return;
+  }finally{
+   // Restore the start button if no start request was sent.
+   if(button.dataset.startRequestSent!=='true'){
+    button.dataset.commandPending='false';
+    button.disabled=false;
+   }
+  }
  }
  button.dataset.commandPending='true';
+ button.dataset.startRequestSent='true';
  button.disabled=true;
  let confirmed=false;
  try{
@@ -1413,6 +1541,7 @@ Confira as opções salvas antes de confirmar.`))return;
    }
  }finally{
    button.dataset.commandPending='false';
+   button.dataset.startRequestSent='false';
    const status=await refreshDashboard();
    if(confirmed || (status && status.running!==wasRunning))showRobotNotice('');
    if(status)button.disabled=!status.running&&!status.auto_buy_enabled;
