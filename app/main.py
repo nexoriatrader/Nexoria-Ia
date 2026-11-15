@@ -529,9 +529,34 @@ async def autopilot_once():
                     if batch and pulso_active:
                         if now-autopilot_last_attempt.get(uid,-1e12)<8:
                             continue
+                        profile=sess.get(db.AutomationProfile,uid)
+                        allowed_symbols=None
+                        if profile is not None:
+                            if (profile.account_mode!='demo' or profile.strategy!='pulso_v2'
+                                or profile.market!='volatility' or profile.expiry_minutes!=5
+                                or profile.news_filter):
+                                autopilot_reasons[uid]='Configuração incompatível ou filtro de notícias indisponível; sem novas entradas'
+                                continue
+                            try:
+                                allowed_symbols=json.loads(profile.symbols_json)
+                            except (TypeError,ValueError):
+                                autopilot_reasons[uid]='Configuração de ativos inválida'
+                                continue
+                            if not allowed_symbols:
+                                autopilot_reasons[uid]='Nenhum ativo habilitado'
+                                continue
+                            if profile.max_daily_orders:
+                                day_start=datetime.now(BRASILIA_TZ).replace(hour=0,minute=0,second=0,microsecond=0).astimezone(timezone.utc)
+                                daily_count=sum(1 for o in orders
+                                    if o.state not in ('CANCELLED',)
+                                    and o.created_at is not None
+                                    and o.created_at.replace(tzinfo=timezone.utc) >= day_start)
+                                if daily_count>=profile.max_daily_orders:
+                                    autopilot_reasons[uid]='Limite diário de operações DEMO atingido'
+                                    continue
                         try:
                             from .pulso_live import confirmed_pulso_signal
-                            candidate=await confirmed_pulso_signal()
+                            candidate=await confirmed_pulso_signal(allowed_symbols=allowed_symbols)
                         except (MarketError,ValueError,TimeoutError,OSError) as exc:
                             autopilot_reasons[uid]='PULSO V2: cotações DEMO indisponíveis; sem compra'
                             log.warning('PULSO live data unavailable: %s',type(exc).__name__)
@@ -1115,6 +1140,112 @@ async def current_config(request:Request,nexora_sid:str|None=Cookie(default=None
             'execution':'DERIV_DEMO_ONLY','real_orders_enabled':False}
 
 
+class AutomationProfileRequest(BaseModel):
+    """Explicit user choices; not an instruction to place a buy."""
+    account_mode:str='demo'
+    market:str='volatility'
+    symbols:list[str]=[]
+    strategy:str='pulso_v2'
+    expiry_minutes:int=5
+    news_filter:bool=False
+    news_minutes_before:int=30
+    news_minutes_after:int=30
+    max_daily_orders:int=0
+
+
+def automation_profile_result(profile):
+    if profile is None:
+        return {
+            'account_mode':'demo','market':'volatility','symbols':[],
+            'strategy':'pulso_v2','expiry_minutes':5,
+            'news_filter':False,'news_minutes_before':30,
+            'news_minutes_after':30,'max_daily_orders':0,
+            'configured':False,'execution':'DERIV_DEMO_ONLY'
+        }
+    return {
+        'account_mode':profile.account_mode,'market':profile.market,
+        'symbols':json.loads(profile.symbols_json),
+        'strategy':profile.strategy,'expiry_minutes':profile.expiry_minutes,
+        'news_filter':profile.news_filter,
+        'news_minutes_before':profile.news_minutes_before,
+        'news_minutes_after':profile.news_minutes_after,
+        'max_daily_orders':profile.max_daily_orders,
+        'configured':True,'execution':'DERIV_DEMO_ONLY'
+    }
+
+
+@app.get('/api/automation/profile')
+async def get_automation_profile(request:Request,nexora_sid:str|None=Cookie(default=None)):
+    user=active_user(request,nexora_sid)
+    with db.SessionLocal() as session:
+        return automation_profile_result(session.get(db.AutomationProfile,user.id))
+
+
+@app.post('/api/automation/profile')
+async def save_automation_profile(request:Request,payload:AutomationProfileRequest,
+                                  nexora_sid:str|None=Cookie(default=None)):
+    user=active_user(request,nexora_sid)
+    if payload.account_mode!='demo':
+        raise HTTPException(403,'A automação em conta REAL ainda não está disponível')
+    if payload.market!='volatility' or payload.strategy!='pulso_v2' or payload.expiry_minutes!=5:
+        raise HTTPException(422,'Somente PULSO V2 · Volatility · M5 está implementado nesta etapa')
+    if not 1<=len(payload.symbols)<=25 or len(payload.symbols)!=len(set(payload.symbols)):
+        raise HTTPException(422,'Selecione de 1 a 25 ativos diferentes')
+    if any(not re.fullmatch(r'[A-Za-z0-9_]{2,30}',x) for x in payload.symbols):
+        raise HTTPException(422,'Símbolo inválido')
+    if payload.news_minutes_before not in (0,15,30,60) or payload.news_minutes_after not in (0,15,30,60):
+        raise HTTPException(422,'Janela de notícias inválida')
+    if not 0<=payload.max_daily_orders<=100:
+        raise HTTPException(422,'Máximo diário fora do limite permitido')
+    # Validate membership in the actual broker catalog, not a fabricated list.
+    try:
+        instruments=await catalogue('volatility')
+        available={item['symbol'] for item in instruments}
+    except (MarketError,TimeoutError,OSError):
+        raise HTTPException(503,'Catálogo da Deriv indisponível; configuração não salva') from None
+    if not set(payload.symbols).issubset(available):
+        raise HTTPException(422,'Seleção contém ativo não disponível no catálogo Volatility')
+    async with autopilot_lock:
+        if user.id in autopilot_enabled:
+            raise HTTPException(409,'Desligue o robô antes de alterar sua automação')
+        with db.SessionLocal() as session:
+            profile=session.get(db.AutomationProfile,user.id)
+            if profile is None:
+                profile=db.AutomationProfile(user_id=user.id)
+                session.add(profile)
+            profile.market=payload.market
+            profile.account_mode=payload.account_mode
+            profile.symbols_json=json.dumps(sorted(payload.symbols))
+            profile.strategy=payload.strategy
+            profile.expiry_minutes=payload.expiry_minutes
+            profile.news_filter=payload.news_filter
+            profile.news_minutes_before=payload.news_minutes_before
+            profile.news_minutes_after=payload.news_minutes_after
+            profile.max_daily_orders=payload.max_daily_orders
+            session.commit()
+            result=automation_profile_result(profile)
+    return {**result,'saved':True,'running':False,
+        'ready_to_start':not payload.news_filter,
+        'note':('Filtro de notícias salvo como preferência, mas NÃO está conectado a calendário validado; '
+                'a ativação será bloqueada até sua implementação.'
+                if payload.news_filter else
+                'Preferências salvas. O robô continua desligado.')}
+
+
+@app.get('/api/automation/catalogue')
+async def automation_catalogue(request:Request,nexora_sid:str|None=Cookie(default=None)):
+    active_user(request,nexora_sid)
+    try:
+        items=await catalogue('volatility')
+    except (MarketError,TimeoutError,OSError):
+        raise HTTPException(503,'Não foi possível consultar os ativos Deriv') from None
+    return {'market':'volatility',
+            'items':[{'symbol':x['symbol'],'name':x.get('name') or x.get('display_name') or x['symbol']}
+                     for x in items],
+            'source':'DERIV_PUBLIC_CATALOG',
+            'execution':'DEMO_ONLY'}
+
+
 class AutoPilotSwitch(BaseModel):
     confirm:str=''
 
@@ -1520,6 +1651,19 @@ async def autopilot_start(request:Request,payload:AutoPilotSwitch,
         raise HTTPException(503,'PULSO V2 DEMO indisponível nesta configuração do servidor')
     if user.selected_mode!='demo':
         raise HTTPException(403,'Somente conta demonstrativa')
+    with db.SessionLocal() as session:
+        profile=session.get(db.AutomationProfile,user.id)
+        if profile is not None:
+            if (profile.account_mode!='demo' or profile.market!='volatility'
+                or profile.strategy!='pulso_v2' or profile.expiry_minutes!=5):
+                raise HTTPException(409,'Configuração de automação ainda não executável')
+            if profile.news_filter:
+                raise HTTPException(409,'Filtro de notícias ainda não conectado: desative para executar DEMO')
+            try:
+                if not json.loads(profile.symbols_json):
+                    raise HTTPException(409,'Escolha pelo menos um ativo')
+            except (ValueError,TypeError):
+                raise HTTPException(409,'Lista de ativos inválida') from None
     if user.martingale:
         raise HTTPException(409,'Configuração antiga de Martingale: salve novamente as opções atuais')
     with db.SessionLocal() as sess:
