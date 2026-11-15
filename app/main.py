@@ -1154,6 +1154,7 @@ class AutomationProfileRequest(BaseModel):
     max_daily_orders:int=0
     indicators:list[str]=[]
     direction:str='AUTO'
+    real_account_id:str|None=None
 
 
 def automation_profile_result(profile):
@@ -1163,7 +1164,7 @@ def automation_profile_result(profile):
             'strategy':'pulso_v2','expiry_minutes':5,
             'news_filter':False,'news_minutes_before':30,
             'news_minutes_after':30,'max_daily_orders':0,
-            'indicators':[],'direction':'AUTO',
+            'indicators':[],'direction':'AUTO','real_account_id':None,
             'configured':False,'execution':'DERIV_DEMO_ONLY'
         }
     return {
@@ -1176,6 +1177,7 @@ def automation_profile_result(profile):
         'max_daily_orders':profile.max_daily_orders,
         'indicators':json.loads(profile.indicators_json or '[]'),
         'direction':profile.direction,
+        'real_account_id':profile.real_account_id,
         'configured':True,'execution':'DERIV_DEMO_ONLY'
     }
 
@@ -1190,7 +1192,7 @@ async def get_automation_profile(request:Request,nexora_sid:str|None=Cookie(defa
 @app.post('/api/automation/profile')
 async def save_automation_profile(request:Request,payload:AutomationProfileRequest,
                                   nexora_sid:str|None=Cookie(default=None)):
-    user=active_user(request,nexora_sid)
+    user,token=active_session(request,nexora_sid)
     if payload.account_mode not in ('demo','real'):
         raise HTTPException(422,'Modo de conta inválido')
     if payload.market not in (*AUTOMATION_GROUPS, 'volatility') or payload.strategy not in ('pulso_v2','trend','rsi'):
@@ -1210,6 +1212,21 @@ async def save_automation_profile(request:Request,payload:AutomationProfileReque
     indicator_options={'EMA','SMA','RSI','MACD','BOLLINGER','ATR','ADX','STOCHASTIC','SUPPORT_RESISTANCE','CANDLE_PATTERNS'}
     if len(payload.indicators)!=len(set(payload.indicators)) or not set(payload.indicators).issubset(indicator_options):
         raise HTTPException(422,'Seleção de indicadores inválida')
+    if payload.account_mode=='real':
+        if not payload.real_account_id or not re.fullmatch(r'[A-Za-z0-9]{2,100}',payload.real_account_id):
+            raise HTTPException(422,'Selecione uma conta REAL vinculada à Deriv')
+        try:
+            async with httpx.AsyncClient(timeout=15) as client:
+                res=await client.get('https://api.derivws.com/trading/v1/options/accounts',
+                    headers={'Authorization':f'Bearer {token}'})
+                res.raise_for_status()
+                payload_accounts=res.json()
+        except (httpx.HTTPError,ValueError):
+            raise HTTPException(503,'Não foi possível consultar as contas vinculadas à Deriv') from None
+        from .auth_helpers import extract_accounts,real_accounts
+        owned={a['account_id'] for a in real_accounts(extract_accounts(payload_accounts))}
+        if payload.real_account_id not in owned:
+            raise HTTPException(403,'Conta REAL não pertence à sessão autenticada')
     # Validate membership in the actual broker catalog, not a fabricated list.
     try:
         instruments=await instruments_by_group('derived' if payload.market=='volatility' else payload.market)
@@ -1237,6 +1254,7 @@ async def save_automation_profile(request:Request,payload:AutomationProfileReque
             profile.max_daily_orders=payload.max_daily_orders
             profile.indicators_json=json.dumps(sorted(payload.indicators))
             profile.direction=payload.direction
+            profile.real_account_id=payload.real_account_id if payload.account_mode=='real' else None
             session.commit()
             result=automation_profile_result(profile)
     return {**result,'saved':True,'running':False,
