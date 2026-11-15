@@ -585,7 +585,7 @@ async def autopilot_once():
                             if (profile.account_mode!='demo'
                                 or profile.market not in (*AUTOMATION_GROUPS,'volatility')
                                 or profile.strategy not in ('pulso_v2','trend','rsi')
-                                or profile.expiry_minutes not in (1,3,5,15)
+                                or profile.expiry_minutes not in (0,1,3,5,15)
                                 or profile.news_filter):
                                 autopilot_reasons[uid]='Configuração incompatível ou filtro de notícias indisponível; sem novas entradas'
                                 continue
@@ -694,27 +694,45 @@ async def autopilot_once():
                     # Fresh entries have two proposal checks. For recovery,
                     # skip this redundant preflight; the actual broker proposal
                     # is STILL checked for min payout immediately before buy.
-                    try:
-                        quote=await demo_proposal(token,user.deriv_account_id,
-                            symbol=candidate['symbol'],contract_type=candidate['direction'],
-                            stake=str(entry.stake),duration=candidate['minutes'])
-                        ask=Decimal(str(quote['ask_price']))
-                        payout=Decimal(str(quote['payout']))
-                        selected_ratio=(Decimal('1')+Decimal(str(profile.min_payout))/Decimal('100')
-                                        if pulso_active and profile is not None else Decimal('1.50'))
-                        if (not ask.is_finite() or not payout.is_finite()
-                            or ask<=0 or ask>entry.stake or payout<ask*selected_ratio):
-                            autopilot_reasons[uid]=('PULSO V2: payout DEMO inferior a 88%; entrada ignorada'
-                                                   if pulso_active else 'Proposta DEMO sem payout mínimo experimental de 1,50×')
-                            log.info('V2 quote rejected: symbol=%s duration=%s reason=payout_or_ask',
-                                     candidate['symbol'],candidate['minutes'])
-                            continue
-                    except (DemoTradingError,InvalidOperation,KeyError,ValueError,TypeError) as exc:
-                        autopilot_reasons[uid]='Ativo ou duração sem proposta DEMO compatível; nova análise depois'
-                        log.warning('V2 quote unavailable: symbol=%s duration=%s error_type=%s deriv_code=%s',
-                                    candidate['symbol'],candidate['minutes'],type(exc).__name__,
-                                    getattr(exc,'deriv_code','NOT_BROKER_REJECTION'))
+                    # Expiration AUTO evaluates the actual broker offers rather
+                    # than picking a duration at random. No eligible offer means no buy.
+                    selected_ratio=(Decimal('1')+Decimal(str(profile.min_payout))/Decimal('100')
+                                    if pulso_active and profile is not None else Decimal('1.50'))
+                    auto_expiry=bool(pulso_active and profile is not None and profile.expiry_minutes==0)
+                    durations=tuple(candidate.get('expiry_options',(candidate['minutes'],))) if auto_expiry else (candidate['minutes'],)
+                    best_offer=None
+                    cutoff=(candidate.get('last_bar_epoch',0)+60+12
+                            if pulso_active and not entry.retry else None)
+                    for duration in durations:
+                        if cutoff is not None and time.time()>=cutoff-1:
+                            break
+                        try:
+                            quote=await demo_proposal(token,user.deriv_account_id,
+                                symbol=candidate['symbol'],contract_type=candidate['direction'],
+                                stake=str(entry.stake),duration=duration)
+                            ask=Decimal(str(quote['ask_price']))
+                            payout=Decimal(str(quote['payout']))
+                            if (not ask.is_finite() or not payout.is_finite()
+                                or ask<=0 or ask>entry.stake or payout<ask*selected_ratio):
+                                continue
+                            ratio=payout/ask
+                            if best_offer is None or ratio>best_offer[0]:
+                                best_offer=(ratio,duration)
+                        except (DemoTradingError,InvalidOperation,KeyError,ValueError,TypeError) as exc:
+                            log.info('NEXORA expiry offer unavailable: symbol=%s duration=%s error=%s',
+                                     candidate['symbol'],duration,type(exc).__name__)
+                    if best_offer is None:
+                        autopilot_reasons[uid]='Nenhuma expiração com proposta DEMO e payout mínimo válidos'
+                        log_v2_gate(uid,'NO_VALID_EXPIRY',detail='symbol='+str(candidate['symbol']))
                         continue
+                    candidate['minutes']=best_offer[1]
+                    if auto_expiry:
+                        candidate['strategy']=candidate['strategy']+'_m'+str(best_offer[1])
+                        candidate['reason']=candidate['reason']+' · AUTO M'+str(best_offer[1])
+                        state=automation_scan_progress.get(uid)
+                        if state: state['selected_expiry']=best_offer[1]
+                    log.info('NEXORA expiry selected: symbol=%s minutes=%s quoted_payout_ratio=%.3f',
+                             candidate['symbol'],best_offer[1],float(best_offer[0]))
             if uid not in autopilot_enabled:
                 continue
             deadline_for_buy=(candidate['last_bar_epoch']+60+12
@@ -1204,7 +1222,7 @@ class AutomationProfileRequest(BaseModel):
     market:str='volatility'
     symbols:list[str]=[]
     strategy:str='pulso_v2'
-    expiry_minutes:int=5
+    expiry_minutes:int=0
     news_filter:bool=False
     news_minutes_before:int=30
     news_minutes_after:int=30
@@ -1220,7 +1238,7 @@ def automation_profile_result(profile):
     if profile is None:
         return {
             'account_mode':'demo','market':'volatility','symbols':[],
-            'strategy':'pulso_v2','expiry_minutes':5,
+            'strategy':'pulso_v2','expiry_minutes':0,
             'news_filter':False,'news_minutes_before':30,
             'news_minutes_after':30,'max_daily_orders':0,
             'indicators':[],'direction':'AUTO','real_account_id':None,
@@ -1259,7 +1277,7 @@ async def save_automation_profile(request:Request,payload:AutomationProfileReque
         raise HTTPException(422,'Modo de conta inválido')
     if payload.market not in (*AUTOMATION_GROUPS, 'volatility') or payload.strategy not in ('pulso_v2','trend','rsi'):
         raise HTTPException(422,'Mercado ou estratégia inválidos')
-    if payload.expiry_minutes not in (1,3,5,15):
+    if payload.expiry_minutes not in (0,1,3,5,15):
         raise HTTPException(422,'Expiração inválida')
     if not 1<=len(payload.symbols)<=50 or len(payload.symbols)!=len(set(payload.symbols)):
         raise HTTPException(422,'Selecione de 1 a 50 ativos diferentes')
@@ -1768,7 +1786,7 @@ async def autopilot_start(request:Request,payload:AutoPilotSwitch,
         if profile is not None:
             if (profile.account_mode!='demo' or profile.market not in (*AUTOMATION_GROUPS,'volatility')
                 or profile.strategy not in ('pulso_v2','trend','rsi')
-                or profile.expiry_minutes not in (1,3,5,15)):
+                or profile.expiry_minutes not in (0,1,3,5,15)):
                 raise HTTPException(409,'Configuração de automação inválida')
             if profile.news_filter:
                 raise HTTPException(409,'Filtro de notícias ainda não conectado: desative para executar DEMO')
@@ -1821,8 +1839,8 @@ async def autopilot_start(request:Request,payload:AutoPilotSwitch,
         from .trade_selector_v2 import clear_user_signals
         clear_user_signals(user.id)
         autopilot_enabled.add(user.id)
-        log.warning('AutoPilot armed: scan_mode=PULSO_V2; market=DERIV_VOLATILITY_CATALOG; direction=CALL; duration=5m; execution=DEMO')
-    autopilot_reasons[user.id]='PULSO V2 ativo na DEMO; monitorando índices Volatility para CALL com volatilidade estável'
+        log.warning('AutoPilot armed: scan_mode=PULSO_V2; expiry=AUTO_M1_M3_M5_M15; execution=DEMO')
+    autopilot_reasons[user.id]='AutoPilot DEMO ativo; buscando sinais com expiração automática conforme perfil salvo'
     return {'running':True,'access':access,'execution':'DERIV_DEMO_ONLY','real_orders_enabled':False}
 
 
