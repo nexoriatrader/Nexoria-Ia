@@ -1185,10 +1185,12 @@ async def get_automation_profile(request:Request,nexora_sid:str|None=Cookie(defa
 async def save_automation_profile(request:Request,payload:AutomationProfileRequest,
                                   nexora_sid:str|None=Cookie(default=None)):
     user=active_user(request,nexora_sid)
-    if payload.account_mode!='demo':
-        raise HTTPException(403,'A automação em conta REAL ainda não está disponível')
-    if payload.market!='volatility' or payload.strategy!='pulso_v2' or payload.expiry_minutes!=5:
-        raise HTTPException(422,'Somente PULSO V2 · Volatility · M5 está implementado nesta etapa')
+    if payload.account_mode not in ('demo','real'):
+        raise HTTPException(422,'Modo de conta inválido')
+    if payload.market not in ('volatility','forex') or payload.strategy not in ('pulso_v2','trend','rsi'):
+        raise HTTPException(422,'Mercado ou estratégia inválidos')
+    if payload.expiry_minutes not in (1,3,5,15):
+        raise HTTPException(422,'Expiração inválida')
     if not 1<=len(payload.symbols)<=25 or len(payload.symbols)!=len(set(payload.symbols)):
         raise HTTPException(422,'Selecione de 1 a 25 ativos diferentes')
     if any(not re.fullmatch(r'[A-Za-z0-9_]{2,30}',x) for x in payload.symbols):
@@ -1199,12 +1201,12 @@ async def save_automation_profile(request:Request,payload:AutomationProfileReque
         raise HTTPException(422,'Máximo diário fora do limite permitido')
     # Validate membership in the actual broker catalog, not a fabricated list.
     try:
-        instruments=await catalogue('volatility')
+        instruments=await catalogue(payload.market)
         available={item['symbol'] for item in instruments}
     except (MarketError,TimeoutError,OSError):
         raise HTTPException(503,'Catálogo da Deriv indisponível; configuração não salva') from None
     if not set(payload.symbols).issubset(available):
-        raise HTTPException(422,'Seleção contém ativo não disponível no catálogo Volatility')
+        raise HTTPException(422,'Seleção contém ativo não disponível no mercado escolhido')
     async with autopilot_lock:
         if user.id in autopilot_enabled:
             raise HTTPException(409,'Desligue o robô antes de alterar sua automação')
@@ -1225,21 +1227,23 @@ async def save_automation_profile(request:Request,payload:AutomationProfileReque
             session.commit()
             result=automation_profile_result(profile)
     return {**result,'saved':True,'running':False,
-        'ready_to_start':not payload.news_filter,
-        'note':('Filtro de notícias salvo como preferência, mas NÃO está conectado a calendário validado; '
-                'a ativação será bloqueada até sua implementação.'
-                if payload.news_filter else
-                'Preferências salvas. O robô continua desligado.')}
+        'ready_to_start':(payload.account_mode=='demo' and payload.market=='volatility'
+                          and payload.strategy=='pulso_v2' and payload.expiry_minutes==5
+                          and not payload.news_filter),
+        'note':'Preferências registradas. A ativação é um comando separado.'}
 
 
 @app.get('/api/automation/catalogue')
-async def automation_catalogue(request:Request,nexora_sid:str|None=Cookie(default=None)):
+async def automation_catalogue(request:Request,market:str='volatility',
+                               nexora_sid:str|None=Cookie(default=None)):
     active_user(request,nexora_sid)
+    if market not in ('volatility','forex'):
+        raise HTTPException(422,'Mercado inválido')
     try:
-        items=await catalogue('volatility')
+        items=await catalogue(market)
     except (MarketError,TimeoutError,OSError):
         raise HTTPException(503,'Não foi possível consultar os ativos Deriv') from None
-    return {'market':'volatility',
+    return {'market':market,
             'items':[{'symbol':x['symbol'],'name':x.get('name') or x.get('display_name') or x['symbol']}
                      for x in items],
             'source':'DERIV_PUBLIC_CATALOG',
