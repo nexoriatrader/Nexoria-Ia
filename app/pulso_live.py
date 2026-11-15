@@ -22,7 +22,7 @@ _cache={}
 _cache_lock=asyncio.Lock()
 
 
-async def _candidate_for_symbol(symbol, bucket, *, deadline):
+async def _candidate_for_symbol(symbol, bucket, *, deadline, direction="AUTO"):
     """Only a closed broker-provided M1 candle can authorize a DEMO signal."""
     if time.time()>=deadline:
         return None
@@ -41,11 +41,13 @@ async def _candidate_for_symbol(symbol, bucket, *, deadline):
         return None
     rows=[[b["epoch"],b["open"],b["high"],b["low"],b["close"]]
           for b in tail]
-    direction=make_variants(rows)[("stable_volatility","CALL")][-1]
-    if direction!=1 or time.time()>=deadline:
+    side="PUT" if direction=="PUT" else "CALL"
+    signal=make_variants(rows)[("stable_volatility",side)][-1]
+    if signal!=(1 if side=="CALL" else -1) or time.time()>=deadline:
         return None
     return {
-        "strategy":STRATEGY,"direction":"CALL","symbol":symbol,
+        "strategy":(STRATEGY if side=="CALL" else "nexora_pulso_v2_stable_put_5m"),
+        "direction":side,"symbol":symbol,
         "minutes":5,"bar_seconds":60,
         "last_bar_epoch":bars[-1]["epoch"],
         "reason":"PULSO V2: pressão eficiente + volatilidade estável; CALL M1/5min",
@@ -53,7 +55,7 @@ async def _candidate_for_symbol(symbol, bucket, *, deadline):
     }
 
 
-async def confirmed_pulso_signal(allowed_symbols=None):
+async def confirmed_pulso_signal(allowed_symbols=None, direction="AUTO"):
     """Scan all Deriv-listed Volatility symbols (or single-symbol fallback).
 
     Return at most ONE live candidate per closed M1 bar. Fail closed on
@@ -66,7 +68,7 @@ async def confirmed_pulso_signal(allowed_symbols=None):
     async with _cache_lock:
         now=time.time()
         bucket=int(now//60)*60
-        key=tuple(sorted(set(allowed_symbols))) if allowed_symbols is not None else None
+        key=(direction,tuple(sorted(set(allowed_symbols))) if allowed_symbols is not None else None)
         cached=_cache.get(key)
         if cached and cached["last_bucket"]==bucket:
             return dict(cached["candidate"]) if cached["candidate"] else None
@@ -96,7 +98,7 @@ async def confirmed_pulso_signal(allowed_symbols=None):
         async def examine(symbol):
             async with sem:
                 try:
-                    return await _candidate_for_symbol(symbol,bucket,deadline=deadline)
+                    return await _candidate_for_symbol(symbol,bucket,deadline=deadline,direction=direction)
                 except (MarketError,TimeoutError,OSError,TypeError,ValueError) as exc:
                     _log.info("PULSO M1 ignored symbol=%s error_type=%s",symbol,type(exc).__name__)
                     return None
