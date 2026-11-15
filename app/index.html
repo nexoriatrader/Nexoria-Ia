@@ -877,7 +877,6 @@ html,body{max-width:100%;overflow-x:clip}
         <label class="auto-choice"><input type="radio" name="autoStrategy" value="trend"> Tendência e pullback <small>EMA 20/50 + confirmação de preço</small></label>
         <label class="auto-choice"><input type="radio" name="autoStrategy" value="rsi"> Reversão RSI <small>RSI e confirmação de reversão</small></label>
       </div>
-      <p class="helper"><a href="#" onclick="event.preventDefault();go('strategies')">Como funcionam as estratégias?</a></p>
       <div class="field"><label for="autoDirection">Direção das entradas</label><select id="autoDirection"><option value="AUTO">Automática conforme estratégia</option><option value="CALL">Somente CALL / Alta</option><option value="PUT">Somente PUT / Baixa</option></select></div>
       <div class="field"><label>Indicadores selecionados</label><p class="helper">Primeiro escolha a estratégia. Aqui aparecem somente os indicadores compatíveis. O indicador essencial fica ativo e você pode escolher no máximo um filtro complementar para evitar excesso de restrições.</p><p id="autoIndicatorRecommendation" class="auto-indicator-recommendation" role="status"></p></div>
       <div class="auto-symbols" id="autoIndicators">
@@ -923,7 +922,6 @@ html,body{max-width:100%;overflow-x:clip}
       <button id="autoWizardBack" class="outline" type="button" onclick="changeAutomationWizardStep(-1)">← VOLTAR</button>
       <button id="autoWizardNext" class="gold" type="button" onclick="changeAutomationWizardStep(1)">AVANÇAR →</button>
     </div>
-        <div class="actions"><button class="outline" type="button" onclick="go('features')">FUNCIONALIDADES DO ROBÔ</button><button class="outline" type="button" onclick="go('strategies')">ESTRATÉGIAS DO ROBÔ</button></div>
   </div>
 </section>
 <section id="results" class="hidden">
