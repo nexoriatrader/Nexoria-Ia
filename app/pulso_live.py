@@ -77,10 +77,12 @@ async def confirmed_pulso_signal(allowed_symbols=None):
                 if _cache[k]["last_bucket"]<bucket-120:
                     _cache.pop(k,None)
         deadline=bucket+12
-        if SYMBOLS_MODE=="single":
+        if allowed_symbols is not None:
+            # Only symbols the user explicitly selected from the broker catalogue.
+            symbols=sorted(set(allowed_symbols))
+        elif SYMBOLS_MODE=="single":
             symbols=[SYMBOL]
         else:
-            # Broker's current catalog, not fabricated static symbols.
             instruments=await asyncio.wait_for(catalogue("volatility"),timeout=5)
             symbols=sorted({i["symbol"] for i in instruments})
             if not symbols:
