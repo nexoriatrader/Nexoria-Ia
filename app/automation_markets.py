@@ -23,8 +23,8 @@ _catalog_lock = asyncio.Lock()
 
 
 def _classify(asset):
-    market = str(asset.get("market") or asset.get("market_display_name") or "").lower()
-    submarket = str(asset.get("submarket") or asset.get("submarket_display_name") or "").lower()
+    market = str(asset.get("market") or asset.get("market_display_name") or "").lower().replace("_"," ")
+    submarket = str(asset.get("submarket") or asset.get("submarket_display_name") or "").lower().replace("_"," ")
     symbol = str(asset.get("symbol") or asset.get("underlying_symbol") or "")
     label = str(asset.get("underlying_symbol_name") or asset.get("display_name") or symbol)
     combined = " ".join((market, submarket))
