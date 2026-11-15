@@ -558,15 +558,18 @@ body.marketing-mode .section-foot{margin-top:0}
         <label class="auto-choice"><input type="radio" name="autoMode" value="real"> Conta REAL <small>Conta de operações reais</small></label>
       </div>
       <div class="auto-options">
-        <label class="auto-choice"><input type="radio" name="autoMarket" value="volatility" checked> Índices Volatility <small>Disponível na DEMO</small></label>
         <label class="auto-choice"><input type="radio" name="autoMarket" value="forex"> Forex <small>Pares de moedas</small></label>
+        <label class="auto-choice"><input type="radio" name="autoMarket" value="derived" checked> Derivados <small>Volatility, Step, Crash/Boom e outros</small></label>
+        <label class="auto-choice"><input type="radio" name="autoMarket" value="stocks_indices"> Ações e índices <small>Empresas e índices de bolsas</small></label>
+        <label class="auto-choice"><input type="radio" name="autoMarket" value="commodities"> Matérias-primas <small>Ouro, prata, petróleo e outros</small></label>
       </div>
       <div class="auto-step"><span>02</span><strong>Ativos autorizados pelo usuário</strong></div>
-      <p class="helper">O scanner só poderá negociar os ativos selecionados. Lista consultada no catálogo oficial da Deriv.</p>
+      <p class="helper">Escolha os ativos do mercado selecionado. Catálogo atualizado pela Deriv.</p>
       <div class="actions" style="margin:4px 0 10px">
         <button type="button" class="outline" onclick="selectAutomationAssets(true)">SELECIONAR TODOS</button>
         <button type="button" class="outline" onclick="selectAutomationAssets(false)">LIMPAR</button>
       </div>
+      <div class="field"><label for="autoAssetSearch">Buscar ativo</label><input id="autoAssetSearch" type="search" placeholder="Nome ou código do ativo" oninput="renderAutomationAssets()"></div>
       <div id="automationSymbols" class="auto-symbols"><p class="helper">Carregando ativos...</p></div>
       <div class="auto-step"><span>03</span><strong>Estratégia de análise</strong></div>
       <div class="auto-options">
@@ -1130,7 +1133,7 @@ function setAutomationRadio(name,value){
 async function changeAutomationMarket(){
  const feedback=$('autoConfigFeedback'),market=automationRadio('autoMarket');
  feedback.textContent='Carregando ativos do mercado selecionado...';
- automationAssets=[];automationSelected.clear();renderAutomationAssets();
+ automationAssets=[];automationSelected.clear();$('autoAssetSearch').value='';renderAutomationAssets();
  try{
   const result=await req('/api/automation/catalogue?market='+encodeURIComponent(market));
   if(automationRadio('autoMarket')!==market)return;
@@ -1161,7 +1164,9 @@ function selectAutomationAssets(all){
 function renderAutomationAssets(){
  const box=$('automationSymbols');box.replaceChildren();
  if(!automationAssets.length){box.textContent='Nenhum ativo disponível. Verifique a conexão com a Deriv.';return}
+ const search=$('autoAssetSearch').value.trim().toLowerCase();
  for(const item of automationAssets){
+  if(search&&!((item.name||'')+' '+item.symbol).toLowerCase().includes(search))continue;
   const label=document.createElement('label'),input=document.createElement('input');
   input.type='checkbox';input.checked=automationSelected.has(item.symbol);
   input.addEventListener('change',()=>{
@@ -1187,12 +1192,12 @@ async function loadAutomationProfile(){
    req('/api/automation/profile'),req('/api/onboarding/config')
   ]);
   setAutomationRadio('autoMode',profile.account_mode||'demo');
-  setAutomationRadio('autoMarket',profile.market||'volatility');
+  setAutomationRadio('autoMarket',profile.market==='volatility'?'derived':(profile.market||'derived'));
   setAutomationRadio('autoStrategy',profile.strategy||'pulso_v2');
   $('autoExpiry').value=String(profile.expiry_minutes||5);
-  const catalogue=await req('/api/automation/catalogue?market='+encodeURIComponent(profile.market||'volatility'));
+  const catalogue=await req('/api/automation/catalogue?market='+encodeURIComponent(profile.market==='volatility'?'derived':(profile.market||'derived')));
   automationAssets=catalogue.items||[];
-  automationSelected=new Set(profile.configured?profile.symbols:automationAssets.map(x=>x.symbol));
+  automationSelected=new Set(profile.configured?profile.symbols:[]);
   $('autoNews').checked=Boolean(profile.news_filter);
   $('autoNewsBefore').value=String(profile.news_minutes_before);
   $('autoNewsAfter').value=String(profile.news_minutes_after);
