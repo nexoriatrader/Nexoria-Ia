@@ -55,6 +55,34 @@ autopilot_last_attempt: dict[int,float] = {}
 v2_last_scan: dict[int,float] = {}
 v2_gate_last_log: dict[tuple[int,str],float] = {}
 autopilot_reasons: dict[int,str] = {}
+# Read-only progress snapshots. Only real scanner callbacks update symbols.
+automation_scan_progress: dict[int,dict] = {}
+
+def record_automation_scan(uid:int, event:str, symbol:str|None, total:int):
+    if uid not in autopilot_enabled:
+        return
+    now=datetime.now(timezone.utc).isoformat()
+    state=automation_scan_progress.setdefault(uid,{
+        'stage':'waiting','last_symbol':None,'active_symbol':None,
+        'checked':0,'total':0,'last_checked_at':None,'last_scan_at':None,
+        'cycle':0,'gale':0})
+    if event=='start':
+        state.update(stage='scanning',checked=0,total=total,
+                     active_symbol=None,last_scan_at=now)
+    elif event=='checking':
+        state.update(stage='scanning',active_symbol=symbol)
+    elif event=='checked':
+        state.update(last_symbol=symbol,last_checked_at=now,
+                     checked=min(state.get('checked',0)+1,total))
+    elif event=='cached':
+        if state.get('stage')=='scanning':
+            state['stage']='waiting'
+    elif event=='timeout':
+        state.update(stage='waiting',active_symbol=None)
+    elif event=='signal':
+        state.update(stage='signal',last_symbol=symbol,last_checked_at=now,
+                     active_symbol=None)
+
 autopilot_lock = asyncio.Lock()
 market_last_tick = 0.0
 market_connected = False
@@ -220,6 +248,7 @@ def autopilot_entry_plan(sess, user, orders):
 def disarm_autopilot(uid:int, reason:str):
     """Revoke persistent opt-in on a safety stop."""
     autopilot_enabled.discard(uid)
+    automation_scan_progress.pop(uid,None)
     with db.SessionLocal() as sess:
         consent=sess.get(db.AutoPilotResumeConsent,uid)
         if consent:
@@ -481,6 +510,10 @@ async def autopilot_once():
                         continue
                     disarm_autopilot(uid,reason)
                     continue
+                if pulso_active:
+                    tracker=automation_scan_progress.setdefault(uid,{})
+                    tracker['cycle']=int(entry.cycle or 0)
+                    tracker['gale']=int(entry.gale or 0)
                 if entry.retry:
                     # V2 recovery is not held by the 60s fresh-scan cooldown.
                     # It can start promptly AFTER verified official settlement.
@@ -551,12 +584,20 @@ async def autopilot_once():
                                 continue
                         try:
                             from .automation_signals import confirmed_automation_signal
-                            candidate=await confirmed_automation_signal(profile)
+                            candidate=await confirmed_automation_signal(
+                                profile,
+                                scan_event=lambda event,symbol,total: record_automation_scan(
+                                    uid,event,symbol,total))
                         except (MarketError,ValueError,TimeoutError,OSError) as exc:
+                            state=automation_scan_progress.get(uid)
+                            if state: state.update(stage='waiting',active_symbol=None)
                             autopilot_reasons[uid]='PULSO V2: cotações DEMO indisponíveis; sem compra'
                             log.warning('PULSO live data unavailable: %s',type(exc).__name__)
                             continue
                         if candidate is None:
+                            state=automation_scan_progress.get(uid)
+                            if state and state.get('stage')=='scanning':
+                                state.update(stage='waiting',active_symbol=None)
                             autopilot_reasons[uid]='Aguardando sinal confirmado na estratégia selecionada'
                             continue
                     elif batch:
@@ -1772,6 +1813,7 @@ async def autopilot_stop(request:Request,nexora_sid:str|None=Cookie(default=None
     # Wait for any already dispatched broker request to finish before declaring OFF.
     async with autopilot_lock:
         autopilot_enabled.discard(user.id)
+        automation_scan_progress.pop(user.id,None)
         for key in list(v2_gate_last_log):
             if key[0]==user.id: v2_gate_last_log.pop(key,None)
         with db.SessionLocal() as sess:
@@ -1806,6 +1848,7 @@ async def status(request:Request,nexora_sid:str|None=Cookie(default=None)):
                 'v2_available':v2_enabled(),
                 'v2_upgrade_needed':upgrade_needed,
                 'analysis_symbol':SYMBOL,
+                'scan_progress':automation_scan_progress.get(user.id) if user.id in autopilot_enabled else None,
                 'reason':autopilot_reasons.get(user.id,
                    'Execução interrompida após reinício; reative manualmente no painel' if interrupted else 'Robô desligado')}
 
