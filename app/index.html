@@ -622,6 +622,9 @@ html,body{max-width:100%;overflow-x:clip}
 .auto-wizard-actions button[hidden]{display:none}
 #autoSaveButton{min-height:49px;width:100%}
 @media(max-width:650px){.auto-preset-layout{grid-template-columns:1fr;gap:8px}.auto-preset-button{min-height:83px;display:grid;grid-template-columns:31px 1fr;column-gap:10px;row-gap:2px;align-items:start}.auto-preset-button .auto-preset-icon{grid-row:span 2}.auto-preset-button small{font-size:11px}.auto-wizard-header{margin-top:18px}.auto-wizard-actions{position:sticky;bottom:0;z-index:5;background:#0b1c2af5;padding:11px 0;border-top:1px solid #294b62}}
+</style><style>
+#robot-config .auto-preset-layout[hidden],#robot-config .auto-preset-status[hidden]{display:none!important}
+#robot-config .auto-assets-tip{padding:9px 12px;border-left:3px solid #49b6d4;background:#102c40;border-radius:0 9px 9px 0}
 </style></head>
 <body>
 <div class="shell">
@@ -860,9 +863,9 @@ html,body{max-width:100%;overflow-x:clip}
       </div>
       <div class="auto-step"><span>03</span><strong>Ativos autorizados pelo usuário</strong></div>
       <p class="helper">Escolha os ativos do mercado selecionado. Catálogo atualizado pela Deriv.</p>
+      <p class="helper auto-assets-tip">Até 5 ativos são selecionados automaticamente ao escolher o mercado. Marque ou desmarque individualmente os ativos que deseja operar.</p>
       <div class="actions" style="margin:4px 0 10px">
-        <button type="button" class="outline" onclick="selectAutomationAssets(true)">SELECIONAR TODOS</button>
-        <button type="button" class="outline" onclick="selectAutomationAssets(false)">LIMPAR</button>
+        <button type="button" class="outline" onclick="selectAutomationAssets(false)">LIMPAR SELEÇÃO</button>
       </div>
       <div class="field"><label for="autoAssetSearch">Buscar ativo</label><input id="autoAssetSearch" type="search" placeholder="Nome ou código do ativo" oninput="renderAutomationAssets()"></div>
       <div id="automationSymbols" class="auto-symbols"><p class="helper">Carregando ativos...</p></div>
@@ -1632,6 +1635,10 @@ function initAutomationWizard(){
 }
 function setAutomationWizardStep(step){
  autoWizardStep=Math.min(6,Math.max(1,step));
+ const presetControls=$('automationConfigCard').querySelector('.auto-preset-layout');
+ const presetStatus=$('autoPresetStatus');
+ if(presetControls)presetControls.hidden=autoWizardStep!==1;
+ if(presetStatus)presetStatus.hidden=autoWizardStep!==1;
  for(const element of document.querySelectorAll('.auto-wizard-step')){
   element.hidden=Number(element.dataset.wizardStep)!==autoWizardStep;
  }
