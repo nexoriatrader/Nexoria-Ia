@@ -962,7 +962,7 @@ html,body{max-width:100%;overflow-x:clip}
       <div class="auto-step"><span>06</span><strong>Entradas e gerenciamento de risco</strong></div>
       <div class="settings-grid">
         <div class="field"><label for="autoStake">Entrada (USD)</label><input id="autoStake" type="number" min="0.50" step="0.01" value="0.50"></div>
-        <div class="field"><label for="autoExpiry">Expiração</label><select id="autoExpiry"><option value="1">1 minuto</option><option value="3">3 minutos</option><option value="5" selected>5 minutos</option><option value="15">15 minutos</option></select></div>
+        <div class="field"><label>Expiração automática inteligente</label><p class="helper">O NEXORA compara M1, M3, M5 e M15 disponíveis na Deriv após confirmar um sinal e escolhe a proposta que atende ao payout mínimo. Sem proposta válida, não opera.</p></div>
         <div class="field"><label for="autoWin">Stop Win (USD)</label><input id="autoWin" type="number" min="0" step="0.01" value="0"></div>
         <div class="field"><label for="autoLoss">Stop Loss (USD)</label><input id="autoLoss" type="number" min="0" step="0.01" value="0"></div>
         <div class="field"><label for="autoPayout">Payout mínimo (%)</label><input id="autoPayout" type="number" min="0" max="200" step="1" value="88"></div>
@@ -1553,7 +1553,7 @@ function askRobotStartConfirmation(profile,risk,catalogue){
   ['Estratégia',strategyNames[profile.strategy]||profile.strategy],
   ['Indicadores',indicators.join(', ')||'Nenhum filtro complementar'],
   ['Direção',({AUTO:'Automática',CALL:'Somente alta (CALL)',PUT:'Somente baixa (PUT)'})[profile.direction]||profile.direction],
-  ['Expiração',profile.expiry_minutes+' minuto(s)'],
+  ['Expiração','AUTO · M1, M3, M5 ou M15 (payout válido)'],
   ['Payout mínimo',(profile.min_payout_pct??88)+'%']
  ]);
  addRobotReviewGroup(box,'Entradas e proteção',[
@@ -1922,7 +1922,6 @@ async function applyAutomationPreset(mode){
   setAutomationRadio('autoStrategy',conservative?'trend':'rsi');
   updateStrategyIndicators();
   $('autoDirection').value='AUTO';
-  $('autoExpiry').value=conservative?'5':'1';
   $('autoStake').value=presetMoney(conservative?Math.max(0.5,Math.min(100,balance*0.005)):Math.max(0.5,Math.min(100,balance===null?0.5:balance*0.01)));
   $('autoWin').value=conservative?presetMoney(balance*0.05):'0.00';
   $('autoLoss').value=conservative?presetMoney(balance*0.03):'0.00';
@@ -2151,7 +2150,7 @@ document.querySelectorAll('#autoIndicators input[type="checkbox"]').forEach(inpu
 document.querySelectorAll('input[name="autoStrategy"]').forEach(x=>x.addEventListener('change',()=>{
  updateStrategyIndicators();automationProfileSaved=false;
 }));
-['autoStake','autoWin','autoLoss','autoExpiry','autoDirection','autoPayout'].forEach(id=>$(id)?.addEventListener('change',renderAutomationSummary));
+['autoStake','autoWin','autoLoss','autoDirection','autoPayout'].forEach(id=>$(id)?.addEventListener('change',renderAutomationSummary));
 
 function toggleAutomationProgressions(){
  $('autoMgSettings').classList.toggle('hidden',!$('autoMg').checked);
@@ -2189,7 +2188,7 @@ function renderAutomationAssets(){
 function renderAutomationSummary(){
  const node=$('autoConfigSummary');if(!node)return;
  node.textContent=automationRadio('autoMode')?.toUpperCase()+' · '+automationRadio('autoMarket')?.toUpperCase()+
-  ' · '+automationRadio('autoStrategy')+' · M'+$('autoExpiry').value+' · '+automationSelected.size+
+  ' · '+automationRadio('autoStrategy')+' · Expiração AUTO M1/M3/M5/M15 · '+automationSelected.size+
   ' ativo(s) · '+$('autoDirection').value+' · entrada US$ '+$('autoStake').value+
   ' · stop win US$ '+$('autoWin').value+' · stop loss US$ '+$('autoLoss').value+
   ' · notícias: '+($('autoNews').checked?'solicitado (bloqueia ativação)':'desligado');
@@ -2204,7 +2203,6 @@ async function loadAutomationProfile(){
   await changeAutomationAccount(profile.real_account_id);
   setAutomationRadio('autoMarket',profile.market==='volatility'?'derived':(profile.market||'derived'));
   setAutomationRadio('autoStrategy',profile.strategy||'pulso_v2');
-  $('autoExpiry').value=String(profile.expiry_minutes||5);
   const selectedMarket=profile.market==='volatility'?'derived':(profile.market||'derived');
   const requestId=++automationMarketRequest;
   const catalogue=await req('/api/automation/catalogue?market='+encodeURIComponent(selectedMarket));
@@ -2247,7 +2245,7 @@ async function saveAutomationProfile(){
  try{
   const profile={account_mode:automationRadio('autoMode'),market:automationRadio('autoMarket'),
    symbols:[...automationSelected],strategy:automationRadio('autoStrategy'),
-   expiry_minutes:Number($('autoExpiry').value),news_filter:$('autoNews').checked,
+   expiry_minutes:0,news_filter:$('autoNews').checked,
    news_minutes_before:Number($('autoNewsBefore').value),news_minutes_after:Number($('autoNewsAfter').value),
    max_daily_orders:0,
    indicators:[...document.querySelectorAll('#autoIndicators input:checked')].map(x=>x.value),
