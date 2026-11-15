@@ -583,7 +583,13 @@ body.marketing-mode .section-foot{margin-top:0}
         <div class="field"><label for="autoLoss">Stop Loss (USD)</label><input id="autoLoss" type="number" min="0" step="0.01" value="0"></div>
         <div class="field"><label for="autoDailyLimit">Máx. de operações por dia (0 = sem limite)</label><input id="autoDailyLimit" type="number" min="0" max="100" step="1" value="0"></div>
       </div>
-      <label class="auto-choice auto-disabled"><input type="checkbox" disabled> Martingale e ciclos <small>Disponíveis como preferências antigas; ainda não executados no PULSO V2</small></label>
+      <label class="auto-choice"><input id="autoMg" type="checkbox" onchange="toggleAutomationProgressions()"> Configurar Martingale <small>Preferência salva, mas ainda NÃO executada pelo PULSO V2</small></label>
+      <div id="autoMgSettings" class="settings-grid hidden">
+        <div class="field"><label for="autoGales">Tentativas após LOSS</label><select id="autoGales"><option value="1">1 tentativa</option><option value="2">2 tentativas</option><option value="3">3 tentativas</option><option value="4">4 tentativas</option><option value="5">5 tentativas</option></select></div>
+        <div class="field"><label for="autoMultiplier">Multiplicador</label><input id="autoMultiplier" type="number" min="1" step=".1" max="100" value="2.00"></div>
+      </div>
+      <div class="field"><label for="autoCycles">Ciclos adicionais (preferência · inativos no PULSO)</label><select id="autoCycles" onchange="toggleAutomationProgressions()"><option value="0">Desativados</option><option value="1">1 ciclo</option><option value="2">2 ciclos</option><option value="3">3 ciclos</option><option value="4">4 ciclos</option><option value="5">5 ciclos</option></select></div>
+      <div id="autoCycleSettings" class="field hidden"><label for="autoCycleMultiplier">Multiplicador dos ciclos</label><input id="autoCycleMultiplier" type="number" min="1" max="100" step=".1" value="2.00"></div>
       <div class="auto-step"><span>05</span><strong>Filtros e proteções</strong></div>
       <label class="auto-choice"><input type="checkbox" id="autoNews" onchange="showAutomationNews()"> Filtro de notícias econômicas <small>Em preparação. Se ativado, bloqueia a partida até a integração ficar pronta.</small></label>
       <div id="autoNewsWindows" class="settings-grid hidden">
@@ -1116,6 +1122,11 @@ function renderOrders(){
  }
 }
 let automationAssets=[],automationSelected=new Set(),automationProfileSaved=false;
+function toggleAutomationProgressions(){
+ $('autoMgSettings').classList.toggle('hidden',!$('autoMg').checked);
+ $('autoCycleSettings').classList.toggle('hidden',$('autoCycles').value==='0');
+ renderAutomationSummary();
+}
 function showAutomationNews(){
  $('autoNewsWindows').classList.toggle('hidden',!$('autoNews').checked);
  renderAutomationSummary();
@@ -1162,7 +1173,12 @@ async function loadAutomationProfile(){
   $('autoStake').value=risk.stake;
   $('autoWin').value=risk.stop_win;
   $('autoLoss').value=risk.stop_loss;
-  renderAutomationAssets();showAutomationNews();
+  $('autoMg').checked=Boolean(risk.martingale);
+  $('autoGales').value=String(risk.gale_count||1);
+  $('autoMultiplier').value=String(risk.multiplier||'2.00');
+  $('autoCycles').value=String(risk.cycles||'0');
+  $('autoCycleMultiplier').value=String(risk.cycle_multiplier||'2.00');
+  renderAutomationAssets();showAutomationNews();toggleAutomationProgressions();
   automationProfileSaved=Boolean(profile.configured);
   feedback.textContent=profile.configured?'Configuração carregada. Salve novamente após fazer alterações.':
    'Escolha os ativos e salve sua automação antes de ligar o robô.';
@@ -1185,12 +1201,14 @@ async function saveAutomationProfile(){
    max_daily_orders:cap};
   await req('/api/automation/profile',{method:'POST',headers:{'Content-Type':'application/json'},
    body:JSON.stringify(profile)});
-  const current=await req('/api/onboarding/config');
+  const mg=$('autoMg').checked,cycles=$('autoCycles').value;
   const risk={stake:String(stake),stop_win:String(win),stop_loss:String(loss),
-   martingale:false,gale_count:0,multiplier:'2.00',cycles:'0',cycle_multiplier:'2.00'};
+   martingale:mg,gale_count:mg?Number($('autoGales').value):0,
+   multiplier:mg?$('autoMultiplier').value:'2.00',
+   cycles:cycles,cycle_multiplier:cycles!=='0'?$('autoCycleMultiplier').value:'2.00'};
   await req('/api/onboarding/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(risk)});
   automationProfileSaved=true;
-  feedback.textContent='Configuração salva no servidor. '+(profile.news_filter?
+  feedback.textContent='Configuração salva. Martingale e ciclos são preferências inativas no PULSO V2. '+(profile.news_filter?
    'Filtro de notícias solicitado: ativação bloqueada até a integração ficar pronta.':
    'Agora você pode ligar o robô em DEMO.');
   renderAutomationSummary();fail('');
