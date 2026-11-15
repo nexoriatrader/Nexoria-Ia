@@ -798,8 +798,8 @@ async function refreshDashboard(){
    $('robotButton').style.background=robotRunning?'linear-gradient(135deg,#fa9b9d,#dc5269)':'';
    if(robotRunning)showRobotNotice('');
    if(pulsoSelected){
-     $('autopilotVersion').textContent='NEXORA PULSO V2 · CALL · 5 min · DEMO';
-     $('v2ScannerHealth').textContent='Scanner PULSO: somente Volatility 100 (1s) e volatilidade estável';
+     $('autopilotVersion').textContent='NEXORA PULSO V2 · VOLATILITY · CALL · 5 min · DEMO';
+     $('v2ScannerHealth').textContent='Scanner PULSO: índices Volatility disponíveis na Deriv · CALL · 5 min';
      $('v2Opportunity').textContent='● Oportunidade encontrada: aguarde confirmação no fechamento da vela M1';
    }else if(status.v2_available){
      req('/api/autopilot/v2/scanner-status').then(data=>{
@@ -852,7 +852,7 @@ async function toggleRobot(){
  if(!wasRunning){
    if(!window.confirm(`Você está prestes a iniciar o NEXORA PULSO V2 na conta DEMO.
 
-Estratégia: somente CALL no Volatility 100 (1s), expiração de 5 minutos e valor fixo. Confirme após revisar seus stops e o valor da entrada.
+Estratégia: somente CALL nos índices Volatility disponíveis, expiração de 5 minutos e valor fixo. Confirme após revisar seus stops e o valor da entrada.
 
 Se quiser conferir ou ajustar algo antes, clique em "Cancelar" e revise as configurações antes de ligar novamente.`))return;
  }
