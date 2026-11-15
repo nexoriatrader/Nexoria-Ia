@@ -1653,6 +1653,8 @@ async def autopilot_start(request:Request,payload:AutoPilotSwitch,
         raise HTTPException(403,'Somente conta demonstrativa')
     with db.SessionLocal() as session:
         profile=session.get(db.AutomationProfile,user.id)
+        if profile is None:
+            raise HTTPException(409,'Configure e salve os ativos no novo painel antes de ligar o robô')
         if profile is not None:
             if (profile.account_mode!='demo' or profile.market!='volatility'
                 or profile.strategy!='pulso_v2' or profile.expiry_minutes!=5):
