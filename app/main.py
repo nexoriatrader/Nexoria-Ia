@@ -2037,6 +2037,116 @@ async def demo_buy_route(request:Request,payload:DemoBuy,
         raise HTTPException(409,'Desligue o AutoPilot antes de iniciar um teste manual')
     return await perform_demo_buy(user,token,payload)
 
+@app.get('/api/autopilot/pulso-v2/audit')
+async def pulso_v2_demo_audit(request:Request,nexora_sid:str|None=Cookie(default=None)):
+    """Read-only, account-owned broker settlement audit; no trading changes.
+
+    Do not select favourable symbols based on this report: multiple testing
+    and sparse samples require genuinely fresh prospective verification.
+    """
+    user=active_user(request,nexora_sid)
+    from collections import defaultdict
+    from decimal import Decimal, InvalidOperation
+    from datetime import timedelta
+
+    with db.SessionLocal() as session:
+        records=session.execute(
+            select(db.DemoOrder,db.AutoPilotAttribution)
+            .join(db.AutoPilotAttribution,db.AutoPilotAttribution.order_id==db.DemoOrder.id)
+            .where(db.DemoOrder.user_id==user.id,
+                   db.AutoPilotAttribution.user_id==user.id,
+                   db.AutoPilotAttribution.strategy=='nexora_pulso_v2_stable_call_5m')
+            .order_by(db.DemoOrder.id.asc())
+        ).all()
+    by_symbol=defaultdict(lambda:{
+        'settled':0,'wins':0,'losses':0,'draws':0,'pending':0,
+        'net_pnl':Decimal('0'),'total_stake':Decimal('0'),
+        'first_buy_at':None,'last_buy_at':None
+    })
+    all_orders=[]
+    duplicates=[]
+    prior_by_symbol={}
+    for o,attribution in records:
+        if o.state=='CANCELLED':
+            continue
+        key=o.symbol
+        stat=by_symbol[key]
+        buy_at=o.broker_purchase_at or o.created_at
+        if buy_at is not None:
+            if buy_at.tzinfo is None:
+                buy_at=buy_at.replace(tzinfo=timezone.utc)
+            iso=buy_at.isoformat()
+            stat['first_buy_at']=min(stat['first_buy_at'] or iso,iso)
+            stat['last_buy_at']=max(stat['last_buy_at'] or iso,iso)
+            previous=prior_by_symbol.get(key)
+            if previous is not None:
+                prev_at,prev_id,prev_minutes,prev_state=previous
+                elapsed=(buy_at-prev_at).total_seconds()
+                if 0<=elapsed<prev_minutes*60:
+                    duplicates.append({
+                        'symbol':key,'earlier_order_id':prev_id,
+                        'later_order_id':o.id,
+                        'seconds_between_buys':round(elapsed,2),
+                        'earlier_state_now':prev_state,
+                        'note':'Possível sobreposição temporal; conferir encerramento oficial do primeiro contrato.'
+                    })
+            prior_by_symbol[key]=(buy_at,o.id,o.duration_minutes,o.state)
+        if o.state!='SETTLED' or o.pnl is None:
+            stat['pending']+=1
+            continue
+        try:
+            pnl=Decimal(str(o.pnl))
+            stake=Decimal(str(o.stake))
+        except (InvalidOperation,ValueError,TypeError):
+            continue
+        if not pnl.is_finite() or not stake.is_finite():
+            continue
+        stat['settled']+=1
+        stat['wins']+=int(pnl>0)
+        stat['losses']+=int(pnl<0)
+        stat['draws']+=int(pnl==0)
+        stat['net_pnl']+=pnl
+        stat['total_stake']+=stake
+        all_orders.append({
+            'id':o.id,'symbol':key,'pnl':float(pnl),
+            'stake':float(stake),'direction':o.direction,
+            'duration_minutes':o.duration_minutes,
+            'buy_at':buy_at.isoformat() if buy_at else None,
+        })
+    assets=[]
+    for symbol,item in sorted(by_symbol.items()):
+        n=item['settled']
+        assets.append({
+            'symbol':symbol,'settled':n,'wins':item['wins'],
+            'losses':item['losses'],'draws':item['draws'],
+            'pending':item['pending'],
+            'win_rate':round(item['wins']/n,4) if n else None,
+            'net_pnl':str(item['net_pnl'].quantize(Decimal('0.01'))),
+            'total_stake':str(item['total_stake'].quantize(Decimal('0.01'))),
+            'first_buy_at':item['first_buy_at'],'last_buy_at':item['last_buy_at']
+        })
+    total_settled=sum(x['settled'] for x in assets)
+    total_wins=sum(x['wins'] for x in assets)
+    total_pnl=sum((Decimal(x['net_pnl']) for x in assets),Decimal('0'))
+    return {
+        'study':'PULSO_V2_OFFICIAL_DEMO_AUDIT',
+        'scope':'AUTHENTICATED_USER_ALL_PULSO_V2_HISTORY',
+        'execution':'READ_ONLY',
+        'assets':assets,
+        'overall':{
+            'settled':total_settled,'wins':total_wins,
+            'losses':sum(x['losses'] for x in assets),
+            'draws':sum(x['draws'] for x in assets),
+            'pending':sum(x['pending'] for x in assets),
+            'win_rate':round(total_wins/total_settled,4) if total_settled else None,
+            'net_pnl':str(total_pnl.quantize(Decimal('0.01')))
+        },
+        'potential_overlaps':duplicates,
+        'orders_counted':len(all_orders),
+        'caveat':'Sobreposição por horário de compra não comprova duplicidade; comparar liquidação oficial. Retornos anteriores não demonstram vantagem futura.'
+    }
+
+
 @app.get('/api/autopilot/strategy-stats')
 async def autopilot_strategy_stats(request:Request,nexora_sid:str|None=Cookie(default=None)):
     """Official settled-broker results attributed to an experimental strategy."""
