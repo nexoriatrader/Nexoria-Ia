@@ -145,6 +145,7 @@ async def confirmed_automation_signal(profile, scan_event=None):
 
     now=time.time()
     if now%60>12:
+        if scan_event: scan_event('window',None,len(symbols),'aguardando_fechamento_m1')
         return None
     bucket=int(now//60)*60
     key=(profile.strategy,profile.expiry_minutes,direction,tuple(symbols),tuple(indicators))
@@ -171,10 +172,13 @@ async def confirmed_automation_signal(profile, scan_event=None):
         async def check(symbol):
             async with sem:
                 if scan_event: scan_event('checking',symbol,len(batch))
+                reason='nao_classificado'
                 try:
                     if time.time()>=deadline:
+                        reason='janela_expirada'
                         return None
                     if not await supported(symbol,minutes=profile.expiry_minutes):
+                        reason='ativo_incompativel'
                         return None
                     raw=await public_request({
                         'ticks_history':symbol,'style':'candles','granularity':60,
@@ -182,18 +186,24 @@ async def confirmed_automation_signal(profile, scan_event=None):
                     },expected='candles',timeout=7)
                     closed=strict_closed_bars(raw,60,now=time.time())
                     if len(closed)<85 or closed[-1]['epoch']+60!=bucket:
+                        reason='velas_insuficientes'
                         return None
                     rows=closed[-85:]
                     if any(rows[i]['epoch']-rows[i-1]['epoch']!=60
                            for i in range(1,len(rows))):
+                        reason='velas_incompletas'
                         return None
                     side=_direction_for(rows,profile.strategy)
                     if not side or (direction!='AUTO' and side!=direction):
+                        reason='estrategia_sem_sinal'
                         return None
                     if not _indicators_agree(rows,side,indicators,profile.strategy):
+                        reason='indicadores_nao_confirmados'
                         return None
                     if time.time()>=deadline:
+                        reason='janela_expirada'
                         return None
+                    reason='sinal_confirmado'
                     return {
                         'strategy':'nexora_'+profile.strategy+'_m1',
                         'direction':side,'symbol':symbol,
@@ -203,9 +213,10 @@ async def confirmed_automation_signal(profile, scan_event=None):
                         'score':1
                     }
                 except (MarketError,TimeoutError,OSError,ValueError,TypeError,IndexError):
+                    reason='dados_indisponiveis'
                     return None
                 finally:
-                    if scan_event: scan_event('checked',symbol,len(batch))
+                    if scan_event: scan_event('checked',symbol,len(batch),reason)
 
         tasks=[asyncio.create_task(check(x)) for x in batch]
         try:
