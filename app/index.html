@@ -537,7 +537,7 @@ body.marketing-mode .section-foot{margin-top:0}
       </div>
     </div>
     <div class="robot-details-content hidden" aria-label="Análise do Robô Trader IA">
-      <p id="autopilotVersion" class="helper"><strong>Robô Trader I.A</strong></p>
+      <p id="autopilotVersion" class="helper"><strong>Automatizador NEXORA IA</strong></p>
       <div class="market-schedule" aria-label="Cronograma automático de mercados" role="status">
         <div class="market-schedule-row"><span class="market-schedule-dot active" id="forexScheduleDot"></span><span>Forex</span><strong id="forexScheduleStatus">Verificando horário</strong></div>
         <div class="market-schedule-row"><span class="market-schedule-dot" id="volScheduleDot"></span><span>Deriv (Volatility)</span><strong id="volScheduleStatus">Verificando horário</strong></div>
@@ -651,22 +651,22 @@ body.marketing-mode .section-foot{margin-top:0}
   <div class="section-heading"><div><div class="eyebrow">GUIA DO NEXORA</div><h1>Funcionalidades do Robô</h1><p>Entenda os recursos, limitações e o que já está disponível.</p></div></div>
   <div class="auto-guide">
     <div class="card"><div class="surface-heading">Ligar e desligar</div><p>Ativa ou interrompe novas entradas. Desligar não cancela contratos que já foram comprados.</p><p class="helper">Disponível na DEMO</p></div>
-    <div class="card"><div class="surface-heading">Ativos personalizados</div><p>Você escolhe os índices Volatility que o PULSO poderá analisar, usando a lista consultada na Deriv.</p><p class="helper">Disponível · PULSO V2 DEMO</p></div>
+    <div class="card"><div class="surface-heading">Ativos personalizados</div><p>Escolha pares Forex, índices derivados, ações, índices de bolsa e matérias-primas no catálogo da Deriv.</p></div>
     <div class="card"><div class="surface-heading">Valor por entrada</div><p>Define o valor fixo da compra de cada contrato, sujeito aos limites do NEXORA e da corretora.</p><p class="helper">Disponível · DEMO</p></div>
     <div class="card"><div class="surface-heading">Stop Win e Stop Loss</div><p>Interrompem novas entradas quando os limites definidos forem atingidos a partir dos resultados liquidados da sessão. Não garantem perda máxima exata.</p><p class="helper">Disponível · DEMO</p></div>
-    <div class="card"><div class="surface-heading">Martingale</div><p>Aumenta a aposta depois de uma perda, de acordo com um multiplicador. Pode ampliar muito os prejuízos e não melhora a precisão dos sinais.</p><p class="helper">Configuração de recuperação</p></div>
-    <div class="card"><div class="surface-heading">Ciclos</div><p>Repetem sequências de tentativas conforme limites definidos. Não garantem recuperar perdas.</p><p class="helper">Configuração de sequências</p></div>
+    <div class="card"><div class="surface-heading">Martingale</div><p>Defina a quantidade de tentativas após um LOSS e o multiplicador aplicado à entrada seguinte. Valores maiores aumentam a exposição.</p></div>
+    <div class="card"><div class="surface-heading">Ciclos</div><p>Configure o número de ciclos adicionais e o multiplicador entre sequências.</p></div>
     <div class="card"><div class="surface-heading">Limite diário</div><p>Permite limitar o número de operações DEMO enviadas em um dia no horário de Brasília.</p><p class="helper">Disponível · DEMO</p></div>
-    <div class="card"><div class="surface-heading">Filtro de notícias</div><p>Planejado para bloquear entradas perto de notícias econômicas relevantes. Sem calendário validado, ativar a opção impede que o robô inicie.</p><p class="helper">Proteção de eventos econômicos</p></div>
+    <div class="card"><div class="surface-heading">Filtro de notícias</div><p>Escolha o tempo de pausa antes e depois de eventos econômicos, principalmente para Forex e mercados financeiros.</p></div>
     <div class="card"><div class="surface-heading">Integração Deriv</div><p>O NEXORA consulta ativos, tipos de contratos, propostas e liquidações por meio da API. Novos recursos devem ser liberados após validação.</p><p class="helper">Integração parcial ativa · DEMO</p></div>
   </div><div class="actions"><button class="gold" onclick="go('dashboard')">VOLTAR PARA MINHA AUTOMAÇÃO</button></div>
 </section>
 <section id="strategies" class="hidden">
   <div class="section-heading"><div><div class="eyebrow">BIBLIOTECA DE ESTRATÉGIAS</div><h1>Estratégias do Robô</h1><p>Entenda as regras e saiba quais estratégias realmente podem executar operações.</p></div></div>
   <div class="auto-guide">
-    <div class="card"><div class="surface-heading">PULSO V2 · Disponível DEMO</div><p>Analisa velas M1 fechadas e procura pressão compradora com volatilidade relativa estável. Se houver sinal, pode comprar CALL com expiração de 5 minutos nos índices selecionados.</p><p class="helper">Experimental; sem Martingale ou ciclos, e sem garantia de lucro.</p></div>
-    <div class="card"><div class="surface-heading">Tendência + pullback</div><p>Hipótese de aguardar tendência e recuo confirmado para entrada. Usa alinhamento da tendência e confirmação do recuo como critérios para localizar entradas.</p></div>
-    <div class="card"><div class="surface-heading">Reversão com RSI</div><p>Hipótese de buscar condições de exaustão e confirmação de reversão. RSI sobrecomprado ou sobrevendido, isoladamente, não determina direção futura.</p></div>
+    <div class="card"><div class="surface-heading">PULSO V2</div><p>Analisa pressão direcional e estabilidade da volatilidade a partir de velas fechadas. Permite selecionar direção, duração e os ativos desejados.</p></div>
+    <div class="card"><div class="surface-heading">Tendência + pullback</div><p>Usa EMA 20 e EMA 50 para identificar tendência e procura recuo até a média rápida com confirmação da vela para gerar sinais de alta ou baixa.</p></div>
+    <div class="card"><div class="surface-heading">Reversão com RSI</div><p>Observa o retorno do RSI através das faixas de 30 e 70 e confirma a direção pela vela fechada para identificar possíveis reversões.</p></div>
     <div class="card"><div class="surface-heading">Forex com filtro econômico</div><p>Poderá considerar sessões, notícias e contexto de mercado. Permite combinar análise de mercado com a programação de eventos macroeconômicos.</p></div>
   </div><div class="actions"><button class="gold" onclick="go('dashboard')">CONFIGURAR MINHA AUTOMAÇÃO</button></div>
 </section>
@@ -917,9 +917,9 @@ async function refreshDashboard(){
    $('robotButton').style.background=robotRunning?'linear-gradient(135deg,#fa9b9d,#dc5269)':'';
    if(robotRunning)showRobotNotice('');
    if(pulsoSelected){
-     $('autopilotVersion').textContent='NEXORA PULSO V2 · VOLATILITY · CALL · 5 min · DEMO';
-     $('v2ScannerHealth').textContent='Scanner PULSO: índices Volatility disponíveis na Deriv · CALL · 5 min';
-     $('v2Opportunity').textContent='● Oportunidade encontrada: aguarde confirmação no fechamento da vela M1';
+     $('autopilotVersion').textContent='NEXORA IA · '+(automationRadio('autoStrategy')||'pulso_v2')+' · '+(automationRadio('autoMarket')||'derived').toUpperCase();
+     $('v2ScannerHealth').textContent='Scanner NEXORA · estratégia selecionada · análise de velas fechadas';
+     $('v2Opportunity').textContent='● Aguardando novo sinal no mercado selecionado';
    }else if(status.v2_available){
      req('/api/autopilot/v2/scanner-status').then(data=>{
        if(sequence!==dashboardStatusSequence)return;
@@ -969,11 +969,20 @@ async function toggleRobot(){
  if(button.dataset.commandPending==='true')return;
  const wasRunning=robotRunning;
  if(!wasRunning){
-   if(!window.confirm(`Você está prestes a iniciar o NEXORA PULSO V2 na conta DEMO.
+   const mode=automationRadio('autoMode');
+   if(mode==='real'){
+      showRobotNotice('A conta REAL foi configurada. O mecanismo de envio de ordens reais precisa de integração própria com o canal REAL da Deriv.');
+      return;
+   }
+   if(!window.confirm(`Iniciar automação NEXORA na conta DEMO?
 
-Estratégia: somente CALL nos índices Volatility disponíveis, expiração de 5 minutos e valor fixo. Confirme após revisar seus stops e o valor da entrada.
+Mercado: ${automationRadio('autoMarket')}
+Estratégia: ${automationRadio('autoStrategy')}
+Ativos selecionados: ${automationSelected.size}
+Expiração: ${$('autoExpiry').value} minuto(s)
+Entrada: US$ ${$('autoStake').value}
 
-Se quiser conferir ou ajustar algo antes, clique em "Cancelar" e revise as configurações antes de ligar novamente.`))return;
+Confira as opções salvas antes de confirmar.`))return;
  }
  button.dataset.commandPending='true';
  button.disabled=true;
