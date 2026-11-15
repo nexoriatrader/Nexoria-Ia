@@ -170,6 +170,7 @@ class AutomationProfile(Base):
     max_daily_orders=Column(Integer,nullable=False,default=0)
     indicators_json=Column(Text,nullable=False,default='[]')
     direction=Column(String(10),nullable=False,default='AUTO')
+    real_account_id=Column(String(100),nullable=True)
     updated_at=Column(DateTime(timezone=True),default=utcnow,onupdate=utcnow,nullable=False)
 
 
@@ -234,6 +235,9 @@ def init_db():
     if 'direction' not in profile_columns:
         with engine.begin() as conn:
             conn.execute(text("ALTER TABLE automation_profiles ADD COLUMN direction VARCHAR(10) NOT NULL DEFAULT 'AUTO'"))
+    if 'real_account_id' not in profile_columns:
+        with engine.begin() as conn:
+            conn.execute(text("ALTER TABLE automation_profiles ADD COLUMN real_account_id VARCHAR(100)"))
     access_columns={col['name'] for col in inspect(engine).get_columns('robot_access')}
     if 'suspended' not in access_columns:
         with engine.begin() as conn:
