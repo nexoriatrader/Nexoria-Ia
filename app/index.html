@@ -564,6 +564,12 @@ html,body{max-width:100%;overflow-x:clip}
 .dash-balance-action span{font-size:14px}
 @media(max-width:550px){.dash-balance-tile{min-height:184px;padding:13px 9px}.dash-balance-action{font-size:9px;min-height:44px;padding:8px 5px;letter-spacing:0}.dash-balance-action span{font-size:12px}}
 @media(max-width:360px){.dash-balance-action{font-size:8.5px;flex-wrap:wrap}}
+</style><style>
+.dash-access{gap:5px}
+.dash-add-time{width:100%;min-height:37px;margin-top:6px;padding:7px 6px;border-radius:9px;border:1px solid #4a91ad;background:#1d526a;color:#e8faff;font-size:10px;font-weight:900;letter-spacing:.02em;line-height:1.3}
+.dash-add-time:hover{background:#286783;border-color:#75ccea}
+.dash-add-time:focus-visible{outline:2px solid #87dafa;outline-offset:2px}
+@media(max-width:550px){.dash-access{padding:8px 5px}.dash-add-time{min-height:39px;font-size:9px;padding:6px 3px}}
 </style></head>
 <body>
 <div class="shell">
@@ -708,7 +714,9 @@ html,body{max-width:100%;overflow-x:clip}
         <div class="dash-control-actions">
           <button id="configureRobotButton" class="dash-configure-button" type="button" onclick="toggleRobotConfiguration()">⚙ CONFIGURAR ROBÔ <span id="configureRobotChevron" aria-hidden="true">⌄</span></button>
           <div class="dash-access">
-            <span>Tempo disponível</span><strong id="dashboardAccessCountdown">Consultando...</strong>
+            <span>Tempo disponível Robô</span>
+            <strong id="dashboardAccessCountdown">Consultando...</strong>
+            <button class="dash-add-time" type="button" onclick="go('account')" title="Acessar indicações e planos na Minha Conta">＋ ADICIONAR TEMPO</button>
           </div>
         </div>
       </div>
