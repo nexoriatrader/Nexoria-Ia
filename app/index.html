@@ -613,7 +613,7 @@ html,body{max-width:100%;overflow-x:clip}
 .auto-wizard-header{margin:22px 0 16px;display:flex;gap:14px;align-items:center}
 .auto-wizard-header>span{white-space:nowrap;color:#b7d0e2;font-size:12px;font-weight:850}
 .auto-wizard-track{height:7px;background:#294457;border-radius:99px;flex:1;overflow:hidden}
-.auto-wizard-track span{display:block;height:100%;width:16.67%;border-radius:99px;background:linear-gradient(90deg,#46bbe5,#69dfb4);transition:width .2s}
+.auto-wizard-track span{display:block;height:100%;width:14.29%;border-radius:99px;background:linear-gradient(90deg,#46bbe5,#69dfb4);transition:width .2s}
 .auto-wizard-step{display:grid;gap:12px;min-width:0}
 .auto-wizard-step[hidden]{display:none!important}
 .auto-wizard-step .auto-step{margin:0 0 4px}
@@ -829,31 +829,33 @@ html,body{max-width:100%;overflow-x:clip}
   <div class="card auto-config" id="automationConfigCard">
     <div class="surface-heading">CONFIGURE SUA AUTOMAÇÃO</div>
     <p class="helper">Comece por um perfil pronto ou monte sua própria configuração. Todas as opções podem ser revisadas antes de salvar.</p>
-    <div class="auto-preset-layout" role="group" aria-label="Escolha o perfil de automação">
-      <button type="button" class="auto-preset-button" data-preset="conservative" aria-pressed="false" onclick="applyAutomationPreset('conservative')">
-        <span class="auto-preset-icon">◈</span><strong>Conservadora</strong><small>Entradas menores, limites de ganho/perda e filtros mais criteriosos.</small>
-      </button>
-      <button type="button" class="auto-preset-button" data-preset="aggressive" aria-pressed="false" onclick="applyAutomationPreset('aggressive')">
-        <span class="auto-preset-icon">↗</span><strong>Arriscada</strong><small>Mais tentativas, Martingale e ciclos. Sem stops no modelo inicial.</small>
-      </button>
-      <button type="button" class="auto-preset-button active" data-preset="custom" aria-pressed="true" onclick="applyAutomationPreset('custom')">
-        <span class="auto-preset-icon">⚙</span><strong>Personalizada</strong><small>Monte sua própria estratégia e defina cada parâmetro.</small>
-      </button>
-    </div>
-    <div id="autoPresetStatus" class="auto-preset-status" role="status">Personalizada · configure os parâmetros do seu jeito.</div>
     <div class="auto-wizard-header">
-      <span id="autoWizardProgress">Etapa 1 de 6</span>
+      <span id="autoWizardProgress">Etapa 1 de 7</span>
       <div class="auto-wizard-track" aria-hidden="true"><span id="autoWizardFill"></span></div>
     </div>
     <div class="auto-steps">
-      <div class="auto-step"><span>01</span><strong>Selecione o modo de operação</strong></div>
+      <div class="auto-step"><span>01</span><strong>Escolha seu perfil de configuração</strong></div>
+      <p class="helper auto-step-help">Selecione um perfil pronto ou monte sua própria configuração. Você poderá ajustar as opções nas próximas etapas.</p>
+      <div class="auto-preset-layout" role="group" aria-label="Escolha o perfil de automação">
+        <button type="button" class="auto-preset-button" data-preset="conservative" aria-pressed="false" onclick="applyAutomationPreset('conservative')">
+          <span class="auto-preset-icon">◈</span><strong>Conservadora</strong><small>Entradas menores, limites de ganho/perda e filtros mais criteriosos.</small>
+        </button>
+        <button type="button" class="auto-preset-button" data-preset="aggressive" aria-pressed="false" onclick="applyAutomationPreset('aggressive')">
+          <span class="auto-preset-icon">↗</span><strong>Arriscada</strong><small>Mais tentativas, Martingale e ciclos. Sem stops no modelo inicial.</small>
+        </button>
+        <button type="button" class="auto-preset-button active" data-preset="custom" aria-pressed="true" onclick="applyAutomationPreset('custom')">
+          <span class="auto-preset-icon">⚙</span><strong>Personalizada</strong><small>Monte sua própria estratégia e defina cada parâmetro.</small>
+        </button>
+      </div>
+      <div id="autoPresetStatus" class="auto-preset-status" role="status">Personalizada · configure os parâmetros do seu jeito.</div>
+      <div class="auto-step"><span>02</span><strong>Selecione o modo de operação</strong></div>
       <p class="helper auto-step-help">Escolha qual conta da corretora o robô deverá utilizar.</p>
       <div class="auto-options auto-account-options">
         <label class="auto-choice"><input type="radio" name="autoMode" value="demo" checked> Treinamento <small>Saldo fictício na corretora</small></label>
         <label class="auto-choice"><input type="radio" name="autoMode" value="real"> Conta Real <small>Saldo em dinheiro na corretora</small></label>
       </div>
       <div class="field hidden" id="autoRealAccountWrapper"><label for="autoRealAccount">Selecione sua conta real na Deriv</label><select id="autoRealAccount"><option value="">Consultando contas vinculadas...</option></select></div>
-      <div class="auto-step"><span>02</span><strong>Seleção de Mercado</strong></div>
+      <div class="auto-step"><span>03</span><strong>Seleção de Mercado</strong></div>
       <p class="helper auto-step-help">Selecione qual mercado o robô vai operar.</p>
       <div class="auto-options auto-market-options">
         <label class="auto-choice"><input type="radio" name="autoMarket" value="forex"> Forex <small>Pares de moedas</small></label>
@@ -861,7 +863,7 @@ html,body{max-width:100%;overflow-x:clip}
         <label class="auto-choice"><input type="radio" name="autoMarket" value="stocks_indices"> Ações e Índices <small>Empresas e índices de bolsas</small></label>
         <label class="auto-choice"><input type="radio" name="autoMarket" value="commodities"> Matérias-primas <small>Ouro, prata, petróleo e outros</small></label>
       </div>
-      <div class="auto-step"><span>03</span><strong>Ativos autorizados pelo usuário</strong></div>
+      <div class="auto-step"><span>04</span><strong>Ativos autorizados pelo usuário</strong></div>
       <p class="helper">Escolha os ativos do mercado selecionado. Catálogo atualizado pela Deriv.</p>
       <p class="helper auto-assets-tip">Até 5 ativos são selecionados automaticamente ao escolher o mercado. Marque ou desmarque individualmente os ativos que deseja operar.</p>
       <div class="actions" style="margin:4px 0 10px">
@@ -869,7 +871,7 @@ html,body{max-width:100%;overflow-x:clip}
       </div>
       <div class="field"><label for="autoAssetSearch">Buscar ativo</label><input id="autoAssetSearch" type="search" placeholder="Nome ou código do ativo" oninput="renderAutomationAssets()"></div>
       <div id="automationSymbols" class="auto-symbols"><p class="helper">Carregando ativos...</p></div>
-      <div class="auto-step"><span>04</span><strong>Estratégia de análise</strong></div>
+      <div class="auto-step"><span>05</span><strong>Estratégia de análise</strong></div>
       <div class="auto-options">
         <label class="auto-choice"><input type="radio" name="autoStrategy" value="pulso_v2" checked> PULSO V2 <small>Pressão direcional + volatilidade estável · CALL · M5</small></label>
         <label class="auto-choice"><input type="radio" name="autoStrategy" value="trend"> Tendência e pullback <small>EMA 20/50 + confirmação de preço</small></label>
@@ -890,7 +892,7 @@ html,body{max-width:100%;overflow-x:clip}
         <label><input type="checkbox" value="SUPPORT_RESISTANCE"> Suporte e resistência</label>
         <label><input type="checkbox" value="CANDLE_PATTERNS"> Padrões de velas</label>
       </div>
-      <div class="auto-step"><span>05</span><strong>Entradas e gerenciamento de risco</strong></div>
+      <div class="auto-step"><span>06</span><strong>Entradas e gerenciamento de risco</strong></div>
       <div class="settings-grid">
         <div class="field"><label for="autoStake">Entrada (USD)</label><input id="autoStake" type="number" min="0.50" step="0.01" value="0.50"></div>
         <div class="field"><label for="autoExpiry">Expiração</label><select id="autoExpiry"><option value="1">1 minuto</option><option value="3">3 minutos</option><option value="5" selected>5 minutos</option><option value="15">15 minutos</option></select></div>
@@ -906,7 +908,7 @@ html,body{max-width:100%;overflow-x:clip}
       </div>
       <div class="field"><label for="autoCycles">Ciclos adicionais</label><select id="autoCycles" onchange="toggleAutomationProgressions()"><option value="0">Desativados</option><option value="1">1 ciclo</option><option value="2">2 ciclos</option><option value="3">3 ciclos</option><option value="4">4 ciclos</option><option value="5">5 ciclos</option></select></div>
       <div id="autoCycleSettings" class="field hidden"><label for="autoCycleMultiplier">Multiplicador dos ciclos</label><input id="autoCycleMultiplier" type="number" min="1" max="100" step=".1" value="2.00"></div>
-      <div class="auto-step"><span>06</span><strong>Filtros e proteções</strong></div>
+      <div class="auto-step"><span>07</span><strong>Filtros e proteções</strong></div>
       <label class="auto-choice"><input type="checkbox" id="autoNews" onchange="showAutomationNews()"> Filtro de notícias econômicas <small>Defina o intervalo de proteção antes e após os eventos</small></label>
       <div id="autoNewsWindows" class="settings-grid hidden">
         <div class="field"><label for="autoNewsBefore">Pausar antes</label><select id="autoNewsBefore"><option value="15">15 minutos</option><option value="30" selected>30 minutos</option><option value="60">60 minutos</option></select></div>
@@ -1619,7 +1621,7 @@ function initAutomationWizard(){
  if(autoWizardReady)return;
  const container=$('automationConfigCard').querySelector('.auto-steps');
  const contents=[...container.children],headers=contents.filter(el=>el.matches('.auto-step'));
- if(headers.length!==6)throw Error('Etapas de configuração incompletas');
+ if(headers.length!==7)throw Error('Etapas de configuração incompletas');
  let group=null,number=0;
  for(const child of contents){
   if(child.matches('.auto-step')){
@@ -1634,26 +1636,22 @@ function initAutomationWizard(){
  setAutomationWizardStep(1);
 }
 function setAutomationWizardStep(step){
- autoWizardStep=Math.min(6,Math.max(1,step));
- const presetControls=$('automationConfigCard').querySelector('.auto-preset-layout');
- const presetStatus=$('autoPresetStatus');
- if(presetControls)presetControls.hidden=autoWizardStep!==1;
- if(presetStatus)presetStatus.hidden=autoWizardStep!==1;
+ autoWizardStep=Math.min(7,Math.max(1,step));
  for(const element of document.querySelectorAll('.auto-wizard-step')){
   element.hidden=Number(element.dataset.wizardStep)!==autoWizardStep;
  }
- $('autoWizardProgress').textContent='Etapa '+autoWizardStep+' de 6';
- $('autoWizardFill').style.width=(autoWizardStep/6*100)+'%';
+ $('autoWizardProgress').textContent='Etapa '+autoWizardStep+' de 7';
+ $('autoWizardFill').style.width=(autoWizardStep/7*100)+'%';
  $('autoWizardBack').hidden=autoWizardStep===1;
- $('autoWizardNext').hidden=autoWizardStep===6;
+ $('autoWizardNext').hidden=autoWizardStep===7;
 }
 function changeAutomationWizardStep(delta){
  if(delta>0){
-  if(autoWizardStep===1&&automationRadio('autoMode')==='real'&&!$('autoRealAccount').value){
+  if(autoWizardStep===2&&automationRadio('autoMode')==='real'&&!$('autoRealAccount').value){
    focusAutomationInvalid(markAutomationInvalid('autoRealAccount','Selecione sua conta real para continuar.'));
    return;
   }
-  if(autoWizardStep===3&&!automationSelected.size){
+  if(autoWizardStep===4&&!automationSelected.size){
    focusAutomationInvalid(markAutomationInvalid('automationSymbols','Selecione pelo menos um ativo.'));
    return;
   }
