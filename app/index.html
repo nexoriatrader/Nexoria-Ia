@@ -643,6 +643,22 @@ html,body{max-width:100%;overflow-x:clip}
 .nexora-start-actions{display:flex;gap:10px;margin-top:14px;position:sticky;bottom:-23px;background:#0e2030;padding:12px 0 6px}
 .nexora-start-actions button{flex:1;min-height:46px;font-size:12px;font-weight:800}
 @media(max-width:520px){.nexora-start-dialog{padding:16px;max-height:92dvh}.nexora-start-actions{bottom:-16px}.nexora-review-label{flex-basis:37%}.nexora-start-dialog-head h2{font-size:18px}}
+</style><style>
+.dash-scan-monitor{border:1px solid #30576d;border-radius:14px;background:#10283b;padding:14px;margin:12px 0 15px}
+.dash-scan-monitor-head{display:flex;gap:9px;align-items:center;color:#bbecf7;font-size:12px}
+.dash-scan-monitor-head strong{flex:1}.dash-scan-monitor-head small{color:#a1b7c8;font-size:11px}
+.dash-scan-dot{width:9px;height:9px;border-radius:50%;background:#7b909e;flex:none}
+.dash-scan-monitor.scanning .dash-scan-dot{background:#50e2b3;animation:nexoraDot 1.5s ease-in-out infinite}
+.dash-scan-monitor.waiting .dash-scan-dot{background:#eebd6d}
+.dash-scan-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px;margin:13px 0}
+.dash-scan-grid>div{min-width:0;border:1px solid #28485e;background:#091d2d;border-radius:9px;padding:9px}
+.dash-scan-grid span{display:block;color:#97b5c5;font-size:11px;margin-bottom:4px}
+.dash-scan-grid strong{display:block;font-size:13px;overflow-wrap:anywhere}
+.dash-scan-track{height:5px;border-radius:99px;background:#254656;overflow:hidden}
+.dash-scan-track>span{display:block;width:0;height:100%;background:#50c9d6;transition:width .4s}
+.dash-scan-caption{color:#b6cbd9;font-size:11px;line-height:1.5;margin-top:9px}
+@keyframes nexoraDot{0%,100%{opacity:1}50%{opacity:.35}}
+@media(prefers-reduced-motion:reduce){.dash-scan-monitor.scanning .dash-scan-dot{animation:none}}
 </style></head>
 <body>
 <div class="shell">
@@ -845,6 +861,17 @@ html,body{max-width:100%;overflow-x:clip}
       <div class="dash-realtime-live"><span class="dash-live-pulse" aria-hidden="true"></span><strong id="dashRealtimeState">AGUARDANDO</strong></div>
     </div>
     <div class="dash-realtime-status" id="dashRealtimeDescription" role="status">Consultando o estado do robô...</div>
+    <div class="dash-scan-monitor" id="dashScanMonitor" aria-label="Atividade real do scanner">
+      <div class="dash-scan-monitor-head"><span class="dash-scan-dot" aria-hidden="true"></span><strong id="dashScanStatus">AGUARDANDO</strong><small id="dashScanUpdated">—</small></div>
+      <div class="dash-scan-grid">
+        <div><span>Ativo em análise</span><strong id="dashScanSymbol">—</strong></div>
+        <div><span>Último ativo verificado</span><strong id="dashScanLastSymbol">—</strong></div>
+        <div><span>Ativos verificados</span><strong id="dashScanChecked">—</strong></div>
+        <div><span>Progressão</span><strong id="dashScanCycle">—</strong></div>
+      </div>
+      <div class="dash-scan-track"><span id="dashScanFill"></span></div>
+      <p class="dash-scan-caption" id="dashScanCaption">Aguardando ativação do robô.</p>
+    </div>
     <div class="dash-realtime-list" id="dashRealtimeOrders" aria-live="polite" aria-label="Operações recentes">
       <p class="muted">Carregando operações...</p>
     </div>
@@ -1234,6 +1261,10 @@ function updateResultsPolling(){
      resultsRequestBusy=true;
      try{
        await loadDemoOrders();
+       if(activePage==='dashboard'){
+         const scanStatus=await req('/api/status');
+         renderScanMonitor(scanStatus);
+       }
        if(activePage==='results')$('resultsLiveStatus').textContent='Atualização automática 🟢';
      }catch(e){
        if(activePage==='results')$('resultsLiveStatus').textContent='○ Tentando sincronizar com a Deriv...';
@@ -1307,6 +1338,41 @@ async function loadAutopilotReadiness(){
    if(!robotRunning)showRobotNotice('Não foi possível verificar a disponibilidade do robô. Atualize os dados para tentar novamente.');
  }
 }
+function renderScanMonitor(status){
+ const card=$('dashScanMonitor');if(!card||!status)return;
+ const running=Boolean(status.running),data=status.scan_progress;
+ const at=data?.last_checked_at||data?.last_scan_at;
+ const date=at?new Date(at):null;
+ const fresh=date&&!Number.isNaN(date.getTime())&&Date.now()-date.getTime()<120000&&Date.now()-date.getTime()>=-5000;
+ const checking=running&&fresh&&data?.stage==='scanning';
+ card.classList.toggle('scanning',checking);
+ card.classList.toggle('waiting',running&&!checking);
+ $('dashScanUpdated').textContent=date&&!Number.isNaN(date.getTime())?
+  'Leitura '+new Intl.DateTimeFormat('pt-BR',{timeZone:'America/Sao_Paulo',hour:'2-digit',minute:'2-digit',second:'2-digit'}).format(date):'—';
+ if(!running){
+  $('dashScanStatus').textContent='ROBÔ DESLIGADO';
+  $('dashScanCaption').textContent='Ligue o robô para acompanhar as verificações do scanner.';
+ }else if(!fresh){
+  $('dashScanStatus').textContent='AGUARDANDO NOVA LEITURA';
+  $('dashScanCaption').textContent=status.reason||'Ainda não há uma análise recente confirmada.';
+ }else if(checking){
+  $('dashScanStatus').textContent='VARREDURA EM ANDAMENTO';
+  $('dashScanCaption').textContent='Consultando os ativos e validando os indicadores da estratégia.';
+ }else{
+  $('dashScanStatus').textContent=data.stage==='signal'?'SINAL ENCONTRADO':'AGUARDANDO OPORTUNIDADE';
+  $('dashScanCaption').textContent=status.reason||'Aguardando confirmação de sinal.';
+ }
+ $('dashScanSymbol').textContent=checking?(data.active_symbol||'Consultando...'):'—';
+ $('dashScanLastSymbol').textContent=running&&data?.last_symbol?data.last_symbol:'—';
+ $('dashScanChecked').textContent=running&&data?.last_scan_at?
+  (data.checked||0)+' / '+(data.total||0):'—';
+ $('dashScanCycle').textContent=!running?'—':
+  data&&(Number(data.cycle)>0||Number(data.gale)>0)?
+   'Ciclo '+Number(data.cycle||0)+' · Gale '+Number(data.gale||0):
+   'Sem progressão';
+ $('dashScanFill').style.width=running&&data?.total?
+  Math.min(100,100*Number(data.checked||0)/Number(data.total))+'%':'0%';
+}
 async function refreshDashboard(){
  const sequence=++dashboardStatusSequence;
  try{
@@ -1316,6 +1382,7 @@ async function refreshDashboard(){
    // Ignore an older response that arrived after a newer status request.
    if(sequence!==dashboardStatusSequence)return null;
    robotRunning=Boolean(status.running);
+   renderScanMonitor(status);
    const available=Boolean(status.auto_buy_enabled);
    $('robotState').textContent=robotRunning?'ATIVO':status.interrupted_after_restart?'INTERROMPIDO':available?'PRONTO':'INDISPONÍVEL';
    $('robotMessage').textContent=status.reason||'Aguardando oportunidades no mercado DEMO';
