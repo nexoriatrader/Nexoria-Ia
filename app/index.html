@@ -578,7 +578,7 @@ body.marketing-mode .section-foot{margin-top:0}
       <div class="auto-step"><span>04</span><strong>Entradas e gerenciamento de risco</strong></div>
       <div class="settings-grid">
         <div class="field"><label for="autoStake">Entrada (USD)</label><input id="autoStake" type="number" min="0.50" step="0.01" value="0.50"></div>
-        <div class="field"><label for="autoExpiry">Expiração</label><select id="autoExpiry"><option value="5">5 minutos · PULSO V2</option></select></div>
+        <div class="field"><label for="autoExpiry">Expiração</label><select id="autoExpiry"><option value="1">1 minuto</option><option value="3">3 minutos</option><option value="5" selected>5 minutos</option><option value="15">15 minutos</option></select></div>
         <div class="field"><label for="autoWin">Stop Win (USD)</label><input id="autoWin" type="number" min="0" step="0.01" value="0"></div>
         <div class="field"><label for="autoLoss">Stop Loss (USD)</label><input id="autoLoss" type="number" min="0" step="0.01" value="0"></div>
         <div class="field"><label for="autoDailyLimit">Máx. de operações por dia (0 = sem limite)</label><input id="autoDailyLimit" type="number" min="0" max="100" step="1" value="0"></div>
@@ -1122,6 +1122,27 @@ function renderOrders(){
  }
 }
 let automationAssets=[],automationSelected=new Set(),automationProfileSaved=false;
+const automationRadio=name=>document.querySelector('input[name="'+name+'"]:checked')?.value;
+function setAutomationRadio(name,value){
+ const field=document.querySelector('input[name="'+name+'"][value="'+value+'"]');
+ if(field)field.checked=true;
+}
+async function changeAutomationMarket(){
+ const feedback=$('autoConfigFeedback'),market=automationRadio('autoMarket');
+ feedback.textContent='Carregando ativos do mercado selecionado...';
+ automationAssets=[];automationSelected.clear();renderAutomationAssets();
+ try{
+  const result=await req('/api/automation/catalogue?market='+encodeURIComponent(market));
+  if(automationRadio('autoMarket')!==market)return;
+  automationAssets=result.items||[];
+  renderAutomationAssets();renderAutomationSummary();
+  feedback.textContent='Selecione os ativos que deseja automatizar.';
+ }catch(e){feedback.textContent='Não foi possível consultar o mercado: '+e.message}
+}
+document.querySelectorAll('input[name="autoMarket"]').forEach(x=>x.addEventListener('change',changeAutomationMarket));
+document.querySelectorAll('input[name="autoMode"], input[name="autoStrategy"]').forEach(x=>x.addEventListener('change',renderAutomationSummary));
+['autoStake','autoWin','autoLoss','autoExpiry','autoDailyLimit'].forEach(id=>$(id)?.addEventListener('change',renderAutomationSummary));
+
 function toggleAutomationProgressions(){
  $('autoMgSettings').classList.toggle('hidden',!$('autoMg').checked);
  $('autoCycleSettings').classList.toggle('hidden',$('autoCycles').value==='0');
@@ -1153,7 +1174,8 @@ function renderAutomationAssets(){
 }
 function renderAutomationSummary(){
  const node=$('autoConfigSummary');if(!node)return;
- node.textContent='DEMO · PULSO V2 · CALL · M5 · '+automationSelected.size+
+ node.textContent=automationRadio('autoMode')?.toUpperCase()+' · '+automationRadio('autoMarket')?.toUpperCase()+
+  ' · '+automationRadio('autoStrategy')+' · M'+$('autoExpiry').value+' · '+automationSelected.size+
   ' ativo(s) · entrada US$ '+$('autoStake').value+
   ' · stop win US$ '+$('autoWin').value+' · stop loss US$ '+$('autoLoss').value+
   ' · notícias: '+($('autoNews').checked?'solicitado (bloqueia ativação)':'desligado');
@@ -1161,9 +1183,14 @@ function renderAutomationSummary(){
 async function loadAutomationProfile(){
  const feedback=$('autoConfigFeedback');
  try{
-  const [profile,catalogue,risk]=await Promise.all([
-   req('/api/automation/profile'),req('/api/automation/catalogue'),req('/api/onboarding/config')
+  const [profile,risk]=await Promise.all([
+   req('/api/automation/profile'),req('/api/onboarding/config')
   ]);
+  setAutomationRadio('autoMode',profile.account_mode||'demo');
+  setAutomationRadio('autoMarket',profile.market||'volatility');
+  setAutomationRadio('autoStrategy',profile.strategy||'pulso_v2');
+  $('autoExpiry').value=String(profile.expiry_minutes||5);
+  const catalogue=await req('/api/automation/catalogue?market='+encodeURIComponent(profile.market||'volatility'));
   automationAssets=catalogue.items||[];
   automationSelected=new Set(profile.configured?profile.symbols:automationAssets.map(x=>x.symbol));
   $('autoNews').checked=Boolean(profile.news_filter);
@@ -1195,8 +1222,9 @@ async function saveAutomationProfile(){
  }
  button.disabled=true;feedback.textContent='Validando e salvando suas preferências...';
  try{
-  const profile={account_mode:'demo',market:'volatility',symbols:[...automationSelected],
-   strategy:'pulso_v2',expiry_minutes:5,news_filter:$('autoNews').checked,
+  const profile={account_mode:automationRadio('autoMode'),market:automationRadio('autoMarket'),
+   symbols:[...automationSelected],strategy:automationRadio('autoStrategy'),
+   expiry_minutes:Number($('autoExpiry').value),news_filter:$('autoNews').checked,
    news_minutes_before:Number($('autoNewsBefore').value),news_minutes_after:Number($('autoNewsAfter').value),
    max_daily_orders:cap};
   await req('/api/automation/profile',{method:'POST',headers:{'Content-Type':'application/json'},
