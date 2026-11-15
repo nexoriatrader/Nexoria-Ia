@@ -557,6 +557,7 @@ body.marketing-mode .section-foot{margin-top:0}
         <label class="auto-choice"><input type="radio" name="autoMode" value="demo" checked> Treinamento DEMO <small>Disponível</small></label>
         <label class="auto-choice"><input type="radio" name="autoMode" value="real"> Conta REAL <small>Conta de operações reais</small></label>
       </div>
+      <div class="field hidden" id="autoRealAccountWrapper"><label for="autoRealAccount">Minha conta REAL na Deriv</label><select id="autoRealAccount"><option value="">Consultando contas vinculadas...</option></select></div>
       <div class="auto-options">
         <label class="auto-choice"><input type="radio" name="autoMarket" value="forex"> Forex <small>Pares de moedas</small></label>
         <label class="auto-choice"><input type="radio" name="autoMarket" value="derived" checked> Derivados <small>Volatility, Step, Crash/Boom e outros</small></label>
@@ -1144,6 +1145,25 @@ function setAutomationRadio(name,value){
  const field=document.querySelector('input[name="'+name+'"][value="'+value+'"]');
  if(field)field.checked=true;
 }
+async function changeAutomationAccount(selectedAccount){
+ const isReal=automationRadio('autoMode')==='real';
+ $('autoRealAccountWrapper').classList.toggle('hidden',!isReal);
+ if(!isReal)return;
+ const input=$('autoRealAccount');input.replaceChildren();
+ const defaultOption=document.createElement('option');
+ defaultOption.value='';defaultOption.textContent='Escolha uma conta real';
+ input.append(defaultOption);
+ try{
+  const response=await req('/api/accounts/available');
+  for(const acct of response.real_accounts||[]){
+   const option=document.createElement('option');
+   option.value=acct.account_id;
+   option.textContent=acct.account_id+(acct.currency?' · '+acct.currency:'');
+   input.append(option);
+  }
+  if(selectedAccount)input.value=selectedAccount;
+ }catch(e){$('autoConfigFeedback').textContent='Não foi possível consultar suas contas: '+e.message}
+}
 async function changeAutomationMarket(){
  const feedback=$('autoConfigFeedback'),market=automationRadio('autoMarket');
  feedback.textContent='Carregando ativos do mercado selecionado...';
@@ -1157,7 +1177,10 @@ async function changeAutomationMarket(){
  }catch(e){feedback.textContent='Não foi possível consultar o mercado: '+e.message}
 }
 document.querySelectorAll('input[name="autoMarket"]').forEach(x=>x.addEventListener('change',changeAutomationMarket));
-document.querySelectorAll('input[name="autoMode"], input[name="autoStrategy"]').forEach(x=>x.addEventListener('change',renderAutomationSummary));
+document.querySelectorAll('input[name="autoMode"]').forEach(x=>x.addEventListener('change',()=>{
+ changeAutomationAccount();renderAutomationSummary();
+}));
+document.querySelectorAll('input[name="autoStrategy"]').forEach(x=>x.addEventListener('change',renderAutomationSummary));
 ['autoStake','autoWin','autoLoss','autoExpiry','autoDailyLimit','autoDirection'].forEach(id=>$(id)?.addEventListener('change',renderAutomationSummary));
 
 function toggleAutomationProgressions(){
@@ -1206,6 +1229,7 @@ async function loadAutomationProfile(){
    req('/api/automation/profile'),req('/api/onboarding/config')
   ]);
   setAutomationRadio('autoMode',profile.account_mode||'demo');
+  await changeAutomationAccount(profile.real_account_id);
   setAutomationRadio('autoMarket',profile.market==='volatility'?'derived':(profile.market||'derived'));
   setAutomationRadio('autoStrategy',profile.strategy||'pulso_v2');
   $('autoExpiry').value=String(profile.expiry_minutes||5);
@@ -1249,7 +1273,8 @@ async function saveAutomationProfile(){
    news_minutes_before:Number($('autoNewsBefore').value),news_minutes_after:Number($('autoNewsAfter').value),
    max_daily_orders:cap,
    indicators:[...document.querySelectorAll('#autoIndicators input:checked')].map(x=>x.value),
-   direction:$('autoDirection').value};
+   direction:$('autoDirection').value,
+   real_account_id:automationRadio('autoMode')==='real'?$('autoRealAccount').value:null};
   await req('/api/automation/profile',{method:'POST',headers:{'Content-Type':'application/json'},
    body:JSON.stringify(profile)});
   const mg=$('autoMg').checked,cycles=$('autoCycles').value;
