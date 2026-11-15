@@ -22,12 +22,15 @@ _cache={}
 _cache_lock=asyncio.Lock()
 
 
-async def _candidate_for_symbol(symbol, bucket, *, deadline, direction="AUTO", minutes=5, indicators=()):
+async def _candidate_for_symbol(symbol, bucket, *, deadline, direction="AUTO", minutes=5, indicators=(), verdict=None):
     """Only a closed broker-provided M1 candle can authorize a DEMO signal."""
+    def reject(reason):
+        if verdict: verdict(reason)
+        return None
     if time.time()>=deadline:
-        return None
+        return reject('janela_expirada')
     if not await supported(symbol, minutes=minutes):
-        return None
+        return reject('ativo_incompativel')
     # Historical signal warm-up requires >110 bars. Do not infer gaps.
     raw=await public_request({
         "ticks_history":symbol,"style":"candles",
@@ -35,22 +38,24 @@ async def _candidate_for_symbol(symbol, bucket, *, deadline, direction="AUTO", m
     },expected="candles",timeout=8)
     bars=strict_closed_bars(raw,60,now=time.time())
     if len(bars)<135 or bars[-1]["epoch"]+60!=bucket:
-        return None
+        return reject('velas_insuficientes')
     tail=bars[-135:]
     if any(tail[j]["epoch"]-tail[j-1]["epoch"]!=60 for j in range(1,len(tail))):
-        return None
+        return reject('velas_incompletas')
     rows=[[b["epoch"],b["open"],b["high"],b["low"],b["close"]]
           for b in tail]
     side="PUT" if direction=="PUT" else "CALL"
     signal=make_variants(rows)[("stable_volatility",side)][-1]
-    if signal!=(1 if side=="CALL" else -1) or time.time()>=deadline:
-        return None
+    if time.time()>=deadline:
+        return reject('janela_expirada')
+    if signal!=(1 if side=="CALL" else -1):
+        return reject('estrategia_sem_sinal')
     if indicators:
         # Apply additional user-selected technical filters to the closed candles.
         # Late import avoids a circular import at module initialization.
         from .automation_signals import _indicators_agree
         if not _indicators_agree(tail,side,indicators,"pulso_v2"):
-            return None
+            return reject('indicadores_nao_confirmados')
     return {
         "strategy":f"nexora_pulso_v2_stable_{side.lower()}_{minutes}m",
         "direction":side,"symbol":symbol,
@@ -70,6 +75,7 @@ async def confirmed_pulso_signal(allowed_symbols=None, direction="AUTO", minutes
     """
     now=time.time()
     if now%60>12:
+        if scan_event: scan_event('window',None,len(allowed_symbols or []),'aguardando_fechamento_m1')
         return None
     async with _cache_lock:
         now=time.time()
@@ -106,13 +112,22 @@ async def confirmed_pulso_signal(allowed_symbols=None, direction="AUTO", minutes
         async def examine(symbol):
             async with sem:
                 if scan_event: scan_event('checking',symbol,len(symbols))
+                reason='nao_classificado'
+                def verdict(value):
+                    nonlocal reason
+                    reason=value
                 try:
-                    return await _candidate_for_symbol(symbol,bucket,deadline=deadline,direction=direction,minutes=minutes,indicators=indicators)
+                    result=await _candidate_for_symbol(
+                        symbol,bucket,deadline=deadline,direction=direction,
+                        minutes=minutes,indicators=indicators,verdict=verdict)
+                    if result: reason='sinal_confirmado'
+                    return result
                 except (MarketError,TimeoutError,OSError,TypeError,ValueError) as exc:
+                    reason='dados_indisponiveis'
                     _log.info("PULSO M1 ignored symbol=%s error_type=%s",symbol,type(exc).__name__)
                     return None
                 finally:
-                    if scan_event: scan_event('checked',symbol,len(symbols))
+                    if scan_event: scan_event('checked',symbol,len(symbols),reason)
         # Execute bounded asynchronous calls, never beyond candle entry window.
         remaining=deadline-time.time()
         if remaining<=1:
