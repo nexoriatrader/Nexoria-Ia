@@ -154,6 +154,23 @@ class PilotStrategyChoice(Base):
                         onupdate=utcnow, nullable=False)
 
 
+class AutomationProfile(Base):
+    """Per-user requested automation profile. Settings alone never arm trading."""
+    __tablename__='automation_profiles'
+    user_id=Column(Integer,ForeignKey('users.id'),primary_key=True)
+    market=Column(String(24),nullable=False,default='volatility')
+    symbols_json=Column(Text,nullable=False,default='["1HZ100V"]')
+    strategy=Column(String(40),nullable=False,default='pulso_v2')
+    account_mode=Column(String(16),nullable=False,default='demo')
+    expiry_minutes=Column(Integer,nullable=False,default=5)
+    news_filter=Column(Boolean,nullable=False,default=False)
+    news_minutes_before=Column(Integer,nullable=False,default=30)
+    news_minutes_after=Column(Integer,nullable=False,default=30)
+    min_payout=Column(String(12),nullable=False,default='88')
+    max_daily_orders=Column(Integer,nullable=False,default=0)
+    updated_at=Column(DateTime(timezone=True),default=utcnow,onupdate=utcnow,nullable=False)
+
+
 class RiskSession(Base):
     """Auditable manual DEMO risk reset boundary; historical orders stay untouched."""
     __tablename__ = 'risk_sessions'
