@@ -586,6 +586,12 @@ html,body{max-width:100%;overflow-x:clip}
 #robot-config .auto-config{margin:0 0 22px}
 #dashboard .dash-control-card,#dashboard .dash-realtime-card{margin-bottom:14px}
 @media(max-width:600px){.robot-config-page-heading{align-items:stretch}.robot-config-page-heading .robot-back-button{width:100%}#robot-config .auto-config{padding:16px}}
+</style><style>
+/* Inline configuration validation: clear visual field errors and accessible focus */
+#robot-config .auto-invalid{border:2px solid #fa6b75!important;background:rgba(103,27,41,.28)!important;box-shadow:0 0 0 3px rgba(250,107,117,.12)}
+#robot-config .auto-field-error{color:#ff9ba4;font-size:12px;font-weight:700;line-height:1.5;margin:5px 0 9px}
+#robot-config .auto-symbols.auto-invalid{border-radius:12px;min-height:55px;padding:9px}
+#robot-config input:focus-visible,#robot-config select:focus-visible{outline:2px solid #80dbff;outline-offset:2px}
 </style></head>
 <body>
 <div class="shell">
@@ -1535,7 +1541,94 @@ function renderOrders(){
    tbody.append(row);
  }
 }
-let automationAssets=[],automationSelected=new Set(),automationProfileSaved=false;
+let automationAssets=[],automationSelected=new Set(),automationProfileSaved=false,automationMarketRequest=0;
+// Five broker-listed suggestions per market; code matches are preferences, never fabricated assets.
+const automationMarketFavourites={
+ forex:['frxEURUSD','frxGBPUSD','frxUSDJPY','frxAUDUSD','frxUSDCAD'],
+ derived:['R_10','R_25','R_50','R_75','R_100','1HZ10V','1HZ25V','1HZ50V','1HZ75V','1HZ100V'],
+ stocks_indices:['OTC_SP500','OTC_NASDAQ','OTC_DJI','OTC_FTSE','OTC_NIKKEI'],
+ commodities:['frxXAUUSD','frxXAGUSD','frxXTIUSD','frxXBRUSD','frxXPTUSD']
+};
+function suggestedAutomationAssets(market,items){
+ const favourites=automationMarketFavourites[market]||[];
+ const priorities=new Map(favourites.map((symbol,i)=>[symbol.toUpperCase(),i]));
+ const sorted=[...items].sort((a,b)=>{
+  const pa=priorities.get(a.symbol.toUpperCase())??1000;
+  const pb=priorities.get(b.symbol.toUpperCase())??1000;
+  return pa-pb||String(a.name||a.symbol).localeCompare(String(b.name||b.symbol),'pt-BR');
+ });
+ return sorted.slice(0,5).map(x=>x.symbol);
+}
+function clearAutomationInvalid(id){
+ const target=$(id);
+ if(!target)return;
+ target.classList.remove('auto-invalid');
+ target.removeAttribute('aria-invalid');
+ const note=document.querySelector('[data-auto-error-for="'+id+'"]');
+ if(note)note.remove();
+}
+function markAutomationInvalid(id,message){
+ const target=$(id);if(!target)return;
+ target.classList.add('auto-invalid');
+ target.setAttribute('aria-invalid','true');
+ let note=document.querySelector('[data-auto-error-for="'+id+'"]');
+ if(!note){
+  note=document.createElement('p');note.className='auto-field-error';
+  note.dataset.autoErrorFor=id;
+  target.insertAdjacentElement('afterend',note);
+ }
+ note.textContent=message;
+ return target;
+}
+function clearAutomationErrors(){
+ document.querySelectorAll('#robot-config .auto-invalid').forEach(el=>{
+  el.classList.remove('auto-invalid');el.removeAttribute('aria-invalid');
+ });
+ document.querySelectorAll('#robot-config .auto-field-error').forEach(el=>el.remove());
+}
+function focusAutomationInvalid(target){
+ if(!target)return;
+ target.scrollIntoView({behavior:'smooth',block:'center'});
+ setTimeout(()=>{target.focus({preventScroll:true})},250);
+}
+function validateAutomationSettings(){
+ clearAutomationErrors();
+ const errors=[];
+ const check=(id,condition,message)=>{if(condition)errors.push(markAutomationInvalid(id,message))};
+ check('automationSymbols',!automationSelected.size,'Selecione pelo menos um ativo deste mercado.');
+ check('autoRealAccount',automationRadio('autoMode')==='real'&&!$('autoRealAccount').value,'Selecione sua conta real vinculada.');
+ for(const [id,min,max,label] of [
+  ['autoStake',0.5,100000,'Valor da entrada'],['autoWin',0,1000000,'Stop Win'],
+  ['autoLoss',0,1000000,'Stop Loss'],['autoPayout',0,200,'Payout mínimo'],
+  ['autoDailyLimit',0,100,'Limite diário']
+ ]){
+  const field=$(id),value=Number(field.value);
+  const missing=field.value.trim()==='';
+  check(id,missing||!Number.isFinite(value)||value<min||value>max||
+   (id==='autoDailyLimit'&&!Number.isInteger(value))||
+   (id==='autoPayout'&&!Number.isInteger(value)),label+' inválido. Confira o valor.');
+ }
+ if($('autoMg').checked){
+  const v=Number($('autoMultiplier').value);
+  check('autoMultiplier',!Number.isFinite(v)||v<1||v>100,'Informe um multiplicador entre 1 e 100.');
+ }
+ if($('autoCycles').value!=='0'){
+  const v=Number($('autoCycleMultiplier').value);
+  check('autoCycleMultiplier',!Number.isFinite(v)||v<1||v>100,'Informe um multiplicador entre 1 e 100.');
+ }
+ if(errors.length){
+  $('autoConfigFeedback').textContent='Confira os campos destacados em vermelho.';
+  focusAutomationInvalid(errors[0]);
+  return false;
+ }
+ return true;
+}
+document.querySelectorAll('#robot-config input,#robot-config select').forEach(field=>{
+ for(const eventName of ['input','change'])field.addEventListener(eventName,()=>{
+  clearAutomationInvalid(field.id);
+  if(field.name==='autoMarket')clearAutomationInvalid('automationSymbols');
+ });
+});
 const automationRadio=name=>document.querySelector('input[name="'+name+'"]:checked')?.value;
 function setAutomationRadio(name,value){
  const field=document.querySelector('input[name="'+name+'"][value="'+value+'"]');
@@ -1561,16 +1654,21 @@ async function changeAutomationAccount(selectedAccount){
  }catch(e){$('autoConfigFeedback').textContent='Não foi possível consultar suas contas: '+e.message}
 }
 async function changeAutomationMarket(){
- const feedback=$('autoConfigFeedback'),market=automationRadio('autoMarket');
+ const feedback=$('autoConfigFeedback'),market=automationRadio('autoMarket'),requestId=++automationMarketRequest;
+ clearAutomationInvalid('automationSymbols');
  feedback.textContent='Carregando ativos do mercado selecionado...';
  automationAssets=[];automationSelected.clear();$('autoAssetSearch').value='';renderAutomationAssets();
  try{
   const result=await req('/api/automation/catalogue?market='+encodeURIComponent(market));
-  if(automationRadio('autoMarket')!==market)return;
+  if(requestId!==automationMarketRequest||automationRadio('autoMarket')!==market)return;
   automationAssets=result.items||[];
+  automationSelected=new Set(suggestedAutomationAssets(market,automationAssets));
   renderAutomationAssets();renderAutomationSummary();
-  feedback.textContent='Selecione os ativos que deseja automatizar.';
- }catch(e){feedback.textContent='Não foi possível consultar o mercado: '+e.message}
+  automationProfileSaved=false;
+  feedback.textContent=automationSelected.size?
+   automationSelected.size+' ativos principais pré-selecionados. Você pode alterar a seleção.':
+   'Nenhum ativo retornado pela Deriv para este mercado.';
+ }catch(e){if(requestId===automationMarketRequest)feedback.textContent='Não foi possível consultar o mercado: '+e.message}
 }
 document.querySelectorAll('input[name="autoMarket"]').forEach(x=>x.addEventListener('change',changeAutomationMarket));
 document.querySelectorAll('input[name="autoMode"]').forEach(x=>x.addEventListener('change',()=>{
@@ -1593,6 +1691,7 @@ function selectAutomationAssets(all){
  renderAutomationAssets();
  renderAutomationSummary();
  automationProfileSaved=false;
+ if(automationSelected.size)clearAutomationInvalid('automationSymbols');
 }
 function renderAutomationAssets(){
  const box=$('automationSymbols');box.replaceChildren();
@@ -1605,6 +1704,7 @@ function renderAutomationAssets(){
   input.addEventListener('change',()=>{
    if(input.checked)automationSelected.add(item.symbol);else automationSelected.delete(item.symbol);
    renderAutomationSummary();automationProfileSaved=false;
+   if(automationSelected.size)clearAutomationInvalid('automationSymbols');
   });
   label.append(input,document.createTextNode(' '+(item.name||item.symbol)+' · '+item.symbol));
   box.append(label);
@@ -1629,9 +1729,14 @@ async function loadAutomationProfile(){
   setAutomationRadio('autoMarket',profile.market==='volatility'?'derived':(profile.market||'derived'));
   setAutomationRadio('autoStrategy',profile.strategy||'pulso_v2');
   $('autoExpiry').value=String(profile.expiry_minutes||5);
-  const catalogue=await req('/api/automation/catalogue?market='+encodeURIComponent(profile.market==='volatility'?'derived':(profile.market||'derived')));
+  const selectedMarket=profile.market==='volatility'?'derived':(profile.market||'derived');
+  const requestId=++automationMarketRequest;
+  const catalogue=await req('/api/automation/catalogue?market='+encodeURIComponent(selectedMarket));
+  if(requestId!==automationMarketRequest)return;
   automationAssets=catalogue.items||[];
-  automationSelected=new Set(profile.configured?profile.symbols:[]);
+  automationSelected=new Set(profile.configured?
+   profile.symbols.filter(symbol=>automationAssets.some(item=>item.symbol===symbol)):
+   suggestedAutomationAssets(selectedMarket,automationAssets));
   $('autoNews').checked=Boolean(profile.news_filter);
   $('autoNewsBefore').value=String(profile.news_minutes_before);
   $('autoNewsAfter').value=String(profile.news_minutes_after);
@@ -1650,18 +1755,15 @@ async function loadAutomationProfile(){
   renderAutomationAssets();showAutomationNews();toggleAutomationProgressions();
   automationProfileSaved=Boolean(profile.configured);
   feedback.textContent=profile.configured?'Configuração carregada. Salve novamente após fazer alterações.':
-   'Escolha os ativos e salve sua automação antes de ligar o robô.';
+   automationSelected.size+' ativos principais selecionados automaticamente. Revise e salve sua automação.';
  }catch(e){feedback.textContent='Configurador indisponível: '+e.message}
 }
 async function saveAutomationProfile(){
  const feedback=$('autoConfigFeedback'),button=$('autoSaveButton');
  if(robotRunning){feedback.textContent='Desligue o robô antes de editar sua automação.';return}
- if(!automationSelected.size){feedback.textContent='Selecione pelo menos um ativo.';return}
+ if(!validateAutomationSettings())return;
  const stake=Number($('autoStake').value),win=Number($('autoWin').value),loss=Number($('autoLoss').value);
  const cap=Number($('autoDailyLimit').value),payout=Number($('autoPayout').value);
- if(!Number.isFinite(stake)||stake<.5||!Number.isFinite(win)||win<0||!Number.isFinite(loss)||loss<0||!Number.isInteger(cap)||cap<0||cap>100||!Number.isInteger(payout)||payout<0||payout>200){
-  feedback.textContent='Revise entrada, stops e limite diário.';return;
- }
  button.disabled=true;feedback.textContent='Validando e salvando suas preferências...';
  try{
   const profile={account_mode:automationRadio('autoMode'),market:automationRadio('autoMarket'),
