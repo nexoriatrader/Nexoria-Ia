@@ -897,7 +897,6 @@ html,body{max-width:100%;overflow-x:clip}
         <div class="field"><label for="autoExpiry">Expiração</label><select id="autoExpiry"><option value="1">1 minuto</option><option value="3">3 minutos</option><option value="5" selected>5 minutos</option><option value="15">15 minutos</option></select></div>
         <div class="field"><label for="autoWin">Stop Win (USD)</label><input id="autoWin" type="number" min="0" step="0.01" value="0"></div>
         <div class="field"><label for="autoLoss">Stop Loss (USD)</label><input id="autoLoss" type="number" min="0" step="0.01" value="0"></div>
-        <div class="field"><label for="autoDailyLimit">Máx. de operações por dia (0 = sem limite)</label><input id="autoDailyLimit" type="number" min="0" max="100" step="1" value="0"></div>
         <div class="field"><label for="autoPayout">Payout mínimo (%)</label><input id="autoPayout" type="number" min="0" max="200" step="1" value="88"></div>
       </div>
       <label class="auto-choice"><input id="autoMg" type="checkbox" onchange="toggleAutomationProgressions()"> Configurar Martingale <small>Quantidade de tentativas e multiplicador</small></label>
@@ -948,7 +947,6 @@ html,body{max-width:100%;overflow-x:clip}
     <div class="card"><div class="surface-heading">Stop Win e Stop Loss</div><p>Interrompem novas entradas quando os limites definidos forem atingidos a partir dos resultados liquidados da sessão. Não garantem perda máxima exata.</p><p class="helper">Disponível · DEMO</p></div>
     <div class="card"><div class="surface-heading">Martingale</div><p>Defina a quantidade de tentativas após um LOSS e o multiplicador aplicado à entrada seguinte. Valores maiores aumentam a exposição.</p></div>
     <div class="card"><div class="surface-heading">Ciclos</div><p>Configure o número de ciclos adicionais e o multiplicador entre sequências.</p></div>
-    <div class="card"><div class="surface-heading">Limite diário</div><p>Permite limitar o número de operações DEMO enviadas em um dia no horário de Brasília.</p><p class="helper">Disponível · DEMO</p></div>
     <div class="card"><div class="surface-heading">Filtro de notícias</div><p>Escolha o tempo de pausa antes e depois de eventos econômicos, principalmente para Forex e mercados financeiros.</p></div>
     <div class="card"><div class="surface-heading">Integração Deriv</div><p>O NEXORA consulta ativos, tipos de contratos, propostas e liquidações por meio da API. Novos recursos devem ser liberados após validação.</p><p class="helper">Integração parcial ativa · DEMO</p></div>
   </div><div class="actions"><button class="gold" onclick="go('dashboard')">VOLTAR PARA MINHA AUTOMAÇÃO</button></div>
@@ -1697,7 +1695,6 @@ async function applyAutomationPreset(mode){
   $('autoStake').value=presetMoney(conservative?Math.max(0.5,Math.min(100,balance*0.005)):Math.max(0.5,Math.min(100,balance===null?0.5:balance*0.01)));
   $('autoWin').value=conservative?presetMoney(balance*0.05):'0.00';
   $('autoLoss').value=conservative?presetMoney(balance*0.03):'0.00';
-  $('autoDailyLimit').value=conservative?'5':'0';
   $('autoPayout').value=conservative?'90':'75';
   $('autoMg').checked=!conservative;
   $('autoGales').value=conservative?'1':'2';
@@ -1778,13 +1775,11 @@ function validateAutomationSettings(){
  check('autoRealAccount',automationRadio('autoMode')==='real'&&!$('autoRealAccount').value,'Selecione sua conta real vinculada.');
  for(const [id,min,max,label] of [
   ['autoStake',0.5,100000,'Valor da entrada'],['autoWin',0,1000000,'Stop Win'],
-  ['autoLoss',0,1000000,'Stop Loss'],['autoPayout',0,200,'Payout mínimo'],
-  ['autoDailyLimit',0,100,'Limite diário']
+  ['autoLoss',0,1000000,'Stop Loss'],['autoPayout',0,200,'Payout mínimo']
  ]){
   const field=$(id),value=Number(field.value);
   const missing=field.value.trim()==='';
   check(id,missing||!Number.isFinite(value)||value<min||value>max||
-   (id==='autoDailyLimit'&&!Number.isInteger(value))||
    (id==='autoPayout'&&!Number.isInteger(value)),label+' inválido. Confira o valor.');
  }
  if($('autoMg').checked){
@@ -1925,7 +1920,7 @@ document.querySelectorAll('#autoIndicators input[type="checkbox"]').forEach(inpu
 document.querySelectorAll('input[name="autoStrategy"]').forEach(x=>x.addEventListener('change',()=>{
  updateStrategyIndicators();automationProfileSaved=false;
 }));
-['autoStake','autoWin','autoLoss','autoExpiry','autoDailyLimit','autoDirection','autoPayout'].forEach(id=>$(id)?.addEventListener('change',renderAutomationSummary));
+['autoStake','autoWin','autoLoss','autoExpiry','autoDirection','autoPayout'].forEach(id=>$(id)?.addEventListener('change',renderAutomationSummary));
 
 function toggleAutomationProgressions(){
  $('autoMgSettings').classList.toggle('hidden',!$('autoMg').checked);
@@ -1990,7 +1985,6 @@ async function loadAutomationProfile(){
   $('autoNews').checked=Boolean(profile.news_filter);
   $('autoNewsBefore').value=String(profile.news_minutes_before);
   $('autoNewsAfter').value=String(profile.news_minutes_after);
-  $('autoDailyLimit').value=String(profile.max_daily_orders);
   $('autoPayout').value=String(profile.min_payout_pct??88);
   $('autoDirection').value=profile.direction||'AUTO';
   updateStrategyIndicators(profile.configured?(profile.indicators||[]):undefined);
@@ -2017,14 +2011,14 @@ async function saveAutomationProfile(){
  if(robotRunning){feedback.textContent='Desligue o robô antes de editar sua automação.';return}
  if(!validateAutomationSettings())return;
  const stake=Number($('autoStake').value),win=Number($('autoWin').value),loss=Number($('autoLoss').value);
- const cap=Number($('autoDailyLimit').value),payout=Number($('autoPayout').value);
+ const payout=Number($('autoPayout').value);
  button.disabled=true;feedback.textContent='Validando e salvando suas preferências...';
  try{
   const profile={account_mode:automationRadio('autoMode'),market:automationRadio('autoMarket'),
    symbols:[...automationSelected],strategy:automationRadio('autoStrategy'),
    expiry_minutes:Number($('autoExpiry').value),news_filter:$('autoNews').checked,
    news_minutes_before:Number($('autoNewsBefore').value),news_minutes_after:Number($('autoNewsAfter').value),
-   max_daily_orders:cap,
+   max_daily_orders:0,
    indicators:[...document.querySelectorAll('#autoIndicators input:checked')].map(x=>x.value),
    direction:$('autoDirection').value,
    min_payout_pct:Number($('autoPayout').value),
