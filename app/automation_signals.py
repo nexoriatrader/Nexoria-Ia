@@ -133,7 +133,7 @@ _scan_cache = {}
 _scan_lock = asyncio.Lock()
 
 
-async def confirmed_automation_signal(profile):
+async def confirmed_automation_signal(profile, scan_event=None):
     """Return one signal on a fresh closed M1 candle, or None."""
     symbols=json.loads(profile.symbols_json)
     if not symbols:
@@ -141,7 +141,7 @@ async def confirmed_automation_signal(profile):
     indicators=json.loads(profile.indicators_json or '[]')
     direction=profile.direction
     if profile.strategy=='pulso_v2':
-        return await confirmed_pulso_signal(symbols,direction=direction,minutes=profile.expiry_minutes,indicators=indicators)
+        return await confirmed_pulso_signal(symbols,direction=direction,minutes=profile.expiry_minutes,indicators=indicators,scan_event=scan_event)
 
     now=time.time()
     if now%60>12:
@@ -151,6 +151,7 @@ async def confirmed_automation_signal(profile):
     async with _scan_lock:
         cached=_scan_cache.get(key)
         if cached and cached[0]==bucket:
+            if scan_event: scan_event('cached',None,len(symbols))
             return dict(cached[1]) if cached[1] else None
         _scan_cache[key]=(bucket,None)
         if len(_scan_cache)>300:
@@ -163,14 +164,16 @@ async def confirmed_automation_signal(profile):
         batch_size=min(8,len(unique))
         first=(bucket//60*batch_size)%len(unique)
         batch=[unique[(first+i)%len(unique)] for i in range(batch_size)]
+        if scan_event: scan_event('start',None,len(batch))
         deadline=bucket+12
         sem=asyncio.Semaphore(4)
 
         async def check(symbol):
             async with sem:
-                if time.time()>=deadline:
-                    return None
+                if scan_event: scan_event('checking',symbol,len(batch))
                 try:
+                    if time.time()>=deadline:
+                        return None
                     if not await supported(symbol,minutes=profile.expiry_minutes):
                         return None
                     raw=await public_request({
@@ -201,6 +204,8 @@ async def confirmed_automation_signal(profile):
                     }
                 except (MarketError,TimeoutError,OSError,ValueError,TypeError,IndexError):
                     return None
+                finally:
+                    if scan_event: scan_event('checked',symbol,len(batch))
 
         tasks=[asyncio.create_task(check(x)) for x in batch]
         try:
@@ -213,6 +218,7 @@ async def confirmed_automation_signal(profile):
                 candidates.sort(key=lambda item:item['symbol'])
                 result=candidates[0]
                 _scan_cache[key]=(bucket,result)
+                if scan_event: scan_event('signal',result['symbol'],len(batch))
                 return dict(result)
             return None
         finally:
