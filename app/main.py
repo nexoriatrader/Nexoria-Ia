@@ -445,6 +445,7 @@ async def autopilot_once():
                 # PULSO V2 replaces the legacy scanner for every manually
                 # armed DEMO evaluation; no extra strategy-selection button.
                 pulso_active=bool(batch and v2_enabled())
+                profile=None
                 if not batch and not connected:
                     continue
                 # The goal of 50 trades is informational, NOT an execution cap.
@@ -533,8 +534,10 @@ async def autopilot_once():
                         profile=sess.get(db.AutomationProfile,uid)
                         allowed_symbols=None
                         if profile is not None:
-                            if (profile.account_mode!='demo' or profile.strategy!='pulso_v2'
-                                or profile.market not in ('derived','volatility') or profile.expiry_minutes!=5
+                            if (profile.account_mode!='demo'
+                                or profile.market not in (*AUTOMATION_GROUPS,'volatility')
+                                or profile.strategy not in ('pulso_v2','trend','rsi')
+                                or profile.expiry_minutes not in (1,3,5,15)
                                 or profile.news_filter):
                                 autopilot_reasons[uid]='Configuração incompatível ou filtro de notícias indisponível; sem novas entradas'
                                 continue
@@ -556,14 +559,14 @@ async def autopilot_once():
                                     autopilot_reasons[uid]='Limite diário de operações DEMO atingido'
                                     continue
                         try:
-                            from .pulso_live import confirmed_pulso_signal
-                            candidate=await confirmed_pulso_signal(allowed_symbols=allowed_symbols)
+                            from .automation_signals import confirmed_automation_signal
+                            candidate=await confirmed_automation_signal(profile)
                         except (MarketError,ValueError,TimeoutError,OSError) as exc:
                             autopilot_reasons[uid]='PULSO V2: cotações DEMO indisponíveis; sem compra'
                             log.warning('PULSO live data unavailable: %s',type(exc).__name__)
                             continue
                         if candidate is None:
-                            autopilot_reasons[uid]='PULSO V2: aguardando CALL com volatilidade estável'
+                            autopilot_reasons[uid]='Aguardando sinal confirmado na estratégia selecionada'
                             continue
                     elif batch:
                         # Fresh confirmed signals from the same batch can be
@@ -646,8 +649,10 @@ async def autopilot_once():
                             stake=str(entry.stake),duration=candidate['minutes'])
                         ask=Decimal(str(quote['ask_price']))
                         payout=Decimal(str(quote['payout']))
+                        selected_ratio=(Decimal('1')+Decimal(str(profile.min_payout))/Decimal('100')
+                                        if pulso_active and profile is not None else Decimal('1.50'))
                         if (not ask.is_finite() or not payout.is_finite()
-                            or ask<=0 or ask>entry.stake or payout<ask*Decimal('1.88' if pulso_active else '1.50')):
+                            or ask<=0 or ask>entry.stake or payout<ask*selected_ratio):
                             autopilot_reasons[uid]=('PULSO V2: payout DEMO inferior a 88%; entrada ignorada'
                                                    if pulso_active else 'Proposta DEMO sem payout mínimo experimental de 1,50×')
                             log.info('V2 quote rejected: symbol=%s duration=%s reason=payout_or_ask',
@@ -695,6 +700,7 @@ async def autopilot_once():
                             minutes=candidate['minutes'],confirm='DEMO_ONLY',request_key=key),
                     attribution={'strategy':candidate['strategy'],'reason':candidate['reason'],
                                  'v2':bool(batch),'pulso_v2':pulso_active,
+                                 'min_payout_ratio':str(Decimal('1')+Decimal(str(profile.min_payout))/Decimal('100')) if pulso_active and profile is not None else '1.50',
                                  'cycle_index':entry.cycle,'gale_index':entry.gale,
                                  'gale_multiplier':(plan.requested_multiplier if plan else '2.00'),
                                  'cycle_multiplier':(cycle_cfg.multiplier if cycle_cfg else '2.00')},
@@ -1155,6 +1161,7 @@ class AutomationProfileRequest(BaseModel):
     indicators:list[str]=[]
     direction:str='AUTO'
     real_account_id:str|None=None
+    min_payout_pct:int=88
 
 
 def automation_profile_result(profile):
@@ -1165,6 +1172,7 @@ def automation_profile_result(profile):
             'news_filter':False,'news_minutes_before':30,
             'news_minutes_after':30,'max_daily_orders':0,
             'indicators':[],'direction':'AUTO','real_account_id':None,
+            'min_payout_pct':88,
             'configured':False,'execution':'DERIV_DEMO_ONLY'
         }
     return {
@@ -1178,6 +1186,7 @@ def automation_profile_result(profile):
         'indicators':json.loads(profile.indicators_json or '[]'),
         'direction':profile.direction,
         'real_account_id':profile.real_account_id,
+        'min_payout_pct':int(Decimal(profile.min_payout)),
         'configured':True,'execution':'DERIV_DEMO_ONLY'
     }
 
@@ -1209,6 +1218,8 @@ async def save_automation_profile(request:Request,payload:AutomationProfileReque
         raise HTTPException(422,'Máximo diário fora do limite permitido')
     if payload.direction not in ('AUTO','CALL','PUT'):
         raise HTTPException(422,'Direção inválida')
+    if not 0<=payload.min_payout_pct<=200:
+        raise HTTPException(422,'Payout mínimo fora do intervalo')
     indicator_options={'EMA','SMA','RSI','MACD','BOLLINGER','ATR','ADX','STOCHASTIC','SUPPORT_RESISTANCE','CANDLE_PATTERNS'}
     if len(payload.indicators)!=len(set(payload.indicators)) or not set(payload.indicators).issubset(indicator_options):
         raise HTTPException(422,'Seleção de indicadores inválida')
@@ -1255,12 +1266,11 @@ async def save_automation_profile(request:Request,payload:AutomationProfileReque
             profile.indicators_json=json.dumps(sorted(payload.indicators))
             profile.direction=payload.direction
             profile.real_account_id=payload.real_account_id if payload.account_mode=='real' else None
+            profile.min_payout=str(payload.min_payout_pct)
             session.commit()
             result=automation_profile_result(profile)
     return {**result,'saved':True,'running':False,
-        'ready_to_start':(payload.account_mode=='demo' and payload.market in ('volatility','derived')
-                          and payload.strategy=='pulso_v2' and payload.expiry_minutes==5
-                          and not payload.news_filter),
+        'ready_to_start':(payload.account_mode=='demo' and not payload.news_filter),
         'note':'Preferências registradas. A ativação é um comando separado.'}
 
 
@@ -1689,9 +1699,10 @@ async def autopilot_start(request:Request,payload:AutoPilotSwitch,
         if profile is None:
             raise HTTPException(409,'Configure e salve os ativos no novo painel antes de ligar o robô')
         if profile is not None:
-            if (profile.account_mode!='demo' or profile.market not in ('derived','volatility')
-                or profile.strategy!='pulso_v2' or profile.expiry_minutes!=5):
-                raise HTTPException(409,'Configuração de automação ainda não executável')
+            if (profile.account_mode!='demo' or profile.market not in (*AUTOMATION_GROUPS,'volatility')
+                or profile.strategy not in ('pulso_v2','trend','rsi')
+                or profile.expiry_minutes not in (1,3,5,15)):
+                raise HTTPException(409,'Configuração de automação inválida')
             if profile.news_filter:
                 raise HTTPException(409,'Filtro de notícias ainda não conectado: desative para executar DEMO')
             try:
@@ -2152,8 +2163,8 @@ async def perform_demo_buy(user, token, payload:DemoBuy, *, attribution:dict|Non
         buy_kwargs={'symbol':payload.symbol,'contract_type':payload.direction,
                     'stake':order.stake,'duration':payload.minutes,'confirm':'DEMO_ONLY'}
         if attribution and attribution.get('v2'):
-            buy_kwargs['min_payout_ratio']=(
-                '1.88' if attribution.get('pulso_v2') else '1.50')
+            buy_kwargs['min_payout_ratio']=attribution.get(
+                'min_payout_ratio','1.88' if attribution.get('pulso_v2') else '1.50')
         if latest_buy_send_epoch is not None:
             buy_kwargs['latest_buy_send_epoch']=latest_buy_send_epoch
             if time.time()>latest_buy_send_epoch:
