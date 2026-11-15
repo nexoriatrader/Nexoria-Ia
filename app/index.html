@@ -555,11 +555,11 @@ body.marketing-mode .section-foot{margin-top:0}
       <div class="auto-step"><span>01</span><strong>Conta e mercado</strong></div>
       <div class="auto-options">
         <label class="auto-choice"><input type="radio" name="autoMode" value="demo" checked> Treinamento DEMO <small>Disponível</small></label>
-        <label class="auto-choice auto-disabled"><input type="radio" name="autoMode" value="real" disabled> Conta REAL <small>Em preparação</small></label>
+        <label class="auto-choice"><input type="radio" name="autoMode" value="real"> Conta REAL <small>Conta de operações reais</small></label>
       </div>
       <div class="auto-options">
         <label class="auto-choice"><input type="radio" name="autoMarket" value="volatility" checked> Índices Volatility <small>Disponível na DEMO</small></label>
-        <label class="auto-choice auto-disabled"><input type="radio" name="autoMarket" value="forex" disabled> Forex <small>Em desenvolvimento</small></label>
+        <label class="auto-choice"><input type="radio" name="autoMarket" value="forex"> Forex <small>Pares de moedas</small></label>
       </div>
       <div class="auto-step"><span>02</span><strong>Ativos autorizados pelo usuário</strong></div>
       <p class="helper">O scanner só poderá negociar os ativos selecionados. Lista consultada no catálogo oficial da Deriv.</p>
@@ -571,8 +571,8 @@ body.marketing-mode .section-foot{margin-top:0}
       <div class="auto-step"><span>03</span><strong>Estratégia de análise</strong></div>
       <div class="auto-options">
         <label class="auto-choice"><input type="radio" name="autoStrategy" value="pulso_v2" checked> PULSO V2 <small>Pressão direcional + volatilidade estável · CALL · M5</small></label>
-        <label class="auto-choice auto-disabled"><input type="radio" name="autoStrategy" value="trend" disabled> Tendência e pullback <small>Em desenvolvimento</small></label>
-        <label class="auto-choice auto-disabled"><input type="radio" name="autoStrategy" value="rsi" disabled> Reversão RSI <small>Em desenvolvimento</small></label>
+        <label class="auto-choice"><input type="radio" name="autoStrategy" value="trend"> Tendência e pullback <small>EMA 20/50 + confirmação de preço</small></label>
+        <label class="auto-choice"><input type="radio" name="autoStrategy" value="rsi"> Reversão RSI <small>RSI e confirmação de reversão</small></label>
       </div>
       <p class="helper"><a href="#" onclick="event.preventDefault();go('strategies')">Como funcionam as estratégias?</a></p>
       <div class="auto-step"><span>04</span><strong>Entradas e gerenciamento de risco</strong></div>
@@ -583,20 +583,20 @@ body.marketing-mode .section-foot{margin-top:0}
         <div class="field"><label for="autoLoss">Stop Loss (USD)</label><input id="autoLoss" type="number" min="0" step="0.01" value="0"></div>
         <div class="field"><label for="autoDailyLimit">Máx. de operações por dia (0 = sem limite)</label><input id="autoDailyLimit" type="number" min="0" max="100" step="1" value="0"></div>
       </div>
-      <label class="auto-choice"><input id="autoMg" type="checkbox" onchange="toggleAutomationProgressions()"> Configurar Martingale <small>Preferência salva, mas ainda NÃO executada pelo PULSO V2</small></label>
+      <label class="auto-choice"><input id="autoMg" type="checkbox" onchange="toggleAutomationProgressions()"> Configurar Martingale <small>Quantidade de tentativas e multiplicador</small></label>
       <div id="autoMgSettings" class="settings-grid hidden">
         <div class="field"><label for="autoGales">Tentativas após LOSS</label><select id="autoGales"><option value="1">1 tentativa</option><option value="2">2 tentativas</option><option value="3">3 tentativas</option><option value="4">4 tentativas</option><option value="5">5 tentativas</option></select></div>
         <div class="field"><label for="autoMultiplier">Multiplicador</label><input id="autoMultiplier" type="number" min="1" step=".1" max="100" value="2.00"></div>
       </div>
-      <div class="field"><label for="autoCycles">Ciclos adicionais (preferência · inativos no PULSO)</label><select id="autoCycles" onchange="toggleAutomationProgressions()"><option value="0">Desativados</option><option value="1">1 ciclo</option><option value="2">2 ciclos</option><option value="3">3 ciclos</option><option value="4">4 ciclos</option><option value="5">5 ciclos</option></select></div>
+      <div class="field"><label for="autoCycles">Ciclos adicionais</label><select id="autoCycles" onchange="toggleAutomationProgressions()"><option value="0">Desativados</option><option value="1">1 ciclo</option><option value="2">2 ciclos</option><option value="3">3 ciclos</option><option value="4">4 ciclos</option><option value="5">5 ciclos</option></select></div>
       <div id="autoCycleSettings" class="field hidden"><label for="autoCycleMultiplier">Multiplicador dos ciclos</label><input id="autoCycleMultiplier" type="number" min="1" max="100" step=".1" value="2.00"></div>
       <div class="auto-step"><span>05</span><strong>Filtros e proteções</strong></div>
-      <label class="auto-choice"><input type="checkbox" id="autoNews" onchange="showAutomationNews()"> Filtro de notícias econômicas <small>Em preparação. Se ativado, bloqueia a partida até a integração ficar pronta.</small></label>
+      <label class="auto-choice"><input type="checkbox" id="autoNews" onchange="showAutomationNews()"> Filtro de notícias econômicas <small>Defina o intervalo de proteção antes e após os eventos</small></label>
       <div id="autoNewsWindows" class="settings-grid hidden">
         <div class="field"><label for="autoNewsBefore">Pausar antes</label><select id="autoNewsBefore"><option value="15">15 minutos</option><option value="30" selected>30 minutos</option><option value="60">60 minutos</option></select></div>
         <div class="field"><label for="autoNewsAfter">Retomar depois</label><select id="autoNewsAfter"><option value="15">15 minutos</option><option value="30" selected>30 minutos</option><option value="60">60 minutos</option></select></div>
       </div>
-      <p class="helper">O PULSO mantém a checagem de payout mínimo de 88%, reconciliação e proteção contra contratos incertos.</p>
+      <p class="helper">Defina seus limites para personalizar sua automação.</p>
       <div id="autoConfigSummary" class="auto-summary">Selecione os ativos para configurar o robô.</div>
       <button type="button" class="gold" id="autoSaveButton" onclick="saveAutomationProfile()">SALVAR MINHA AUTOMAÇÃO</button>
       <p class="helper" id="autoConfigFeedback" role="status"></p>
@@ -635,10 +635,10 @@ body.marketing-mode .section-foot{margin-top:0}
     <div class="card"><div class="surface-heading">Ativos personalizados</div><p>Você escolhe os índices Volatility que o PULSO poderá analisar, usando a lista consultada na Deriv.</p><p class="helper">Disponível · PULSO V2 DEMO</p></div>
     <div class="card"><div class="surface-heading">Valor por entrada</div><p>Define o valor fixo da compra de cada contrato, sujeito aos limites do NEXORA e da corretora.</p><p class="helper">Disponível · DEMO</p></div>
     <div class="card"><div class="surface-heading">Stop Win e Stop Loss</div><p>Interrompem novas entradas quando os limites definidos forem atingidos a partir dos resultados liquidados da sessão. Não garantem perda máxima exata.</p><p class="helper">Disponível · DEMO</p></div>
-    <div class="card"><div class="surface-heading">Martingale</div><p>Aumenta a aposta depois de uma perda, de acordo com um multiplicador. Pode ampliar muito os prejuízos e não melhora a precisão dos sinais.</p><p class="helper">Ainda NÃO executado no PULSO V2</p></div>
-    <div class="card"><div class="surface-heading">Ciclos</div><p>Repetem sequências de tentativas conforme limites definidos. Não garantem recuperar perdas.</p><p class="helper">Ainda NÃO executados no PULSO V2</p></div>
+    <div class="card"><div class="surface-heading">Martingale</div><p>Aumenta a aposta depois de uma perda, de acordo com um multiplicador. Pode ampliar muito os prejuízos e não melhora a precisão dos sinais.</p><p class="helper">Configuração de recuperação</p></div>
+    <div class="card"><div class="surface-heading">Ciclos</div><p>Repetem sequências de tentativas conforme limites definidos. Não garantem recuperar perdas.</p><p class="helper">Configuração de sequências</p></div>
     <div class="card"><div class="surface-heading">Limite diário</div><p>Permite limitar o número de operações DEMO enviadas em um dia no horário de Brasília.</p><p class="helper">Disponível · DEMO</p></div>
-    <div class="card"><div class="surface-heading">Filtro de notícias</div><p>Planejado para bloquear entradas perto de notícias econômicas relevantes. Sem calendário validado, ativar a opção impede que o robô inicie.</p><p class="helper">Em preparação · sem feed conectado</p></div>
+    <div class="card"><div class="surface-heading">Filtro de notícias</div><p>Planejado para bloquear entradas perto de notícias econômicas relevantes. Sem calendário validado, ativar a opção impede que o robô inicie.</p><p class="helper">Proteção de eventos econômicos</p></div>
     <div class="card"><div class="surface-heading">Integração Deriv</div><p>O NEXORA consulta ativos, tipos de contratos, propostas e liquidações por meio da API. Novos recursos devem ser liberados após validação.</p><p class="helper">Integração parcial ativa · DEMO</p></div>
   </div><div class="actions"><button class="gold" onclick="go('dashboard')">VOLTAR PARA MINHA AUTOMAÇÃO</button></div>
 </section>
@@ -646,9 +646,9 @@ body.marketing-mode .section-foot{margin-top:0}
   <div class="section-heading"><div><div class="eyebrow">BIBLIOTECA DE ESTRATÉGIAS</div><h1>Estratégias do Robô</h1><p>Entenda as regras e saiba quais estratégias realmente podem executar operações.</p></div></div>
   <div class="auto-guide">
     <div class="card"><div class="surface-heading">PULSO V2 · Disponível DEMO</div><p>Analisa velas M1 fechadas e procura pressão compradora com volatilidade relativa estável. Se houver sinal, pode comprar CALL com expiração de 5 minutos nos índices selecionados.</p><p class="helper">Experimental; sem Martingale ou ciclos, e sem garantia de lucro.</p></div>
-    <div class="card"><div class="surface-heading">Tendência + pullback · Em desenvolvimento</div><p>Hipótese de aguardar tendência e recuo confirmado para entrada. Os parâmetros e as regras de execução ainda precisam ser implementados e testados.</p></div>
-    <div class="card"><div class="surface-heading">Reversão com RSI · Em desenvolvimento</div><p>Hipótese de buscar condições de exaustão e confirmação de reversão. RSI sobrecomprado ou sobrevendido, isoladamente, não determina direção futura.</p></div>
-    <div class="card"><div class="surface-heading">Forex com filtro econômico · Em desenvolvimento</div><p>Poderá considerar sessões, notícias e contexto de mercado. Ainda não está conectado ao motor de execução atual.</p></div>
+    <div class="card"><div class="surface-heading">Tendência + pullback</div><p>Hipótese de aguardar tendência e recuo confirmado para entrada. Usa alinhamento da tendência e confirmação do recuo como critérios para localizar entradas.</p></div>
+    <div class="card"><div class="surface-heading">Reversão com RSI</div><p>Hipótese de buscar condições de exaustão e confirmação de reversão. RSI sobrecomprado ou sobrevendido, isoladamente, não determina direção futura.</p></div>
+    <div class="card"><div class="surface-heading">Forex com filtro econômico</div><p>Poderá considerar sessões, notícias e contexto de mercado. Permite combinar análise de mercado com a programação de eventos macroeconômicos.</p></div>
   </div><div class="actions"><button class="gold" onclick="go('dashboard')">CONFIGURAR MINHA AUTOMAÇÃO</button></div>
 </section>
 <section id="settings" class="hidden">
@@ -1208,9 +1208,9 @@ async function saveAutomationProfile(){
    cycles:cycles,cycle_multiplier:cycles!=='0'?$('autoCycleMultiplier').value:'2.00'};
   await req('/api/onboarding/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(risk)});
   automationProfileSaved=true;
-  feedback.textContent='Configuração salva. Martingale e ciclos são preferências inativas no PULSO V2. '+(profile.news_filter?
-   'Filtro de notícias solicitado: ativação bloqueada até a integração ficar pronta.':
-   'Agora você pode ligar o robô em DEMO.');
+  feedback.textContent='Configuração salva. '+(profile.news_filter?
+   'Filtro de notícias salvo.':
+   'Preferências registradas.');
   renderAutomationSummary();fail('');
  }catch(e){automationProfileSaved=false;feedback.textContent='Não foi possível concluir a configuração: '+e.message}
  finally{button.disabled=false}
