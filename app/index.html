@@ -481,6 +481,69 @@ html,body{max-width:100%;overflow-x:clip}
  .dash-realtime-footer .outline{width:100%}
 }
 @media(prefers-reduced-motion:reduce){.primary-nav{scroll-behavior:auto}.dash-live-pulse{animation:none}}
+</style><style>
+/* NEXORA educational hub: mobile-first, accessible and scannable */
+.learning-hero{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(200px,.7fr);gap:22px;align-items:center;margin:16px 0 16px;padding:27px;border-radius:22px;border:1px solid #33627c;background:radial-gradient(circle at 95% 0,#17638152,transparent 43%),linear-gradient(135deg,#16364d,#0d2135 80%);overflow:hidden}
+.learning-hero h1{font-size:clamp(24px,4.5vw,36px);line-height:1.16;letter-spacing:-.035em}
+.learning-hero p{max-width:610px;margin:11px 0 15px;color:#bdd2df;font-size:14px;line-height:1.65}
+.learning-quickfacts{display:flex;gap:9px;flex-wrap:wrap}
+.learning-quickfacts span{font-size:11px;color:#b9e2f1;background:#173f56;border:1px solid #346c85;border-radius:100px;padding:6px 10px;font-weight:700}
+.learning-hero-graphic{background:#102b3e;border:1px solid #35617a;border-radius:18px;padding:14px}
+.learning-hero-graphic span{font-size:9px;display:block;color:#90bed1;letter-spacing:.16em;text-align:center;font-weight:850}
+.learning-mini-graph svg{width:100%;height:auto;display:block}
+.learning-tabs{position:sticky;top:62px;z-index:8;display:flex;gap:8px;padding:9px;background:rgba(11,27,44,.97);border:1px solid #29485d;border-radius:15px;overflow-x:auto;scrollbar-width:thin;margin:12px 0 23px}
+.learning-tab{background:transparent;color:#aabfd0;border:1px solid transparent;padding:10px 16px;min-height:43px;border-radius:10px;font-size:12px;font-weight:850;white-space:nowrap;flex:1 0 auto}
+.learning-tab.active{background:#195273;color:#fff;border-color:#367ca1}
+.learning-tab:hover{background:#23445b}
+.learning-section{margin-bottom:33px;scroll-margin-top:124px}
+.learning-section-head{margin:0 0 17px}
+.learning-section-head h2{font-size:clamp(20px,3vw,25px)}
+.learning-section-head p{font-size:13px;color:#9cb5c8;margin-top:5px}
+.learning-cards{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:13px}
+.learning-card{display:flex;flex-direction:column;min-width:0;padding:19px;background:linear-gradient(150deg,#152f46,#0c2032 78%);border:1px solid #305471;border-radius:18px;box-shadow:0 10px 26px #0002}
+.learning-card-top{display:flex;align-items:center;justify-content:space-between;gap:9px}
+.learning-emoji{display:grid;place-items:center;width:43px;height:43px;border:1px solid #3d8195;border-radius:13px;background:#1c4f5d;color:#c0f4dd;font-size:24px}
+.learning-category{font-size:9px;letter-spacing:.09em;color:#9cd4e8;text-align:right;font-weight:850}
+.learning-card h3{font-size:19px;letter-spacing:-.02em;margin:16px 0 9px}
+.learning-card>p{font-size:13px;line-height:1.6;color:#bccedc;flex:1}
+.learning-example{margin:15px 0 11px;border:1px solid #335a70;border-radius:12px;background:#0d2c3f;padding:11px 12px}
+.learning-example span{display:block;color:#8fb3ca;font-size:10px;margin-bottom:5px}
+.learning-example strong{font-size:12px;color:#e0f2fc;line-height:1.5;display:block}
+.learning-meta{display:flex;gap:5px;flex-wrap:wrap}
+.learning-meta span{font-size:10px;color:#b4d5e6;border:1px solid #31556d;background:#183347;border-radius:100px;padding:5px 8px}
+.learning-details{margin-top:16px;border-top:1px solid #2b4d62;padding-top:10px}
+.learning-details summary{cursor:pointer;font-size:12px;font-weight:850;color:#eac66f;display:flex;justify-content:space-between;gap:8px;list-style:none;min-height:35px;align-items:center}
+.learning-details summary::-webkit-details-marker{display:none}
+.learning-details[open] summary span{transform:rotate(180deg)}
+.learning-details>div{padding:8px 0 0}
+.learning-details p{font-size:12px;line-height:1.7;color:#bdd0de;margin:0 0 9px}
+.learning-indicators{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:11px}
+.learning-indicator{display:flex;align-items:flex-start;gap:13px;border:1px solid #2e4e65;border-radius:15px;background:linear-gradient(145deg,#132a3d,#0c1c2d);padding:16px;min-width:0}
+.learning-indicator-mark{display:grid;place-items:center;flex:none;width:54px;height:48px;border-radius:12px;border:1px solid #456880;background:#193e55;color:#c6eaff;font-weight:900;font-size:13px}
+.learning-indicator-mark.momentum{background:#363057;color:#ded2ff;border-color:#655587}
+.learning-indicator-mark.vol{background:#273d3e;color:#b6eace;border-color:#436e5a}
+.learning-indicator-mark.price{background:#493624;color:#ffe1a4;border-color:#836a41}
+.learning-indicator h3{font-size:14px;line-height:1.4;margin-bottom:5px}
+.learning-indicator p{font-size:12px;color:#bbccda;line-height:1.6}
+.learning-indicator small{display:block;color:#92b8cc;font-size:10px;margin-top:9px}
+.learning-tip{display:flex;align-items:flex-start;gap:12px;padding:17px 18px;border-radius:14px;background:#112c3e;border:1px solid #316274;margin-top:15px}
+.learning-tip>span{color:#f2cd71;font-size:27px;line-height:1}
+.learning-tip p{font-size:12px;line-height:1.7;color:#d3e4ed}
+.learning-steps{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:11px}
+.learning-step{display:flex;gap:14px;border:1px solid #31516c;border-radius:14px;background:#102539;padding:16px}
+.learning-step>span{display:grid;place-items:center;flex:none;width:38px;height:38px;border-radius:11px;background:#224e68;color:#c1efff;font-size:13px;font-weight:900}
+.learning-step h3{font-size:14px;margin:0 0 5px}.learning-step p{font-size:12px;line-height:1.6;color:#b5cbda}
+.learning-faq{display:grid;gap:8px;margin:17px 0}
+.learning-faq details{border:1px solid #2d4e63;background:#0f2437;border-radius:12px;padding:0 15px}
+.learning-faq summary{min-height:49px;display:flex;align-items:center;font-size:12px;font-weight:850;cursor:pointer}
+.learning-faq p{font-size:12px;line-height:1.65;color:#c2d5e2;padding:0 0 14px}
+.learning-cta{display:flex;align-items:center;justify-content:space-between;gap:15px;padding:23px;margin:15px 0;border:1px solid #8e783d;border-radius:18px;background:linear-gradient(110deg,#273c3d,#102a3b)}
+.learning-cta strong{display:block;font-size:17px;margin-bottom:4px}.learning-cta p{font-size:12px;color:#b8cfdb}
+.learning-cta .gold{min-height:47px;white-space:nowrap}
+.learning-tab:focus-visible,.learning-details summary:focus-visible,.learning-faq summary:focus-visible{outline:2px solid #74d5ff;outline-offset:3px}
+@media(max-width:920px){.learning-cards{grid-template-columns:1fr 1fr}.learning-card:last-child{grid-column:span 2}.learning-hero{grid-template-columns:minmax(0,1fr) 210px}}
+@media(max-width:700px){.learning-hero{grid-template-columns:1fr;padding:20px}.learning-hero-graphic{display:none}.learning-cards{grid-template-columns:1fr}.learning-card:last-child{grid-column:auto}.learning-indicators{grid-template-columns:1fr}.learning-steps{grid-template-columns:1fr}.learning-cta{flex-direction:column;align-items:stretch}.learning-cta .gold{width:100%}.learning-tabs{top:58px;margin-left:-7px;margin-right:-7px;border-radius:9px;padding:7px}.learning-tab{padding:9px 12px;min-height:44px}.learning-indicator{padding:14px}.learning-card{padding:17px}}
+@media(max-width:400px){.learning-hero h1{font-size:25px}.learning-quickfacts span{font-size:10px}.learning-indicator-mark{width:43px;height:43px;font-size:11px}.learning-cta{padding:17px}}
 </style></head>
 <body>
 <div class="shell">
@@ -780,13 +843,114 @@ html,body{max-width:100%;overflow-x:clip}
   </div><div class="actions"><button class="gold" onclick="go('dashboard')">VOLTAR PARA MINHA AUTOMAÇÃO</button></div>
 </section>
 <section id="strategies" class="hidden">
-  <div class="section-heading"><div><div class="eyebrow">BIBLIOTECA DE ESTRATÉGIAS</div><h1>Estratégias do Robô</h1><p>Entenda as regras e saiba quais estratégias realmente podem executar operações.</p></div></div>
-  <div class="auto-guide">
-    <div class="card"><div class="surface-heading">PULSO V2</div><p>Analisa pressão direcional e estabilidade da volatilidade a partir de velas fechadas. Permite selecionar direção, duração e os ativos desejados.</p></div>
-    <div class="card"><div class="surface-heading">Tendência + pullback</div><p>Usa EMA 20 e EMA 50 para identificar tendência e procura recuo até a média rápida com confirmação da vela para gerar sinais de alta ou baixa.</p></div>
-    <div class="card"><div class="surface-heading">Reversão com RSI</div><p>Observa o retorno do RSI através das faixas de 30 e 70 e confirma a direção pela vela fechada para identificar possíveis reversões.</p></div>
-    <div class="card"><div class="surface-heading">Forex com filtro econômico</div><p>Poderá considerar sessões, notícias e contexto de mercado. Permite combinar análise de mercado com a programação de eventos macroeconômicos.</p></div>
-  </div><div class="actions"><button class="gold" onclick="go('dashboard')">CONFIGURAR MINHA AUTOMAÇÃO</button></div>
+  <div class="learning-hero">
+    <div class="learning-hero-text">
+      <div class="eyebrow">CENTRAL DE CONHECIMENTO · NEXORA IA</div>
+      <h1>Conheça os Indicadores e Estratégias</h1>
+      <p>Entenda o que o robô observa no mercado, como identifica sinais e como os indicadores podem complementar uma estratégia.</p>
+      <div class="learning-quickfacts"><span>◈ 3 estratégias</span><span>◈ 10 indicadores e filtros</span><span>◈ Exemplos CALL e PUT</span></div>
+    </div>
+    <div class="learning-hero-graphic" aria-hidden="true">
+      <div class="learning-mini-graph">
+        <svg viewBox="0 0 260 130" role="presentation" preserveAspectRatio="xMidYMid meet">
+          <defs><linearGradient id="learningLine" x1="0" y1="1" x2="1" y2="0"><stop stop-color="#43a5fb"/><stop offset="1" stop-color="#5ae2b5"/></linearGradient></defs>
+          <path d="M0 30H260M0 65H260M0 100H260" stroke="#39617a" stroke-width="1" stroke-dasharray="4 7" opacity=".45"/>
+          <path d="M10 105L35 91L59 102L83 71L109 81L134 64L158 68L181 45L204 54L229 27L250 17" fill="none" stroke="url(#learningLine)" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M10 105L35 91L59 102L83 71L109 81L134 64L158 68L181 45L204 54L229 27L250 17L250 130L10 130Z" fill="#48c7d9" opacity=".09"/>
+          <circle cx="229" cy="27" r="6" fill="#62e5b5" stroke="#102a3c" stroke-width="3"/>
+        </svg>
+      </div>
+      <span>ANÁLISE DE MERCADO</span>
+    </div>
+  </div>
+  <div class="learning-tabs" role="group" aria-label="Conteúdo educativo">
+    <button type="button" class="learning-tab active" data-education-tab="all" aria-pressed="true" onclick="setEducationTab('all')">Visão geral</button>
+    <button type="button" class="learning-tab" data-education-tab="strategies" aria-pressed="false" onclick="setEducationTab('strategies')">Estratégias</button>
+    <button type="button" class="learning-tab" data-education-tab="indicators" aria-pressed="false" onclick="setEducationTab('indicators')">Indicadores</button>
+    <button type="button" class="learning-tab" data-education-tab="howto" aria-pressed="false" onclick="setEducationTab('howto')">Como configurar</button>
+  </div>
+  <div id="learningStrategiesSection" class="learning-section">
+    <div class="learning-section-head"><div><div class="eyebrow">REGRAS DE ANÁLISE</div><h2>Estratégias do Robô</h2><p>Cada estratégia usa critérios diferentes para encontrar possíveis entradas.</p></div></div>
+    <div class="learning-cards">
+      <article class="learning-card">
+        <div class="learning-card-top"><span class="learning-emoji" aria-hidden="true">〽</span><span class="learning-category">VOLATILIDADE E PRESSÃO</span></div>
+        <h3>PULSO V2</h3>
+        <p>Analisa velas de um minuto já fechadas, procurando pressão direcional combinada com condições de volatilidade estável.</p>
+        <div class="learning-example">
+          <span>Como o sinal é formado</span>
+          <strong>Pressão + volatilidade estável + fechamento confirmado</strong>
+        </div>
+        <div class="learning-meta"><span>Velas M1</span><span>Direção CALL / PUT</span><span>Expiração configurável</span></div>
+        <details class="learning-details"><summary>Entender esta estratégia <span aria-hidden="true">⌄</span></summary>
+          <div><p>O robô consulta uma sequência de velas, calcula as condições de pressão e compara a estabilidade do movimento. Quando o conjunto de regras é atendido, gera um sinal na direção configurada.</p>
+          <p><strong>Exemplo:</strong> se houver pressão compradora suficiente e o cenário de volatilidade estiver dentro dos critérios, pode surgir um sinal CALL. Na direção PUT, as condições são avaliadas para movimento de baixa.</p></div>
+        </details>
+      </article>
+      <article class="learning-card">
+        <div class="learning-card-top"><span class="learning-emoji" aria-hidden="true">↗</span><span class="learning-category">SEGUIR TENDÊNCIAS</span></div>
+        <h3>Tendência + Pullback</h3>
+        <p>Usa médias móveis exponenciais de 20 e 50 períodos para identificar o sentido predominante e esperar um recuo com confirmação.</p>
+        <div class="learning-example">
+          <span>Como o sinal é formado</span>
+          <strong>EMA 20 / EMA 50 + recuo até EMA 20 + vela de confirmação</strong>
+        </div>
+        <div class="learning-meta"><span>EMA 20/50</span><span>CALL / PUT</span><span>Velas fechadas</span></div>
+        <details class="learning-details"><summary>Entender esta estratégia <span aria-hidden="true">⌄</span></summary>
+          <div><p><strong>Exemplo CALL:</strong> EMA 20 acima da EMA 50, preço recua até a EMA 20 e uma vela compradora fecha novamente acima dessa média.</p>
+          <p><strong>Exemplo PUT:</strong> EMA 20 abaixo da EMA 50, preço sobe temporariamente até a média rápida e uma vela vendedora fecha abaixo dela.</p></div>
+        </details>
+      </article>
+      <article class="learning-card">
+        <div class="learning-card-top"><span class="learning-emoji" aria-hidden="true">↺</span><span class="learning-category">REVERSÃO DE MOVIMENTO</span></div>
+        <h3>Reversão com RSI</h3>
+        <p>Observa o Índice de Força Relativa (RSI), buscando saídas das regiões extremas acompanhadas por confirmação do movimento do preço.</p>
+        <div class="learning-example">
+          <span>Como o sinal é formado</span>
+          <strong>RSI cruza 30 ou 70 + vela confirma direção</strong>
+        </div>
+        <div class="learning-meta"><span>RSI 14</span><span>Níveis 30/70</span><span>CALL / PUT</span></div>
+        <details class="learning-details"><summary>Entender esta estratégia <span aria-hidden="true">⌄</span></summary>
+          <div><p><strong>Exemplo CALL:</strong> RSI estava em 30 ou menos, volta acima de 30 e a vela fecha em alta.</p>
+          <p><strong>Exemplo PUT:</strong> RSI estava em 70 ou mais, cai abaixo de 70 e a vela fecha em baixa.</p></div>
+        </details>
+      </article>
+    </div>
+  </div>
+  <div id="learningIndicatorsSection" class="learning-section">
+    <div class="learning-section-head">
+      <div><div class="eyebrow">FERRAMENTAS DE CONFIRMAÇÃO</div><h2>Conheça os Indicadores</h2><p>Entenda o papel de cada indicador disponível no configurador do NEXORA.</p></div>
+    </div>
+    <div class="learning-indicators">
+      <article class="learning-indicator"><span class="learning-indicator-mark trend">EMA</span><div><h3>Média Móvel Exponencial</h3><p>Dá maior peso aos preços recentes. A comparação entre EMA 20 e EMA 50 ajuda a identificar a direção da tendência.</p><small>Categoria: tendência</small></div></article>
+      <article class="learning-indicator"><span class="learning-indicator-mark trend">SMA</span><div><h3>Média Móvel Simples</h3><p>Calcula a média dos preços de determinado período. A SMA 20 comparada à SMA 50 oferece outra referência de tendência.</p><small>Categoria: tendência</small></div></article>
+      <article class="learning-indicator"><span class="learning-indicator-mark momentum">RSI</span><div><h3>Índice de Força Relativa</h3><p>Oscila de 0 a 100 e mede o impulso recente. Níveis 30, 50 e 70 ajudam a acompanhar mudanças de pressão.</p><small>Categoria: momentum</small></div></article>
+      <article class="learning-indicator"><span class="learning-indicator-mark momentum">MACD</span><div><h3>Convergência e Divergência</h3><p>Compara médias exponenciais de 12 e 26 períodos para avaliar o sentido do impulso do preço.</p><small>Categoria: tendência e momentum</small></div></article>
+      <article class="learning-indicator"><span class="learning-indicator-mark vol">BB</span><div><h3>Bandas de Bollinger</h3><p>Formam uma região dinâmica ao redor da média do preço. A largura das bandas acompanha a dispersão recente.</p><small>Categoria: volatilidade</small></div></article>
+      <article class="learning-indicator"><span class="learning-indicator-mark vol">ATR</span><div><h3>Average True Range</h3><p>Mede a amplitude média das oscilações, sem indicar sozinho se o preço vai subir ou cair.</p><small>Categoria: volatilidade</small></div></article>
+      <article class="learning-indicator"><span class="learning-indicator-mark trend">ADX</span><div><h3>Índice Direcional Médio</h3><p>Ajuda a observar a intensidade do movimento. O NEXORA utiliza um filtro simplificado de deslocamento relativo à amplitude.</p><small>Categoria: força do movimento</small></div></article>
+      <article class="learning-indicator"><span class="learning-indicator-mark momentum">STO</span><div><h3>Estocástico</h3><p>Compara o fechamento com a faixa recente de máximas e mínimas, mostrando a posição do preço dentro desse intervalo.</p><small>Categoria: momentum</small></div></article>
+      <article class="learning-indicator"><span class="learning-indicator-mark price">S/R</span><div><h3>Suporte e Resistência</h3><p>Identifica regiões de máximas e mínimas anteriores, que podem servir de referência para rompimentos e reação do preço.</p><small>Categoria: ação do preço</small></div></article>
+      <article class="learning-indicator"><span class="learning-indicator-mark price">M1</span><div><h3>Padrões de Velas</h3><p>Analisa a relação entre abertura e fechamento das velas. O filtro inclui padrões de engolfo de alta e de baixa.</p><small>Categoria: ação do preço</small></div></article>
+    </div>
+    <div class="learning-tip"><span aria-hidden="true">✧</span><p><strong>Como os filtros se combinam?</strong> A estratégia define a condição principal de entrada. Os indicadores adicionais funcionam como confirmações: cada filtro escolhido acrescenta um critério ao sinal. Quanto mais critérios, menos oportunidades podem passar.</p></div>
+  </div>
+  <div id="learningHowtoSection" class="learning-section">
+    <div class="learning-section-head"><div><div class="eyebrow">SEU CONTROLE</div><h2>Como configurar o NEXORA</h2><p>Monte sua automação de acordo com o mercado e os critérios que deseja acompanhar.</p></div></div>
+    <div class="learning-steps">
+      <div class="learning-step"><span>01</span><div><h3>Escolha a conta e o mercado</h3><p>Selecione DEMO ou REAL e escolha Forex, Derivados, Ações e Índices ou Matérias-primas.</p></div></div>
+      <div class="learning-step"><span>02</span><div><h3>Selecione os ativos</h3><p>Escolha os instrumentos específicos que o NEXORA deverá acompanhar dentro do mercado selecionado.</p></div></div>
+      <div class="learning-step"><span>03</span><div><h3>Defina a estratégia e os indicadores</h3><p>Escolha PULSO V2, Tendência + Pullback ou RSI e, se desejar, selecione filtros de confirmação.</p></div></div>
+      <div class="learning-step"><span>04</span><div><h3>Personalize as operações</h3><p>Informe direção, entrada, expiração, payout mínimo, stops e suas preferências de Martingale, ciclos e notícias.</p></div></div>
+      <div class="learning-step"><span>05</span><div><h3>Salve sua configuração</h3><p>Revise as opções no painel, salve seu perfil e utilize os controles de automação da conta escolhida.</p></div></div>
+    </div>
+    <div class="learning-faq">
+      <details><summary>Qual a diferença entre estratégia e indicador?</summary><p>A estratégia reúne regras para identificar o momento de uma possível entrada. O indicador mede um aspecto do mercado, como tendência, impulso ou volatilidade, e pode ajudar a confirmar essas regras.</p></details>
+      <details><summary>Posso escolher vários indicadores?</summary><p>Sim. Eles aparecem no painel como filtros adicionais. Cada um acrescenta uma condição de confirmação ao processo de seleção de sinais.</p></details>
+      <details><summary>O que significa CALL e PUT?</summary><p>CALL representa uma operação que depende de o preço subir conforme as condições do contrato. PUT representa uma operação que depende de o preço cair.</p></details>
+      <details><summary>O que é expiração?</summary><p>É o prazo estabelecido para o encerramento do contrato. No configurador você escolhe a duração disponível para sua automação.</p></details>
+    </div>
+  </div>
+  <div class="learning-cta"><div><strong>Pronto para personalizar seu robô?</strong><p>Escolha seus ativos, indicadores e estratégia no painel principal.</p></div><button type="button" class="gold" onclick="go('dashboard');toggleRobotConfiguration(true)">CONFIGURAR MEU ROBÔ</button></div>
 </section>
 <section id="settings" class="hidden">
   <div class="section-heading"><div><div class="eyebrow">SEU CONTROLE</div><h1>Configurações</h1><p>Personalize entradas, stop e progressões. O AutoPilot deve estar desligado para salvar.</p></div></div>
@@ -1201,6 +1365,17 @@ async function loadRobotAccess(){
   }catch(e){target.textContent='Não foi possível consultar a validade do acesso'}
 }
 async function loadDemoBalance(){try{const b=await req('/api/demo/balance');demoBalance=b;$('balanceMetric').textContent=money(b.balance,b.currency);$('accountBalance').textContent=money(b.balance,b.currency);return b}catch(e){$('balanceMetric').textContent='Indisponível';$('accountBalance').textContent='Indisponível';throw e}}
+function setEducationTab(tab){
+ const groups={all:['learningStrategiesSection','learningIndicatorsSection','learningHowtoSection'],
+  strategies:['learningStrategiesSection'],indicators:['learningIndicatorsSection'],howto:['learningHowtoSection']};
+ if(!groups[tab])tab='all';
+ document.querySelectorAll('.learning-tab').forEach(button=>{
+  const active=button.dataset.educationTab===tab;
+  button.classList.toggle('active',active);
+  button.setAttribute('aria-pressed',String(active));
+ });
+ for(const id of groups.all)$(id).classList.toggle('hidden',!groups[tab].includes(id));
+}
 function toggleRobotConfiguration(force){
  const card=$('automationConfigCard'),button=$('configureRobotButton');
  const visible=typeof force==='boolean'?force:card.classList.contains('hidden');
