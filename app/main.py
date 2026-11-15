@@ -549,15 +549,6 @@ async def autopilot_once():
                             if not allowed_symbols:
                                 autopilot_reasons[uid]='Nenhum ativo habilitado'
                                 continue
-                            if profile.max_daily_orders:
-                                day_start=datetime.now(BRASILIA_TZ).replace(hour=0,minute=0,second=0,microsecond=0).astimezone(timezone.utc)
-                                daily_count=sum(1 for o in orders
-                                    if o.state not in ('CANCELLED',)
-                                    and o.created_at is not None
-                                    and o.created_at.replace(tzinfo=timezone.utc) >= day_start)
-                                if daily_count>=profile.max_daily_orders:
-                                    autopilot_reasons[uid]='Limite diário de operações DEMO atingido'
-                                    continue
                         try:
                             from .automation_signals import confirmed_automation_signal
                             candidate=await confirmed_automation_signal(profile)
@@ -1183,7 +1174,7 @@ def automation_profile_result(profile):
         'news_filter':profile.news_filter,
         'news_minutes_before':profile.news_minutes_before,
         'news_minutes_after':profile.news_minutes_after,
-        'max_daily_orders':profile.max_daily_orders,
+        'max_daily_orders':0,
         'indicators':json.loads(profile.indicators_json or '[]'),
         'direction':profile.direction,
         'real_account_id':profile.real_account_id,
@@ -1216,8 +1207,6 @@ async def save_automation_profile(request:Request,payload:AutomationProfileReque
         raise HTTPException(422,'Símbolo inválido')
     if payload.news_minutes_before not in (0,15,30,60) or payload.news_minutes_after not in (0,15,30,60):
         raise HTTPException(422,'Janela de notícias inválida')
-    if not 0<=payload.max_daily_orders<=100:
-        raise HTTPException(422,'Máximo diário fora do limite permitido')
     if payload.direction not in ('AUTO','CALL','PUT'):
         raise HTTPException(422,'Direção inválida')
     if not 0<=payload.min_payout_pct<=200:
@@ -1279,7 +1268,7 @@ async def save_automation_profile(request:Request,payload:AutomationProfileReque
             profile.news_filter=payload.news_filter
             profile.news_minutes_before=payload.news_minutes_before
             profile.news_minutes_after=payload.news_minutes_after
-            profile.max_daily_orders=payload.max_daily_orders
+            profile.max_daily_orders=0  # Daily operation-count cap retired; risk gates remain active.
             profile.indicators_json=json.dumps(sorted(payload.indicators))
             profile.direction=payload.direction
             profile.real_account_id=payload.real_account_id if payload.account_mode=='real' else None
