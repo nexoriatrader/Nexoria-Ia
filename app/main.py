@@ -1152,6 +1152,8 @@ class AutomationProfileRequest(BaseModel):
     news_minutes_before:int=30
     news_minutes_after:int=30
     max_daily_orders:int=0
+    indicators:list[str]=[]
+    direction:str='AUTO'
 
 
 def automation_profile_result(profile):
@@ -1161,6 +1163,7 @@ def automation_profile_result(profile):
             'strategy':'pulso_v2','expiry_minutes':5,
             'news_filter':False,'news_minutes_before':30,
             'news_minutes_after':30,'max_daily_orders':0,
+            'indicators':[],'direction':'AUTO',
             'configured':False,'execution':'DERIV_DEMO_ONLY'
         }
     return {
@@ -1171,6 +1174,8 @@ def automation_profile_result(profile):
         'news_minutes_before':profile.news_minutes_before,
         'news_minutes_after':profile.news_minutes_after,
         'max_daily_orders':profile.max_daily_orders,
+        'indicators':json.loads(profile.indicators_json or '[]'),
+        'direction':profile.direction,
         'configured':True,'execution':'DERIV_DEMO_ONLY'
     }
 
@@ -1200,6 +1205,11 @@ async def save_automation_profile(request:Request,payload:AutomationProfileReque
         raise HTTPException(422,'Janela de notícias inválida')
     if not 0<=payload.max_daily_orders<=100:
         raise HTTPException(422,'Máximo diário fora do limite permitido')
+    if payload.direction not in ('AUTO','CALL','PUT'):
+        raise HTTPException(422,'Direção inválida')
+    indicator_options={'EMA','SMA','RSI','MACD','BOLLINGER','ATR','ADX','STOCHASTIC','SUPPORT_RESISTANCE','CANDLE_PATTERNS'}
+    if len(payload.indicators)!=len(set(payload.indicators)) or not set(payload.indicators).issubset(indicator_options):
+        raise HTTPException(422,'Seleção de indicadores inválida')
     # Validate membership in the actual broker catalog, not a fabricated list.
     try:
         instruments=await instruments_by_group('derived' if payload.market=='volatility' else payload.market)
@@ -1225,6 +1235,8 @@ async def save_automation_profile(request:Request,payload:AutomationProfileReque
             profile.news_minutes_before=payload.news_minutes_before
             profile.news_minutes_after=payload.news_minutes_after
             profile.max_daily_orders=payload.max_daily_orders
+            profile.indicators_json=json.dumps(sorted(payload.indicators))
+            profile.direction=payload.direction
             session.commit()
             result=automation_profile_result(profile)
     return {**result,'saved':True,'running':False,
