@@ -1564,8 +1564,8 @@ async def autopilot_start(request:Request,payload:AutoPilotSwitch,
         from .trade_selector_v2 import clear_user_signals
         clear_user_signals(user.id)
         autopilot_enabled.add(user.id)
-        log.warning('AutoPilot armed: scan_mode=PULSO_V2; symbol=1HZ100V; direction=CALL; duration=5m; execution=DEMO')
-    autopilot_reasons[user.id]='PULSO V2 ativo na DEMO; aguardando CALL confirmado com volatilidade estável'
+        log.warning('AutoPilot armed: scan_mode=PULSO_V2; market=DERIV_VOLATILITY_CATALOG; direction=CALL; duration=5m; execution=DEMO')
+    autopilot_reasons[user.id]='PULSO V2 ativo na DEMO; monitorando índices Volatility para CALL com volatilidade estável'
     return {'running':True,'access':access,'execution':'DERIV_DEMO_ONLY','real_orders_enabled':False}
 
 
