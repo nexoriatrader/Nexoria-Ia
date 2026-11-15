@@ -444,6 +444,43 @@ body.marketing-mode .primary-nav{display:none!important}
 .auto-config{scroll-margin-top:94px}
 @media(max-width:880px){.primary-nav .nav-link{flex:0 0 auto}.dash-control-grid{grid-template-columns:1fr}.dash-control-main{display:grid;grid-template-columns:1.2fr 1fr}.dash-control-actions{grid-template-columns:1fr}.dash-control-main .hero-action{height:100%;min-height:110px}}
 @media(max-width:550px){.shell{padding:13px 12px 35px}.primary-nav{margin:0 -1px 10px;padding:7px}.primary-nav .nav-link{font-size:11px;padding:9px}.dash-control-card,.dash-realtime-card{padding:16px;border-radius:18px}.dash-control-head{margin-bottom:15px}.dash-robot-icon{width:39px;height:39px;font-size:23px}.dash-robot-name strong{font-size:15px}.dash-control-main{grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px}.dash-control-main .hero-action{min-height:117px;font-size:14px;padding:8px}.dash-control-actions{gap:7px}.dash-configure-button{font-size:11px;padding:8px 4px}.dash-access strong{font-size:13px}.dash-balance-grid{gap:8px}.dash-balance-tile{padding:13px 10px;border-radius:12px}.dash-balance-tile strong{font-size:clamp(17px,4.8vw,21px)}.dash-realtime-header .surface-heading{font-size:16px}.dash-realtime-header p{font-size:11px}.dash-realtime-live{padding:6px 8px;font-size:9px}.dash-realtime-footer .outline{font-size:10px}.compact-dash-heading{margin-top:15px}}
+</style><style>
+/* NEXORA phone-first responsive refinements */
+html,body{max-width:100%;overflow-x:clip}
+.primary-nav{scroll-padding-inline:9px;-webkit-overflow-scrolling:touch;overscroll-behavior-x:contain;touch-action:pan-x;gap:5px}
+.primary-nav .nav-link{min-height:44px;scroll-snap-align:start}
+.dash-control-grid,.dash-balance-grid,.dash-control-actions,.dash-realtime-list,.dash-realtime-card{min-width:0}
+.dash-trade-main{flex:1;min-width:0;overflow-wrap:anywhere}
+.dash-trade-main strong{line-height:1.4}
+.dash-realtime-footer{min-width:0;flex-wrap:wrap}
+.dash-realtime-footer span{min-width:0}
+#automationConfigCard .auto-steps,#automationConfigCard .settings-grid,#automationConfigCard .auto-options,#automationConfigCard .auto-symbols{min-width:0}
+#automationConfigCard .field{min-width:0}
+#automationConfigCard input,#automationConfigCard select{max-width:100%}
+@media(max-width:740px){
+ .primary-nav{position:sticky;top:0;margin-left:-12px;margin-right:-12px;border-radius:0;padding:8px 12px;border-left:0;border-right:0;box-shadow:0 8px 25px #020a14b8}
+ .primary-nav .nav-link{font-size:12px;padding:11px 12px;min-height:45px}
+ .dash-control-card,.dash-realtime-card{margin-bottom:12px}
+ .dash-balance-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+ #automationConfigCard .settings-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+ .dash-realtime-card .dash-realtime-header{gap:9px}
+}
+@media(max-width:390px){
+ .dash-control-head{gap:8px}
+ .dash-robot-name{gap:8px}
+ .dash-robot-name strong{font-size:14px}
+ .dash-robot-name span:not(.dash-robot-icon){font-size:10px}
+ .dash-control-main{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}
+ .dash-control-main .hero-action{font-size:13px}
+ .dash-access strong{font-size:12px}
+ .dash-balance-tile strong{font-size:17px}
+ .dash-realtime-header{flex-wrap:wrap}
+ .dash-trade{padding:10px}
+ #automationConfigCard .settings-grid{grid-template-columns:1fr}
+ .dash-realtime-footer{align-items:stretch}
+ .dash-realtime-footer .outline{width:100%}
+}
+@media(prefers-reduced-motion:reduce){.primary-nav{scroll-behavior:auto}.dash-live-pulse{animation:none}}
 </style></head>
 <body>
 <div class="shell">
@@ -619,7 +656,6 @@ body.marketing-mode .primary-nav{display:none!important}
       <p id="v2ScannerHealth" class="helper" role="status">Scanner: verificando condições · última análise —</p>
       <p id="v2Opportunity" class="helper" role="status">● Oportunidade encontrada: Nenhuma no momento</p>
     </div>
-    <div hidden aria-hidden="true"><span id="robotMessage"></span><span id="riskSessionMetric"></span><span id="feedState"></span></div>
       <span id="robotMessage"></span><span id="riskSessionMetric"></span><span id="feedState"></span>
       <span id="lastOrder"></span>
     </div>
