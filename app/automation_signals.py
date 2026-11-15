@@ -166,7 +166,7 @@ async def confirmed_automation_signal(profile, scan_event=None):
         first=(bucket//60*batch_size)%len(unique)
         batch=[unique[(first+i)%len(unique)] for i in range(batch_size)]
         if scan_event: scan_event('start',None,len(batch))
-        deadline=bucket+12
+        deadline=bucket+8
         sem=asyncio.Semaphore(4)
 
         async def check(symbol):
@@ -200,19 +200,10 @@ async def confirmed_automation_signal(profile, scan_event=None):
                     if time.time()>=deadline:
                         reason='janela_expirada'
                         return None
-                    expiry_options=[]
-                    for expiry in ((1,3,5,15) if profile.expiry_minutes==0 else (profile.expiry_minutes,)):
-                        if time.time()>=deadline:
-                            reason='janela_expirada'
-                            return None
-                        try:
-                            if await supported(symbol,minutes=expiry):
-                                expiry_options.append(expiry)
-                        except (MarketError,TimeoutError,OSError,ValueError,TypeError):
-                            continue
-                    if not expiry_options:
-                        reason='ativo_incompativel'
-                        return None
+                    # Broker proposal checks determine supported expirations,
+                    # rather than spending the limited signal window querying
+                    # contracts_for four times for every candidate.
+                    expiry_options=[1,3,5,15] if profile.expiry_minutes==0 else [profile.expiry_minutes]
                     reason='sinal_confirmado'
                     return {
                         'strategy':'nexora_'+profile.strategy+'_m1_auto',
