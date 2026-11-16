@@ -1,4 +1,5 @@
 from types import SimpleNamespace
+from decimal import Decimal
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session
 import pytest
@@ -78,3 +79,17 @@ def test_martingale_blocked_until_validated(setup_db):
         u=s.get(User,uid);u.martingale=True
         with pytest.raises(OrderGuardError, match='Martingale indisponível'):
             reserve(s,u,request_key='gale-disabled',symbol='1HZ100V',direction='CALL',minutes=5)
+
+
+def test_demo_does_not_enforce_arbitrary_thousand_dollar_stake_ceiling():
+    from app.demo import _amount
+    user=SimpleNamespace(id=7,stake='1250.00',stop_win='0',stop_loss='0',
+                         martingale=False)
+    assert order_guard(user,[],Decimal('1250.00'),
+                       parallel=True,symbol='R_75')==Decimal('0')
+    assert _amount('1250.00')==1250.0
+    # Stops remain authoritative even without an arbitrary dollar ceiling.
+    user.stop_loss='500'
+    with pytest.raises(OrderGuardError, match='Stop Loss'):
+        order_guard(user,[],Decimal('1250.00'),
+                    parallel=True,symbol='R_75')
