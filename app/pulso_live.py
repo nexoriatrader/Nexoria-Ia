@@ -42,18 +42,25 @@ async def _candidate_for_symbol(symbol, bucket, *, deadline, direction="AUTO", m
         return reject('velas_incompletas')
     rows=[[b["epoch"],b["open"],b["high"],b["low"],b["close"]]
           for b in tail]
-    side="PUT" if direction=="PUT" else "CALL"
-    signal=make_variants(rows)[("stable_volatility",side)][-1]
-    if time.time()>=deadline:
-        return reject('janela_expirada')
-    if signal!=(1 if side=="CALL" else -1):
+    # AUTO must inspect both real PULSO directions. Explicit CALL/PUT
+    # selections are unchanged; all technical filters remain mandatory.
+    variants=make_variants(rows)
+    permitted=("CALL","PUT") if direction=="AUTO" else (direction,)
+    side=None
+    for attempt in permitted:
+        signal=variants[("stable_volatility",attempt)][-1]
+        if signal!=(1 if attempt=="CALL" else -1):
+            continue
+        if time.time()>=deadline:
+            return reject('janela_expirada')
+        if indicators:
+            from .automation_signals import _indicators_agree
+            if not _indicators_agree(tail,attempt,indicators,"pulso_v2"):
+                continue
+        side=attempt
+        break
+    if side is None:
         return reject('estrategia_sem_sinal')
-    if indicators:
-        # Apply additional user-selected technical filters to the closed candles.
-        # Late import avoids a circular import at module initialization.
-        from .automation_signals import _indicators_agree
-        if not _indicators_agree(tail,side,indicators,"pulso_v2"):
-            return reject('indicadores_nao_confirmados')
     # Duration availability and payout are verified with actual DEMO proposals
     # AFTER a confirmed directional signal; do not make four extra contract
     # catalogue calls inside the narrow closed-candle scanner window.
