@@ -42,16 +42,27 @@ def test_parallel_exposure_and_symbol_lock(tmp_path,monkeypatch):
     finally:cleanup(engine)
 
 
-def test_parallel_pending_and_unknown_block_all_other_symbols(tmp_path,monkeypatch):
+def test_parallel_pending_and_unknown_lock_only_their_symbol(tmp_path,monkeypatch):
     client,factory,engine,uid=prepare(tmp_path,monkeypatch)
     try:
         with factory() as sess:
             user=sess.get(db.User,uid)
-            reserve(sess,user,request_key='pending-0001',symbol='EURJPY',
+            first,_=reserve(sess,user,request_key='pending-0001',symbol='EURJPY',
                 direction='CALL',minutes=3,parallel=True)
-            with pytest.raises(OrderGuardError,match='pendente ou incerto'):
-                reserve(sess,user,request_key='pending-0002',symbol='EURUSD',
-                    direction='CALL',minutes=3,parallel=True)
+            with pytest.raises(OrderGuardError,match='neste ativo'):
+                reserve(sess,user,request_key='pending-0002',symbol='EURJPY',
+                    direction='PUT',minutes=3,parallel=True)
+            second,_=reserve(sess,user,request_key='pending-0003',symbol='EURUSD',
+                direction='CALL',minutes=3,parallel=True)
+            assert second.state=='PENDING'
+            from app.demo_ledger import unknown
+            unknown(sess,first)
+            with pytest.raises(OrderGuardError,match='neste ativo'):
+                reserve(sess,user,request_key='pending-0004',symbol='EURJPY',
+                    direction='PUT',minutes=3,parallel=True)
+            third,_=reserve(sess,user,request_key='pending-0005',symbol='GBPUSD',
+                direction='CALL',minutes=3,parallel=True)
+            assert third.state=='PENDING'
     finally:cleanup(engine)
 
 
