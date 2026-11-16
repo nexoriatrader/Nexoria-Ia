@@ -144,6 +144,10 @@ def test_account_page_identity_referrals_and_plan_catalog_are_separate():
     assert 'R$</small> 29,90' in account
     assert 'R$</small> 49,90' in account
     assert 'R$</small> 99,00' in account
-    assert 'A contratação online ainda não está habilitada' in account
+    assert 'id="accountBillingNote"' in account
+    assert 'data-plan="quinzenal"' in account
+    assert 'data-plan="mensal"' in account
+    assert 'data-plan="trimestral"' in account
+    assert 'disabled data-plan=' in account
     assert "accountUserId').textContent=String(a.user_id||'—')" in html
     assert "if(v==='account'){loadRobotAccess()}" in html
