@@ -141,7 +141,8 @@ def test_auto_reconcile_persists_only_broker_settlement(api, monkeypatch):
         user=s.query(db.User).one()
         order=db.DemoOrder(user_id=user.id,request_key="confirmed-key-01",active_slot=user.id,
             state="CONFIRMED",contract_id="24680",symbol="1HZ100V",direction="CALL",
-            duration_minutes=5,stake="2.00",buy_price="2.00")
+            duration_minutes=5,stake="2.00",buy_price="2.00",
+            created_at=db.utcnow()-timedelta(minutes=6))
         s.add(order)
         s.commit()
         order_id=order.id
