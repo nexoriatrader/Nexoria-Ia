@@ -221,6 +221,10 @@ def init_db():
     Base.metadata.create_all(engine)
     # Backwards-compatible additive migration. Never fabricate official times
     # for existing contracts or overwrite any pre-existing stored evidence.
+    progression_columns={col['name'] for col in inspect(engine).get_columns('demo_order_progressions')}
+    if 'lineage_symbol' not in progression_columns:
+        with engine.begin() as conn:
+            conn.execute(text('ALTER TABLE demo_order_progressions ADD COLUMN lineage_symbol VARCHAR(50)'))
     columns={col['name'] for col in inspect(engine).get_columns('demo_orders')}
     if 'broker_purchase_at' not in columns:
         with engine.begin() as conn:
@@ -301,4 +305,7 @@ class DemoOrderProgression(Base):
     cycle_multiplier = Column(String(20), nullable=False)
     source = Column(String(20), nullable=False, default='autopilot')
     account_mode = Column(String(16), nullable=False, default='demo')
+    # Identifies the original sequence across cycles moved to a NEW signal/symbol.
+    # NULL keeps historical trades grouped by their actual symbol.
+    lineage_symbol = Column(String(50), nullable=True)
     created_at = Column(DateTime(timezone=True), default=utcnow, nullable=False)
