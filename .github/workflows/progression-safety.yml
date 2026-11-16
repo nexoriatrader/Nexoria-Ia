@@ -1,0 +1,26 @@
+name: NEXORA progression safety regression
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  progression:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      NEXORA_DEMO_BUY_ENABLED: "false"
+      NEXORA_PUBLIC_URL: "http://localhost:8000"
+      DATABASE_URL: "sqlite:///./nexora_ci_progression.db"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: python -m pip install -r requirements.txt
+      - name: Generate isolated test-only encryption key
+        run: echo "NEXORA_FERNET_KEY=$(python -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())')" >> "$GITHUB_ENV"
+      - name: Validate progression and broker-order safeguards
+        run: python -m pytest -q tests/test_progression.py tests/test_demo_ledger.py tests/test_zero_stops.py
