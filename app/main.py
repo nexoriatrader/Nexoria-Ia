@@ -502,14 +502,10 @@ async def autopilot_once():
                 # Risk stops and broker-uncertainty safeguards remain mandatory.
                 try:
                     if pulso_active:
-                        # Broker uncertainty blocks purchases across all symbols.
-                        # CONFIRMED contracts may coexist on different symbols,
-                        # but same-symbol slots stay locked through the ledger.
+                        # Contracts with uncertain outcomes stay locked to
+                        # their own symbol. The ledger's durable unique slot
+                        # prevents duplicate buys while other symbols progress.
                         active=[o for o in orders if o.state in ('PENDING','CONFIRMED','UNKNOWN')]
-                        if any(o.state in ('PENDING','UNKNOWN') for o in active):
-                            autopilot_reasons[uid]='Contrato DEMO pendente ou incerto; aguardando reconciliação'
-                            log_v2_gate(uid,'PENDING_OR_UNKNOWN_CONTRACT')
-                            continue
                         entry=last=None
                         if plan and (plan.requested_martingale or plan.cycles_limit):
                             entry,last=v2_symbol_recovery(sess,user,orders,plan,cycle_cfg,batch)
