@@ -47,10 +47,12 @@ async def _candidate_for_symbol(symbol, bucket, *, deadline, direction="AUTO", m
     variants=make_variants(rows)
     permitted=("CALL","PUT") if direction=="AUTO" else (direction,)
     side=None
+    direction_detected=False
     for attempt in permitted:
         signal=variants[("stable_volatility",attempt)][-1]
         if signal!=(1 if attempt=="CALL" else -1):
             continue
+        direction_detected=True
         if time.time()>=deadline:
             return reject('janela_expirada')
         if indicators:
@@ -60,7 +62,7 @@ async def _candidate_for_symbol(symbol, bucket, *, deadline, direction="AUTO", m
         side=attempt
         break
     if side is None:
-        return reject('estrategia_sem_sinal')
+        return reject('indicadores_nao_confirmados' if direction_detected else 'estrategia_sem_sinal')
     # Duration availability and payout are verified with actual DEMO proposals
     # AFTER a confirmed directional signal; do not make four extra contract
     # catalogue calls inside the narrow closed-candle scanner window.
