@@ -1,7 +1,7 @@
 """NEXORA 2.0 DEMO portfolio safety and per-symbol progression tests."""
 import asyncio
 from decimal import Decimal
-from datetime import datetime,timezone
+from datetime import datetime,timezone,timedelta
 from unittest.mock import AsyncMock
 
 import pytest
@@ -85,6 +85,51 @@ def test_martingale_recovery_keeps_symbol_and_original_direction(tmp_path,monkey
             assert entry.stake==Decimal('4.00')
             assert last.duration_minutes==3
     finally:cleanup(engine)
+
+
+def test_recovery_queue_prefers_oldest_settled_loss_not_latest_id(tmp_path,monkeypatch):
+    """An older unresolved Martingale must not be starved by newer losses."""
+    client,factory,engine,uid=prepare(tmp_path,monkeypatch,stop_loss='0.00')
+    try:
+        base=datetime(2026,11,16,13,0,tzinfo=timezone.utc)
+        with factory() as sess:
+            user=sess.get(db.User,uid)
+            sess.add(db.PilotValidationBatch(user_id=uid,after_order_id=0))
+            sess.add(db.RobotRun(user_id=uid,after_order_id=0))
+            sess.add(db.RobotPlan(user_id=uid,requested_martingale=True,
+                gale_count=2,requested_multiplier='2.50'))
+            for i,(symbol,settled_at) in enumerate((
+                ('EURUSD',base),('EURJPY',base+timedelta(minutes=10)),
+                ('GBPUSD',base+timedelta(minutes=20)))):
+                order=db.DemoOrder(user_id=uid,request_key='fair-'+symbol,
+                    state='SETTLED',symbol=symbol,direction='CALL',
+                    duration_minutes=15,stake='2.00',pnl='-2.00',
+                    created_at=settled_at-timedelta(minutes=15),
+                    updated_at=settled_at)
+                sess.add(order)
+                sess.flush()
+                sess.add(db.AutoPilotAttribution(order_id=order.id,user_id=uid,
+                    strategy='test_forex',direction='CALL',reason='teste'))
+            sess.commit()
+        with factory() as sess:
+            user=sess.get(db.User,uid)
+            plan=sess.get(db.RobotPlan,uid)
+            batch=sess.get(db.PilotValidationBatch,uid)
+            rows=sess.scalars(select(db.DemoOrder).order_by(db.DemoOrder.id)).all()
+            entry,last=main.v2_symbol_recovery(sess,user,rows,plan,None,batch)
+            assert (entry.symbol,entry.direction,entry.gale,entry.stake)==(
+                'EURUSD','CALL',1,Decimal('5.00'))
+            assert last.symbol=='EURUSD'
+            # Once an earlier symbol is in an official open state, its
+            # progression must pause without blocking another symbol.
+            first=next(o for o in rows if o.symbol=='EURUSD')
+            first.state='CONFIRMED'
+            sess.flush()
+            entry,last=main.v2_symbol_recovery(sess,user,rows,plan,None,batch)
+            assert entry.symbol=='EURJPY'
+            assert last.symbol=='EURJPY'
+    finally:
+        cleanup(engine)
 
 
 def test_v2_restart_keeps_old_records_out_of_evaluation(tmp_path,monkeypatch):
