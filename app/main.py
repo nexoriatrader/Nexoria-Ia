@@ -555,13 +555,13 @@ async def autopilot_once():
                     if not batch and not m1_recovery_window_open(settlement):
                         autopilot_reasons[uid]='Aguardando abertura de vela M1 para recuperação'
                         continue
-                    if batch and now-autopilot_last_attempt.get(uid,-1e12)<5:
+                    if batch and now-autopilot_last_attempt.get(uid,-1e12)<(1 if pulso_active else 5):
                         log_v2_gate(uid,'RECOVERY_COOLDOWN')
                         continue
                     # Warm the authenticated DEMO socket while there is time.
                     # Otherwise Martingale follows a cold OTP+WS connection and
                     # commonly misses the three-second M5 opening window.
-                    if (batch and SIGNAL_PROFILE=='next_open_v24'
+                    if (batch and not pulso_active and SIGNAL_PROFILE=='next_open_v24'
                         and last is not None
                         and last.duration_minutes in (5,15)
                         and (active_market()=='volatility' if last.duration_minutes==5
@@ -847,61 +847,95 @@ async def autopilot_loop():
         await asyncio.sleep(1)
 
 
-async def reconcile_confirmed_orders_once():
-    """Read official settlement for known contract IDs; never send broker buys.
+def _reconciliation_due(order, now=None):
+    """Skip far-from-expiry contracts; check officially sold/unknown ones ASAP.
 
-    Include UNKNOWN only when Deriv's contract ID is already durably known.
-    A contract without ID cannot be automatically reconciled safely.
-    Prioritize recent contracts so older unresolved records cannot starve them.
+    A short early margin catches broker closures near their expected expiry.
+    Never infer a WIN/LOSS from time alone.
     """
+    if order.state=='UNKNOWN':
+        return True
+    when=order.broker_purchase_at or order.created_at
+    if when is None:
+        return True
+    if when.tzinfo is None:
+        when=when.replace(tzinfo=timezone.utc)
+    current=now or datetime.now(timezone.utc)
+    return (current-when).total_seconds()>=order.duration_minutes*60-3
+
+
+async def _reconcile_one_order(order_id):
+    # Queries to Deriv are read-only and can be made independently per
+    # contract; only database settlement requires the shared reconcile lock.
     with db.SessionLocal() as s:
-        order_ids=s.scalars(select(db.DemoOrder.id).where(
-            db.DemoOrder.state.in_(('CONFIRMED','UNKNOWN')),
-            db.DemoOrder.contract_id.is_not(None))
-            .order_by(db.DemoOrder.id.desc()).limit(100)).all()
-    for order_id in order_ids:
+        order=s.get(db.DemoOrder,order_id)
+        if not order or order.state not in ('CONFIRMED','UNKNOWN') or not order.contract_id:
+            return
+        if not _reconciliation_due(order):
+            return
+        user=s.get(db.User,order.user_id)
+        if not user:
+            return
+        sessions=s.scalars(select(db.Session).where(db.Session.user_id==user.id)
+                               .order_by(db.Session.created_at.desc())).all()
+        token=None
+        for auth_session in sessions:
+            expiry=auth_session.expires_at
+            if expiry.tzinfo is None:
+                expiry=expiry.replace(tzinfo=timezone.utc)
+            if expiry<=db.utcnow():
+                continue
+            try:
+                token=decrypt(auth_session.token_encrypted)
+            except Exception as exc:
+                log.warning('Demo reconciliation session unavailable: %s',type(exc).__name__)
+                continue
+            break
+        account_id=user.deriv_account_id
+        contract_id=order.contract_id
+    if not token:
+        return
+    try:
+        receipt=await demo_contract_status(token,account_id,contract_id)
         async with reconcile_lock:
             with db.SessionLocal() as s:
                 order=s.get(db.DemoOrder,order_id)
-                if not order or order.state not in ('CONFIRMED','UNKNOWN') or not order.contract_id:
-                    continue
-                user=s.get(db.User,order.user_id)
-                if not user:
-                    continue
-                sessions=s.scalars(select(db.Session).where(db.Session.user_id==user.id)
-                                   .order_by(db.Session.created_at.desc())).all()
-                token=None
-                for auth_session in sessions:
-                    expiry=auth_session.expires_at
-                    if expiry.tzinfo is None:
-                        expiry=expiry.replace(tzinfo=timezone.utc)
-                    if expiry<=db.utcnow():
-                        continue
-                    try:
-                        token=decrypt(auth_session.token_encrypted)
-                    except Exception as exc:
-                        log.warning('Demo reconciliation session unavailable: %s',type(exc).__name__)
-                        continue
-                    break
-                account_id=user.deriv_account_id
-                contract_id=order.contract_id
-            if not token:
-                continue
+                if not order or order.state not in ('CONFIRMED','UNKNOWN'):
+                    return
+                try:
+                    settled=settle(s,order,receipt.get('contract',{}))
+                except OrderGuardError as exc:
+                    log.warning('Demo reconciliation rejected: order=%s error=%s',order_id,type(exc).__name__)
+                    return
+                if settled:
+                    log.info('Demo contract settlement recorded from Deriv: order=%s',order_id)
+    except DemoTradingError as exc:
+        log.warning('Demo reconciliation unavailable: order=%s error=%s',order_id,type(exc).__name__)
+
+
+async def reconcile_confirmed_orders_once():
+    """Poll due contracts concurrently, without guessing any outcomes.
+
+    Limit read-only broker status requests to four simultaneous sockets.
+    Reserve/confirm/unknown ledger protections are unchanged.
+    """
+    with db.SessionLocal() as s:
+        rows=s.scalars(select(db.DemoOrder).where(
+            db.DemoOrder.state.in_(('CONFIRMED','UNKNOWN')),
+            db.DemoOrder.contract_id.is_not(None))
+            .order_by(db.DemoOrder.id.desc()).limit(100)).all()
+        due_ids=[o.id for o in rows if _reconciliation_due(o)]
+    sem=asyncio.Semaphore(4)
+    async def process(order_id):
+        async with sem:
             try:
-                receipt=await demo_contract_status(token,account_id,contract_id)
-                with db.SessionLocal() as s:
-                    order=s.get(db.DemoOrder,order_id)
-                    if not order or order.state not in ('CONFIRMED','UNKNOWN'):
-                        continue
-                    try:
-                        settled=settle(s,order,receipt.get('contract',{}))
-                    except OrderGuardError as exc:
-                        log.warning('Demo reconciliation rejected: order=%s error=%s',order_id,type(exc).__name__)
-                        continue
-                    if settled:
-                        log.info('Demo contract settlement recorded from Deriv: order=%s',order_id)
-            except DemoTradingError as exc:
-                log.warning('Demo reconciliation unavailable: order=%s error=%s',order_id,type(exc).__name__)
+                await _reconcile_one_order(order_id)
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                log.exception('Demo reconciliation failed for order=%s',order_id)
+    if due_ids:
+        await asyncio.gather(*(process(order_id) for order_id in due_ids))
 
 
 async def reconcile_confirmed_loop():
@@ -910,9 +944,12 @@ async def reconcile_confirmed_loop():
             await reconcile_confirmed_orders_once()
         except asyncio.CancelledError:
             raise
-        except Exception as exc:
-            log.warning('Demo reconciliation loop failed: %s',type(exc).__name__)
-        await asyncio.sleep(3)
+        except Exception:
+            log.exception('Demo reconciliation loop failed')
+        # Poll near-expiry/unknown contracts promptly, without opening
+        # repeated broker sockets for contracts that cannot have expired yet.
+        await asyncio.sleep(1)
+
 
 @asynccontextmanager
 async def lifespan(app):
