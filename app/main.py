@@ -756,7 +756,9 @@ async def autopilot_once():
                         continue
                     candidate['minutes']=best_offer[1]
                     if auto_expiry:
-                        candidate['strategy']=candidate['strategy']+'_m'+str(best_offer[1])
+                        # Expiry already lives in DemoOrder.duration_minutes and reason.
+                        # Never append it to strategy: the DB identifier is VARCHAR(32).
+                        # AUTO strategy IDs can reach that limit before the suffix.
                         candidate['reason']=candidate['reason']+' · AUTO M'+str(best_offer[1])
                         state=automation_scan_progress.get(uid)
                         if state: state['selected_expiry']=best_offer[1]
@@ -2261,19 +2263,38 @@ async def perform_demo_buy(user, token, payload:DemoBuy, *, attribution:dict|Non
         if not created:
             return {**public_order(order),'replayed':True,'no_new_buy':True}
         if attribution:
-            # Persist attribution and execution progression BEFORE broker I/O;
-            # never claim a Martingale or Cycle from the stake alone.
-            s.add(db.AutoPilotAttribution(order_id=order_id,user_id=user.id,
-                   strategy=attribution['strategy'],direction=payload.direction,
-                   reason=str(attribution['reason'])[:255]))
-            if 'cycle_index' in attribution and 'gale_index' in attribution:
-                s.add(db.DemoOrderProgression(order_id=order_id,user_id=user.id,
-                    cycle_index=int(attribution['cycle_index']),
-                    gale_index=int(attribution['gale_index']),
-                    gale_multiplier=str(attribution['gale_multiplier']),
-                    cycle_multiplier=str(attribution['cycle_multiplier']),
-                    source='autopilot',account_mode='demo'))
-            s.commit()
+            # Persist attribution and progression before any Deriv buy request.
+            # A failed write must release only its pre-buy reservation, never a
+            # contract that may already have been transmitted to the broker.
+            try:
+                strategy=str(attribution['strategy'])
+                if len(strategy)>32:
+                    raise ValueError('Identificador de estratégia excede 32 caracteres')
+                s.add(db.AutoPilotAttribution(order_id=order_id,user_id=user.id,
+                       strategy=strategy,direction=payload.direction,
+                       reason=str(attribution['reason'])[:255]))
+                if 'cycle_index' in attribution and 'gale_index' in attribution:
+                    s.add(db.DemoOrderProgression(order_id=order_id,user_id=user.id,
+                        cycle_index=int(attribution['cycle_index']),
+                        gale_index=int(attribution['gale_index']),
+                        gale_multiplier=str(attribution['gale_multiplier']),
+                        cycle_multiplier=str(attribution['cycle_multiplier']),
+                        source='autopilot',account_mode='demo'))
+                s.commit()
+            except Exception:
+                s.rollback()
+                log.exception('AutoPilot attribution persistence failed before Deriv buy: order=%s',order_id)
+                try:
+                    with db.SessionLocal() as recovery:
+                        pending=recovery.get(db.DemoOrder,order_id,with_for_update=True)
+                        if pending and pending.state=='PENDING' and pending.contract_id is None:
+                            pending.state='CANCELLED'
+                            pending.active_slot=None
+                            pending.error_summary='Falha interna antes de enviar compra à Deriv'
+                            recovery.commit()
+                except Exception:
+                    log.exception('Could not release pre-buy reservation: order=%s',order_id)
+                raise HTTPException(503,'Falha interna antes do envio à Deriv. Nenhuma compra enviada nesta tentativa.') from None
     # Never hold DB transaction across remote Deriv call.
     try:
         buy_kwargs={'symbol':payload.symbol,'contract_type':payload.direction,
