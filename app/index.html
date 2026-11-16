@@ -947,7 +947,7 @@ html,body{max-width:100%;overflow-x:clip}
         <label class="auto-choice"><input type="radio" name="autoStrategy" value="rsi"> Reversão RSI <small>RSI e confirmação de reversão</small></label>
       </div>
       <div class="field"><label for="autoDirection">Direção das entradas</label><select id="autoDirection"><option value="AUTO">Automática conforme estratégia</option><option value="CALL">Somente CALL / Alta</option><option value="PUT">Somente PUT / Baixa</option></select></div>
-      <div class="field"><label>Indicadores selecionados</label><p class="helper">Primeiro escolha a estratégia. Aqui aparecem somente os indicadores compatíveis. O indicador essencial fica ativo e você pode escolher no máximo um filtro complementar para evitar excesso de restrições.</p><p id="autoIndicatorRecommendation" class="auto-indicator-recommendation" role="status"></p></div>
+      <div class="field"><label>Indicadores selecionados</label><p class="helper">Escolha livremente nenhum, um ou vários indicadores de confirmação. Cada filtro adicional precisa concordar com o sinal; filtros demais podem reduzir a frequência de operações.</p><p id="autoIndicatorRecommendation" class="auto-indicator-recommendation" role="status"></p></div>
       <div class="auto-symbols" id="autoIndicators">
         <label><input type="checkbox" value="EMA"> Média móvel exponencial (EMA)</label>
         <label><input type="checkbox" value="SMA"> Média móvel simples (SMA)</label>
@@ -2081,51 +2081,22 @@ document.querySelectorAll('input[name="autoMode"]').forEach(x=>x.addEventListene
  changeAutomationAccount();renderAutomationSummary();
 }));
 const automationStrategyDefaults={
- pulso_v2:{
-  indicators:['ATR'],required:['ATR'],allowed:['ATR','BOLLINGER'],
-  label:'PULSO V2: ATR é parte obrigatória; Bollinger pode ser adicionado como confirmação.'
- },
- trend:{
-  indicators:['EMA','MACD'],required:['EMA'],
-  allowed:['EMA','MACD','ATR'],
-  label:'Tendência + Pullback: EMA 20/50 obrigatória; escolha MACD ou ATR como um único filtro extra.'
- },
- rsi:{
-  indicators:['RSI'],required:['RSI'],
-  allowed:['RSI','ATR'],
-  label:'Reversão RSI: RSI obrigatório; ATR é o único filtro complementar disponível.'
- }
+ pulso_v2:{indicators:['ATR'],label:'PULSO V2: os indicadores escolhidos são filtros opcionais; mais filtros podem reduzir a frequência de sinais.'},
+ trend:{indicators:['EMA'],label:'Tendência + Pullback: combine livremente indicadores de confirmação.'},
+ rsi:{indicators:['RSI'],label:'Reversão RSI: combine livremente indicadores de confirmação.'}
 };
 function updateStrategyIndicators(selection){
  const preset=automationStrategyDefaults[automationRadio('autoStrategy')]||automationStrategyDefaults.pulso_v2;
- const allowed=new Set(preset.allowed),required=new Set(preset.required);
  const values=new Set(Array.isArray(selection)?selection:preset.indicators);
- for(const value of required)values.add(value);
- // No more than one extra confirmation, avoiding over-filtered strategies.
- let selectedExtra=false;
- for(const value of [...values]){
-  if(!allowed.has(value)){values.delete(value);continue}
-  if(!required.has(value)){
-   if(selectedExtra)values.delete(value);
-   else selectedExtra=true;
-  }
- }
  document.querySelectorAll('#autoIndicators input[type="checkbox"]').forEach(input=>{
-  const value=input.value;
-  const compatible=allowed.has(value);
-  const fixed=required.has(value);
-  input.checked=compatible&&values.has(value);
-  input.disabled=!compatible||fixed;
+  input.disabled=false;
+  input.checked=values.has(input.value);
   const label=input.closest('label');
   if(label){
-   label.classList.toggle('auto-incompatible',!compatible);
-   label.classList.toggle('auto-core-indicator',fixed);
-   label.hidden=!compatible;
-   let indicatorNote=label.querySelector('.auto-indicator-note');
-   if(fixed){
-    if(!indicatorNote){indicatorNote=document.createElement('small');indicatorNote.className='auto-indicator-note';label.append(indicatorNote)}
-    indicatorNote.textContent='Essencial · sempre ativo';
-   }else if(indicatorNote){indicatorNote.remove()}
+   label.hidden=false;
+   label.classList.remove('auto-incompatible','auto-core-indicator');
+   const note=label.querySelector('.auto-indicator-note');
+   if(note)note.remove();
   }
  });
  $('autoIndicatorRecommendation').textContent=preset.label;
@@ -2133,19 +2104,9 @@ function updateStrategyIndicators(selection){
 }
 document.querySelectorAll('#autoIndicators input[type="checkbox"]').forEach(input=>{
  input.addEventListener('change',()=>{
-  const preset=automationStrategyDefaults[automationRadio('autoStrategy')];
-  if(!preset.allowed.includes(input.value)||preset.required.includes(input.value)){
-   updateStrategyIndicators([...document.querySelectorAll('#autoIndicators input:checked')].map(x=>x.value));
-   return;
-  }
-  if(input.checked){
-   document.querySelectorAll('#autoIndicators input[type="checkbox"]').forEach(other=>{
-    if(other!==input&&!preset.required.includes(other.value)&&other.checked)other.checked=false;
-   });
-  }
   automationProfileSaved=false;
-  const extras=[...document.querySelectorAll('#autoIndicators input:checked')].filter(x=>!preset.required.includes(x.value));
-  $('autoIndicatorRecommendation').textContent=preset.label+' · '+(extras.length?'Filtro complementar: '+extras[0].value:'Sem filtros complementares.');
+  const count=document.querySelectorAll('#autoIndicators input:checked').length;
+  $('autoIndicatorRecommendation').textContent=count+' filtro(s) escolhido(s). Nenhum indicador adicional é obrigatório; todos devem confirmar para validar um sinal.';
   renderAutomationSummary();
  });
 });
