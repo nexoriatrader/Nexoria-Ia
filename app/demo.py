@@ -195,6 +195,66 @@ async def demo_proposal(token: str, account_id: str, *, symbol: str,
         raise DemoTradingError("Não foi possível consultar proposal na conta demo") from exc
 
 
+
+async def demo_expiry_quotes(token: str, account_id: str, *, symbol: str,
+                             contract_type: str, stake: str,
+                             durations=(1, 3, 5, 15)) -> dict:
+    """Read-only multi-expiry DEMO quotes over ONE authenticated connection.
+
+    Each expiry has its own req_id. A failed or missing quote is excluded, not
+    interpreted as a tradable contract. Purchases still make a fresh proposal
+    and enforce the configured minimum payout.
+    """
+    if contract_type not in {"CALL", "PUT"}:
+        raise DemoTradingError("Direção DEMO inválida")
+    if not isinstance(symbol, str) or not re.fullmatch(r'[A-Za-z0-9_]{2,30}', symbol):
+        raise DemoTradingError("Ativo DEMO inválido")
+    durations=tuple(dict.fromkeys(int(x) for x in durations))
+    if not durations or any(x not in (1,3,5,15) for x in durations):
+        raise DemoTradingError("Expirações DEMO inválidas")
+    url=await get_demo_ws_url(token,account_id)
+    async with websockets.connect(url,ping_interval=20,ping_timeout=10) as ws:
+        currency=cached_demo_currency(account_id)
+        if currency is None:
+            _,currency=await _read_balance(ws,7200)
+            remember_demo_currency(account_id,currency)
+        currency=_currency(currency)
+        pending={}
+        for n,duration in enumerate(durations):
+            req_id=7210+n
+            pending[req_id]=duration
+            await ws.send(json.dumps({
+                "proposal":1,"amount":_amount(stake),"basis":"stake",
+                "contract_type":contract_type,"currency":currency,
+                "duration":duration,"duration_unit":"m",
+                "underlying_symbol":symbol,"req_id":req_id
+            }))
+        offers={}
+        failures={}
+        while pending:
+            message=json.loads(await ws.recv())
+            if not isinstance(message,dict):
+                continue
+            req_id=message.get("req_id")
+            if req_id not in pending:
+                continue
+            duration=pending.pop(req_id)
+            if message.get("error"):
+                code=message["error"].get("code","UNSPECIFIED")
+                failures[duration]=code if isinstance(code,str) and re.fullmatch(r"[A-Za-z0-9_]{1,64}",code) else "UNSPECIFIED"
+                continue
+            proposal=message.get("proposal")
+            if not isinstance(proposal,dict):
+                failures[duration]="INVALID_PROPOSAL"
+                continue
+            offers[duration]={
+                "ask_price":str(proposal.get("ask_price","")),
+                "payout":str(proposal.get("payout","")),
+                "currency":str(proposal.get("currency",currency))
+            }
+        return {"offers":offers,"failures":failures}
+
+
 # V2.4 only: an authenticated, warmed DEMO WebSocket can be acquired
 # before a candle opens. No buy or proposal is sent during warming.
 # Memory-only: a Render restart drops all sessions.
