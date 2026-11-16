@@ -43,6 +43,18 @@ class RobotAccess(Base):
     suspended=Column(Boolean,nullable=False,default=False)
 
 
+class StripeAccessPurchase(Base):
+    """One authenticated checkout; webhook fulfillment uses idempotent row lock."""
+    __tablename__ = 'stripe_access_purchases'
+    checkout_session_id = Column(String(255), primary_key=True)
+    user_id = Column(Integer, ForeignKey('users.id'), nullable=False, index=True)
+    plan_id = Column(String(24), nullable=False)
+    amount_cents = Column(Integer, nullable=False)
+    status = Column(String(24), nullable=False, default='PENDING')
+    created_at = Column(DateTime(timezone=True), default=utcnow, nullable=False)
+    paid_at = Column(DateTime(timezone=True), nullable=True)
+
+
 class ReferralLink(Base):
     """Opaque public referral code; never expose Deriv identifiers."""
     __tablename__='referral_links'

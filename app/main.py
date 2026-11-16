@@ -15,6 +15,7 @@ from pydantic import BaseModel
 from sqlalchemy import select, delete, func
 
 from . import db
+from .stripe_billing import PLANS, billing_enabled, create_checkout, stripe_signature_valid, apply_paid_checkout
 from .automation_markets import GROUPS as AUTOMATION_GROUPS, instruments_by_group
 from .access import (access_control_enabled, access_status, start_trial_on_first_robot_start,
                      register_first_login, referral_report, utc)
@@ -1664,6 +1665,80 @@ async def my_access_status(request:Request,nexora_sid:str|None=Cookie(default=No
         referral=referral_report(sess,user.id)
         sess.commit()
         return {**status,**referral,'user_id':'NXR-'+str(user.id).zfill(6)}
+
+
+class BillingCheckoutRequest(BaseModel):
+    plan_id: str
+
+
+@app.get('/api/billing/plans')
+async def billing_plans():
+    return {'enabled': billing_enabled(),
+            'recurring': False,
+            'plans': [{'id':key,'name':v['name'],'days':v['days'],
+                       'currency':'BRL','amount_cents':v['cents']} for key,v in PLANS.items()]}
+
+
+@app.post('/api/billing/checkout')
+async def billing_checkout(request:Request,payload:BillingCheckoutRequest,
+                           nexora_sid:str|None=Cookie(default=None)):
+    user=active_user(request,nexora_sid)
+    if not billing_enabled():
+        raise HTTPException(503,'Pagamentos ainda não configurados')
+    if payload.plan_id not in PLANS:
+        raise HTTPException(422,'Plano inválido')
+    site_url=os.getenv('NEXORA_PUBLIC_URL','https://nexoria-ia.onrender.com').rstrip('/')
+    if not site_url.startswith('https://') or urlsplit(site_url).hostname not in (
+            'nexoria-ia.onrender.com',):
+        raise HTTPException(503,'URL pública de cobrança não configurada')
+    try:
+        checkout=await create_checkout(os.environ['STRIPE_SECRET_KEY'],
+                  user_id=user.id,plan_id=payload.plan_id,site_url=site_url)
+    except RuntimeError as exc:
+        log.warning('Stripe Checkout unavailable for user=%s',user.id)
+        raise HTTPException(502,str(exc)) from None
+    with db.SessionLocal() as sess:
+        sess.add(db.StripeAccessPurchase(
+            checkout_session_id=checkout['id'],user_id=user.id,
+            plan_id=payload.plan_id,
+            amount_cents=PLANS[payload.plan_id]['cents'],
+            status='PENDING'))
+        sess.commit()
+    return {'url':checkout['url']}
+
+
+@app.post('/api/billing/stripe/webhook')
+async def billing_stripe_webhook(request:Request):
+    if not billing_enabled():
+        raise HTTPException(503,'Webhook de cobrança indisponível')
+    raw=await request.body()
+    if len(raw)>262144:
+        raise HTTPException(413,'Evento muito grande')
+    if not stripe_signature_valid(raw,request.headers.get('stripe-signature',''),
+                os.environ['STRIPE_WEBHOOK_SECRET']):
+        raise HTTPException(400,'Assinatura inválida')
+    try:
+        event=json.loads(raw)
+        kind=event.get('type')
+        obj=event['data']['object']
+    except (ValueError,KeyError,TypeError,AttributeError):
+        raise HTTPException(400,'Evento inválido') from None
+    if kind not in ('checkout.session.completed','checkout.session.async_payment_succeeded'):
+        return {'received':True}
+    if not isinstance(obj,dict):
+        raise HTTPException(400,'Sessão de pagamento inválida')
+    if obj.get('payment_status')!='paid':
+        return {'received':True,'status':'awaiting_payment'}
+    with db.SessionLocal() as sess:
+        result=apply_paid_checkout(sess,obj)
+        if result in ('invalid_payment','unknown_plan'):
+            log.warning('Stripe payment validation rejected: result=%s',result)
+            raise HTTPException(400,'Pagamento inconsistente')
+        if result=='unknown_checkout':
+            # Stripe retries after transaction creating local checkout settles.
+            raise HTTPException(503,'Checkout ainda não registrado')
+        sess.commit()
+    return {'received':True,'status':result}
 
 
 from . import admin_auth
