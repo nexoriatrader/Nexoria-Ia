@@ -73,3 +73,21 @@ def test_rejected_outcome_and_no_arbitrary_stake_caps():
 def test_cycles_disabled_stay_flat_after_exhausted_gale():
     a=calculate([row(1,2,-2),row(2,4,-4)],cycles_enabled=False)
     assert a.stake==Decimal('2.00')
+
+
+def test_cycles_work_without_martingale():
+    # With no gales, a LOSS completes the current cycle and increases the
+    # next cycle's stake; a WIN still returns to the original amount.
+    only_cycles=dict(base='1.00',gale_enabled=False,gales=0,
+                     gale_multiplier='2.50',cycles=2,cycles_enabled=True,
+                     cycle_multiplier='2.50')
+    first=next_entry(orders=[],**only_cycles)
+    assert (first.stake,first.cycle,first.gale)==(Decimal('1.00'),0,0)
+    second=next_entry(orders=[row(1,1,-1)],**only_cycles)
+    assert (second.stake,second.cycle,second.gale)==(Decimal('2.50'),1,0)
+    third=next_entry(orders=[row(1,1,-1),row(2,'2.50',-2.50)],**only_cycles)
+    assert (third.stake,third.cycle,third.gale)==(Decimal('6.25'),2,0)
+    reset=next_entry(orders=[row(1,1,-1),row(2,'2.50',2.20)],**only_cycles)
+    assert (reset.stake,reset.cycle,reset.gale)==(Decimal('1.00'),0,0)
+    with pytest.raises(ProgressionHalt,match='ciclos concluída'):
+        next_entry(orders=[row(1,1,-1),row(2,'2.50',-2.5),row(3,'6.25',-6.25)],**only_cycles)
