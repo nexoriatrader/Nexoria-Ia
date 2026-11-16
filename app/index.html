@@ -1231,8 +1231,8 @@ html,body{max-width:100%;overflow-x:clip}
     <div class="account-plans-title"><div><div class="eyebrow">MAIS TEMPO COM O NEXORA</div><h2 id="accountPlansHeading">Planos de acesso</h2><p>Escolha o período que melhor combina com você.</p></div></div>
     <div class="account-plans-grid">
       <article class="account-plan"><span class="account-plan-name">QUINZENAL</span><h3>15 dias</h3><div class="account-plan-price"><small>R$</small> 29,90</div><p>Acesso ao robô por 15 dias.</p><div class="account-plan-foot">Plano informativo</div></article>
-      <article class="account-plan account-plan-featured"><span class="account-plan-name">MENSAL</span><h3>30 dias</h3><div class="account-plan-price"><small>R$</small> 49,90</div><p>Acesso ao robô por 30 dias.</p><div class="account-plan-foot">Plano informativo</div></article>
-      <article class="account-plan"><span class="account-plan-name">TRIMESTRAL</span><h3>90 dias</h3><div class="account-plan-price"><small>R$</small> 99,00</div><p>Acesso ao robô por 90 dias.</p><div class="account-plan-foot">Plano informativo</div></article>
+      <article class="account-plan account-plan-featured"><span class="account-plan-name">MENSAL</span><h3>1 mês</h3><div class="account-plan-price"><small>R$</small> 49,90</div><p>Acesso ao robô no plano mensal.</p><div class="account-plan-foot">Plano informativo</div></article>
+      <article class="account-plan"><span class="account-plan-name">TRIMESTRAL</span><h3>3 meses</h3><div class="account-plan-price"><small>R$</small> 99,00</div><p>Acesso ao robô no plano trimestral.</p><div class="account-plan-foot">Plano informativo</div></article>
     </div>
     <p class="account-plans-note">Os planos estão disponíveis para consulta. A contratação online ainda não está habilitada nesta página; nenhum pagamento é realizado aqui.</p>
   </section>
@@ -1358,7 +1358,7 @@ function updateResultsPolling(){
    },activePage==='dashboard'?7000:3000);
  }
 }
-function go(v){page(v);updateResultsPolling();window.scrollTo({top:0,behavior:'smooth'});if(v==='setup')loadOnboarding();if(v==='dashboard'){refreshDashboard();loadDemoOrders().catch(()=>{});}if(v==='robot-config'){initAutomationWizard();setAutomationWizardStep(1);loadAutomationProfile();}if(v==='results'){loadDemoOrders();}if(v==='account'){loadDemoBalance();loadRobotAccess()}if(v==='settings')loadSettings()}
+function go(v){page(v);updateResultsPolling();window.scrollTo({top:0,behavior:'smooth'});if(v==='setup')loadOnboarding();if(v==='dashboard'){refreshDashboard();loadDemoOrders().catch(()=>{});}if(v==='robot-config'){initAutomationWizard();setAutomationWizardStep(1);loadAutomationProfile();}if(v==='results'){loadDemoOrders();}if(v==='account'){loadRobotAccess()}if(v==='settings')loadSettings()}
 function fail(msg){$('error').textContent=msg||''}
 async function req(path,opts={}){const r=await fetch(path,{credentials:'same-origin',...opts});let data;try{data=await r.json()}catch{throw Error('Resposta inválida do servidor')}if(!r.ok)throw Error(data.detail||'Falha na conexão');return data}
 function startNexoraTrial(event){
