@@ -19,7 +19,7 @@ from .automation_markets import GROUPS as AUTOMATION_GROUPS, instruments_by_grou
 from .access import (access_control_enabled, access_status, start_trial_on_first_robot_start,
                      register_first_login, referral_report, utc)
 from .demo import (DemoTradingError, DemoPreBuyDeadlineExceeded, demo_account_balance,
-                   demo_contract_status, demo_buy, demo_proposal,
+                   demo_contract_status, demo_buy, demo_proposal, demo_expiry_quotes,
                    prepare_demo_buy_socket)
 from .demo_ledger import OrderGuardError, reserve, public_order, confirmed, unknown, settle
 from .autopilot import analyze, quote_assessment
@@ -707,39 +707,52 @@ async def autopilot_once():
                     best_offer=None
                     cutoff=(candidate.get('last_bar_epoch',0)+60+12
                             if pulso_active and not entry.retry else None)
-                    async def inspect_expiry(duration):
-                        try:
-                            quote=await demo_proposal(token,user.deriv_account_id,
-                                symbol=candidate['symbol'],contract_type=candidate['direction'],
-                                stake=str(entry.stake),duration=duration)
-                            ask=Decimal(str(quote['ask_price']))
-                            payout=Decimal(str(quote['payout']))
-                            if (not ask.is_finite() or not payout.is_finite()
-                                or ask<=0 or ask>entry.stake or payout<ask*selected_ratio):
-                                return None
-                            return (payout/ask,duration)
-                        except (DemoTradingError,InvalidOperation,KeyError,ValueError,TypeError) as exc:
-                            log.info('NEXORA expiry offer unavailable: symbol=%s duration=%s error=%s',
-                                     candidate['symbol'],duration,type(exc).__name__)
-                            return None
-                    timeout=max(0.0,min(4.0,cutoff-time.time()-0.5)) if cutoff else 4.0
+                    checked_expiry=[]
+                    rejected_expiry=[]
+                    quote_failure="none"
+                    quote_elapsed_start=time.monotonic()
+                    timeout=max(0.0,min(6.0,cutoff-time.time()-0.7)) if cutoff else 6.0
                     if timeout>0:
-                        tasks=[asyncio.create_task(inspect_expiry(duration)) for duration in durations]
                         try:
-                            done,pending=await asyncio.wait(tasks,timeout=timeout)
-                            for task in pending: task.cancel()
-                            offers=[task.result() for task in done if not task.cancelled()
-                                    and task.exception() is None and task.result() is not None]
-                            if offers:
-                                # Highest actual quoted return; tie-breaker favors
-                                # longer durations, never an invented accuracy score.
-                                best_offer=max(offers,key=lambda offer:(offer[0],offer[1]))
-                        finally:
-                            for task in tasks:
-                                if not task.done(): task.cancel()
+                            response=await asyncio.wait_for(demo_expiry_quotes(
+                                token,user.deriv_account_id,
+                                symbol=candidate['symbol'],contract_type=candidate['direction'],
+                                stake=str(entry.stake),durations=durations),timeout=timeout)
+                            for duration,proposal in response['offers'].items():
+                                checked_expiry.append(duration)
+                                try:
+                                    ask=Decimal(str(proposal['ask_price']))
+                                    payout=Decimal(str(proposal['payout']))
+                                    if (not ask.is_finite() or not payout.is_finite()
+                                        or ask<=0 or ask>entry.stake or payout<ask*selected_ratio):
+                                        rejected_expiry.append(duration)
+                                        continue
+                                    ratio=payout/ask
+                                    if best_offer is None or (ratio,duration)>(best_offer[0],best_offer[1]):
+                                        best_offer=(ratio,duration)
+                                except (InvalidOperation,ValueError,KeyError,TypeError):
+                                    rejected_expiry.append(duration)
+                            for duration,code in response['failures'].items():
+                                log.info('NEXORA expiry rejected by Deriv: symbol=%s duration=%s deriv_code=%s',
+                                         candidate['symbol'],duration,code)
+                        except asyncio.TimeoutError:
+                            quote_failure="timeout"
+                        except (DemoTradingError,OSError,ValueError,TypeError) as exc:
+                            quote_failure=type(exc).__name__
+                    else:
+                        quote_failure="expired_before_quotes"
+                    elapsed=round(time.monotonic()-quote_elapsed_start,3)
+                    log.warning('NEXORA expiry scan: symbol=%s checked=%s rejected_payout=%s chosen=%s failure=%s elapsed_s=%s',
+                                candidate['symbol'],checked_expiry,rejected_expiry,
+                                best_offer[1] if best_offer else None,quote_failure,elapsed)
                     if best_offer is None:
-                        autopilot_reasons[uid]='Nenhuma expiração com proposta DEMO e payout mínimo válidos'
-                        log_v2_gate(uid,'NO_VALID_EXPIRY',detail='symbol='+str(candidate['symbol']))
+                        if quote_failure=='timeout':
+                            autopilot_reasons[uid]='Deriv demorou a responder às propostas de expiração; entrada descartada com segurança'
+                        elif quote_failure!='none':
+                            autopilot_reasons[uid]='Falha na consulta de expiração: '+quote_failure
+                        else:
+                            autopilot_reasons[uid]='Nenhuma expiração atendeu ao payout mínimo ou à disponibilidade na Deriv'
+                        log_v2_gate(uid,'NO_VALID_EXPIRY',detail='symbol='+str(candidate['symbol'])+' reason='+quote_failure)
                         continue
                     candidate['minutes']=best_offer[1]
                     if auto_expiry:
