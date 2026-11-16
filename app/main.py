@@ -489,21 +489,26 @@ async def autopilot_once():
                 # PULSO V2 replaces the legacy scanner for every manually
                 # armed DEMO evaluation; no extra strategy-selection button.
                 pulso_active=bool(batch and v2_enabled())
-                profile=None
+                profile=sess.get(db.AutomationProfile,uid) if pulso_active else None
                 if not batch and not connected:
                     continue
                 # The goal of 50 trades is informational, NOT an execution cap.
                 # Risk stops and broker-uncertainty safeguards remain mandatory.
                 try:
                     if pulso_active:
-                        # PULSO is independent of legacy V2 recovery, cycles,
-                        # Martingale and legacy trend scanner. Fixed stake only.
+                        # Broker uncertainty blocks purchases across all symbols.
+                        # CONFIRMED contracts may coexist on different symbols,
+                        # but same-symbol slots stay locked through the ledger.
                         active=[o for o in orders if o.state in ('PENDING','CONFIRMED','UNKNOWN')]
-                        if active:
-                            autopilot_reasons[uid]='PULSO DEMO: aguardando liquidação e reconciliação do contrato anterior'
+                        if any(o.state in ('PENDING','UNKNOWN') for o in active):
+                            autopilot_reasons[uid]='Contrato DEMO pendente ou incerto; aguardando reconciliação'
+                            log_v2_gate(uid,'PENDING_OR_UNKNOWN_CONTRACT')
                             continue
-                        entry=NextEntry(stake=Decimal(str(user.stake)),cycle=0,gale=0,retry=False)
-                        last=None
+                        entry=last=None
+                        if plan and (plan.requested_martingale or plan.cycles_limit):
+                            entry,last=v2_symbol_recovery(sess,user,orders,plan,cycle_cfg,batch)
+                        if entry is None:
+                            entry=NextEntry(stake=Decimal(str(user.stake)),cycle=0,gale=0,retry=False)
                     elif batch:
                         active=[o for o in orders if o.state in ('PENDING','CONFIRMED','UNKNOWN')]
                         if any(o.state in ('PENDING','UNKNOWN') for o in active):
@@ -579,7 +584,6 @@ async def autopilot_once():
                     if batch and pulso_active:
                         if now-autopilot_last_attempt.get(uid,-1e12)<8:
                             continue
-                        profile=sess.get(db.AutomationProfile,uid)
                         allowed_symbols=None
                         if profile is not None:
                             if (profile.account_mode!='demo'
@@ -606,7 +610,9 @@ async def autopilot_once():
                             candidate=await confirmed_automation_signal(
                                 profile,
                                 scan_event=lambda event,symbol,total,reason=None: record_automation_scan(
-                                    uid,event,symbol,total,reason))
+                                    uid,event,symbol,total,reason),
+                                excluded_symbols=[o.symbol for o in orders
+                                                  if o.state in ('PENDING','CONFIRMED','UNKNOWN')])
                         except (MarketError,ValueError,TimeoutError,OSError) as exc:
                             state=automation_scan_progress.get(uid)
                             if state: state.update(stage='waiting',active_symbol=None,last_reason='dados_indisponiveis')
@@ -2054,9 +2060,6 @@ async def save_onboarding_config(request:Request,payload:OnboardingConfig,
                                  'martingale':False,'multiplier':'2'})
     except ValueError as e:
         raise HTTPException(422,str(e)) from None
-    from .progression import CAP_PER_TRADE
-    if settings.stake>CAP_PER_TRADE:
-        raise HTTPException(422,'Entrada inicial excede o limite de US$ 100 da sequência')
     async with autopilot_lock:
         if u.id in autopilot_enabled:
             raise HTTPException(409,'Desligue o robô antes de salvar uma nova progressão')
