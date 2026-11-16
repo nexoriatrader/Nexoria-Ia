@@ -9,8 +9,6 @@ Orders remain one-at-a-time and unknown outcomes must block all progression.
 from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 
-CAP_PER_TRADE=Decimal('100.00')
-CAP_SEQUENCE=Decimal('100.00')
 
 
 class ProgressionHalt(Exception):
@@ -54,7 +52,6 @@ def next_entry(*, base, gale_enabled, gales, gale_multiplier, cycles, cycle_mult
     if cycles_enabled and cycles is not None and cycles not in (1,2,3,4,5):
         raise ProgressionHalt('Quantidade de ciclos inválida')
     cycle=gale=0
-    total=Decimal('0')
     previous=None
     last_id=-1
     for row in orders:
@@ -73,9 +70,6 @@ def next_entry(*, base, gale_enabled, gales, gale_multiplier, cycles, cycle_mult
         actual=decimal(row['stake'],min_value=Decimal('0.50'))
         if actual!=expected:
             raise ProgressionHalt('Entrada do histórico diferente da progressão planejada')
-        total+=actual
-        if total>CAP_SEQUENCE:
-            raise ProgressionHalt('Limite máximo da sequência atingido')
         try:
             pnl=Decimal(str(row['pnl']))
         except (InvalidOperation,ValueError,TypeError) as exc:
@@ -84,14 +78,12 @@ def next_entry(*, base, gale_enabled, gales, gale_multiplier, cycles, cycle_mult
             raise ProgressionHalt('Resultado da operação inválido')
         if pnl>0:
             cycle=gale=0
-            total=Decimal('0')
             previous=None
         elif gale<gales:
             gale+=1
             previous=row
         elif not cycles_enabled:
             cycle=gale=0
-            total=Decimal('0')
             previous=None
         else:
             cycle+=1
@@ -101,8 +93,8 @@ def next_entry(*, base, gale_enabled, gales, gale_multiplier, cycles, cycle_mult
                 raise ProgressionHalt('Quantidade de ciclos concluída; robô pausado')
     stake=(base*((cycle_multiplier*(gale_multiplier**gales))**cycle)*(gale_multiplier**gale)).quantize(
         Decimal('0.01'),rounding=ROUND_HALF_UP)
-    if stake>CAP_PER_TRADE or total+stake>CAP_SEQUENCE:
-        raise ProgressionHalt('Progressão ultrapassaria o limite máximo de US$ 100 por sequência')
+    # No arbitrary per-trade or cumulative sequence ceiling. Broker-defined
+    # stake limits, available demo balance and user stops are checked at buy time.
     return NextEntry(stake=stake,cycle=cycle,gale=gale,retry=previous is not None,
                      direction=previous['direction'] if previous else None,
                      symbol=previous['symbol'] if previous else None,
