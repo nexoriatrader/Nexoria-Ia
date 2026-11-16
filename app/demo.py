@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import math
 import os
 import re
 import time
@@ -48,9 +49,17 @@ def _amount(value: str) -> float:
         amount = Decimal(str(value))
     except (InvalidOperation, ValueError, TypeError) as exc:
         raise DemoTradingError("Valor de stake inválido") from exc
-    if not amount.is_finite() or amount < Decimal("0.50") or amount > Decimal("1000"):
-        raise DemoTradingError("Stake demo fora dos limites permitidos")
-    return float(amount)
+    if not amount.is_finite() or amount < Decimal("0.50"):
+        raise DemoTradingError("Stake DEMO inválida ou abaixo do mínimo")
+    # The broker is authoritative for its maximum permitted stake and funds.
+    # Reject unrepresentable numbers instead of imposing an artificial cap.
+    try:
+        value_float = float(amount)
+    except (OverflowError, ValueError):
+        raise DemoTradingError("Stake DEMO fora da faixa numérica suportada") from None
+    if not math.isfinite(value_float):
+        raise DemoTradingError("Stake DEMO fora da faixa numérica suportada")
+    return value_float
 
 
 def _currency(value) -> str:
