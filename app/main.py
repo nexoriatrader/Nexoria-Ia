@@ -336,23 +336,22 @@ def restore_demo_autopilot_consent():
 
 
 def v2_symbol_recovery(sess,user,orders,plan,cycle_cfg,batch):
-    """Pick an owed Martingale on its ORIGINAL symbol, after broker settlement.
+    """Choose the next official-ledger progression in one EXCLUSIVE mode.
 
-    Per-symbol order streams must not be combined: each symbol has its own
-    sequential progression and an active trade always blocks its own symbol.
+    Martingale uses independent per-symbol sequences and repeats the last
+    confirmed direction on that same symbol at the next candle boundary.
+    Cycle-only mode uses the chronological run ledger across ALL symbols:
+    each LOSS advances the stake, and the next entry needs a NEW signal.
+    Never infer settlement from a timer or count CANCELLED pre-buy orders.
     """
     if not batch:
         return None,None
     run=sess.get(db.RobotRun,user.id)
     if not run:
         raise ProgressionHalt('Reative o AutoPilot para iniciar uma sequência DEMO')
-    # New manual activation resets progression, not accumulated V2 evaluation.
+    if plan and plan.requested_martingale and plan.cycles_limit:
+        raise ProgressionHalt('Martingale e ciclos são configurações alternativas')
     after=max(batch.after_order_id,run.after_order_id)
-    # SQL rows have no guaranteed order unless ORDER BY is explicit. The
-    # progression validator requires monotonically increasing broker ledger IDs.
-    # Sort a new view; never rewrite historical rows or their outcomes.
-    # A timing-expired V2.4 attempt was cancelled BEFORE broker transmission.
-    # Keep it in the audit ledger but never treat it as a trade or loss.
     historical=sorted((o for o in orders if o.id>after and o.state!='CANCELLED'),
                       key=lambda o:o.id)
     if not historical:
@@ -361,47 +360,53 @@ def v2_symbol_recovery(sess,user,orders,plan,cycle_cfg,batch):
     attributes={a.order_id:a for a in sess.scalars(select(db.AutoPilotAttribution).where(
         db.AutoPilotAttribution.user_id==user.id,
         db.AutoPilotAttribution.order_id.in_(ids))).all()}
-    progressions={p.order_id:p for p in sess.scalars(select(db.DemoOrderProgression).where(
-        db.DemoOrderProgression.user_id==user.id,
-        db.DemoOrderProgression.order_id.in_(ids))).all()}
-    symbol_groups={}
     for order in historical:
         if order.id not in attributes:
             raise ProgressionHalt('Contrato sem atribuição automática na avaliação 2.0')
-        snapshot=progressions.get(order.id)
-        lineage=snapshot.lineage_symbol if snapshot and snapshot.lineage_symbol else order.symbol
-        symbol_groups.setdefault(lineage,[]).append(order)
-    next_retries=[]
-    next_cycles=[]
-    for symbol,group in symbol_groups.items():
-        if any(o.state in ('PENDING','UNKNOWN','CONFIRMED') for o in group):
+
+    def rows_for(group):
+        return [{'id':o.id,'state':o.state,'pnl':o.pnl,
+                 'direction':o.direction,'symbol':o.symbol,'stake':o.stake,
+                 'strategy':attributes[o.id].strategy} for o in group]
+
+    if plan and plan.cycles_limit:
+        # One cycle-only sequence spans ANY asset. It cannot be combined with
+        # parallel open orders, which would make the next-cycle stake ambiguous.
+        if any(o.state in ('PENDING','CONFIRMED','UNKNOWN') for o in historical):
+            raise ProgressionHalt('Contrato anterior não liquidado; aguardando reconciliação')
+        entry=next_entry(base=user.stake,gale_enabled=False,gales=0,
+                         gale_multiplier='1',cycles=plan.cycles_limit,
+                         cycles_enabled=True,
+                         cycle_multiplier=cycle_cfg.multiplier if cycle_cfg else '2',
+                         orders=rows_for(historical))
+        # A completed loss advances to a new cycle but never reuses the
+        # previous signal. Retry remains FALSE (gale=0).
+        return entry,historical[-1]
+
+    if not plan or not plan.requested_martingale:
+        return None,None
+    groups={}
+    for order in historical:
+        groups.setdefault(order.symbol,[]).append(order)
+    owed=[]
+    for symbol,group in groups.items():
+        if any(o.state in ('PENDING','CONFIRMED','UNKNOWN') for o in group):
             continue
-        rows=[{'id':o.id,'state':o.state,'pnl':o.pnl,'direction':o.direction,
-               'symbol':o.symbol,'stake':o.stake,
-               'strategy':attributes[o.id].strategy} for o in group]
         try:
-            entry=next_entry(base=user.stake,
-                gale_enabled=bool(plan and plan.requested_martingale),
-                gales=plan.gale_count if plan and plan.requested_martingale else 0,
-                gale_multiplier=plan.requested_multiplier if plan else '2',
-                cycles=(plan.cycles_limit if plan else None),
-                cycles_enabled=bool(plan and plan.cycles_limit),
-                cycle_multiplier=cycle_cfg.multiplier if cycle_cfg else '2',orders=rows)
-        except ProgressionHalt as exc:
-            if 'Quantidade de ciclos concluída' in str(exc):
-                continue
+            entry=next_entry(base=user.stake,gale_enabled=True,
+                             gales=plan.gale_count,
+                             gale_multiplier=plan.requested_multiplier,
+                             cycles=None,cycles_enabled=False,
+                             cycle_multiplier='1',orders=rows_for(group))
+        except ProgressionHalt:
             raise
         if entry.retry:
-            next_retries.append((group[-1].id,entry,group[-1]))
-        elif entry.cycle>0 and group[-1].state=='SETTLED':
-            next_cycles.append((group[-1].id,entry,group[-1]))
-    if not next_retries and not next_cycles:
+            owed.append((group[-1],entry))
+    if not owed:
         return None,None
-    queue=next_retries if next_retries else next_cycles
-    _,entry,last=min(queue,key=lambda pair:(
-        pair[2].updated_at or pair[2].created_at,pair[0]))
+    last,entry=min(owed,key=lambda pair:(
+        pair[0].updated_at or pair[0].created_at,pair[0].id))
     return entry,last
-
 
 def v24_recovery_timing(settled_at, *, now=None, bar_seconds=300):
     """Next M5 (Volatility) or M15 (Forex) gate after verified settlement.
@@ -425,6 +430,28 @@ def v24_recovery_timing(settled_at, *, now=None, bar_seconds=300):
     ready=target<=current<=target+3 and settled_ts<target
     warmup=10<=remaining<=45 and settled_ts<target
     return target,ready,warmup
+
+
+def martingale_next_candle_window(settled_at, minutes, *, now=None, grace_seconds=8):
+    """Only permit a Martingale in a subsequent candle of the same expiry.
+
+    Return (target_epoch, is_open). The target is NEVER the same candle as
+    broker settlement, including when settlement arrives at its opening.
+    """
+    if minutes not in (1,3,5,15):
+        raise ValueError('Expiração de recuperação inválida')
+    if not settled_at:
+        return None,False
+    if settled_at.tzinfo is None:
+        settled_at=settled_at.replace(tzinfo=timezone.utc)
+    ts=time.time() if now is None else float(now)
+    period=minutes*60
+    settled=settled_at.timestamp()
+    target=(int(settled//period)+1)*period
+    if ts>target+grace_seconds:
+        # Missed a boundary: only retry on the next one, never mid-candle.
+        target=max(target+period,(int(ts//period)+1)*period)
+    return target,target<=ts<=target+grace_seconds
 
 
 def m1_recovery_window_open(settled_at, now=None):
