@@ -971,10 +971,10 @@ html,body{max-width:100%;overflow-x:clip}
       <label class="auto-choice"><input id="autoMg" type="checkbox" onchange="toggleAutomationProgressions()"> Configurar Martingale <small>Quantidade de tentativas e multiplicador</small></label>
       <div id="autoMgSettings" class="settings-grid hidden">
         <div class="field"><label for="autoGales">Tentativas após LOSS</label><select id="autoGales"><option value="1">1 tentativa</option><option value="2">2 tentativas</option><option value="3">3 tentativas</option><option value="4">4 tentativas</option><option value="5">5 tentativas</option></select></div>
-        <div class="field"><label for="autoMultiplier">Multiplicador</label><input id="autoMultiplier" type="number" min="1" step=".1" max="100" value="2.00"></div>
+        <div class="field"><label for="autoMultiplier">Multiplicador</label><input id="autoMultiplier" type="number" min="1" step=".1" value="2.00"></div>
       </div>
       <div class="field"><label for="autoCycles">Ciclos adicionais</label><select id="autoCycles" onchange="toggleAutomationProgressions()"><option value="0">Desativados</option><option value="1">1 ciclo</option><option value="2">2 ciclos</option><option value="3">3 ciclos</option><option value="4">4 ciclos</option><option value="5">5 ciclos</option></select></div>
-      <div id="autoCycleSettings" class="field hidden"><label for="autoCycleMultiplier">Multiplicador dos ciclos</label><input id="autoCycleMultiplier" type="number" min="1" max="100" step=".1" value="2.00"></div>
+      <div id="autoCycleSettings" class="field hidden"><label for="autoCycleMultiplier">Multiplicador dos ciclos</label><input id="autoCycleMultiplier" type="number" min="1" step=".1" value="2.00"></div>
       <div class="auto-step"><span>07</span><strong>Filtros e proteções</strong></div>
       <label class="auto-choice"><input type="checkbox" id="autoNews" onchange="showAutomationNews()"> Filtro de notícias econômicas <small>Defina o intervalo de proteção antes e após os eventos</small></label>
       <div id="autoNewsWindows" class="settings-grid hidden">
@@ -2006,7 +2006,7 @@ function validateAutomationSettings(){
  check('automationSymbols',!automationSelected.size,'Selecione pelo menos um ativo deste mercado.');
  check('autoRealAccount',automationRadio('autoMode')==='real'&&!$('autoRealAccount').value,'Selecione sua conta real vinculada.');
  for(const [id,min,max,label] of [
-  ['autoStake',0.5,100000,'Valor da entrada'],['autoWin',0,1000000,'Stop Win'],
+  ['autoStake',0.5,Infinity,'Valor da entrada'],['autoWin',0,1000000,'Stop Win'],
   ['autoLoss',0,1000000,'Stop Loss'],['autoPayout',0,200,'Payout mínimo']
  ]){
   const field=$(id),value=Number(field.value);
@@ -2016,11 +2016,11 @@ function validateAutomationSettings(){
  }
  if($('autoMg').checked){
   const v=Number($('autoMultiplier').value);
-  check('autoMultiplier',!Number.isFinite(v)||v<1||v>100,'Informe um multiplicador entre 1 e 100.');
+  check('autoMultiplier',!Number.isFinite(v)||v<1,'Informe um multiplicador válido a partir de 1.');
  }
  if($('autoCycles').value!=='0'){
   const v=Number($('autoCycleMultiplier').value);
-  check('autoCycleMultiplier',!Number.isFinite(v)||v<1||v>100,'Informe um multiplicador entre 1 e 100.');
+  check('autoCycleMultiplier',!Number.isFinite(v)||v<1,'Informe um multiplicador válido a partir de 1.');
  }
  if(errors.length){
   $('autoConfigFeedback').textContent='Confira os campos destacados em vermelho.';
