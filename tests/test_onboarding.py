@@ -150,4 +150,4 @@ def test_account_page_identity_referrals_and_plan_catalog_are_separate():
     assert 'data-plan="trimestral"' in account
     assert 'disabled data-plan=' in account
     assert "accountUserId').textContent=String(a.user_id||'—')" in html
-    assert "if(v==='account'){loadRobotAccess()}" in html
+    assert "if(v==='account'){loadRobotAccess();loadBillingPlans()}" in html
