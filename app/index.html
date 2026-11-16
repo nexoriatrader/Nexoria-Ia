@@ -910,7 +910,7 @@ html,body{max-width:100%;overflow-x:clip}
           <span class="auto-preset-icon">◈</span><strong>Conservadora</strong><small>Entradas menores, limites de ganho/perda e filtros mais criteriosos.</small>
         </button>
         <button type="button" class="auto-preset-button" data-preset="aggressive" aria-pressed="false" onclick="applyAutomationPreset('aggressive')">
-          <span class="auto-preset-icon">↗</span><strong>Arriscada</strong><small>Mais tentativas, Martingale e ciclos. Sem stops no modelo inicial.</small>
+          <span class="auto-preset-icon">↗</span><strong>Arriscada</strong><small>Martingale sem ciclos, com stops desligados no modelo inicial.</small>
         </button>
         <button type="button" class="auto-preset-button active" data-preset="custom" aria-pressed="true" onclick="applyAutomationPreset('custom')">
           <span class="auto-preset-icon">⚙</span><strong>Personalizada</strong><small>Monte sua própria estratégia e defina cada parâmetro.</small>
@@ -1929,7 +1929,7 @@ async function applyAutomationPreset(mode){
  const initialMode=automationRadio('autoMode');
  try{
   setAutomationPresetMode(mode,conservative?'Consultando o saldo para calcular 5% de Stop Win e 3% de Stop Loss...':
-   'Arriscada · sem stops, com Martingale e ciclos. Maior exposição a perdas.');
+   'Arriscada · sem stops e Martingale com até 2 tentativas. Ciclos são uma alternativa.');
   const balance=await presetBalance();
   if(automationRadio('autoMode')!==initialMode){
    setAutomationPresetMode('custom','A conta mudou. Selecione novamente o perfil desejado.');
@@ -1949,7 +1949,7 @@ async function applyAutomationPreset(mode){
   $('autoMg').checked=!conservative;
   $('autoGales').value=conservative?'1':'2';
   $('autoMultiplier').value=conservative?'2.00':'2.00';
-  $('autoCycles').value=conservative?'0':'2';
+  $('autoCycles').value='0';
   $('autoCycleMultiplier').value='2.00';
   $('autoNews').checked=false;
   toggleAutomationProgressions();showAutomationNews();
@@ -1957,7 +1957,7 @@ async function applyAutomationPreset(mode){
   automationProfileSaved=false;
   setAutomationPresetMode(mode,conservative?
    'Conservadora · Stop Win 5% e Stop Loss 3% do saldo USD '+money(balance,'USD')+'; entrada 0,5% do saldo; sem Martingale ou ciclos.':
-   'Arriscada · Stop Win e Stop Loss desligados, Martingale até 2 tentativas e 2 ciclos. Esse perfil pode causar perdas elevadas.');
+   'Arriscada · Stop Win e Stop Loss desligados, Martingale até 2 tentativas. Para usar ciclos, desative Martingale.');
   renderAutomationSummary();
  }finally{autoPresetApplying=false}
 }
