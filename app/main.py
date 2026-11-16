@@ -539,11 +539,6 @@ async def autopilot_once():
                         continue
                     disarm_autopilot(uid,reason)
                     continue
-                lineage_symbol=None
-                if batch and last is not None and (entry.retry or entry.cycle>0):
-                    previous=sess.get(db.DemoOrderProgression,last.id)
-                    lineage_symbol=(previous.lineage_symbol
-                                    if previous and previous.lineage_symbol else last.symbol)
                 if pulso_active:
                     tracker=automation_scan_progress.setdefault(uid,{})
                     tracker['cycle']=int(entry.cycle or 0)
@@ -832,7 +827,6 @@ async def autopilot_once():
                                  'v2':bool(batch),'pulso_v2':pulso_active,
                                  'min_payout_ratio':str(Decimal('1')+Decimal(str(profile.min_payout))/Decimal('100')) if pulso_active and profile is not None else '1.50',
                                  'cycle_index':entry.cycle,'gale_index':entry.gale,
-                                 'lineage_symbol':(lineage_symbol or key if batch and plan and plan.cycles_limit else None),
                                  'gale_multiplier':(plan.requested_multiplier if plan else '2.00'),
                                  'cycle_multiplier':(cycle_cfg.multiplier if cycle_cfg else '2.00')},
                     stake_override=entry.stake,
@@ -2334,7 +2328,6 @@ async def perform_demo_buy(user, token, payload:DemoBuy, *, attribution:dict|Non
                         gale_index=int(attribution['gale_index']),
                         gale_multiplier=str(attribution['gale_multiplier']),
                         cycle_multiplier=str(attribution['cycle_multiplier']),
-                        lineage_symbol=attribution.get('lineage_symbol'),
                         source='autopilot',account_mode='demo'))
                 s.commit()
             except Exception:
