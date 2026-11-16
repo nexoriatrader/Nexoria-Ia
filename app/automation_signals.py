@@ -133,9 +133,11 @@ _scan_cache = {}
 _scan_lock = asyncio.Lock()
 
 
-async def confirmed_automation_signal(profile, scan_event=None):
+async def confirmed_automation_signal(profile, scan_event=None, excluded_symbols=()):
     """Return one signal on a fresh closed M1 candle, or None."""
-    symbols=json.loads(profile.symbols_json)
+    excluded=set(excluded_symbols)
+    symbols=[symbol for symbol in json.loads(profile.symbols_json)
+             if symbol not in excluded]
     if not symbols:
         return None
     indicators=json.loads(profile.indicators_json or '[]')
