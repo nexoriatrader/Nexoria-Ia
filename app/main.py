@@ -1325,19 +1325,9 @@ async def save_automation_profile(request:Request,payload:AutomationProfileReque
     indicator_options={'EMA','SMA','RSI','MACD','BOLLINGER','ATR','ADX','STOCHASTIC','SUPPORT_RESISTANCE','CANDLE_PATTERNS'}
     if len(payload.indicators)!=len(set(payload.indicators)) or not set(payload.indicators).issubset(indicator_options):
         raise HTTPException(422,'Seleção de indicadores inválida')
-    # Match the same strategy/indicator rules as the configurator. Core
-    # indicators cannot be detached from a strategy; complementary filters
-    # must belong to the selected strategy.
-    strategy_indicators={
-        'pulso_v2':({'ATR'},{'ATR','BOLLINGER'}),
-        'trend':({'EMA'},{'EMA','MACD','ATR'}),
-        'rsi':({'RSI'},{'RSI','ATR'})
-    }
-    required,allowed=strategy_indicators[payload.strategy]
-    chosen=set(payload.indicators)
-    if (not required.issubset(chosen) or not chosen.issubset(allowed)
-            or len(chosen-required)>1):
-        raise HTTPException(422,'Escolha apenas indicadores compatíveis e no máximo um filtro complementar')
+    # Any implemented confirmation indicator can be selected independently.
+    # The directional strategy still supplies its own entry signal; chosen
+    # confirmations are optional AND-filters, not an implicit override.
     if payload.account_mode=='real':
         if not payload.real_account_id or not re.fullmatch(r'[A-Za-z0-9]{2,100}',payload.real_account_id):
             raise HTTPException(422,'Selecione uma conta REAL vinculada à Deriv')
