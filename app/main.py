@@ -715,8 +715,8 @@ async def autopilot_once():
                         candidate.get('expiry_options',(candidate['minutes'],)),
                         automatic=auto_expiry)
                     if not durations:
-                        autopilot_reasons[uid]='Forex AUTO: sinal sem opção M15 configurada; nenhuma proposta enviada'
-                        log_v2_gate(uid,'FOREX_M15_UNAVAILABLE',detail='symbol='+str(candidate['symbol']))
+                        autopilot_reasons[uid]='Nenhuma expiração candidata válida; nenhuma proposta enviada'
+                        log_v2_gate(uid,'NO_CANDIDATE_EXPIRY',detail='symbol='+str(candidate['symbol']))
                         continue
                     best_offer=None
                     cutoff=(candidate.get('last_bar_epoch',0)+60+12
@@ -756,8 +756,8 @@ async def autopilot_once():
                     else:
                         quote_failure="expired_before_quotes"
                     elapsed=round(time.monotonic()-quote_elapsed_start,3)
-                    log.warning('NEXORA expiry scan: symbol=%s checked=%s rejected_payout=%s chosen=%s failure=%s elapsed_s=%s',
-                                candidate['symbol'],checked_expiry,rejected_expiry,
+                    log.warning('NEXORA expiry scan: symbol=%s candidates=%s quoted=%s rejected_payout=%s chosen=%s failure=%s elapsed_s=%s',
+                                candidate['symbol'],durations,checked_expiry,rejected_expiry,
                                 best_offer[1] if best_offer else None,quote_failure,elapsed)
                     if best_offer is None:
                         if quote_failure=='timeout':
