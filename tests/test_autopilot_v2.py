@@ -624,3 +624,110 @@ def test_v24_forex_recovery_uses_m15_not_m5():
     assert main.v24_recovery_timing(settled,now=9900+3.01,bar_seconds=900)==(10800,False,False)
     with pytest.raises(ValueError):
         main.v24_recovery_timing(settled,now=9902,bar_seconds=60)
+
+
+def test_cycle_only_uses_new_signal_any_symbol_and_resets_on_win(tmp_path,monkeypatch):
+    """The next cycle is priced using the global confirmed ledger, not old symbol."""
+    client,factory,engine,uid=prepare(tmp_path,monkeypatch,stop_loss='0.00')
+    try:
+        with factory() as sess:
+            user=sess.get(db.User,uid)
+            sess.add(db.PilotValidationBatch(user_id=uid,after_order_id=0))
+            sess.add(db.RobotRun(user_id=uid,after_order_id=0))
+            sess.add(db.RobotPlan(user_id=uid,requested_martingale=False,
+                gale_count=0,cycles_limit=2))
+            sess.add(db.RobotCycleParams(user_id=uid,multiplier='2.50'))
+            sess.commit()
+            first=db.DemoOrder(user_id=uid,request_key='cycle-cross-001',
+                state='SETTLED',symbol='EURUSD',direction='PUT',
+                duration_minutes=5,stake=user.stake,pnl='-2.00')
+            sess.add(first);sess.flush()
+            sess.add(db.AutoPilotAttribution(order_id=first.id,user_id=uid,
+                strategy='pulso_v2',direction='PUT',reason='fresh signal 1'))
+            sess.commit()
+        with factory() as sess:
+            user=sess.get(db.User,uid)
+            plan=sess.get(db.RobotPlan,uid)
+            batch=sess.get(db.PilotValidationBatch,uid)
+            cfg=sess.get(db.RobotCycleParams,uid)
+            orders=sess.scalars(select(db.DemoOrder).order_by(db.DemoOrder.id)).all()
+            entry,last=main.v2_symbol_recovery(sess,user,orders,plan,cfg,batch)
+            assert (entry.cycle,entry.gale,entry.stake,entry.retry)==(
+                1,0,Decimal('5.00'),False)
+            assert entry.symbol is None and entry.direction is None
+            assert last.symbol=='EURUSD'
+            second=db.DemoOrder(user_id=uid,request_key='cycle-cross-002',
+                state='SETTLED',symbol='GBPUSD',direction='CALL',
+                duration_minutes=1,stake='5.00',pnl='-5.00')
+            sess.add(second);sess.flush()
+            sess.add(db.AutoPilotAttribution(order_id=second.id,user_id=uid,
+                strategy='pulso_v2',direction='CALL',reason='fresh signal 2'))
+            sess.commit()
+        with factory() as sess:
+            user=sess.get(db.User,uid)
+            orders=sess.scalars(select(db.DemoOrder).order_by(db.DemoOrder.id)).all()
+            entry,last=main.v2_symbol_recovery(sess,user,orders,
+                sess.get(db.RobotPlan,uid),
+                sess.get(db.RobotCycleParams,uid),
+                sess.get(db.PilotValidationBatch,uid))
+            assert (entry.cycle,entry.stake,entry.retry)==(2,Decimal('12.50'),False)
+            assert entry.symbol is None and last.symbol=='GBPUSD'
+            win=db.DemoOrder(user_id=uid,request_key='cycle-cross-003',
+                state='SETTLED',symbol='1HZ50V',direction='PUT',
+                duration_minutes=3,stake='12.50',pnl='11.00')
+            sess.add(win);sess.flush()
+            sess.add(db.AutoPilotAttribution(order_id=win.id,user_id=uid,
+                strategy='pulso_v2',direction='PUT',reason='fresh signal 3'))
+            sess.commit()
+        with factory() as sess:
+            user=sess.get(db.User,uid)
+            orders=sess.scalars(select(db.DemoOrder).order_by(db.DemoOrder.id)).all()
+            entry,last=main.v2_symbol_recovery(sess,user,orders,
+                sess.get(db.RobotPlan,uid),
+                sess.get(db.RobotCycleParams,uid),
+                sess.get(db.PilotValidationBatch,uid))
+            assert (entry.cycle,entry.stake,entry.retry)==(0,Decimal('2.00'),False)
+    finally:cleanup(engine)
+
+
+def test_cycle_only_blocks_until_all_official_orders_settle(tmp_path,monkeypatch):
+    client,factory,engine,uid=prepare(tmp_path,monkeypatch,stop_loss='0.00')
+    try:
+        with factory() as sess:
+            sess.add(db.PilotValidationBatch(user_id=uid,after_order_id=0))
+            sess.add(db.RobotRun(user_id=uid,after_order_id=0))
+            sess.add(db.RobotPlan(user_id=uid,requested_martingale=False,
+                gale_count=0,cycles_limit=2))
+            sess.add(db.RobotCycleParams(user_id=uid,multiplier='2.50'))
+            order=db.DemoOrder(user_id=uid,request_key='cycle-confirmed-001',
+                state='CONFIRMED',symbol='EURUSD',direction='PUT',
+                duration_minutes=5,stake='2.00')
+            sess.add(order);sess.flush()
+            sess.add(db.AutoPilotAttribution(order_id=order.id,user_id=uid,
+                strategy='pulso_v2',direction='PUT',reason='broker still open'))
+            sess.commit()
+        with factory() as sess:
+            user=sess.get(db.User,uid)
+            rows=sess.scalars(select(db.DemoOrder)).all()
+            with pytest.raises(main.ProgressionHalt,match='não liquidado'):
+                main.v2_symbol_recovery(sess,user,rows,
+                    sess.get(db.RobotPlan,uid),
+                    sess.get(db.RobotCycleParams,uid),
+                    sess.get(db.PilotValidationBatch,uid))
+    finally:cleanup(engine)
+
+
+@pytest.mark.parametrize('minutes',[1,3,5,15])
+def test_martingale_dispatch_only_at_next_matching_candle(minutes):
+    settlement=datetime(2026,11,16,12,0,1,tzinfo=timezone.utc)
+    period=minutes*60
+    opening=(int(settlement.timestamp()//period)+1)*period
+    target,ready=main.martingale_next_candle_window(
+        settlement,minutes,now=opening-0.1)
+    assert target==opening and not ready
+    target,ready=main.martingale_next_candle_window(
+        settlement,minutes,now=opening+2)
+    assert target==opening and ready
+    target,ready=main.martingale_next_candle_window(
+        settlement,minutes,now=opening+10)
+    assert target==opening+period and not ready

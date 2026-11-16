@@ -336,23 +336,22 @@ def restore_demo_autopilot_consent():
 
 
 def v2_symbol_recovery(sess,user,orders,plan,cycle_cfg,batch):
-    """Pick an owed Martingale on its ORIGINAL symbol, after broker settlement.
+    """Choose the next official-ledger progression in one EXCLUSIVE mode.
 
-    Per-symbol order streams must not be combined: each symbol has its own
-    sequential progression and an active trade always blocks its own symbol.
+    Martingale uses independent per-symbol sequences and repeats the last
+    confirmed direction on that same symbol at the next candle boundary.
+    Cycle-only mode uses the chronological run ledger across ALL symbols:
+    each LOSS advances the stake, and the next entry needs a NEW signal.
+    Never infer settlement from a timer or count CANCELLED pre-buy orders.
     """
     if not batch:
         return None,None
     run=sess.get(db.RobotRun,user.id)
     if not run:
         raise ProgressionHalt('Reative o AutoPilot para iniciar uma sequência DEMO')
-    # New manual activation resets progression, not accumulated V2 evaluation.
+    if plan and plan.requested_martingale and plan.cycles_limit:
+        raise ProgressionHalt('Martingale e ciclos são configurações alternativas')
     after=max(batch.after_order_id,run.after_order_id)
-    # SQL rows have no guaranteed order unless ORDER BY is explicit. The
-    # progression validator requires monotonically increasing broker ledger IDs.
-    # Sort a new view; never rewrite historical rows or their outcomes.
-    # A timing-expired V2.4 attempt was cancelled BEFORE broker transmission.
-    # Keep it in the audit ledger but never treat it as a trade or loss.
     historical=sorted((o for o in orders if o.id>after and o.state!='CANCELLED'),
                       key=lambda o:o.id)
     if not historical:
@@ -361,43 +360,53 @@ def v2_symbol_recovery(sess,user,orders,plan,cycle_cfg,batch):
     attributes={a.order_id:a for a in sess.scalars(select(db.AutoPilotAttribution).where(
         db.AutoPilotAttribution.user_id==user.id,
         db.AutoPilotAttribution.order_id.in_(ids))).all()}
-    symbol_groups={}
     for order in historical:
         if order.id not in attributes:
-            # Manual operations cannot be blended into progression.
             raise ProgressionHalt('Contrato sem atribuição automática na avaliação 2.0')
-        symbol_groups.setdefault(order.symbol,[]).append(order)
-    next_retries=[]
-    for symbol,group in symbol_groups.items():
-        if any(o.state in ('PENDING','UNKNOWN','CONFIRMED') for o in group):
+
+    def rows_for(group):
+        return [{'id':o.id,'state':o.state,'pnl':o.pnl,
+                 'direction':o.direction,'symbol':o.symbol,'stake':o.stake,
+                 'strategy':attributes[o.id].strategy} for o in group]
+
+    if plan and plan.cycles_limit:
+        # One cycle-only sequence spans ANY asset. It cannot be combined with
+        # parallel open orders, which would make the next-cycle stake ambiguous.
+        if any(o.state in ('PENDING','CONFIRMED','UNKNOWN') for o in historical):
+            raise ProgressionHalt('Contrato anterior não liquidado; aguardando reconciliação')
+        entry=next_entry(base=user.stake,gale_enabled=False,gales=0,
+                         gale_multiplier='1',cycles=plan.cycles_limit,
+                         cycles_enabled=True,
+                         cycle_multiplier=cycle_cfg.multiplier if cycle_cfg else '2',
+                         orders=rows_for(historical))
+        # A completed loss advances to a new cycle but never reuses the
+        # previous signal. Retry remains FALSE (gale=0).
+        return entry,historical[-1]
+
+    if not plan or not plan.requested_martingale:
+        return None,None
+    groups={}
+    for order in historical:
+        groups.setdefault(order.symbol,[]).append(order)
+    owed=[]
+    for symbol,group in groups.items():
+        if any(o.state in ('PENDING','CONFIRMED','UNKNOWN') for o in group):
             continue
-        rows=[{'id':o.id,'state':o.state,'pnl':o.pnl,'direction':o.direction,
-               'symbol':o.symbol,'stake':o.stake,
-               'strategy':attributes[o.id].strategy} for o in group]
         try:
-            entry=next_entry(base=user.stake,
-                gale_enabled=bool(plan and plan.requested_martingale),
-                gales=plan.gale_count if plan and plan.requested_martingale else 0,
-                gale_multiplier=plan.requested_multiplier if plan else '2',
-                cycles=(plan.cycles_limit if plan else None),
-                cycles_enabled=bool(plan and plan.cycles_limit),
-                cycle_multiplier=cycle_cfg.multiplier if cycle_cfg else '2',orders=rows)
-        except ProgressionHalt as exc:
-            if 'Quantidade de ciclos concluída' in str(exc):
-                continue
+            entry=next_entry(base=user.stake,gale_enabled=True,
+                             gales=plan.gale_count,
+                             gale_multiplier=plan.requested_multiplier,
+                             cycles=None,cycles_enabled=False,
+                             cycle_multiplier='1',orders=rows_for(group))
+        except ProgressionHalt:
             raise
         if entry.retry:
-            next_retries.append((group[-1].id,entry,group[-1]))
-    if not next_retries:
+            owed.append((group[-1],entry))
+    if not owed:
         return None,None
-    # Prioritize the OLDEST officially settled outstanding recovery.
-    # Taking max(order_id) here starves earlier losing symbols whenever
-    # newer M15 contracts settle (observed in the DEMO ledger).
-    # A confirmed order on its own symbol remains excluded above.
-    _,entry,last=min(next_retries,key=lambda pair:(
-        pair[2].updated_at or pair[2].created_at,pair[0]))
+    last,entry=min(owed,key=lambda pair:(
+        pair[0].updated_at or pair[0].created_at,pair[0].id))
     return entry,last
-
 
 def v24_recovery_timing(settled_at, *, now=None, bar_seconds=300):
     """Next M5 (Volatility) or M15 (Forex) gate after verified settlement.
@@ -421,6 +430,28 @@ def v24_recovery_timing(settled_at, *, now=None, bar_seconds=300):
     ready=target<=current<=target+3 and settled_ts<target
     warmup=10<=remaining<=45 and settled_ts<target
     return target,ready,warmup
+
+
+def martingale_next_candle_window(settled_at, minutes, *, now=None, grace_seconds=8):
+    """Only permit a Martingale in a subsequent candle of the same expiry.
+
+    Return (target_epoch, is_open). The target is NEVER the same candle as
+    broker settlement, including when settlement arrives at its opening.
+    """
+    if minutes not in (1,3,5,15):
+        raise ValueError('Expiração de recuperação inválida')
+    if not settled_at:
+        return None,False
+    if settled_at.tzinfo is None:
+        settled_at=settled_at.replace(tzinfo=timezone.utc)
+    ts=time.time() if now is None else float(now)
+    period=minutes*60
+    settled=settled_at.timestamp()
+    target=(int(settled//period)+1)*period
+    if ts>target+grace_seconds:
+        # Missed a boundary: only retry on the next one, never mid-candle.
+        target=max(target+period,(int(ts//period)+1)*period)
+    return target,target<=ts<=target+grace_seconds
 
 
 def m1_recovery_window_open(settled_at, now=None):
@@ -491,6 +522,9 @@ async def autopilot_once():
                 orders=sess.scalars(select(db.DemoOrder).where(db.DemoOrder.user_id==uid)).all()
                 plan=sess.get(db.RobotPlan,uid)
                 cycle_cfg=sess.get(db.RobotCycleParams,uid)
+                if plan and plan.requested_martingale and plan.cycles_limit:
+                    disarm_autopilot(uid,'Escolha apenas Martingale OU ciclos nas configurações; operações existentes continuam em reconciliação')
+                    continue
                 batch=sess.get(db.PilotValidationBatch,uid)
                 # PULSO V2 replaces the legacy scanner for every manually
                 # armed DEMO evaluation; no extra strategy-selection button.
@@ -551,6 +585,15 @@ async def autopilot_once():
                     if not batch and not m1_recovery_window_open(settlement):
                         autopilot_reasons[uid]='Aguardando abertura de vela M1 para recuperação'
                         continue
+                    if batch and pulso_active:
+                        target_open,ready=martingale_next_candle_window(
+                            settlement,last.duration_minutes,now=time.time())
+                        if not ready:
+                            autopilot_reasons[uid]=(
+                                'Martingale M'+str(last.duration_minutes)+
+                                ': aguardando abertura da próxima vela após LOSS oficial')
+                            log_v2_gate(uid,'MARTINGALE_NEXT_CANDLE_WAIT')
+                            continue
                     if batch and now-autopilot_last_attempt.get(uid,-1e12)<(1 if pulso_active else 5):
                         log_v2_gate(uid,'RECOVERY_COOLDOWN')
                         continue
@@ -573,7 +616,7 @@ async def autopilot_once():
                         if not recovery_ready:
                             autopilot_reasons[uid]='Recuperação aguardando próxima abertura M'+str(last.duration_minutes)+' após liquidação'
                             continue
-                    if batch: log_v2_gate(uid,'RECOVERY_PENDING')
+                    if batch: log_v2_gate(uid,'MARTINGALE_PENDING')
                     candidate={'strategy':entry.strategy or 'recuperacao',
                         'direction':entry.direction,
                         'symbol':entry.symbol or SYMBOL,
@@ -581,6 +624,9 @@ async def autopilot_once():
                         'reason':'Continuação controlada: ciclo '+str(entry.cycle)+
                                  ', martingale '+str(entry.gale)}
                 else:
+                    if batch and entry.cycle>0 and last is not None:
+                        autopilot_reasons[uid]='Ciclo '+str(entry.cycle)+' aguardando próximo sinal confirmado · '+str(entry.stake)+' USD'
+                        log_v2_gate(uid,'CYCLE_WAITING_SIGNAL')
                     if not batch and now-autopilot_last_attempt.get(uid,-1e12)<60:
                         continue
                     if batch and pulso_active:
@@ -783,6 +829,15 @@ async def autopilot_once():
                 continue
             deadline_for_buy=(candidate['last_bar_epoch']+60+12
                               if pulso_active and not entry.retry else None)
+            if pulso_active and entry.retry:
+                # This is a deadline for an existing confirmed candle only;
+                # never extend it to an arbitrary mid-candle instant.
+                target_open,ready=martingale_next_candle_window(
+                    last.updated_at,last.duration_minutes,now=time.time())
+                if not ready:
+                    autopilot_reasons[uid]='Martingale: janela da próxima vela encerrada'
+                    continue
+                deadline_for_buy=target_open+8
             timed_v24=(bool(batch) and not pulso_active and SIGNAL_PROFILE=='next_open_v24'
                        and candidate['minutes'] in (5,15)
                        and active_market()==('volatility' if candidate['minutes']==5 else 'forex'))
@@ -1871,6 +1926,9 @@ async def autopilot_start(request:Request,payload:AutoPilotSwitch,
     if user.martingale:
         raise HTTPException(409,'Configuração antiga de Martingale: salve novamente as opções atuais')
     with db.SessionLocal() as sess:
+        plan=sess.get(db.RobotPlan,user.id)
+        if plan and plan.requested_martingale and plan.cycles_limit:
+            raise HTTPException(409,'Escolha Martingale OU ciclos antes de ligar o robô; ambos não podem operar juntos')
         orders=sess.scalars(select(db.DemoOrder).where(db.DemoOrder.user_id==user.id)).all()
         boundary=latest_risk_session(sess,user.id)
         blocker=autopilot_start_blocker(user,orders,after_order_id=boundary.after_order_id if boundary else 0)
@@ -2096,6 +2154,8 @@ async def save_onboarding_config(request:Request,payload:OnboardingConfig,
         raise HTTPException(422,'Para ativar Martingale, escolha entre 1 e 5 tentativas')
     if not payload.martingale and payload.gale_count!=0:
         raise HTTPException(422,'Desative a quantidade de tentativas quando Martingale estiver desligado')
+    if payload.martingale and payload.cycles!='0':
+        raise HTTPException(422,'Escolha apenas Martingale na próxima vela OU ciclos no próximo sinal, nunca ambos')
     gale_factor=parse_progression_multiplier(payload.multiplier,'Multiplicador Martingale')
     cycle_factor=parse_progression_multiplier(payload.cycle_multiplier,'Multiplicador de ciclos')
     try:

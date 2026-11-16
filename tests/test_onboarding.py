@@ -40,15 +40,33 @@ def test_onboarding_saves_limits_and_future_preferences_without_triggering_broke
         assert before.json()['stop_win']=='0.00'
         assert before.json()['stop_loss']=='0.00'
         assert before.json()['martingale_execution_enabled'] is True
+        # Old onboarding allowed BOTH modes. That is now explicitly
+        # prohibited, without changing saved state or sending any buy.
         response=client.post('/api/onboarding/config',json=payload)
+        assert response.status_code==422,response.text
+        assert 'Martingale' in response.json()['detail']
+        assert client.get('/api/onboarding/config').json()['cycles']=='0'
+
+        martingale_only={**payload,'cycles':'0'}
+        response=client.post('/api/onboarding/config',json=martingale_only)
         assert response.status_code==200,response.text
         assert response.json()['martingale_execution_enabled'] is True
-        assert response.json()['cycles_execution_enabled'] is True
         after=client.get('/api/onboarding/config').json()
         assert after['martingale'] is True
         assert after['gale_count']==2
         assert after['multiplier']=='3'
+        assert after['cycles']=='0'
+
+        cycles_only={**payload,'martingale':False,'gale_count':0,'cycles':'5',
+                     'cycle_multiplier':'2.50'}
+        response=client.post('/api/onboarding/config',json=cycles_only)
+        assert response.status_code==200,response.text
+        assert response.json()['cycles_execution_enabled'] is True
+        after=client.get('/api/onboarding/config').json()
+        assert after['martingale'] is False
+        assert after['gale_count']==0
         assert after['cycles']=='5'
+        assert after['cycle_multiplier']=='2.50'
         assert after['stake']=='2.50'
         with factory() as sess:
             u=sess.get(db.User,uid)
@@ -71,6 +89,7 @@ def test_onboarding_validates_cycle_and_martingale_inputs(tmp_path,monkeypatch):
         for override in ({'cycles':'-1'}, {'cycles':'6'}, {'gale_count':6},
                          {'martingale':True,'gale_count':0},
                          {'martingale':False,'gale_count':1},
+                         {'martingale':True,'gale_count':2,'cycles':'1'},
                          {'multiplier':'invalid'}, {'multiplier':'0.9'}, {'cycle_multiplier':'0'}, {'stake':'0'}):
             assert client.post('/api/onboarding/config',json={**valid,**override}).status_code==422
         assert client.get('/api/onboarding/config').json()['cycles']=='0'

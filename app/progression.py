@@ -4,7 +4,7 @@ A cycle = initial attempt + configured Martingales. After all lose, the final
 loss stake is multiplied by the cycle multiplier to seed the next cycle; advance
 the *next* cycle's base by the cycle multiplier. Any win resets both levels.
 A selected number of cycles means ADDITIONAL cycles after the initial cycle.
-Orders remain one-at-a-time and unknown outcomes must block all progression.
+Only Martingale reuses the previous signal. A new cycle awaits the next confirmed\nstrategy signal; uncertain orders keep their own symbol locked until reconciled.
 """
 from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
@@ -95,7 +95,11 @@ def next_entry(*, base, gale_enabled, gales, gale_multiplier, cycles, cycle_mult
         Decimal('0.01'),rounding=ROUND_HALF_UP)
     # No arbitrary per-trade or cumulative sequence ceiling. Broker-defined
     # stake limits, available demo balance and user stops are checked at buy time.
-    return NextEntry(stake=stake,cycle=cycle,gale=gale,retry=previous is not None,
-                     direction=previous['direction'] if previous else None,
-                     symbol=previous['symbol'] if previous else None,
-                     strategy=previous.get('strategy') if previous else None)
+    # A Martingale continues the losing contract on its ORIGINAL signal.
+    # The FIRST entry of a new cycle is NOT a Martingale: it must await the
+    # scanner's next confirmed signal, potentially on a different symbol.
+    retry=previous is not None and gale>0
+    return NextEntry(stake=stake,cycle=cycle,gale=gale,retry=retry,
+                     direction=previous['direction'] if retry else None,
+                     symbol=previous['symbol'] if retry else None,
+                     strategy=previous.get('strategy') if retry else None)
