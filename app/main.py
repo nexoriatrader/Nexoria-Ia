@@ -361,13 +361,18 @@ def v2_symbol_recovery(sess,user,orders,plan,cycle_cfg,batch):
     attributes={a.order_id:a for a in sess.scalars(select(db.AutoPilotAttribution).where(
         db.AutoPilotAttribution.user_id==user.id,
         db.AutoPilotAttribution.order_id.in_(ids))).all()}
+    progressions={p.order_id:p for p in sess.scalars(select(db.DemoOrderProgression).where(
+        db.DemoOrderProgression.user_id==user.id,
+        db.DemoOrderProgression.order_id.in_(ids))).all()}
     symbol_groups={}
     for order in historical:
         if order.id not in attributes:
-            # Manual operations cannot be blended into progression.
             raise ProgressionHalt('Contrato sem atribuição automática na avaliação 2.0')
-        symbol_groups.setdefault(order.symbol,[]).append(order)
+        snapshot=progressions.get(order.id)
+        lineage=snapshot.lineage_symbol if snapshot and snapshot.lineage_symbol else order.symbol
+        symbol_groups.setdefault(lineage,[]).append(order)
     next_retries=[]
+    next_cycles=[]
     for symbol,group in symbol_groups.items():
         if any(o.state in ('PENDING','UNKNOWN','CONFIRMED') for o in group):
             continue
@@ -388,13 +393,12 @@ def v2_symbol_recovery(sess,user,orders,plan,cycle_cfg,batch):
             raise
         if entry.retry:
             next_retries.append((group[-1].id,entry,group[-1]))
-    if not next_retries:
+        elif entry.cycle>0 and group[-1].state=='SETTLED':
+            next_cycles.append((group[-1].id,entry,group[-1]))
+    if not next_retries and not next_cycles:
         return None,None
-    # Prioritize the OLDEST officially settled outstanding recovery.
-    # Taking max(order_id) here starves earlier losing symbols whenever
-    # newer M15 contracts settle (observed in the DEMO ledger).
-    # A confirmed order on its own symbol remains excluded above.
-    _,entry,last=min(next_retries,key=lambda pair:(
+    queue=next_retries if next_retries else next_cycles
+    _,entry,last=min(queue,key=lambda pair:(
         pair[2].updated_at or pair[2].created_at,pair[0]))
     return entry,last
 
@@ -491,6 +495,9 @@ async def autopilot_once():
                 orders=sess.scalars(select(db.DemoOrder).where(db.DemoOrder.user_id==uid)).all()
                 plan=sess.get(db.RobotPlan,uid)
                 cycle_cfg=sess.get(db.RobotCycleParams,uid)
+                if plan and plan.requested_martingale and plan.cycles_limit:
+                    disarm_autopilot(uid,'Escolha apenas Martingale OU ciclos nas configurações; operações existentes continuam em reconciliação')
+                    continue
                 batch=sess.get(db.PilotValidationBatch,uid)
                 # PULSO V2 replaces the legacy scanner for every manually
                 # armed DEMO evaluation; no extra strategy-selection button.
@@ -532,6 +539,11 @@ async def autopilot_once():
                         continue
                     disarm_autopilot(uid,reason)
                     continue
+                lineage_symbol=None
+                if batch and last is not None and (entry.retry or entry.cycle>0):
+                    previous=sess.get(db.DemoOrderProgression,last.id)
+                    lineage_symbol=(previous.lineage_symbol
+                                    if previous and previous.lineage_symbol else last.symbol)
                 if pulso_active:
                     tracker=automation_scan_progress.setdefault(uid,{})
                     tracker['cycle']=int(entry.cycle or 0)
@@ -573,7 +585,7 @@ async def autopilot_once():
                         if not recovery_ready:
                             autopilot_reasons[uid]='Recuperação aguardando próxima abertura M'+str(last.duration_minutes)+' após liquidação'
                             continue
-                    if batch: log_v2_gate(uid,'RECOVERY_PENDING')
+                    if batch: log_v2_gate(uid,'MARTINGALE_PENDING')
                     candidate={'strategy':entry.strategy or 'recuperacao',
                         'direction':entry.direction,
                         'symbol':entry.symbol or SYMBOL,
@@ -581,6 +593,9 @@ async def autopilot_once():
                         'reason':'Continuação controlada: ciclo '+str(entry.cycle)+
                                  ', martingale '+str(entry.gale)}
                 else:
+                    if batch and entry.cycle>0 and last is not None:
+                        autopilot_reasons[uid]='Ciclo '+str(entry.cycle)+' aguardando próximo sinal confirmado · '+str(entry.stake)+' USD'
+                        log_v2_gate(uid,'CYCLE_WAITING_SIGNAL')
                     if not batch and now-autopilot_last_attempt.get(uid,-1e12)<60:
                         continue
                     if batch and pulso_active:
@@ -817,6 +832,7 @@ async def autopilot_once():
                                  'v2':bool(batch),'pulso_v2':pulso_active,
                                  'min_payout_ratio':str(Decimal('1')+Decimal(str(profile.min_payout))/Decimal('100')) if pulso_active and profile is not None else '1.50',
                                  'cycle_index':entry.cycle,'gale_index':entry.gale,
+                                 'lineage_symbol':(lineage_symbol or key if batch and plan and plan.cycles_limit else None),
                                  'gale_multiplier':(plan.requested_multiplier if plan else '2.00'),
                                  'cycle_multiplier':(cycle_cfg.multiplier if cycle_cfg else '2.00')},
                     stake_override=entry.stake,
@@ -2096,6 +2112,8 @@ async def save_onboarding_config(request:Request,payload:OnboardingConfig,
         raise HTTPException(422,'Para ativar Martingale, escolha entre 1 e 5 tentativas')
     if not payload.martingale and payload.gale_count!=0:
         raise HTTPException(422,'Desative a quantidade de tentativas quando Martingale estiver desligado')
+    if payload.martingale and payload.cycles!='0':
+        raise HTTPException(422,'Escolha apenas Martingale na próxima vela OU ciclos no próximo sinal, nunca ambos')
     gale_factor=parse_progression_multiplier(payload.multiplier,'Multiplicador Martingale')
     cycle_factor=parse_progression_multiplier(payload.cycle_multiplier,'Multiplicador de ciclos')
     try:
@@ -2316,6 +2334,7 @@ async def perform_demo_buy(user, token, payload:DemoBuy, *, attribution:dict|Non
                         gale_index=int(attribution['gale_index']),
                         gale_multiplier=str(attribution['gale_multiplier']),
                         cycle_multiplier=str(attribution['cycle_multiplier']),
+                        lineage_symbol=attribution.get('lineage_symbol'),
                         source='autopilot',account_mode='demo'))
                 s.commit()
             except Exception:
