@@ -45,14 +45,24 @@ def test_up_to_five_gales_and_cycles():
     a=calculate(orders,gales=5,cycles=5,gale_multiplier='1.0',cycle_multiplier='1.0')
     assert (a.cycle,a.gale)==(1,0)
 
-def test_rejected_outcome_and_exposure_limits():
+def test_rejected_outcome_and_no_arbitrary_stake_caps():
     with pytest.raises(ProgressionHalt,match='não liquidado'):
         calculate([dict(row(1,2,-2),state='CONFIRMED')])
     with pytest.raises(ProgressionHalt,match='histórico diferente'):
         calculate([row(1,4,-4)])
-    with pytest.raises(ProgressionHalt,match='[Ll]imite máximo'):
-        calculate([row(i,20,-20) for i in range(1,7)],
-                  base='20.00',gales=5,cycles=5,gale_multiplier='1',cycle_multiplier='1')
+    after_six_losses=calculate([row(i,20,-20) for i in range(1,7)],
+                               base='20.00',gales=5,cycles=5,
+                               gale_multiplier='1',cycle_multiplier='1')
+    assert after_six_losses.stake==Decimal('20.00')
+    assert after_six_losses.cycle==1
+    large_first_gale=calculate([row(1,50,-50)],base='50.00',
+                               gale_multiplier='2.50',gales=2,cycles=0,
+                               cycles_enabled=False)
+    assert large_first_gale.stake==Decimal('125.00')
+    large_second_gale=calculate([row(1,50,-50),row(2,125,-125)],
+                                base='50.00',gale_multiplier='2.50',
+                                gales=2,cycles=0,cycles_enabled=False)
+    assert large_second_gale.stake==Decimal('312.50')
     with pytest.raises(ProgressionHalt):
         calculate([],cycle_multiplier='NaN')
     with pytest.raises(ProgressionHalt):
