@@ -2017,8 +2017,6 @@ def parse_progression_multiplier(value, label):
         raise HTTPException(422,label+': informe um número maior ou igual a 1.0')
     if d.as_tuple().exponent<-2:
         raise HTTPException(422,label+': use no máximo duas casas decimais')
-    if d>100000:
-        raise HTTPException(422,label+': valor acima do limite de 100000')
     return d
 
 
