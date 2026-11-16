@@ -128,3 +128,22 @@ def test_third_page_is_part_of_explicit_login_flow():
     assert '/api/demo/buy' not in setup
     assert 'id="setupCycleMultiplier"' in setup
     assert 'A cada perda confirmada' in setup
+
+
+def test_account_page_identity_referrals_and_plan_catalog_are_separate():
+    from pathlib import Path
+    html=(Path(__file__).resolve().parents[1]/'app'/'index.html').read_text()
+    account=html.split('<section id="account"',1)[1].split('<p id="error"',1)[0]
+    assert 'id="accountUserId"' in account
+    assert 'Corretora conectada' in account
+    assert 'onclick="logout()"' in account
+    assert 'Deriv Demo <span class="pill">' not in account
+    assert 'id="accountBalance"' not in account
+    assert account.index('id="accountUserId"') < account.index('id="robotAccessCountdown"')
+    assert account.index('id="referralSummary"') < account.index('id="accountPlansHeading"')
+    assert 'R$</small> 29,90' in account
+    assert 'R$</small> 49,90' in account
+    assert 'R$</small> 99,00' in account
+    assert 'A contratação online ainda não está habilitada' in account
+    assert "accountUserId').textContent=String(a.user_id||'—')" in html
+    assert "if(v==='account'){loadRobotAccess()}" in html
