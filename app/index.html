@@ -788,7 +788,7 @@ html,body{max-width:100%;overflow-x:clip}
         <p class="setup-hint">A cada perda confirmada, a entrada pode aumentar segundo seu multiplicador, respeitando o limite da sequência.</p>
       </div>
       <div class="setup-panel setup-panel-full">
-        <div class="setup-panel-title"><span class="setup-icon" aria-hidden="true">∞</span><div><h2>Ciclos operacionais</h2><p>Progressão entre ciclos completos perdidos.</p></div></div>
+        <div class="setup-panel-title"><span class="setup-icon" aria-hidden="true">∞</span><div><h2>Ciclos operacionais</h2><p>Configuração independente: funciona com ou sem Martingale.</p></div></div>
         <label for="setupCycles">Ciclos adicionais após uma sequência de perdas (máximo 5)</label>
         <select id="setupCycles"><option value="0">Desativado (0)</option><option value="1">1 ciclo adicional</option><option value="2">2 ciclos adicionais</option><option value="3">3 ciclos adicionais</option><option value="4">4 ciclos adicionais</option><option value="5">5 ciclos adicionais</option></select><label for="setupCycleMultiplier" style="margin-top:13px">Multiplicador dos ciclos</label><input id="setupCycleMultiplier" class="setup-numeric" type="text" inputmode="decimal" value="2.0" maxlength="12" placeholder="Ex.: 2.5"><small class="setup-fieldhelp">Digite livremente o fator de ciclo, como 1.0, 2.3 ou 2.5</small>
         <p class="setup-hint">Ex.: entrada US$ 2, gale 2× (US$ 4), próximo ciclo 2× (US$ 8), gale (US$ 16). Uma vitória reinicia no valor inicial; após esgotar os ciclos, o robô pausa. Sem teto financeiro fixo de progressão no NEXORA; os valores dependem do saldo, dos stops escolhidos e da aceitação pela Deriv.</p>
@@ -973,7 +973,9 @@ html,body{max-width:100%;overflow-x:clip}
         <div class="field"><label for="autoGales">Tentativas após LOSS</label><select id="autoGales"><option value="1">1 tentativa</option><option value="2">2 tentativas</option><option value="3">3 tentativas</option><option value="4">4 tentativas</option><option value="5">5 tentativas</option></select></div>
         <div class="field"><label for="autoMultiplier">Multiplicador</label><input id="autoMultiplier" type="number" min="1" step=".1" value="2.00"></div>
       </div>
-      <div class="field"><label for="autoCycles">Ciclos adicionais</label><select id="autoCycles" onchange="toggleAutomationProgressions()"><option value="0">Desativados</option><option value="1">1 ciclo</option><option value="2">2 ciclos</option><option value="3">3 ciclos</option><option value="4">4 ciclos</option><option value="5">5 ciclos</option></select></div>
+      <div class="auto-step"><span>06B</span><strong>Ciclos — independente do Martingale</strong></div>
+      <p class="helper">Você pode ativar somente ciclos, somente Martingale, ambos ou nenhum. Com Martingale desligado, cada LOSS conclui uma tentativa do ciclo atual.</p>
+      <div class="field"><label for="autoCycles">Ciclos adicionais (não exigem Martingale)</label><select id="autoCycles" onchange="toggleAutomationProgressions()"><option value="0">Desativados</option><option value="1">1 ciclo</option><option value="2">2 ciclos</option><option value="3">3 ciclos</option><option value="4">4 ciclos</option><option value="5">5 ciclos</option></select></div>
       <div id="autoCycleSettings" class="field hidden"><label for="autoCycleMultiplier">Multiplicador dos ciclos</label><input id="autoCycleMultiplier" type="number" min="1" step=".1" value="2.00"></div>
       <div class="auto-step"><span>07</span><strong>Filtros e proteções</strong></div>
       <label class="auto-choice"><input type="checkbox" id="autoNews" onchange="showAutomationNews()"> Filtro de notícias econômicas <small>Defina o intervalo de proteção antes e após os eventos</small></label>
@@ -1141,12 +1143,14 @@ html,body{max-width:100%;overflow-x:clip}
     </div>
     <p class="muted">Um Stop Win ou Stop Loss em US$ 0,00 desativa esse limite. Outros bloqueios de segurança continuam valendo.</p>
     <div class="divider" style="height:1px;background:#35536a;margin:21px 0"></div>
-    <div class="surface-heading">Martingale e ciclos</div>
+    <div class="surface-heading">Martingale (opcional)</div>
     <label class="checkrow"><input type="checkbox" id="mg" onchange="toggleSettingsMartingale()"> Ativar Martingale</label>
     <div class="settings-grid" id="settingsGaleFields">
       <div class="field"><label for="mgCount">Quantidade de Martingales</label><select id="mgCount"><option value="1">1 tentativa</option><option value="2">2 tentativas</option><option value="3">3 tentativas</option><option value="4">4 tentativas</option><option value="5">5 tentativas</option></select></div>
       <div class="field"><label for="mult">Multiplicador Martingale</label><input id="mult" inputmode="decimal" type="text" placeholder="Ex.: 2.3" value="2.0"><small class="setup-fieldhelp">Número ≥ 1.0, até 2 casas decimais</small></div>
     </div>
+    <div class="surface-heading" style="margin-top:22px">Ciclos independentes (opcional)</div>
+    <p class="muted">Ciclos podem ser configurados sem ativar Martingale. A quantidade e o multiplicador são independentes.</p>
     <div class="settings-grid" style="margin-top:16px">
       <div class="field"><label for="cycles">Ciclos adicionais (máximo 5)</label><select id="cycles"><option value="0">Desativado (0)</option><option value="1">1 ciclo</option><option value="2">2 ciclos</option><option value="3">3 ciclos</option><option value="4">4 ciclos</option><option value="5">5 ciclos</option></select></div>
       <div class="field"><label for="cycleMultiplier">Multiplicador dos ciclos</label><input id="cycleMultiplier" inputmode="decimal" type="text" placeholder="Ex.: 2.5" value="2.0"><small class="setup-fieldhelp">Digite seu fator livremente</small></div>
