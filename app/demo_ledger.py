@@ -58,8 +58,8 @@ def order_guard(user, orders, stake, *, after_order_id=0,
         raise OrderGuardError('Contrato demo em andamento ou pendente de reconciliação')
     pnl=sum((money(o.pnl) for o in orders if o.state=='SETTLED' and o.pnl is not None
              and (after_order_id==0 or (getattr(o,'id',None) or 0)>after_order_id)),Decimal('0'))
-    if stake < Decimal('0.50') or stake > Decimal('1000'):
-        raise OrderGuardError('Valor da entrada fora dos limites de treinamento')
+    if stake < Decimal('0.50'):
+        raise OrderGuardError('Entrada DEMO abaixo do valor mínimo permitido')
     stop_win=money(user.stop_win)
     stop_loss=money(user.stop_loss)
     if stop_loss<0 or stop_win<0:
