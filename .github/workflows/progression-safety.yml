@@ -23,4 +23,4 @@ jobs:
       - name: Generate isolated test-only encryption key
         run: echo "NEXORA_FERNET_KEY=$(python -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())')" >> "$GITHUB_ENV"
       - name: Validate progression and broker-order safeguards
-        run: python -m pytest -q tests/test_progression.py tests/test_demo_ledger.py tests/test_zero_stops.py
+        run: python -m pytest -q tests/test_progression.py tests/test_demo_ledger.py tests/test_zero_stops.py tests/test_autopilot_v2.py::test_martingale_recovery_keeps_symbol_and_original_direction tests/test_autopilot_v2.py::test_recovery_queue_prefers_oldest_settled_loss_not_latest_id
