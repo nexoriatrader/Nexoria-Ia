@@ -585,6 +585,15 @@ async def autopilot_once():
                     if not batch and not m1_recovery_window_open(settlement):
                         autopilot_reasons[uid]='Aguardando abertura de vela M1 para recuperação'
                         continue
+                    if batch and pulso_active:
+                        target_open,ready=martingale_next_candle_window(
+                            settlement,last.duration_minutes,now=time.time())
+                        if not ready:
+                            autopilot_reasons[uid]=(
+                                'Martingale M'+str(last.duration_minutes)+
+                                ': aguardando abertura da próxima vela após LOSS oficial')
+                            log_v2_gate(uid,'MARTINGALE_NEXT_CANDLE_WAIT')
+                            continue
                     if batch and now-autopilot_last_attempt.get(uid,-1e12)<(1 if pulso_active else 5):
                         log_v2_gate(uid,'RECOVERY_COOLDOWN')
                         continue
@@ -820,6 +829,15 @@ async def autopilot_once():
                 continue
             deadline_for_buy=(candidate['last_bar_epoch']+60+12
                               if pulso_active and not entry.retry else None)
+            if pulso_active and entry.retry:
+                # This is a deadline for an existing confirmed candle only;
+                # never extend it to an arbitrary mid-candle instant.
+                target_open,ready=martingale_next_candle_window(
+                    last.updated_at,last.duration_minutes,now=time.time())
+                if not ready:
+                    autopilot_reasons[uid]='Martingale: janela da próxima vela encerrada'
+                    continue
+                deadline_for_buy=target_open+8
             timed_v24=(bool(batch) and not pulso_active and SIGNAL_PROFILE=='next_open_v24'
                        and candidate['minutes'] in (5,15)
                        and active_market()==('volatility' if candidate['minutes']==5 else 'forex'))
@@ -1908,6 +1926,9 @@ async def autopilot_start(request:Request,payload:AutoPilotSwitch,
     if user.martingale:
         raise HTTPException(409,'Configuração antiga de Martingale: salve novamente as opções atuais')
     with db.SessionLocal() as sess:
+        plan=sess.get(db.RobotPlan,user.id)
+        if plan and plan.requested_martingale and plan.cycles_limit:
+            raise HTTPException(409,'Escolha Martingale OU ciclos antes de ligar o robô; ambos não podem operar juntos')
         orders=sess.scalars(select(db.DemoOrder).where(db.DemoOrder.user_id==user.id)).all()
         boundary=latest_risk_session(sess,user.id)
         blocker=autopilot_start_blocker(user,orders,after_order_id=boundary.after_order_id if boundary else 0)
