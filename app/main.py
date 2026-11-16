@@ -390,7 +390,12 @@ def v2_symbol_recovery(sess,user,orders,plan,cycle_cfg,batch):
             next_retries.append((group[-1].id,entry,group[-1]))
     if not next_retries:
         return None,None
-    _,entry,last=max(next_retries,key=lambda pair:pair[0])
+    # Prioritize the OLDEST officially settled outstanding recovery.
+    # Taking max(order_id) here starves earlier losing symbols whenever
+    # newer M15 contracts settle (observed in the DEMO ledger).
+    # A confirmed order on its own symbol remains excluded above.
+    _,entry,last=min(next_retries,key=lambda pair:(
+        pair[2].updated_at or pair[2].created_at,pair[0]))
     return entry,last
 
 
