@@ -247,7 +247,8 @@ def test_reconciliation_prioritizes_recent_contracts(tmp_path,monkeypatch):
             s.add_all([
                 db.DemoOrder(user_id=uid,request_key=f'pending-{i:03d}',
                     active_slot=None,state='CONFIRMED',contract_id=str(100000+i),
-                    symbol='1HZ100V',direction='CALL',duration_minutes=5,stake='2.00')
+                    symbol='1HZ100V',direction='CALL',duration_minutes=5,stake='2.00',
+                    created_at=db.utcnow()-timedelta(minutes=6))
                 for i in range(105)
             ])
             s.commit()
