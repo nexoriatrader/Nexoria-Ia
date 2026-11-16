@@ -151,3 +151,30 @@ def test_account_page_identity_referrals_and_plan_catalog_are_separate():
     assert 'disabled data-plan=' in account
     assert "accountUserId').textContent=String(a.user_id||'—')" in html
     assert "if(v==='account'){loadRobotAccess();loadBillingPlans()}" in html
+
+
+def test_robot_wizard_has_exactly_seven_main_steps_and_cycles_stay_in_step_six():
+    from pathlib import Path
+    html=(Path(__file__).resolve().parents[1]/'app'/'index.html').read_text()
+    config=html.split('<section id="robot-config"',1)[1].split('<section id="results"',1)[0]
+    steps=config.split('<div class="auto-steps">',1)[1].split('<div class="auto-wizard-actions">',1)[0]
+    assert steps.count('<div class="auto-step">')==7
+    assert 'class="auto-cycle-subheading"' in steps
+    assert '<span>06B</span>' in steps
+    assert steps.index('<span>06B</span>')<steps.index('<span>07</span>')
+    assert "if(headers.length!==7)throw Error('Etapas de configuração incompletas')" in html
+    assert "element.hidden=Number(element.dataset.wizardStep)!==autoWizardStep" in html
+    assert 'id="autoWizardBack"' in config
+    assert 'id="autoWizardNext"' in config
+    assert 'id="autoSaveButton"' in config
+
+
+def test_results_screen_has_no_pulso_audit_button_or_panel():
+    from pathlib import Path
+    html=(Path(__file__).resolve().parents[1]/'app'/'index.html').read_text()
+    results=html.split('<section id="results"',1)[1].split('<section id="features"',1)[0]
+    assert 'AUDITORIA PULSO' not in results
+    assert 'pulsoAuditCard' not in results
+    assert 'loadPulsoAudit' not in html
+    assert 'id="ordersBody"' in results
+    assert 'id="resultsLiveStatus"' in results
