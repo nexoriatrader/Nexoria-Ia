@@ -580,6 +580,48 @@ html,body{max-width:100%;overflow-x:clip}
 .primary-nav .nav-broker-link:focus-visible{outline:2px solid #74d5ff}
 @media(max-width:550px){.nexora-logo-only{padding:8px 0 12px}.nexora-logo-only .brand img{width:clamp(190px,56vw,230px);height:auto}.primary-nav .nav-broker-link{padding:10px 12px;min-height:45px}}
 </style><style>
+/* Account dashboard: single identity, membership, referrals, and plan catalog */
+#account .account-profile-card{padding:22px 24px}
+.account-profile-top{display:flex;align-items:center;gap:17px;flex-wrap:wrap}
+.account-profile-avatar{display:grid;place-items:center;flex:none;width:58px;height:58px;border-radius:18px;border:1px solid #5590ad;background:linear-gradient(145deg,#20556b,#102c49);color:#f5c85b;font-size:32px;font-weight:950}
+.account-profile-identity{display:flex;flex-direction:column;min-width:0;flex:1;gap:3px}
+.account-eyebrow{color:#93b3c9;font-size:10px;font-weight:850;letter-spacing:.12em}
+.account-profile-identity strong{font-size:clamp(19px,3vw,25px);font-weight:900;letter-spacing:.015em;overflow-wrap:anywhere}
+.account-identity-hint{font-size:11px;color:#9db5c7}
+.account-broker-status{display:inline-flex;align-items:center;gap:8px;background:#102f33;border:1px solid #306862;border-radius:999px;color:#a6efd3;padding:9px 12px;font-size:11px;font-weight:850}
+.account-profile-bottom{border-top:1px solid #2a475b;margin-top:20px;padding-top:16px;display:flex;align-items:center;justify-content:space-between;gap:15px}
+.account-broker-info{display:flex;flex-direction:column;gap:2px}
+.account-broker-info strong{font-size:16px}
+.account-disconnect{min-height:43px}
+.account-card-header{display:flex;justify-content:space-between;align-items:center;gap:10px}
+.account-card-header .surface-heading{margin:3px 0 0}
+.account-access-indicator{font-size:10px;font-weight:850;letter-spacing:.05em;color:#f3c86a}
+.account-access-time{font-variant-numeric:tabular-nums;color:#f4be52;font-size:clamp(29px,6vw,43px);font-weight:900;line-height:1.15;letter-spacing:-.045em;margin:20px 0 10px}
+.account-access-note{margin-top:14px;font-size:12px;color:#92b0c6;border-top:1px solid #28475b;padding-top:13px}
+.account-referral-gift{font-size:12px;font-weight:900;color:#ffe39b;border:1px solid #806b41;border-radius:9px;background:#4b3b27;padding:7px 10px}
+.account-referral-field{margin-top:18px}
+.account-referral-field label{display:block;margin-bottom:8px;color:#c1d8ea;font-size:12px;font-weight:750}
+.account-referral-copy{display:flex;gap:9px;align-items:stretch}
+.account-referral-copy input{flex:1;min-width:0;min-height:45px;border-radius:10px;border:1px solid #3b6278;padding:10px;background:#081b2b;color:#d5e8f4;font-size:12px}
+.account-referral-copy button{flex:none;white-space:nowrap}
+.account-referral-summary{margin-top:13px;color:#aed4e7;font-size:12px;font-weight:700}
+.account-plans-section{margin:24px 0}
+.account-plans-title h2{font-size:clamp(21px,3vw,26px);letter-spacing:-.025em}
+.account-plans-title p{color:#9bb6c8;font-size:13px;margin-top:4px}
+.account-plans-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-top:16px}
+.account-plan{display:flex;flex-direction:column;min-width:0;padding:22px 19px;border:1px solid #2b4b63;border-radius:18px;background:linear-gradient(145deg,#10293c,#0b1c2d);min-height:217px}
+.account-plan-featured{border-color:#ba964c;background:linear-gradient(145deg,#273c48,#102a3e);box-shadow:inset 0 0 0 1px #d5af4d22}
+.account-plan-name{color:#a3bfd2;font-size:10px;font-weight:850;letter-spacing:.14em}
+.account-plan-featured .account-plan-name{color:#f4d68c}
+.account-plan h3{font-size:17px;margin:10px 0 8px}
+.account-plan-price{font-size:clamp(25px,3vw,32px);font-weight:950;letter-spacing:-.05em;color:#f7d381;white-space:nowrap}
+.account-plan-price small{font-size:14px;font-weight:800;letter-spacing:0}
+.account-plan p{font-size:12px;color:#aabfd0;margin-top:10px}
+.account-plan-foot{font-size:11px;color:#7894a6;margin-top:auto;padding-top:15px}
+.account-plans-note{font-size:11px;color:#92adbf;line-height:1.6;margin-top:13px}
+@media(max-width:700px){.account-plans-grid{grid-template-columns:1fr}.account-plan{min-height:0;padding:17px 19px}.account-plan-foot{padding-top:10px}}
+@media(max-width:480px){#account .account-profile-card{padding:18px 16px}.account-profile-top{gap:11px}.account-profile-avatar{width:48px;height:48px;font-size:27px}.account-broker-status{margin-left:59px;font-size:10px}.account-referral-copy{flex-direction:column}.account-referral-copy button{min-height:44px}.account-access-indicator{font-size:9px}}
+</style><style>
 /* Dedicated robot-configuration page, separate from the dashboard */
 .robot-config-page-heading{gap:16px;flex-wrap:wrap}
 .robot-config-page-heading .robot-back-button{flex:none;min-height:44px;font-size:12px}
@@ -1161,23 +1203,39 @@ html,body{max-width:100%;overflow-x:clip}
   </div>
 </section>
 <section id="account" class="hidden">
-  <div class="section-heading"><div><h1>Minha conta</h1></div></div>
-  <div class="card"><div class="surface-heading">Acesso ao robô</div>
-    <p class="helper" id="accountUserId">Meu ID NEXORA: —</p>
-    <div class="metric-value" id="robotAccessCountdown" style="color:#f4be52;font-variant-numeric:tabular-nums">--:--:--</div>
+  <div class="section-heading account-page-heading"><div><div class="eyebrow">PERFIL E ASSINATURA</div><h1>Minha conta</h1><p>Gerencie seu acesso, suas indicações e conheça os planos do NEXORA.</p></div></div>
+  <div class="card account-profile-card">
+    <div class="account-profile-top">
+      <div class="account-profile-avatar" aria-hidden="true">N</div>
+      <div class="account-profile-identity"><span class="account-eyebrow">MEU ID NEXORA</span><strong id="accountUserId">—</strong><span class="account-identity-hint">Identificação exclusiva da sua conta</span></div>
+      <span class="account-broker-status"><span class="dot" aria-hidden="true"></span>Corretora conectada</span>
+    </div>
+    <div class="account-profile-bottom">
+      <div class="account-broker-info"><span class="account-eyebrow">CORRETORA</span><strong>Deriv</strong><span class="account-identity-hint">Conta de treinamento</span></div>
+      <button class="outline account-disconnect" type="button" onclick="logout()">DESCONECTAR</button>
+    </div>
+  </div>
+  <div class="card account-access-card">
+    <div class="account-card-header"><div><div class="account-eyebrow">SUA ASSINATURA</div><div class="surface-heading">Acesso ao robô</div></div><span class="account-access-indicator">TEMPO RESTANTE</span></div>
+    <div class="account-access-time" id="robotAccessCountdown" aria-live="off">--:--:--</div>
     <p class="muted" id="robotAccessInfo">Consultando o período de acesso...</p>
-    <p class="helper">O acesso controla novas entradas. Contratos já comprados na Deriv continuam até a liquidação.</p>
+    <p class="account-access-note">A validade controla apenas novas entradas. Contratos já comprados continuam até a liquidação pela corretora.</p>
   </div>
-  <div class="card"><div class="surface-heading">Indique e ganhe +24 horas</div>
-    <p class="muted">Cada novo usuário que você indicar para usar nosso robô você ganha +24 horas. Copie seu link único abaixo.</p>
-    <div class="field" style="margin-top:12px"><label for="referralLink">Meu link exclusivo</label><input readonly id="referralLink" value="—"></div>
-    <div class="actions"><button class="outline" onclick="copyMyReferral()">COPIAR LINK</button></div>
-    <p class="helper" id="referralSummary">Consultando indicações...</p>
+  <div class="card account-referral-card">
+    <div class="account-card-header"><div><div class="account-eyebrow">CONVIDE E GANHE</div><div class="surface-heading">Indique e ganhe +24 horas</div></div><span class="account-referral-gift" aria-hidden="true">+24h</span></div>
+    <p class="muted">Compartilhe seu link exclusivo. Cada indicação válida adiciona mais 24 horas de acesso.</p>
+    <div class="account-referral-field"><label for="referralLink">Seu link exclusivo</label><div class="account-referral-copy"><input readonly id="referralLink" value="—" aria-label="Seu link de indicação"><button class="outline" type="button" onclick="copyMyReferral()">COPIAR LINK</button></div></div>
+    <p class="account-referral-summary" id="referralSummary">Consultando indicações...</p>
   </div>
-  <div class="card"><div class="surface-heading">Deriv Demo <span class="pill"><span class="dot"></span>CONECTADA</span></div>
-    <p class="muted">Saldo oficial da Deriv Demo</p><div class="metric-value" id="accountBalance">—</div>
-    <div class="actions"><button class="outline" onclick="logout()">DESCONECTAR</button></div>
-  </div>
+  <section class="account-plans-section" aria-labelledby="accountPlansHeading">
+    <div class="account-plans-title"><div><div class="eyebrow">MAIS TEMPO COM O NEXORA</div><h2 id="accountPlansHeading">Planos de acesso</h2><p>Escolha o período que melhor combina com você.</p></div></div>
+    <div class="account-plans-grid">
+      <article class="account-plan"><span class="account-plan-name">QUINZENAL</span><h3>15 dias</h3><div class="account-plan-price"><small>R$</small> 29,90</div><p>Acesso ao robô por 15 dias.</p><div class="account-plan-foot">Plano informativo</div></article>
+      <article class="account-plan account-plan-featured"><span class="account-plan-name">MENSAL</span><h3>30 dias</h3><div class="account-plan-price"><small>R$</small> 49,90</div><p>Acesso ao robô por 30 dias.</p><div class="account-plan-foot">Plano informativo</div></article>
+      <article class="account-plan"><span class="account-plan-name">TRIMESTRAL</span><h3>90 dias</h3><div class="account-plan-price"><small>R$</small> 99,00</div><p>Acesso ao robô por 90 dias.</p><div class="account-plan-foot">Plano informativo</div></article>
+    </div>
+    <p class="account-plans-note">Os planos estão disponíveis para consulta. A contratação online ainda não está habilitada nesta página; nenhum pagamento é realizado aqui.</p>
+  </section>
 </section>
 
 <p id="error" class="alert" role="alert"></p>
@@ -1701,7 +1759,7 @@ async function loadRobotAccess(){
     accessExpiresMs=a.expires_at?new Date(a.expires_at).getTime():null;
     accessServerDelta=a.server_time?new Date(a.server_time).getTime()-Date.now():0;
     updateAccessCountdown();
-    $('accountUserId').textContent='Meu ID NEXORA: '+String(a.user_id||'—');
+    $('accountUserId').textContent=String(a.user_id||'—');
     $('referralLink').value=location.origin+'/i/'+encodeURIComponent(a.short_code)+'?v=2';
     $('referralSummary').textContent=(a.confirmed_referrals||0)+' indicações válidas · '+(a.bonus_hours||0)+' horas ganhas';
     if(!a.enforced){
@@ -1724,7 +1782,7 @@ async function loadRobotAccess(){
       ' · validade até '+when+' (Brasília)';
   }catch(e){target.textContent='Não foi possível consultar a validade do acesso'}
 }
-async function loadDemoBalance(){try{const b=await req('/api/demo/balance');demoBalance=b;$('balanceMetric').textContent=money(b.balance,b.currency);$('accountBalance').textContent=money(b.balance,b.currency);return b}catch(e){$('balanceMetric').textContent='Indisponível';$('accountBalance').textContent='Indisponível';throw e}}
+async function loadDemoBalance(){try{const b=await req('/api/demo/balance');demoBalance=b;$('balanceMetric').textContent=money(b.balance,b.currency);return b}catch(e){$('balanceMetric').textContent='Indisponível';throw e}}
 function setEducationTab(tab){
  const groups={all:['learningStrategiesSection','learningIndicatorsSection','learningHowtoSection'],
   strategies:['learningStrategiesSection'],indicators:['learningIndicatorsSection'],howto:['learningHowtoSection']};
