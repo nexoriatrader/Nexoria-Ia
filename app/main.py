@@ -34,6 +34,7 @@ from .trade_selector_v2 import (select_demo_signal, last_scan_report, has_pendin
                                 active_market, catalogue, supported, fetch_closed_timeframe,
                                 SIGNAL_PROFILE)
 from .progression import next_entry, ProgressionHalt, NextEntry
+from .expiry_policy import proposal_durations
 from .security import CLIENT_ID, REDIRECT, TOKEN_URL, build_authorize_url, make_login, make_session_id, hashsecret, encrypt, decrypt, cookie_options
 
 log=logging.getLogger('nexora')
@@ -709,7 +710,14 @@ async def autopilot_once():
                     selected_ratio=(Decimal('1')+Decimal(str(profile.min_payout))/Decimal('100')
                                     if pulso_active and profile is not None else Decimal('1.50'))
                     auto_expiry=bool(pulso_active and profile is not None)
-                    durations=tuple(candidate.get('expiry_options',(candidate['minutes'],))) if auto_expiry else (candidate['minutes'],)
+                    durations=proposal_durations(
+                        profile.market if auto_expiry else '',
+                        candidate.get('expiry_options',(candidate['minutes'],)),
+                        automatic=auto_expiry)
+                    if not durations:
+                        autopilot_reasons[uid]='Forex AUTO: sinal sem opção M15 configurada; nenhuma proposta enviada'
+                        log_v2_gate(uid,'FOREX_M15_UNAVAILABLE',detail='symbol='+str(candidate['symbol']))
+                        continue
                     best_offer=None
                     cutoff=(candidate.get('last_bar_epoch',0)+60+12
                             if pulso_active and not entry.retry else None)
