@@ -872,6 +872,7 @@ html,body{max-width:100%;overflow-x:clip}
         <div><span>Último ativo verificado</span><strong id="dashScanLastSymbol">—</strong></div>
         <div><span>Ativos verificados</span><strong id="dashScanChecked">—</strong></div>
         <div><span>Progressão</span><strong id="dashScanCycle">—</strong></div>
+        <div><span>Última expiração escolhida</span><strong id="dashScanExpiry">—</strong></div>
       </div>
       <div class="dash-scan-track"><span id="dashScanFill"></span></div>
       <p class="dash-scan-caption" id="dashScanCaption">Aguardando ativação do robô.</p>
@@ -1374,6 +1375,7 @@ function renderScanMonitor(status){
  $('dashScanLastSymbol').textContent=running&&data?.last_symbol?data.last_symbol:'—';
  $('dashScanChecked').textContent=running&&data?.last_scan_at?
   (data.checked||0)+' / '+(data.total||0):'—';
+ $('dashScanExpiry').textContent=running&&data?.selected_expiry?'M'+data.selected_expiry:'Aguardando sinal';
  $('dashScanCycle').textContent=!running?'—':
   data&&(Number(data.cycle)>0||Number(data.gale)>0)?
    'Ciclo '+Number(data.cycle||0)+' · Gale '+Number(data.gale||0):
