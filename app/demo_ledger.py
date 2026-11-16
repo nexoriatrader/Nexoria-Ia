@@ -48,8 +48,9 @@ def order_guard(user, orders, stake, *, after_order_id=0,
     active=[o for o in orders if o.state in ACTIVE]
     stake=money(stake)
     if parallel:
-        if any(o.state in ('PENDING','UNKNOWN') for o in active):
-            raise OrderGuardError('Contrato pendente ou incerto; novas entradas bloqueadas')
+        # A pending/uncertain order locks its own symbol, not unrelated
+        # symbols. Every symbol keeps a unique durable active_slot, and the
+        # locked user row still serializes risk/exposure checks.
         if any(o.symbol==symbol for o in active):
             raise OrderGuardError('Já existe contrato aberto neste ativo')
         if any(o.active_slot==user.id for o in active):
