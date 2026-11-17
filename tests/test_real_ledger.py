@@ -133,6 +133,7 @@ def test_real_worker_reserves_and_reconciles_mock_contract(session,monkeypatch):
         real_runtime.running.clear()
         real_runtime.reasons.clear()
         real_runtime._user_locks.clear()
+        real_runtime.last_scan.clear()
         session.close()
 
 
@@ -177,4 +178,5 @@ def test_uncertain_real_execution_never_sends_next_buy(session,monkeypatch):
         real_runtime.running.clear()
         real_runtime.reasons.clear()
         real_runtime._user_locks.clear()
+        real_runtime.last_scan.clear()
         session.close()
