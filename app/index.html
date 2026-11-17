@@ -1472,6 +1472,8 @@ function clearLoginQuery(){
   window.history.replaceState({},'',url.pathname+url.search+url.hash);
 }
 let nexoraLoginRedirectPending=false;
+// A mobile back-navigation may restore this page from cache; allow a fresh login.
+window.addEventListener('pageshow',()=>{nexoraLoginRedirectPending=false;});
 function startNexoraTrial(event){
  // Both landing CTA buttons share the same validated destination.
  if(event&&event.button!==undefined&&event.button!==0)return;
