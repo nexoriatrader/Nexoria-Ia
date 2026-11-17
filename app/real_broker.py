@@ -104,17 +104,23 @@ async def buy_real_contract(
     token: str, account_id: str, *, symbol: str, contract_type: str,
     stake: str, duration: int, currency: str, min_payout_ratio: str,
     latest_buy_send_epoch: float | None = None,
+    duration_options: tuple[int, ...] | None = None,
 ) -> dict:
-    """One opt-in REAL purchase after external durable reservation and risk checks.
+    """Buy only after caller's durable REAL reservation and risk checks.
 
-    IMPORTANT: This adapter deliberately has NO HTTP route and NO autopilot
-    integration. Connecting it requires a separate real ledger with durable
-    unknown-order reconciliation and explicit per-user consent.
+    Optional automatic expiry probes M1/M3/M5/M15 with read-only quotes, then
+    fetches a fresh streaming proposal for the selected expiry before purchase.
     """
     if not re.fullmatch(r"[A-Za-z0-9_]{2,30}", symbol or ""):
         raise RealExecutionError("Ativo REAL inválido")
     if contract_type not in ("CALL", "PUT") or duration not in (1, 3, 5, 15):
         raise RealExecutionError("Contrato REAL inválido")
+    if duration_options is not None:
+        if (not isinstance(duration_options, tuple) or not duration_options
+            or any(x not in (1,3,5,15) for x in duration_options)
+            or len(duration_options)>4):
+            raise RealExecutionError("Expirações automáticas REAL inválidas")
+        duration_options=tuple(dict.fromkeys(duration_options))
     if not re.fullmatch(r"[A-Za-z0-9]{2,20}", currency or ""):
         raise RealExecutionError("Moeda REAL inválida")
     try:
@@ -133,6 +139,51 @@ async def buy_real_contract(
     try:
         async with asyncio.timeout(20):
             async with websockets.connect(url, ping_interval=20, ping_timeout=10) as ws:
+                if duration_options:
+                    # One authenticated socket; never accept non-streaming
+                    # proposal IDs for a purchase. They are quotes only.
+                    outstanding={}
+                    for i,minutes in enumerate(duration_options):
+                        req_id=8500+i
+                        outstanding[req_id]=minutes
+                        await ws.send(json.dumps({
+                            "proposal":1,"amount":float(amount),"basis":"stake",
+                            "contract_type":contract_type,"currency":currency,
+                            "duration":minutes,"duration_unit":"m",
+                            "underlying_symbol":symbol,"req_id":req_id,
+                        }))
+                    eligible=[]
+                    try:
+                        budget=4.0
+                        if latest_buy_send_epoch is not None:
+                            budget=min(budget,max(0.0,latest_buy_send_epoch-time.time()-2.0))
+                        async with asyncio.timeout(budget):
+                            while outstanding:
+                                response=json.loads(await ws.recv())
+                                req_id=response.get("req_id")
+                                if req_id not in outstanding:
+                                    continue
+                                minutes=outstanding.pop(req_id)
+                                proposal_quote=response.get("proposal")
+                                if response.get("error") or not isinstance(proposal_quote,dict):
+                                    continue
+                                try:
+                                    ask_quote=Decimal(str(proposal_quote.get("ask_price")))
+                                    pay_quote=Decimal(str(proposal_quote.get("payout")))
+                                    if (ask_quote.is_finite() and 0<ask_quote<=amount
+                                        and pay_quote.is_finite() and
+                                        pay_quote>=ask_quote*minimum_ratio):
+                                        eligible.append((pay_quote/ask_quote, minutes))
+                                except (InvalidOperation,ValueError,TypeError):
+                                    continue
+                    except TimeoutError:
+                        pass
+                    if not eligible:
+                        raise RealExecutionError(
+                            "Nenhuma expiração REAL com payout válido na janela do sinal")
+                    duration=max(eligible)[1]
+                # Broker requires a fresh STREAMING proposal for the actual
+                # contract. The preliminary automatic quotes are never bought.
                 await ws.send(json.dumps({
                     "proposal": 1, "amount": float(amount), "basis": "stake",
                     "contract_type": contract_type, "currency": currency,
