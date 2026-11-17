@@ -150,8 +150,13 @@ async def shared_candle_request(symbol: str, granularity: int, count: int, *, ti
         response=await asyncio.wait_for(asyncio.shield(task),timeout=timeout)
         if not isinstance(response.get('candles'),list) or not response['candles']:
             raise MarketError('Velas da Deriv indisponíveis')
+        # At a candle boundary the broker may be a few seconds late publishing
+        # the completed bar. Do NOT cache that stale response for the whole new
+        # candle period: subsequent scanners must be able to retry immediately.
+        latest_epoch=max(int(bar['epoch']) for bar in response['candles'])
+        fresh=latest_epoch>=bucket*granularity-granularity
         async with _candle_lock:
-            if int(time.time()//granularity)==bucket:
+            if fresh and int(time.time()//granularity)==bucket:
                 _candle_snapshots[key]=dict(response)
                 # Bound memory while allowing concurrent portfolio strategies.
                 if len(_candle_snapshots)>180:
