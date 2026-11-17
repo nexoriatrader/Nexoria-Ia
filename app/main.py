@@ -18,7 +18,7 @@ from . import db
 from .stripe_billing import PLANS, billing_enabled, stripe_expected_livemode, create_checkout, stripe_signature_valid, apply_paid_checkout
 from .automation_markets import GROUPS as AUTOMATION_GROUPS, instruments_by_group, featured_instruments_by_group
 from .access import (access_control_enabled, access_status, start_trial_on_first_robot_start,
-                     register_first_login, referral_report, utc)
+                     register_first_login, referral_report, trial_duration_hours, utc)
 from .demo import (DemoTradingError, DemoPreBuyDeadlineExceeded, demo_account_balance,
                    demo_contract_status, demo_buy, demo_proposal, demo_expiry_quotes,
                    prepare_demo_buy_socket)
@@ -1200,33 +1200,74 @@ async def health():
             'manual_demo_purchase_enabled':enabled,'real_orders_enabled':real_runtime.real_available(),
             'execution_modes':['demo']+(['real'] if real_runtime.real_available() else [])}
 
+@app.get('/api/public/offer')
+async def public_offer():
+    """Public, non-sensitive source of truth for the trial landing page."""
+    return {'trial_hours':trial_duration_hours(),
+            'trial_starts':'first_verified_deriv_login',
+            'referral_bonus_hours':24}
+
+
+def oauth_recovery_redirect(nexora_sid:str|None, *, reason:str='expired'):
+    """Treat repeated callbacks with a live login as a successful existing session.
+
+    OAuth codes and state are single-use. Browser reload/back navigation can
+    repeat their callback after login succeeded; never display a raw HTTP 400
+    or exchange the authorization code again. Unknown callbacks must NOT
+    create sessions, and unauthenticated visitors must log in afresh.
+    """
+    if nexora_sid:
+        try:
+            active_session(None,nexora_sid)
+        except HTTPException:
+            pass
+        else:
+            response=RedirectResponse('/?login=existing',status_code=303)
+            response.delete_cookie('nexora_state',path='/')
+            return response
+    reason=reason if reason in ('expired','cancelled','failed') else 'expired'
+    response=RedirectResponse('/?login='+reason,status_code=303)
+    response.delete_cookie('nexora_state',path='/')
+    return response
+
+
 @app.get('/auth/deriv/start')
 async def login_start(ref:str|None=None):
     state,verifier=make_login()
     if ref and not re.fullmatch(r'[A-Za-z0-9_-]{8,32}',ref):
         ref=None
     with db.SessionLocal() as s:
-        # expiry handled at consumption; old flows can be pruned in maintenance
-        s.add(db.LoginFlow(state_hash=hashsecret(state),verifier_encrypted=encrypt(verifier),referral_code=ref));s.commit()
+        # Keep single-use PKCE verifiers only while an OAuth authorization
+        # remains usable. Expired flows must not accumulate in PostgreSQL.
+        s.execute(delete(db.LoginFlow).where(
+            db.LoginFlow.created_at < db.utcnow()-timedelta(minutes=15)))
+        s.add(db.LoginFlow(state_hash=hashsecret(state),
+                           verifier_encrypted=encrypt(verifier),referral_code=ref))
+        s.commit()
     response=RedirectResponse(build_authorize_url(state,verifier),302)
     response.set_cookie('nexora_state',state,max_age=600,**cookie_options())
     return response
 
 @app.get('/auth/deriv/callback')
 async def callback(code:str|None=None,state:str|None=None,error:str|None=None,
-                   nexora_state:str|None=Cookie(default=None)):
+                   nexora_state:str|None=Cookie(default=None),
+                   nexora_sid:str|None=Cookie(default=None)):
     if not state or not nexora_state or not secrets.compare_digest(state,nexora_state):
-        raise HTTPException(400,'Estado OAuth inválido')
+        return oauth_recovery_redirect(nexora_sid)
     with db.SessionLocal() as s:
         obj=s.get(db.LoginFlow,hashsecret(state))
-        if not obj:raise HTTPException(400,'Solicitação expirada ou já utilizada')
+        if obj is None:
+            return oauth_recovery_redirect(nexora_sid)
         age=db.utcnow()- (obj.created_at.replace(tzinfo=timezone.utc) if obj.created_at.tzinfo is None else obj.created_at)
+        if age.total_seconds()>600 or age.total_seconds() < -30:
+            s.delete(obj)
+            s.commit()
+            return oauth_recovery_redirect(nexora_sid)
         verifier=decrypt(obj.verifier_encrypted)
         referral_code=obj.referral_code
         s.delete(obj);s.commit()
-    if age.total_seconds()>600:raise HTTPException(400,'Solicitação de login expirada')
-    if error:return RedirectResponse('/?login=cancelled',303)
-    if not code:raise HTTPException(400,'Código OAuth ausente')
+    if error:return oauth_recovery_redirect(nexora_sid,reason='cancelled')
+    if not code:return oauth_recovery_redirect(nexora_sid)
     try:
         async with httpx.AsyncClient(timeout=20) as client:
             token_resp=await client.post(TOKEN_URL,data={'grant_type':'authorization_code','client_id':CLIENT_ID,
@@ -1236,8 +1277,9 @@ async def callback(code:str|None=None,state:str|None=None,error:str|None=None,
             accounts_resp=await client.get('https://api.derivws.com/trading/v1/options/accounts',
                 headers={'Authorization':f'Bearer {token}'})
             accounts_resp.raise_for_status();payload=accounts_resp.json()
-    except (httpx.HTTPError,ValueError,KeyError):
-        raise HTTPException(502,'Falha de autenticação com a Deriv') from None
+    except (httpx.HTTPError,ValueError,KeyError) as exc:
+        log.warning('Deriv OAuth callback unavailable: %s',type(exc).__name__)
+        return oauth_recovery_redirect(nexora_sid,reason='failed')
     from .auth_helpers import extract_accounts, demo_id
     account=demo_id(extract_accounts(payload))
     if account is None:

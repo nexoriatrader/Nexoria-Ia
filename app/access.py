@@ -1,7 +1,7 @@
 """Shared DEMO/REAL robot access window. No payment credentials stored here.
 
 Enable NEXORA_ACCESS_CONTROL_ENABLED=true only after product/onboarding
-testing. Trial is seven days by default, starting with first verified Deriv registration for new users.
+testing. Trial is 24 hours by default, starting with first verified Deriv registration for new users.
 All reads use server time; logout/login never renews the trial.
 """
 import os
@@ -12,12 +12,12 @@ from . import db
 
 
 def trial_duration_hours():
-    """Seven-day launch trial; 24 hours remains available for legacy opt-in."""
+    """24-hour launch trial; older 7-day grants are preserved as stored."""
     try:
-        hours=int(os.getenv('NEXORA_TRIAL_HOURS','168'))
-    except ValueError:
-        hours=168
-    return hours if hours in (24,168) else 168
+        hours=int(os.getenv('NEXORA_TRIAL_HOURS','24'))
+    except (ValueError, TypeError):
+        hours=24
+    return hours if hours in (24,168) else 24
 
 
 def access_control_enabled():
