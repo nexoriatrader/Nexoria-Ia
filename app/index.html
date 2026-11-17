@@ -731,7 +731,7 @@ html,body{max-width:100%;overflow-x:clip}
     </div>
     <p id="robotStartDialogNote" class="helper">Estas são as configurações realmente salvas na sua conta. Confira todos os detalhes antes de ligar o robô.</p>
     <div id="robotStartDialogDetails" class="nexora-start-details"></div>
-    <p class="nexora-start-warning">A ativação autoriza novas operações na conta DEMO conforme os parâmetros salvos. Indicadores e estratégias não garantem resultados.</p>
+    <p id="robotStartDialogWarning" class="nexora-start-warning">Confira o ambiente antes de autorizar novas operações. Indicadores e estratégias não garantem resultados.</p>
     <div class="nexora-start-actions">
       <button type="button" class="outline" onclick="resolveRobotStartDialog(false)">CANCELAR</button>
       <button type="button" class="gold" id="robotStartConfirmButton" onclick="resolveRobotStartDialog(true)">CONFIRMAR E LIGAR ROBÔ</button>
@@ -775,7 +775,7 @@ html,body{max-width:100%;overflow-x:clip}
    <article class="lp-card"><div class="lp-icon"><svg viewBox="0 0 48 48" width="42" height="42" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6v36M24 6v36M39 6v36"/><rect x="5" y="15" width="8" height="15" rx="2" fill="currentColor" fill-opacity=".18"/><rect x="20" y="9" width="8" height="18" rx="2" fill="currentColor" fill-opacity=".18"/><rect x="35" y="22" width="8" height="14" rx="2" fill="currentColor" fill-opacity=".18"/></svg></div><h3>Operações automáticas</h3><p>Monitore oportunidades e ative o Robô Nexora para operar na sua conta.</p></article>
    <article class="lp-card"><div class="lp-icon"><svg viewBox="0 0 48 48" width="42" height="42" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 38h38M8 33l11-11 8 6 13-17M31 11h9v9"/><circle cx="19" cy="22" r="2" fill="currentColor"/><circle cx="27" cy="28" r="2" fill="currentColor"/></svg></div><h3>Análise em tempo real</h3><p>Acompanhe as condições do mercado e os sinais analisados pelo robô.</p></article>
    <article class="lp-card"><div class="lp-icon"><svg viewBox="0 0 48 48" width="42" height="42" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M24 4l17 7v12c0 11-7 18-17 22C14 41 7 34 7 23V11z"/><path d="M15 24l6 6 13-14"/></svg></div><h3>Gestão de risco</h3><p>Personalize entradas, Stop Win e Stop Loss; operar envolve riscos.</p></article>
-   <article class="lp-card"><div class="lp-icon"><svg viewBox="0 0 48 48" width="42" height="42" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="24" cy="24" r="18"/><path d="M24 13v12l9 5"/><path d="M36 5v10M31 10h10"/></svg></div><h3>Acesso grátis por 24h</h3><p>Conheça a plataforma na DEMO e ganhe mais 24h por indicação válida.</p></article>
+   <article class="lp-card"><div class="lp-icon"><svg viewBox="0 0 48 48" width="42" height="42" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="24" cy="24" r="18"/><path d="M24 13v12l9 5"/><path d="M36 5v10M31 10h10"/></svg></div><h3>Acesso grátis por 7 dias</h3><p>Conheça a plataforma na DEMO e ganhe mais 24h por indicação válida.</p></article>
   </div>
  </section>
  <section id="como-funciona" class="lp-section" aria-labelledby="lpStepsTitle">
@@ -791,7 +791,7 @@ html,body{max-width:100%;overflow-x:clip}
   <div><span aria-hidden="true">▥</span> Painel intuitivo</div>
   <div><span aria-hidden="true">▥</span> Resultados registrados</div>
  </div>
- <div class="lp-final"><h2>Comece agora com <br><strong>7 dias grátis</strong></h2><a id="lpFinalTrialButton" class="lp-button lp-button-primary" href="/auth/deriv/start" onclick="startNexoraTrial(event)" aria-label="Iniciar teste gratuito NEXORA IA de 24 horas">Quero testar o NEXORA IA <span aria-hidden="true">➜</span></a></div>
+ <div class="lp-final"><h2>Comece agora com <br><strong>7 dias grátis</strong></h2><a id="lpFinalTrialButton" class="lp-button lp-button-primary" href="/auth/deriv/start" onclick="startNexoraTrial(event)" aria-label="Iniciar teste gratuito NEXORA IA de 7 dias">Quero testar o NEXORA IA <span aria-hidden="true">➜</span></a></div>
  <p class="lp-disclaimer">Operações financeiras envolvem riscos e podem resultar em perdas. Resultados não são garantidos.</p>
 </section>
 <section id="setup" class="robot-setup hidden" aria-labelledby="setupTitle">
@@ -1611,6 +1611,9 @@ function reviewAmount(value){
 function askRobotStartConfirmation(profile,risk,catalogue){
  if(robotStartDialogResolver)return Promise.resolve(false);
  const box=$('robotStartDialogDetails');box.replaceChildren();
+ $('robotStartDialogWarning').textContent=profile.account_mode==='real'?
+  'ATENÇÃO: ao confirmar, o NEXORA poderá comprar contratos com DINHEIRO REAL da conta Deriv selecionada. Há risco de perder capital, inclusive antes de uma proteção interromper novas entradas. Nenhuma estratégia garante lucro.':
+  'A ativação autoriza novas operações na conta DEMO conforme os parâmetros salvos. Indicadores e estratégias não garantem resultados.';
  const marketNames={derived:'Índices derivados',volatility:'Índices derivados',
   forex:'Forex',stocks_indices:'Ações e índices',commodities:'Matérias-primas'};
  const strategyNames={pulso_v2:'PULSO V2',trend:'Tendência e Pullback',rsi:'Reversão RSI'};
@@ -1624,6 +1627,7 @@ function askRobotStartConfirmation(profile,risk,catalogue){
  const indicators=(profile.indicators||[]).map(item=>indicatorNames[item]||item);
  const stopAmount=(value)=>Number(value)>0?reviewAmount(value):'Desativado';
  addRobotReviewGroup(box,'Conta e mercado',[
+  ['Conta Deriv',profile.account_mode==='real'?(profile.real_account_id||'Não selecionada'):'Conta de treinamento'],
   ['Modo de operação',profile.account_mode==='real'?'Conta REAL (dinheiro próprio)':'Treinamento · conta DEMO (saldo fictício)'],
   ['Perfil',presetNames[profile.preset_mode]||'Personalizada'],
   ['Mercado',marketNames[profile.market]||profile.market],
