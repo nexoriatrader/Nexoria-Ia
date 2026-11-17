@@ -254,23 +254,24 @@ def test_v2_martingale_enters_same_symbol_without_waiting_for_scan(tmp_path,monk
         cleanup(engine)
 
 
-def test_status_exposes_legacy_session_and_required_v2_rearm(tmp_path,monkeypatch):
+def test_v2_unavailable_fails_closed_then_requires_explicit_start(tmp_path,monkeypatch):
     client,factory,engine,uid=prepare(tmp_path,monkeypatch)
     try:
         monkeypatch.setenv('NEXORA_V2_ENABLED','false')
-        assert client.post('/api/autopilot/start',
-            json={'confirm':'START_DEMO_AUTOPILOT'}).status_code==200
+        blocked=client.post('/api/autopilot/start',
+            json={'confirm':'START_DEMO_AUTOPILOT'})
+        assert blocked.status_code==503
+        assert uid not in main.autopilot_enabled
         monkeypatch.setenv('NEXORA_V2_ENABLED','true')
+        started=client.post('/api/autopilot/start',
+            json={'confirm':'START_DEMO_AUTOPILOT'})
+        assert started.status_code==200,started.text
         state=client.get('/api/status').json()
-        assert state['autopilot_version']=='V1_SINGLE_ASSET'
-        assert state['v2_upgrade_needed'] is True
+        assert state['autopilot_version']=='V2_PULSO'
+        assert state['v2_available'] is True
         assert state['analysis_symbol']=='1HZ100V'
         assert client.post('/api/autopilot/stop').status_code==200
-        assert client.post('/api/autopilot/start',
-            json={'confirm':'START_DEMO_AUTOPILOT'}).status_code==200
-        state=client.get('/api/status').json()
-        assert state['autopilot_version']=='V2_MULTI_ASSET'
-        assert state['v2_upgrade_needed'] is False
+        assert client.get('/api/status').json()['running'] is False
     finally:cleanup(engine)
 
 
@@ -315,9 +316,8 @@ def test_selector_expands_catalogue_without_inventing_symbols():
     assert all(x['family']=='forex' for x in out)
 
 
-def test_selector_rotates_bounded_groups_across_catalogue(monkeypatch):
+def test_selector_covers_full_broker_catalogue_without_unbounded_requests(monkeypatch):
     from app import trade_selector_v2 as selector
-    monkeypatch.setattr(selector,'_scan_offset',0)
     items=[{'symbol':f'frx{pair}','display_name':pair,
             'family':'forex'} for pair in selector.FX_PAIRS]
     items += [{'symbol':f'R_{n}','display_name':f'Volatility {n} Index',
@@ -326,16 +326,14 @@ def test_selector_rotates_bounded_groups_across_catalogue(monkeypatch):
     monkeypatch.setattr(selector,'supported',AsyncMock(return_value=False))
     first=asyncio.run(selector.select_demo_signal())
     report1=selector.last_scan_report()
-    second=asyncio.run(selector.select_demo_signal())
-    report2=selector.last_scan_report()
-    assert first is None and second is None
+    assert first is None
     assert report1['catalogue_size']==len(items)
-    assert report1['batch_size']==selector.SCAN_BATCH
-    assert report2['batch_size']==selector.SCAN_BATCH
-    seen1={row['symbol'] for row in report1['assets']}
-    seen2={row['symbol'] for row in report2['assets']}
-    assert not seen1.intersection(seen2)
+    assert report1['batch_size']==len(items)
+    assert report1['next_scan_offset'] is None
     assert report1['status']=='MARKET_DATA_UNAVAILABLE'
+    assert len({row['symbol'] for row in report1['assets']})==len(items)
+    assert all(row['status']=='CALL_PUT_OR_DURATION_UNAVAILABLE'
+               for row in report1['assets'])
 
 
 def test_underscore_deriv_symbol_can_be_discovered_quoted_and_reserved(tmp_path,monkeypatch):
@@ -356,15 +354,12 @@ def test_underscore_deriv_symbol_can_be_discovered_quoted_and_reserved(tmp_path,
 
 
 def test_public_market_websocket_close_is_reported_as_data_error(monkeypatch):
-    import sys,types
     from websockets.exceptions import ConnectionClosedError
     from app.market import public_request,MarketError
-    from app import trade_selector_v2 as selector
-    class ClosedSocket:
-        async def __aenter__(self): raise ConnectionClosedError(None,None)
-        async def __aexit__(self,*args): return False
     import websockets
-    monkeypatch.setattr(websockets,'connect',lambda *a,**kw:ClosedSocket())
+    async def closed(*args,**kwargs):
+        raise ConnectionClosedError(None,None)
+    monkeypatch.setattr(websockets,'connect',closed)
     try:
         asyncio.run(public_request({'active_symbols':'brief'},expected='active_symbols',timeout=1))
         assert False,'ConnectionClosedError must convert to MarketError'
@@ -430,7 +425,7 @@ def test_v2_pending_signal_queue_exposes_other_assets_without_rescanning(monkeyp
     import time
     from app import trade_selector_v2 as selector
     monkeypatch.setattr(selector,'_pending_signals_by_user',{})
-    monkeypatch.setattr(selector,'_scan_offset',0)
+    monkeypatch.setattr(selector,'SIGNAL_PROFILE','relaxed_v22')
     now=int(time.time())//60*60
     monkeypatch.setattr(selector.time,'time',lambda: now+5)
     monkeypatch.setattr(selector,'catalogue',AsyncMock(return_value=[
