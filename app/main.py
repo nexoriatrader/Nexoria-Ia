@@ -15,7 +15,7 @@ from pydantic import BaseModel
 from sqlalchemy import select, delete, func
 
 from . import db
-from .stripe_billing import PLANS, billing_enabled, create_checkout, stripe_signature_valid, apply_paid_checkout
+from .stripe_billing import PLANS, billing_enabled, stripe_expected_livemode, create_checkout, stripe_signature_valid, apply_paid_checkout
 from .automation_markets import GROUPS as AUTOMATION_GROUPS, instruments_by_group, featured_instruments_by_group
 from .access import (access_control_enabled, access_status, start_trial_on_first_robot_start,
                      register_first_login, referral_report, utc)
@@ -1781,6 +1781,8 @@ async def billing_stripe_webhook(request:Request):
         obj=event['data']['object']
     except (ValueError,KeyError,TypeError,AttributeError):
         raise HTTPException(400,'Evento inválido') from None
+    if event.get('livemode') is not stripe_expected_livemode():
+        raise HTTPException(400,'Modo de pagamento incompatível com o ambiente')
     if kind not in ('checkout.session.completed','checkout.session.async_payment_succeeded'):
         return {'received':True}
     if not isinstance(obj,dict):
