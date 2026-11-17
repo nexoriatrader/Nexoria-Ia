@@ -1344,6 +1344,11 @@ async def logout(request:Request,nexora_sid:str|None=Cookie(default=None)):
         with db.SessionLocal() as s:
             session=s.get(db.Session,hashsecret(nexora_sid))
             if session:
+                # Logout revokes REAL consent too; never leave a live-money
+                # worker running under an authentication session being deleted.
+                async with real_runtime.user_lock(session.user_id):
+                    real_runtime.disarm_real(session.user_id,
+                        'Sessão encerrada; execução REAL desligada')
                 autopilot_enabled.discard(session.user_id)
                 old_consent=s.get(db.AutoPilotResumeConsent,session.user_id)
                 if old_consent:s.delete(old_consent)
