@@ -96,3 +96,23 @@ def test_featured_catalogue_five_only_from_live_broker(monkeypatch):
         automation_markets.instruments_by_group.return_value=rows[:2]
         assert len(await automation_markets.featured_instruments_by_group("forex"))==2
     asyncio.run(check())
+
+
+def test_missing_newly_closed_bar_is_not_cached(monkeypatch):
+    async def check():
+        market._candle_snapshots.clear()
+        market._candle_inflight.clear()
+        clock=[180.5]
+        monkeypatch.setattr(time,"time",lambda:clock[0])
+        stale={"candles":[{"epoch":60,"open":"1","close":"1","high":"1.1","low":"0.9"}]}
+        fresh={"candles":[{"epoch":120,"open":"1","close":"1","high":"1.1","low":"0.9"}]}
+        calls=AsyncMock(side_effect=[stale,fresh])
+        monkeypatch.setattr(market,"public_request",calls)
+        assert await market.shared_candle_request("R_100",60,165)==stale
+        assert await market.shared_candle_request("R_100",60,165)==fresh
+        assert calls.await_count==2
+        assert await market.shared_candle_request("R_100",60,165)==fresh
+        assert calls.await_count==2
+        market._candle_snapshots.clear()
+        market._candle_inflight.clear()
+    asyncio.run(check())
