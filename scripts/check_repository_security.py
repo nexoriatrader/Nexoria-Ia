@@ -12,18 +12,18 @@ from pathlib import Path
 
 # Build regular expressions rather than embedding any sample credentials.
 SIGNATURES = {
-    "github_personal_access_token": re.compile(r"\\bgh[pousr]_[A-Za-z0-9]{24,}\\b"),
-    "github_fine_grained_token": re.compile(r"\\bgithub_pat_[A-Za-z0-9_]{20,}\\b"),
-    "stripe_api_secret": re.compile(r"\\bsk_(?:live|test)_[A-Za-z0-9]{18,}\\b"),
-    "supabase_secret_key": re.compile(r"\\bsb_secret_[A-Za-z0-9_-]{20,}\\b"),
-    "aws_access_key": re.compile(r"\\bAKIA[0-9A-Z]{16}\\b"),
+    "github_personal_access_token": re.compile(r"\bgh[pousr]_[A-Za-z0-9]{24,}\b"),
+    "github_fine_grained_token": re.compile(r"\bgithub_pat_[A-Za-z0-9_]{20,}\b"),
+    "stripe_api_secret": re.compile(r"\bsk_(?:live|test)_[A-Za-z0-9]{18,}\b"),
+    "supabase_secret_key": re.compile(r"\bsb_secret_[A-Za-z0-9_-]{20,}\b"),
+    "aws_access_key": re.compile(r"\bAKIA[0-9A-Z]{16}\b"),
     "private_key_pem": re.compile(r"-----BEGIN (?:[A-Z ]+ )?PRIVATE KEY-----"),
     "postgres_password_url": re.compile(
-        r"postgres(?:ql)?://[^\\s/:@]+:[^@\\s/:]+@",
+        r"postgres(?:ql)?://[^\s/:@]+:[^@\s/:]+@",
         re.IGNORECASE,
     ),
     "fernet_literal": re.compile(
-        r"\\bNEXORA_FERNET_KEY\\s*=\\s*['\\\"]?[A-Za-z0-9_-]{43}="
+        r"\bNEXORA_FERNET_KEY\s*=\s*['\\"]?[A-Za-z0-9_-]{43}="
     ),
 }
 
@@ -54,7 +54,7 @@ def audit_repository(root: Path) -> list[str]:
         check=True, stdout=subprocess.PIPE,
     )
     findings = []
-    for raw in completed.stdout.split(b"\\x00"):
+    for raw in completed.stdout.split(b"\x00"):
         if not raw:
             continue
         relative = Path(raw.decode("utf-8", errors="replace"))
@@ -64,7 +64,7 @@ def audit_repository(root: Path) -> list[str]:
         if not location.is_file() or location.stat().st_size > MAX_TEXT_BYTES:
             continue
         data = location.read_bytes()
-        if b"\\x00" in data[:1024]:
+        if b"\x00" in data[:1024]:
             continue
         content = data.decode("utf-8", errors="replace")
         for number, kind in scan_text(content):
@@ -77,7 +77,7 @@ def main() -> int:
     findings = audit_repository(root)
     if findings:
         print(f"Security audit failed: {len(findings)} potential leak(s) detected.")
-        print("\\n".join(findings))
+        print("\n".join(findings))
         print("Do not paste credentials into issue comments or CI logs.")
         print("Investigate, remove the exposure and rotate any compromised secret.")
         return 1
