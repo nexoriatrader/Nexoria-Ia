@@ -630,6 +630,23 @@ html,body{max-width:100%;overflow-x:clip}
  #account>.account-referral-card{order:3}
  #account>.account-profile-card{order:4}
 }
+/* Compact account typography and spacing on phones only. */
+@media(max-width:700px){
+ #account .account-page-heading{margin-top:12px;margin-bottom:12px}
+ #account .account-page-heading .eyebrow,#account .account-page-heading p{display:none}
+ #account .account-page-heading h1{font-size:clamp(23px,6vw,29px);line-height:1.15}
+ #account .account-access-card{padding:16px 17px}
+ #account .account-access-card .account-card-header{gap:8px}
+ #account .account-access-time{margin:10px 0 6px;font-size:clamp(28px,8vw,39px)}
+ #account .account-access-note{font-size:11px;line-height:1.35;margin-top:8px;padding-top:8px}
+ #account .account-plans-section{margin:13px 0 9px}
+ #account .account-plans-title .eyebrow,#account .account-plans-title p{display:none}
+ #account .account-plans-title h2{font-size:21px}
+ #account .account-plans-swipe-hint{font-size:11px;margin-top:4px}
+ #account .account-plans-grid{margin-top:7px}
+ #account .account-plans-grid>.account-plan{min-height:195px}
+ #account .account-plans-grid .account-plan p{display:none}
+}
 @media(max-width:480px){#account .account-profile-card{padding:18px 16px}.account-profile-top{gap:11px}.account-profile-avatar{width:48px;height:48px;font-size:27px}.account-broker-status{margin-left:59px;font-size:10px}.account-referral-copy{flex-direction:column}.account-referral-copy button{min-height:44px}.account-access-indicator{font-size:9px}}
 </style><style>
 /* Dedicated robot-configuration page, separate from the dashboard */
