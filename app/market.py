@@ -10,6 +10,32 @@ class MarketError(Exception):
     pass
 
 
+async def public_feed_messages(ws, *, heartbeat_seconds:float=35.0):
+    """Yield Deriv public messages with periodic application-layer pings.
+
+    Protocol ping/pong alone is insufficient for servers/proxies that track
+    application requests. Keeping one reader prevents concurrent recv calls
+    and does not produce synthetic market ticks. A disconnected socket raises
+    to its caller, which remains responsible for reconnection/backoff.
+    """
+    if not 0 < heartbeat_seconds <= 60:
+        raise ValueError('Intervalo de heartbeat inválido')
+    clock=asyncio.get_running_loop()
+    next_ping=clock.time()+heartbeat_seconds
+    while True:
+        try:
+            raw=await asyncio.wait_for(ws.recv(),
+                timeout=max(0.001,next_ping-clock.time()))
+        except asyncio.TimeoutError:
+            await ws.send(json.dumps({'ping':1,'req_id':7301}))
+            next_ping=clock.time()+heartbeat_seconds
+            continue
+        if clock.time()>=next_ping:
+            await ws.send(json.dumps({'ping':1,'req_id':7301}))
+            next_ping=clock.time()+heartbeat_seconds
+        yield raw
+
+
 def parse_quote(message: dict) -> dict:
     if message.get("error"):
         error = message["error"]
