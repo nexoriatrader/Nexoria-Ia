@@ -114,6 +114,60 @@ async def public_request(payload: dict, *, expected: str, timeout: float = 12.0)
     raise MarketError('Falha inesperada na consulta pública Deriv')
 
 
+# Share broker PUBLIC candle snapshots across independent robot strategies.
+# Never cache account quotes, contract proposals, purchases or private data.
+# Keys roll over at each broker candle boundary so a new completed bar forces
+# a fresh request. Inflight requests are deduplicated without a global lock
+# across different assets; each caller still enforces its own entry deadline.
+_candle_snapshots = {}
+_candle_inflight = {}
+_candle_lock = asyncio.Lock()
+
+
+async def shared_candle_request(symbol: str, granularity: int, count: int, *, timeout: float = 8.0) -> dict:
+    import time
+    if not isinstance(symbol,str) or not symbol or granularity not in (60,300,900,3600):
+        raise MarketError('Consulta de velas inválida')
+    if not isinstance(count,int) or not 1<=count<=1000:
+        raise MarketError('Quantidade de velas inválida')
+    # Closed-candle snapshots are stable for the current candle interval.
+    # A near-boundary request is never served from the previous bucket.
+    bucket=int(time.time()//granularity)
+    key=(symbol,granularity,count,bucket)
+    async with _candle_lock:
+        cached=_candle_snapshots.get(key)
+        if cached is not None:
+            return dict(cached)
+        task=_candle_inflight.get(key)
+        if task is None:
+            task=asyncio.create_task(public_request({
+                'ticks_history':symbol,'style':'candles','granularity':granularity,
+                'count':count,'end':'latest'
+            },expected='candles',timeout=timeout))
+            _candle_inflight[key]=task
+    try:
+        # Never extend a robot's execution deadline just to fill a shared cache.
+        response=await asyncio.wait_for(asyncio.shield(task),timeout=timeout)
+        if not isinstance(response.get('candles'),list) or not response['candles']:
+            raise MarketError('Velas da Deriv indisponíveis')
+        async with _candle_lock:
+            if int(time.time()//granularity)==bucket:
+                _candle_snapshots[key]=dict(response)
+                # Bound memory while allowing concurrent portfolio strategies.
+                if len(_candle_snapshots)>180:
+                    for k in list(_candle_snapshots):
+                        if k[3]!=int(time.time()//k[1]):
+                            _candle_snapshots.pop(k,None)
+                    while len(_candle_snapshots)>180:
+                        _candle_snapshots.pop(next(iter(_candle_snapshots)))
+        return dict(response)
+    finally:
+        if task.done():
+            async with _candle_lock:
+                if _candle_inflight.get(key) is task:
+                    _candle_inflight.pop(key,None)
+
+
 def parse_symbols(message: dict) -> list[dict]:
     items = message.get('active_symbols', [])
     if not isinstance(items, list):
