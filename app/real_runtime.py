@@ -39,7 +39,17 @@ _MAX_REAL_CONCURRENT_SCANS=3
 
 
 def real_available():
-    return os.getenv('NEXORA_REAL_AUTOPILOT_ENABLED','false').lower()=='true'
+    """REAL requires two independent, explicit server-side release gates.
+
+    First gate is a technical feature toggle. The second is a deliberate
+    production release approval, defaulting to OFF so a code deploy never
+    activates real-money orders merely because an old toggle persisted.
+    Individual authenticated account consent is still required separately.
+    """
+    return (
+        os.getenv('NEXORA_REAL_AUTOPILOT_ENABLED', 'false').strip().lower() == 'true'
+        and os.getenv('NEXORA_REAL_RELEASE_APPROVED', 'false').strip().lower() == 'true'
+    )
 
 
 def user_lock(uid):
