@@ -525,6 +525,29 @@ async def autopilot_once():
                     disarm_autopilot(uid,'Sessão Deriv expirada; conecte novamente')
                     continue
                 orders=sess.scalars(select(db.DemoOrder).where(db.DemoOrder.user_id==uid)).all()
+                # Enforce settled-result stops on EVERY worker tick, even when
+                # the scanner finds no signal. Previously an armed robot could
+                # remain green after reaching Stop Win / Stop Loss indefinitely.
+                boundary=latest_risk_session(sess,uid)
+                after_id=boundary.after_order_id if boundary else 0
+                try:
+                    settled_pnl=sum((
+                        Decimal(str(o.pnl)) for o in orders
+                        if o.state=='SETTLED' and o.pnl is not None
+                        and (o.id or 0)>after_id),Decimal('0'))
+                    stop_win=Decimal(str(user.stop_win))
+                    stop_loss=Decimal(str(user.stop_loss))
+                    if not all(v.is_finite() for v in (settled_pnl,stop_win,stop_loss)):
+                        raise InvalidOperation()
+                except (InvalidOperation,ValueError,TypeError):
+                    disarm_autopilot(uid,'Resultado ou limite de risco inválido; robô desligado')
+                    continue
+                if stop_win>0 and settled_pnl>=stop_win:
+                    disarm_autopilot(uid,'Stop Win atingido; robô desligado')
+                    continue
+                if stop_loss>0 and settled_pnl<=-stop_loss:
+                    disarm_autopilot(uid,'Stop Loss atingido; robô desligado')
+                    continue
                 plan=sess.get(db.RobotPlan,uid)
                 cycle_cfg=sess.get(db.RobotCycleParams,uid)
                 if plan and plan.requested_martingale and plan.cycles_limit:
