@@ -93,7 +93,9 @@ async def confirmed_pulso_signal(allowed_symbols=None, direction="AUTO", minutes
         if cached and cached["last_bucket"]==bucket:
             if scan_event: scan_event('cached', None, len(allowed_symbols or []))
             return dict(cached["candidate"]) if cached["candidate"] else None
+        # An unavailable broker response is not evidence of no signal.
         _cache[key]={"last_bucket":bucket,"candidate":None}
+        incomplete_market_data=False
         # Bound memory across different user-selected portfolios.
         if len(_cache)>200:
             for k in list(_cache):
@@ -109,15 +111,18 @@ async def confirmed_pulso_signal(allowed_symbols=None, direction="AUTO", minutes
             instruments=await asyncio.wait_for(catalogue("volatility"),timeout=5)
             symbols=sorted({i["symbol"] for i in instruments})
             if not symbols:
+                _cache.pop(key,None)
                 _log.warning("PULSO market catalogue empty; no DEMO signals")
                 return None
         if allowed_symbols is not None:
             symbols=[symbol for symbol in symbols if symbol in set(allowed_symbols)]
         if not symbols:
+            _cache.pop(key,None)
             return None
         if scan_event: scan_event('start', None, len(symbols))
         sem=asyncio.Semaphore(5)
         async def examine(symbol):
+            nonlocal incomplete_market_data
             async with sem:
                 if scan_event: scan_event('checking',symbol,len(symbols))
                 reason='nao_classificado'
@@ -135,20 +140,39 @@ async def confirmed_pulso_signal(allowed_symbols=None, direction="AUTO", minutes
                     _log.info("PULSO M1 ignored symbol=%s error_type=%s",symbol,type(exc).__name__)
                     return None
                 finally:
+                    if reason in ('dados_indisponiveis','velas_insuficientes',
+                                  'velas_incompletas','janela_expirada'):
+                        incomplete_market_data=True
                     if scan_event: scan_event('checked',symbol,len(symbols),reason)
         # Execute bounded asynchronous calls, never beyond candle entry window.
         remaining=deadline-time.time()
         if remaining<=1:
+            _cache.pop(key,None)
             return None
+        tasks=[asyncio.create_task(examine(symbol)) for symbol in symbols]
         try:
-            results=await asyncio.wait_for(
-                asyncio.gather(*(examine(symbol) for symbol in symbols)),
-                timeout=max(.5,remaining-0.4))
-        except TimeoutError:
-            _log.warning("PULSO M1 scan deadline exceeded; skip candle")
-            if scan_event: scan_event('timeout',None,len(symbols))
-            return None
-        candidates=[item for item in results if item]
+            # Preserve completed, broker-confirmed signals when another symbol
+            # has a slow response. No late tasks may authorize an entry.
+            done,pending=await asyncio.wait(
+                tasks,timeout=max(.5,remaining-0.4))
+            if pending:
+                incomplete_market_data=True
+                _log.warning("PULSO M1 partial scan: completed=%s pending=%s",
+                             len(done),len(pending))
+                if scan_event: scan_event('timeout',None,len(symbols))
+            candidates=[]
+            for task in done:
+                if task.cancelled() or task.exception() is not None:
+                    incomplete_market_data=True
+                    continue
+                candidate=task.result()
+                if candidate is not None:
+                    candidates.append(candidate)
+        finally:
+            for task in tasks:
+                if not task.done():
+                    task.cancel()
+            await asyncio.gather(*tasks,return_exceptions=True)
         if candidates and time.time()<deadline:
             # Rotate fair ordering by minute; never turn historical results
             # from 1HZ100V into claims about other assets.
@@ -159,4 +183,8 @@ async def confirmed_pulso_signal(allowed_symbols=None, direction="AUTO", minutes
             _log.info("PULSO ready: eligible_symbols=%s signals=%s chosen=%s",
                       len(symbols),len(candidates),chosen["symbol"])
             return dict(chosen)
+        if incomplete_market_data:
+            # An API outage/late M1 candle can recover before the entry window
+            # closes. Never freeze that failure into a false no-signal verdict.
+            _cache.pop(key,None)
         return None
