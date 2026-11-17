@@ -129,12 +129,8 @@ async def _user_scan(uid):
             if not selected_symbols or len(selected_symbols)>5:
                 disarm_real(uid,'Seleção de ativos REAL inválida')
                 return
-            if any(x.state=='SETTLED' for x in orders):
-                profit=sum((Decimal(x.pnl) for x in orders
-                            if x.state=='SETTLED' and x.pnl is not None), Decimal(0))
-                if profit<=-Decimal(stop_loss):
-                    disarm_real(uid,'Stop Loss REAL atingido; desativado')
-                    return
+            # Daily Stop Win/Loss is enforced inside the locked, durable
+            # reservation transaction, not against a lifetime P/L snapshot.
         try:
             candidate=await confirmed_automation_signal(profile)
         except Exception as exc:
@@ -172,7 +168,7 @@ async def _user_scan(uid):
                     duration=expiry,stake=stake,currency='USD')
             except RealOrderGuardError as exc:
                 reasons[uid]=str(exc)
-                if 'Stop Loss' in str(exc):
+                if 'Stop Loss' in str(exc) or 'Stop Win' in str(exc):
                     disarm_real(uid,str(exc))
                 return
             order_id=order.id
