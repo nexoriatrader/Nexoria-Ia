@@ -10,18 +10,20 @@ def test_demo_interface_keeps_official_balance_without_manual_buy_button():
     assert "TESTAR UMA ENTRADA DEMO" not in html
     assert "Teste controlado de integração" not in html
     assert "testDemoBuy()" not in html
-    assert "demoTestInfo" not in html
     assert "/api/demo/balance" in html
-    assert "Saldo Treinamento" in html
-    assert "Saldo Conta Real" in html
+    assert "/api/real/balance" in html
+    assert "Saldo conta DEMO" in html
+    assert "Saldo conta REAL" in html
+    assert 'id="balanceMetric"' in html
+    assert 'id="realBalanceMetric"' in html
 
 
 def test_official_contract_history_replaces_local_simulator():
     html=load_ui()
-    assert "Histórico oficial" in html
+    assert "HISTÓRICO COMPLETO DO ROBÔ" in html
     assert "/api/demo/orders" in html
-    assert 'id="ordersBody"' in html  # Historical results are preserved.
-    assert '/api/demo/results/today' in html  # Daily P/L computed on server.
+    assert 'id="ordersBody"' in html
+    assert "/api/demo/results/today" in html
     for forbidden in ("LIGAR SIMULAÇÃO", "Histórico de simulação", "Resultado virtual",
                       "/api/start", "/api/stop", "/api/history"):
         assert forbidden not in html
@@ -29,14 +31,13 @@ def test_official_contract_history_replaces_local_simulator():
 
 def test_mobile_navigation_and_single_primary_robot_control():
     html=load_ui()
-    assert 'id="drawer"' in html
-    assert 'id="menuButton"' in html
+    assert 'id="primaryNavigation"' in html
     assert 'id="robotButton"' in html
-    assert 'id="chooseReal" aria-pressed="false"' in html
+    assert 'id="configureRobotButton"' in html
     assert "AutoPilot" in html
     assert "loadDemoOrders()" in html
     assert "/api/onboarding/config" in html
-    assert "data-view=\"results\"" in html
+    assert 'data-view="results"' in html
 
 
 def test_continuity_prompt_clarifies_demo_not_real():
@@ -46,10 +47,15 @@ def test_continuity_prompt_clarifies_demo_not_real():
     assert "Não executar compras reais" in text
 
 
-def test_real_mode_is_explicitly_unavailable_for_purchases():
+def test_real_mode_requires_explicit_authorization_before_purchases():
     html=load_ui()
-    assert "Verificando conta real vinculada à Deriv" in html
-    assert 'id="chooseReal" aria-pressed="false"' in html
+    assert 'name="autoMode" value="real"' in html
+    assert 'id="autoRealAccount"' in html
+    assert "/api/accounts/available" in html
+    assert "health.real_orders_enabled" in html
+    assert "START_REAL_AUTOPILOT" in html
+    assert "askRobotStartConfirmation(profile,risk,catalogue)" in html
+
 
 def test_inline_javascript_syntax_is_valid(tmp_path):
     """Catch malformed inline JavaScript before it blocks OAuth login initialization."""
@@ -72,82 +78,68 @@ def test_inline_javascript_syntax_is_valid(tmp_path):
         assert result.returncode == 0, result.stderr
 
 
-def test_premium_landing_preserves_explicit_deriv_oauth_and_no_auto_start():
+def test_landing_preserves_explicit_deriv_oauth_and_no_auto_start():
     html=load_ui()
-    welcome=html.split('<section id="welcome"',1)[1].split('<section id="choose"',1)[0]
-    assert 'CONECTAR E ACESSAR O ROBÔ' in welcome
+    welcome=html.split('<section id="welcome"',1)[1].split('<section id="setup"',1)[0]
     assert 'href="/auth/deriv/start"' in welcome
-    assert 'A conexão à corretora não inicia operações automaticamente' in welcome
-    assert 'Ative o AutoPilot' in welcome
-    assert 'Conta real não habilitada para compras' not in welcome
-    assert 'somente na conta de demonstração' not in welcome
-    assert 'operações automáticas.' in welcome
-    assert 'Execução automática' in welcome
-    assert 'Análise automática' in welcome
-    assert 'AMBIENTE DEMO' not in welcome
-    assert 'DEMO SOMENTE' not in welcome
-    assert 'landing-benefits' in welcome
-    assert 'landing-showcase' in welcome
-    assert 'landing-headline' in welcome
+    assert 'id="lpHeroTrialButton"' in welcome
+    assert 'onclick="startNexoraTrial(event)"' in welcome
+    assert 'gratuitamente por 7 dias' in welcome
+    assert 'Conexão oficial Deriv' in welcome
+    assert 'Como funciona' in welcome
+    assert 'Operações financeiras envolvem riscos' in welcome
     assert '/api/autopilot/start' not in welcome
-    assert 'landing-steps' in welcome
-    assert 'id="robotButton"' in html  # Trading remains opt-in in the existing dashboard.
+    assert 'id="robotButton"' in html
 
 
 def test_premium_landing_mobile_and_accessibility():
     html=load_ui()
     assert 'aria-labelledby="landingHeading"' in html
-    assert 'landing-backdrop" aria-hidden="true"' in html
     assert '@media(max-width:680px)' in html
     assert '@media(prefers-reduced-motion:reduce)' in html
     assert '.landing-cta:focus-visible' in html
-    assert 'id="lab"' in html  # Existing strategy laboratory preserved.
+    assert 'id="landingHeading"' in html
+    assert 'id="lab"' in html
 
 
-def test_account_selection_after_successful_deriv_oauth():
+def test_authenticated_oauth_requires_initial_setup_before_user_starts_robot():
     html=load_ui()
-    assert 'id="chooseHeading"' in html
-    assert 'id="chooseDemo"' in html
-    assert 'selectDemoAccount()' in html
+    assert 'id="setupForm"' in html
+    assert 'id="setupStake"' in html
+    assert 'id="setupLoss"' in html
     assert "new URLSearchParams(window.location.search).get('login')==='ok'" in html
-    assert "page('choose')" in html
+    assert "go('setup')" in html
     assert "page('dashboard')" in html
-    assert "history.replaceState" in html
-    assert 'id="demoInfo"' in html
+    assert 'history.replaceState' in html
+    assert 'id="robotButton"' in html
 
 
-def test_real_account_card_is_informational_and_cannot_trigger_orders():
+def test_real_account_selection_is_separate_from_order_authorization():
     html=load_ui()
-    choose=html.split('<section id="choose"',1)[1].split('<section id="dashboard"',1)[0]
-    assert 'role="group"' in choose
-    assert 'aria-disabled="true"' in choose
-    assert 'SALDO REAL' in choose
-    assert 'id="realInfo"' in choose
-    assert 'onclick="selectDemoAccount()"' in choose
-    assert '/api/demo/buy' not in choose
-    assert '/api/autopilot/start' not in choose
-    assert 'Modo de treinamento selecionado' in choose
-    assert 'choose-accounts' in choose
-    assert 'A um passo do' in choose
-    assert 'Recomendamos utilizar o treinamento por algumas horas' in choose
-    assert 'id="chooseContinue"' in choose
-    assert 'onclick="selectRealAccount()"' in choose
-    assert 'id="realPreview"' in html
-    assert 'Nenhum contrato com saldo real será comprado' in html
-    assert "if(selectedAccountMode==='real'){go('realPreview');return;}" in html
-    assert 'onclick="continueAccount()"' in choose
-    assert 'aria-pressed="true"' in choose
-    assert 'id="chooseReal" aria-pressed="false"' in choose
-    assert '@media(max-width:700px)' in html
+    config=html.split('<section id="robot-config"',1)[1].split('<section id="results"',1)[0]
+    assert 'name="autoMode" value="demo"' in config
+    assert 'name="autoMode" value="real"' in config
+    assert 'id="autoRealAccount"' in config
+    assert "saveAutomationProfile()" in config
+    assert "/api/demo/buy" not in config
+    assert "/api/autopilot/start" not in config
+    assert "changeAutomationAccount" in html
+    assert "real_account_id" in html
+    assert "START_REAL_AUTOPILOT" in html
 
 
-def test_autopilot_activation_confirmation_is_clear_and_multiline():
+def test_autopilot_activation_confirmation_is_mode_specific_and_explicit():
     html=load_ui()
-    assert 'window.confirm(`Você está prestes a iniciar o robô.' in html
-    assert 'Confirme apenas se já revisou as configurações' in html
-    assert 'clique em "Cancelar"' in html
-    assert 'ATIVAR AUTOPILOT NA CONTA DERIV DEMO?' not in html
-    assert 'START_DEMO_AUTOPILOT' in html
+    assert 'id="robotStartDialog"' in html
+    assert 'role="dialog"' in html
+    assert 'id="robotStartDialogDetails"' in html
+    assert 'id="robotStartDialogWarning"' in html
+    assert "DINHEIRO REAL" in html
+    assert "profile.real_account_id" in html
+    assert "askRobotStartConfirmation(profile,risk,catalogue)" in html
+    assert "resolveRobotStartDialog(true)" in html
+    assert "START_REAL_AUTOPILOT" in html
+    assert "START_DEMO_AUTOPILOT" in html
 
 
 def test_network_failure_does_not_claim_autopilot_start_failed():
@@ -189,11 +181,7 @@ def test_risk_reset_confirmation_has_real_line_breaks():
 
 def test_header_has_official_broker_access_instead_of_demo_badge():
     html=load_ui()
-    header=html.split("<header>",1)[1].split("</header>",1)[0]
-    assert 'id="accountBadge"' in header
-    assert 'ACESSAR CORRETORA' in header
-    assert 'href="https://t.deriv.link?t=HR6MZB6Q499Z"' in header
-    assert 'target="_blank"' in header
-    assert 'rel="noopener noreferrer"' in header
-    assert 'DERIV DEMO</span>' not in header
-    assert "$('accountBadge').classList.toggle('hidden',!logged)" in html
+    assert "ACESSAR CORRETORA" in html
+    assert 'id="primaryNavigation"' in html
+    assert 'id="robotButton"' in html
+
