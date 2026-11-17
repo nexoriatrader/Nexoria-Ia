@@ -23,6 +23,8 @@ from .demo import (DemoTradingError, DemoPreBuyDeadlineExceeded, demo_account_ba
                    demo_contract_status, demo_buy, demo_proposal, demo_expiry_quotes,
                    prepare_demo_buy_socket)
 from .demo_ledger import OrderGuardError, reserve, public_order, confirmed, unknown, settle
+from . import real_runtime
+from .real_broker import RealExecutionError, real_account_balance
 from .autopilot import analyze, quote_assessment
 from .engine import Engine, Settings
 from .market import MarketError, discover_symbols, discover_contracts, indicative_proposal
@@ -51,6 +53,8 @@ autopilot_task = None
 market_selfcheck_task = None
 research_worker_task = None
 m1_research_task = None
+real_task = None
+real_reconciliation_task = None
 # Runtime state is volatile; explicit DEMO resume intent is persisted separately.
 autopilot_enabled: set[int] = set()
 autopilot_last_attempt: dict[int,float] = {}
@@ -1005,7 +1009,7 @@ async def reconcile_confirmed_loop():
 
 @asynccontextmanager
 async def lifespan(app):
-    global market_task, reconcile_task, autopilot_task, research_worker_task, m1_research_task
+    global market_task, reconcile_task, autopilot_task, research_worker_task, m1_research_task, real_task, real_reconciliation_task
     if os.getenv('NEXORA_PUBLIC_URL','').startswith('https://') and db.DB_URL.startswith('sqlite:'):
         raise RuntimeError('Não usar SQLite efêmero em implantação pública: configure DATABASE_URL de Postgres')
     db.init_db()
@@ -1016,9 +1020,12 @@ async def lifespan(app):
     market_selfcheck_task=asyncio.create_task(public_market_selfcheck_once())
     research_worker_task=asyncio.create_task(research_loop(),name='research-1hz100v-daily')
     m1_research_task=asyncio.create_task(m1_collect_loop(),name='research-1hz100v-m1-history')
+    real_task=asyncio.create_task(real_runtime.real_loop(),name='real-autopilot-opt-in')
+    real_reconciliation_task=asyncio.create_task(real_runtime.reconcile_real_loop(),name='real-contract-reconcile')
     yield
     autopilot_enabled.clear()
-    tasks=[task for task in (market_task,reconcile_task,autopilot_task,market_selfcheck_task,research_worker_task,m1_research_task) if task]
+    real_runtime.running.clear()
+    tasks=[task for task in (market_task,reconcile_task,autopilot_task,market_selfcheck_task,research_worker_task,m1_research_task,real_task,real_reconciliation_task) if task]
     for task in tasks:
         task.cancel()
     await asyncio.gather(*tasks,return_exceptions=True)
@@ -1159,7 +1166,7 @@ async def health():
     enabled=os.getenv('NEXORA_DEMO_BUY_ENABLED','false').lower()=='true'
     return {'ok':True,'version':VERSION,'market_connected':market_connected,
             'execution':'DERIV_DEMO_ONLY','automatic_demo_orders_enabled':autopilot_allowed(),
-            'manual_demo_purchase_enabled':enabled,'real_orders_enabled':False}
+            'manual_demo_purchase_enabled':enabled,'real_orders_enabled':real_runtime.real_available()}
 
 @app.get('/auth/deriv/start')
 async def login_start(ref:str|None=None):
@@ -1970,9 +1977,98 @@ async def select_pulso_v2(request:Request,payload:PulsoChoiceRequest,
             'message':'PULSO V2 selecionado. Clique LIGAR ROBÔ para iniciar DEMO.'}
 
 
+async def start_real_autopilot(request:Request,nexora_sid:str|None=None):
+    """Explicit opt-in REAL start. No implicit resume after a server restart."""
+    user,token=active_session(request,nexora_sid)
+    if not real_runtime.real_available():
+        raise HTTPException(503,'Operações REAL ainda não foram ativadas neste servidor')
+    if user.id in autopilot_enabled:
+        raise HTTPException(409,'Desligue o robô DEMO antes de iniciar a conta REAL')
+    with db.SessionLocal() as sess:
+        profile=sess.get(db.AutomationProfile,user.id)
+        plan=sess.get(db.RobotPlan,user.id)
+        if not profile or profile.account_mode!='real' or not profile.real_account_id:
+            raise HTTPException(409,'Selecione e salve uma conta REAL nas configurações')
+        if profile.news_filter:
+            raise HTTPException(409,'Filtro de notícias indisponível; desative para usar REAL')
+        if plan and (plan.requested_martingale or plan.cycles_limit):
+            raise HTTPException(409,'Conta REAL beta exige Martingale e ciclos desativados')
+        if user.martingale:
+            raise HTTPException(409,'Desative Martingale nas configurações atuais')
+        if not access_status(sess,user.id)['allowed']:
+            raise HTTPException(403,'Acesso ao robô expirado ou suspenso')
+        try:
+            stake=Decimal(str(user.stake))
+            stop=Decimal(str(user.stop_loss))
+            if not stake.is_finite() or not stop.is_finite() or stake<Decimal('0.50') or stop<stake:
+                raise ValueError()
+        except (InvalidOperation,ValueError):
+            raise HTTPException(409,'Configure Stop Loss REAL de pelo menos uma entrada e valor válido') from None
+        if profile.strategy not in ('pulso_v2','trend','rsi'):
+            raise HTTPException(409,'Estratégia REAL inválida')
+        try:
+            symbols=json.loads(profile.symbols_json)
+        except (ValueError,TypeError):
+            raise HTTPException(409,'Seleção de ativos inválida') from None
+        if not isinstance(symbols,list) or not 1<=len(symbols)<=5:
+            raise HTTPException(409,'Selecione de 1 a 5 ativos para REAL')
+        account_id=profile.real_account_id
+        pending=sess.scalar(select(db.RealOrder.id).where(
+            db.RealOrder.account_id==account_id,
+            db.RealOrder.state.in_(('PENDING','UNKNOWN','CONFIRMED'))).limit(1))
+        if pending:
+            raise HTTPException(409,'Há contrato REAL aberto ou incerto; aguarde conferência')
+    try:
+        async with httpx.AsyncClient(timeout=15) as client:
+            res=await client.get('https://api.derivws.com/trading/v1/options/accounts',
+                headers={'Authorization':f'Bearer {token}'})
+            res.raise_for_status()
+            accounts=res.json()
+    except (httpx.HTTPError,ValueError):
+        raise HTTPException(503,'Não foi possível confirmar a conta REAL com a Deriv') from None
+    from .auth_helpers import extract_accounts,real_accounts
+    valid={row['account_id'] for row in real_accounts(extract_accounts(accounts))}
+    if account_id not in valid:
+        raise HTTPException(403,'Conta REAL não pertence à autorização atual')
+    try:
+        balance=await real_account_balance(token,account_id)
+    except RealExecutionError:
+        raise HTTPException(503,'Canal de negociação REAL indisponível; nenhuma ordem enviada') from None
+    if balance['currency']!='USD':
+        raise HTTPException(409,'A versão REAL inicial aceita apenas contas USD')
+    if Decimal(balance['balance'])<stake:
+        raise HTTPException(409,'Saldo insuficiente na conta REAL')
+    async with real_runtime.user_lock(user.id):
+        with db.SessionLocal() as sess:
+            profile=sess.get(db.AutomationProfile,user.id)
+            if (not profile or profile.account_mode!='real'
+                or profile.real_account_id!=account_id):
+                raise HTTPException(409,'Configuração REAL alterada; inicie novamente')
+            consent=sess.get(db.RealRobotConsent,user.id)
+            if consent is None:
+                consent=db.RealRobotConsent(
+                    user_id=user.id,account_id=account_id,
+                    max_stake=str(stake),stop_loss=str(stop))
+                sess.add(consent)
+            else:
+                consent.account_id=account_id
+                consent.max_stake=str(stake)
+                consent.stop_loss=str(stop)
+                consent.revoked_at=None
+            sess.commit()
+        real_runtime.last_scan.pop(user.id,None)
+        real_runtime.running.add(user.id)
+        real_runtime.reasons[user.id]='Conta REAL ligada; aguardando sinal confirmado'
+    return {'running':True,'execution':'DERIV_REAL',
+            'real_orders_enabled':True,
+            'message':'Compras REAL autorizadas com stop obrigatório e contrato único'}
+
+
 @app.post('/api/autopilot/start')
 async def autopilot_start(request:Request,payload:AutoPilotSwitch,
                           nexora_sid:str|None=Cookie(default=None)):
+    if payload.confirm=='START_REAL_AUTOPILOT':
+        return await start_real_autopilot(request,nexora_sid)
     user,_=active_session(request,nexora_sid)
     if payload.confirm!='START_DEMO_AUTOPILOT':
         raise HTTPException(403,'Confirme o modo automático de treinamento')
@@ -2053,6 +2149,11 @@ async def autopilot_start(request:Request,payload:AutoPilotSwitch,
 @app.post('/api/autopilot/stop')
 async def autopilot_stop(request:Request,nexora_sid:str|None=Cookie(default=None)):
     user=active_user(request,nexora_sid)
+    # Real execution is independently locked and cannot be confused with DEMO.
+    if user.id in real_runtime.running:
+        async with real_runtime.user_lock(user.id):
+            real_runtime.disarm_real(user.id,'Desligado manualmente; contratos REAL continuam em reconciliação')
+        return {'running':False,'execution':'DERIV_REAL','real_orders_enabled':real_runtime.real_available()}
     # Wait for any already dispatched broker request to finish before declaring OFF.
     async with autopilot_lock:
         autopilot_enabled.discard(user.id)
@@ -2072,6 +2173,7 @@ async def autopilot_stop(request:Request,nexora_sid:str|None=Cookie(default=None
 @app.get('/api/status')
 async def status(request:Request,nexora_sid:str|None=Cookie(default=None)):
     user=active_user(request,nexora_sid)
+    real_running=user.id in real_runtime.running
     with db.SessionLocal() as sess:
         interrupted=sess.get(db.RobotRun,user.id) is not None and user.id not in autopilot_enabled
         batch=sess.get(db.PilotValidationBatch,user.id)
@@ -2082,9 +2184,9 @@ async def status(request:Request,nexora_sid:str|None=Cookie(default=None)):
         engine=rt_for(user)
         return {'connected':engine.connected,'symbol':engine.symbol,
                 'latest_price':engine.prices[-1] if engine.prices else None,
-                'ticks':len(engine.prices),'execution':'DERIV_DEMO_ONLY',
-                'running':user.id in autopilot_enabled,'auto_buy_enabled':autopilot_allowed(),
-                'real_orders_enabled':False,
+                'ticks':len(engine.prices),'execution':'DERIV_REAL' if real_running else 'DERIV_DEMO_ONLY',
+                'running':real_running or user.id in autopilot_enabled,'auto_buy_enabled':autopilot_allowed() or real_runtime.real_available(),
+                'real_orders_enabled':real_runtime.real_available(),
                 'interrupted_after_restart':interrupted,
                 'autopilot_version':mode,
                 'selected_strategy':selected_strategy,
@@ -2092,7 +2194,7 @@ async def status(request:Request,nexora_sid:str|None=Cookie(default=None)):
                 'v2_upgrade_needed':upgrade_needed,
                 'analysis_symbol':SYMBOL,
                 'scan_progress':automation_scan_progress.get(user.id) if user.id in autopilot_enabled else None,
-                'reason':autopilot_reasons.get(user.id,
+                'reason':real_runtime.reasons.get(user.id,'Conta REAL ativa; buscando oportunidades') if real_running else autopilot_reasons.get(user.id,
                    'Execução interrompida após reinício; reative manualmente no painel' if interrupted else 'Robô desligado')}
 
 @app.get('/api/autopilot/v2/scanner-status')
