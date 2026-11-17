@@ -250,6 +250,11 @@ async def reconcile_real_once():
                 return True
             when=order.broker_purchase_at
             if when is None:
+                # Some valid buy receipts omit purchase_time. The locally
+                # recorded reservation time is only a polling trigger, NEVER
+                # evidence of settlement. Broker is_sold/profit remain required.
+                when=order.created_at
+            if when is None:
                 return False
             # SQLite integration tests load UTC timestamps without tzinfo;
             # Postgres provides timezone-aware timestamps. Handle both.
