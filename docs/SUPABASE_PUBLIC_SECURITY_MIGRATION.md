@@ -31,15 +31,16 @@ REVOKE ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public FROM anon, authenticated
 
 ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public
   REVOKE ALL ON TABLES FROM anon, authenticated;
-ALTER DEFAULT PRIVILEGES FOR ROLE supabase_admin IN SCHEMA public
-  REVOKE ALL ON TABLES FROM anon, authenticated;
 ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public
-  REVOKE ALL ON SEQUENCES FROM anon, authenticated;
-ALTER DEFAULT PRIVILEGES FOR ROLE supabase_admin IN SCHEMA public
   REVOKE ALL ON SEQUENCES FROM anon, authenticated;
 
 COMMIT;
 ```
+
+O papel de conexão postgres NÃO é membro de supabase_admin; portanto,
+seus privilégios padrão não são alterados aqui. É necessário desabilitar
+\"Automatically expose new tables\" em Supabase Dashboard > Data API para
+cobrir objetos futuros criados pelas ferramentas do Supabase.
 
 A proteção não cria política pública de acesso. O papel `postgres` é
 proprietário das tabelas, tem `BYPASSRLS` e mantém seus privilégios de servidor.
