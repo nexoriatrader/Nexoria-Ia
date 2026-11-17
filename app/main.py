@@ -1237,8 +1237,13 @@ async def login_start(ref:str|None=None):
     if ref and not re.fullmatch(r'[A-Za-z0-9_-]{8,32}',ref):
         ref=None
     with db.SessionLocal() as s:
-        # expiry handled at consumption; old flows can be pruned in maintenance
-        s.add(db.LoginFlow(state_hash=hashsecret(state),verifier_encrypted=encrypt(verifier),referral_code=ref));s.commit()
+        # Keep single-use PKCE verifiers only while an OAuth authorization
+        # remains usable. Expired flows must not accumulate in PostgreSQL.
+        s.execute(delete(db.LoginFlow).where(
+            db.LoginFlow.created_at < db.utcnow()-timedelta(minutes=15)))
+        s.add(db.LoginFlow(state_hash=hashsecret(state),
+                           verifier_encrypted=encrypt(verifier),referral_code=ref))
+        s.commit()
     response=RedirectResponse(build_authorize_url(state,verifier),302)
     response.set_cookie('nexora_state',state,max_age=600,**cookie_options())
     return response
