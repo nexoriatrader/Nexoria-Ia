@@ -116,12 +116,14 @@ def test_real_worker_reserves_and_reconciles_mock_contract(session,monkeypatch):
     real_runtime.running.add(1)
     async def check():
         await real_runtime._user_scan(1)
+        assert session.query(db.RealOrder).count()==1, (real_runtime.reasons.get(1),list(real_runtime.running))
         order=session.query(db.RealOrder).one()
         assert order.state=="CONFIRMED"
         assert order.account_id=="CR123"
         assert buy.await_count==1
         await real_runtime.reconcile_real_once()
         session.expire_all()
+        assert session.query(db.RealOrder).count()==1, (real_runtime.reasons.get(1),list(real_runtime.running))
         order=session.query(db.RealOrder).one()
         assert order.state=="SETTLED" and order.pnl=="0.88"
         assert order.active_slot is None
@@ -162,6 +164,7 @@ def test_uncertain_real_execution_never_sends_next_buy(session,monkeypatch):
     async def check():
         await real_runtime._user_scan(1)
         session.expire_all()
+        assert session.query(db.RealOrder).count()==1, (real_runtime.reasons.get(1),list(real_runtime.running))
         order=session.query(db.RealOrder).one()
         assert order.state=="UNKNOWN" and order.active_slot=="CR123"
         assert 1 not in real_runtime.running
