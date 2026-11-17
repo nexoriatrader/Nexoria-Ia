@@ -621,6 +621,15 @@ html,body{max-width:100%;overflow-x:clip}
 .account-plans-note{font-size:11px;color:#92adbf;line-height:1.6;margin-top:13px}
 .account-plans-swipe-hint{display:none;font-size:11px;color:#a9c4d5;margin-top:10px}
 @media(max-width:700px){#account .account-plans-grid{display:flex;flex-wrap:nowrap;gap:12px;overflow-x:auto;overflow-y:hidden;overscroll-behavior-x:contain;scroll-snap-type:x mandatory;scroll-padding-inline:2px;-webkit-overflow-scrolling:touch;padding:3px 2px 15px;scrollbar-width:none}#account .account-plans-grid::-webkit-scrollbar{display:none}#account .account-plans-grid>.account-plan{box-sizing:border-box;flex:0 0 86%;width:86%;max-width:86%;scroll-snap-align:start;min-height:225px;padding:18px 19px}#account .account-plan-checkout{white-space:nowrap;font-size:12px;letter-spacing:0;padding-inline:8px} .account-plan-foot{padding-top:10px}.account-plans-swipe-hint{display:block}}
+/* Mobile Minha Conta sequence: remaining access, plans, referral, identity/sign-out. */
+@media(max-width:700px){
+ #account:not(.hidden){display:flex;flex-direction:column;align-items:stretch}
+ #account>.account-page-heading{order:0}
+ #account>.account-access-card{order:1}
+ #account>.account-plans-section{order:2}
+ #account>.account-referral-card{order:3}
+ #account>.account-profile-card{order:4}
+}
 @media(max-width:480px){#account .account-profile-card{padding:18px 16px}.account-profile-top{gap:11px}.account-profile-avatar{width:48px;height:48px;font-size:27px}.account-broker-status{margin-left:59px;font-size:10px}.account-referral-copy{flex-direction:column}.account-referral-copy button{min-height:44px}.account-access-indicator{font-size:9px}}
 </style><style>
 /* Dedicated robot-configuration page, separate from the dashboard */
