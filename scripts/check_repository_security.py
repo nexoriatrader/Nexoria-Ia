@@ -23,7 +23,7 @@ SIGNATURES = {
         re.IGNORECASE,
     ),
     "fernet_literal": re.compile(
-        r"\bNEXORA_FERNET_KEY\s*=\s*['\\"]?[A-Za-z0-9_-]{43}="
+        r"\bNEXORA_FERNET_KEY\s*=\s*[A-Za-z0-9_-]{43}="
     ),
 }
 
