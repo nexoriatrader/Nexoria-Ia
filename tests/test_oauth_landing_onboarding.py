@@ -174,3 +174,26 @@ def test_inline_browser_script_has_valid_javascript_syntax(tmp_path):
     checked=subprocess.run([node,"--check",str(js_file)],
         capture_output=True,text=True,timeout=10,check=False)
     assert checked.returncode==0,checked.stderr
+
+
+def test_start_login_prunes_old_single_use_flows(tmp_path,monkeypatch):
+    client,factory,engine=local_client(tmp_path,monkeypatch)
+    with factory() as sess:
+        sess.add(db.LoginFlow(
+            state_hash=hashsecret('stale'),
+            verifier_encrypted=encrypt('stale-verifier'),
+            created_at=db.utcnow()-timedelta(minutes=17)))
+        sess.add(db.LoginFlow(
+            state_hash=hashsecret('recent'),
+            verifier_encrypted=encrypt('recent-verifier'),
+            created_at=db.utcnow()-timedelta(minutes=2)))
+        sess.commit()
+    try:
+        r=client.get('/auth/deriv/start',follow_redirects=False)
+        assert r.status_code==302
+        with factory() as sess:
+            assert sess.get(db.LoginFlow,hashsecret('stale')) is None
+            assert sess.get(db.LoginFlow,hashsecret('recent')) is not None
+            assert sess.query(db.LoginFlow).count()==2
+    finally:
+        client.close();engine.dispose()
