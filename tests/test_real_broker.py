@@ -52,6 +52,12 @@ class DummyWebsocket:
 
     async def recv(self):
         request=self.sent[-1]
+        if 8500<=request["req_id"]<=8503:
+            return json.dumps({"req_id":request["req_id"],"proposal":{
+                "id":"quote-"+str(request["duration"]),
+                "ask_price":self.ask,
+                "payout":"1.95" if request["duration"]==5 else self.payout
+            }})
         if request["req_id"]==8402:
             return json.dumps({"req_id":8402,"proposal":{
                 "id":"proposal-test","ask_price":self.ask,"payout":self.payout
@@ -108,4 +114,34 @@ def test_real_buy_unknown_result_is_not_safe_to_retry(monkeypatch):
                 contract_type="PUT",stake="1",duration=5,
                 currency="USD",min_payout_ratio="1.85")
         assert len(socket.sent)==2
+    asyncio.run(check())
+
+
+def test_real_expiry_auto_uses_broker_quotes_and_fresh_buy_proposal(monkeypatch):
+    socket=DummyWebsocket(payout="1.9")
+    broker_mock(monkeypatch,socket)
+    async def check():
+        result=await real.buy_real_contract("token","REAL123",symbol="R_100",
+            contract_type="CALL",stake="1",duration=1,
+            duration_options=(1,3,5,15),
+            currency="USD",min_payout_ratio="1.85")
+        assert result["duration_minutes"]==5
+        assert len(socket.sent)==6
+        assert [row["duration"] for row in socket.sent[:4]]==[1,3,5,15]
+        assert socket.sent[4]["duration"]==5
+        assert socket.sent[4]["subscribe"]==1
+        assert socket.sent[5]["buy"]=="proposal-test"
+    asyncio.run(check())
+
+
+def test_real_expiry_auto_fails_closed_when_no_quote_passes(monkeypatch):
+    socket=DummyWebsocket(payout="1.1")
+    broker_mock(monkeypatch,socket)
+    async def check():
+        with pytest.raises(real.RealExecutionError):
+            await real.buy_real_contract("token","REAL123",symbol="R_100",
+                contract_type="CALL",stake="1",duration=1,
+                duration_options=(1,3),
+                currency="USD",min_payout_ratio="1.85")
+        assert all("buy" not in row for row in socket.sent)
     asyncio.run(check())
