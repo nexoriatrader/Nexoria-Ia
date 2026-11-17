@@ -84,7 +84,7 @@ def test_landing_preserves_explicit_deriv_oauth_and_no_auto_start():
     assert 'href="/auth/deriv/start"' in welcome
     assert 'id="lpHeroTrialButton"' in welcome
     assert 'onclick="startNexoraTrial(event)"' in welcome
-    assert 'gratuitamente por 7 dias' in welcome
+    assert 'data-trial-label>24 horas</span>' in welcome
     assert 'Conexão oficial Deriv' in welcome
     assert 'Como funciona' in welcome
     assert 'Operações financeiras envolvem riscos' in welcome
@@ -107,8 +107,8 @@ def test_authenticated_oauth_requires_initial_setup_before_user_starts_robot():
     assert 'id="setupForm"' in html
     assert 'id="setupStake"' in html
     assert 'id="setupLoss"' in html
-    assert "new URLSearchParams(window.location.search).get('login')==='ok'" in html
-    assert "go('setup')" in html
+    assert "const loginResult=new URLSearchParams(window.location.search).get('login');" in html
+    assert "go('robot-config');" in html\n    assert "go('setup')" not in html
     assert "page('dashboard')" in html
     assert 'history.replaceState' in html
     assert 'id="robotButton"' in html
