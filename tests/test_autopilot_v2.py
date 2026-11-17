@@ -233,7 +233,7 @@ def test_v2_martingale_enters_same_symbol_without_waiting_for_scan(tmp_path,monk
                 ('EURJPY','4.00','CONFIRMED')]
             attr=s.scalar(select(db.AutoPilotAttribution).where(
                 db.AutoPilotAttribution.order_id==orders[-1].id))
-            assert attr.strategy=='rompimento_m1'
+            assert attr.strategy=='test_confirmed_m1'
         # No fourth trade while both symbols are occupied.
         main.autopilot_last_attempt[uid]=-1e12
         asyncio.run(tick())
