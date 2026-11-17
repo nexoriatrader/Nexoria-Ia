@@ -44,8 +44,8 @@ def billing_enabled():
     if mode=='test' and not secret.startswith(('sk_test_','rk_test_')):
         return False
     # A test Checkout must never grant paid access on the public NEXORA site.
-    public_url=os.getenv('NEXORA_PUBLIC_URL', '').rstrip('/')
-    if mode=='test' and public_url=='https://nexoria-ia.onrender.com':
+    public_url=os.getenv('NEXORA_PUBLIC_URL', 'https://nexoria-ia.onrender.com').rstrip('/')
+    if mode=='test' and public_url.startswith('https://'):
         return False
     return True
 
