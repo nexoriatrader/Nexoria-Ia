@@ -92,6 +92,12 @@ async def _user_scan(uid):
     async with user_lock(uid):
         if uid not in running or not real_available():
             return
+        # Prevent ten REAL robots from constantly re-running identical M1
+        # analysis when the latest candle has not changed.
+        loop_time=asyncio.get_running_loop().time()
+        if loop_time-last_scan.get(uid,-1e12)<4:
+            return
+        last_scan[uid]=loop_time
         with db.SessionLocal() as sess:
             user=sess.get(db.User,uid)
             profile=sess.get(db.AutomationProfile,uid)
@@ -194,6 +200,8 @@ async def _user_scan(uid):
                 mark_real_unknown(sess,sess.get(db.RealOrder,order_id))
             disarm_real(uid,'Compra REAL sem confirmação; novas entradas bloqueadas até reconciliação')
         except RealExecutionError as exc:
+            # This exception is restricted to PRE-BUY validation failures by
+            # real_broker. After the outbound buy, all failures are uncertain.
             with db.SessionLocal() as sess:
                 cancel_unsubmitted_real_order(sess,sess.get(db.RealOrder,order_id),str(exc))
             reasons[uid]='Proposta REAL rejeitada; nenhuma compra enviada'
