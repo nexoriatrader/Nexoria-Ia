@@ -18,7 +18,7 @@
 <meta property="og:image:type" content="image/png">
 <meta property="og:image:width" content="1731">
 <meta property="og:image:height" content="909">
-<meta property="og:image:alt" content="Nexora IA, robô trader automático — teste grátis por 24 horas">
+<meta property="og:image:alt" content="Nexora IA, robô trader automático — teste grátis por 7 dias">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="Nexora Robô Automático">
 <meta name="twitter:description" content="Nexora IA - acesse o melhor e mais prático robô Trader. Acesse e comprove.">
@@ -748,9 +748,9 @@ html,body{max-width:100%;overflow-x:clip}
   <div>
    <div class="lp-eyebrow">Nexora - robô inteligente</div>
    <h1 id="landingHeading">O robô trader automático <em>mais fácil de usar</em></h1>
-   <p class="lp-subtitle">Experimente o NEXORA IA gratuitamente por 24 horas. Configure suas estratégias, e deixe que o robô trabalhe sozinho.</p>
+   <p class="lp-subtitle">Experimente o NEXORA IA gratuitamente por 7 dias. Configure suas estratégias, e deixe que o robô trabalhe sozinho.</p>
    <div class="lp-actions">
-    <a id="lpHeroTrialButton" class="lp-button lp-button-primary" href="/auth/deriv/start" onclick="startNexoraTrial(event)">Teste grátis por 24h <span aria-hidden="true">➜</span></a>
+    <a id="lpHeroTrialButton" class="lp-button lp-button-primary" href="/auth/deriv/start" onclick="startNexoraTrial(event)">Teste grátis por 7 dias <span aria-hidden="true">➜</span></a>
    </div>
    <div class="lp-proof"><span><b aria-hidden="true">✓</b> Conexão oficial Deriv</span><span><b aria-hidden="true">ϟ</b> Ativação em poucos passos</span><span><b aria-hidden="true">▥</b> Gestão de risco</span></div>
   </div>
@@ -791,7 +791,7 @@ html,body{max-width:100%;overflow-x:clip}
   <div><span aria-hidden="true">▥</span> Painel intuitivo</div>
   <div><span aria-hidden="true">▥</span> Resultados registrados</div>
  </div>
- <div class="lp-final"><h2>Comece agora com <br><strong>24 horas grátis</strong></h2><a id="lpFinalTrialButton" class="lp-button lp-button-primary" href="/auth/deriv/start" onclick="startNexoraTrial(event)" aria-label="Iniciar teste gratuito NEXORA IA de 24 horas">Quero testar o NEXORA IA <span aria-hidden="true">➜</span></a></div>
+ <div class="lp-final"><h2>Comece agora com <br><strong>7 dias grátis</strong></h2><a id="lpFinalTrialButton" class="lp-button lp-button-primary" href="/auth/deriv/start" onclick="startNexoraTrial(event)" aria-label="Iniciar teste gratuito NEXORA IA de 24 horas">Quero testar o NEXORA IA <span aria-hidden="true">➜</span></a></div>
  <p class="lp-disclaimer">Operações financeiras envolvem riscos e podem resultar em perdas. Resultados não são garantidos.</p>
 </section>
 <section id="setup" class="robot-setup hidden" aria-labelledby="setupTitle">
@@ -1241,7 +1241,7 @@ html,body{max-width:100%;overflow-x:clip}
 const $=id=>document.getElementById(id);
 let activePage='welcome',demoOrders=[],demoBalance=null,refreshTimer=null,resultsRefreshTimer=null,resultsRequestBusy=false,lastRequestKey=null,robotRunning=false,robotConfiguredMode='demo';
 let dashboardStatusSequence=0;
-let accessExpiresMs=null,accessServerDelta=0,accessMode='UNKNOWN';
+let accessExpiresMs=null,accessServerDelta=0,accessMode='UNKNOWN',accessTrialSeconds=7*24*3600;
 const durationString=seconds=>{
   seconds=Math.max(0,Math.floor(seconds));
   const days=Math.floor(seconds/86400),hours=Math.floor(seconds%86400/3600);
@@ -1252,7 +1252,11 @@ function updateAccessCountdown(){
   const counter=$('robotAccessCountdown');
   if(!counter)return;
   const mini=$('dashboardAccessCountdown');
-  if(accessMode==='TRIAL_AVAILABLE'){counter.textContent='24:00:00';if(mini)mini.textContent='24h grátis disponíveis';return;}
+  if(accessMode==='TRIAL_AVAILABLE'){
+    counter.textContent=durationString(accessTrialSeconds);
+    if(mini)mini.textContent=durationString(accessTrialSeconds)+' de teste disponíveis';
+    return;
+  }
   if(accessMode==='SUSPENDED'){counter.textContent='SUSPENSO';if(mini)mini.textContent='suspenso';return;}
   if(!accessExpiresMs){counter.textContent='--:--:--';if(mini)mini.textContent='consultando...';return;}
   const remain=Math.max(0,Math.floor((accessExpiresMs-(Date.now()+accessServerDelta))/1000));
@@ -1802,6 +1806,8 @@ async function loadRobotAccess(){
     accessMode=a.status;
     accessExpiresMs=a.expires_at?new Date(a.expires_at).getTime():null;
     accessServerDelta=a.server_time?new Date(a.server_time).getTime()-Date.now():0;
+    accessTrialSeconds=Number.isFinite(Number(a.trial_hours))&&Number(a.trial_hours)>0?
+      Number(a.trial_hours)*3600:7*24*3600;
     updateAccessCountdown();
     $('accountUserId').textContent=String(a.user_id||'—');
     $('referralLink').value=location.origin+'/i/'+encodeURIComponent(a.short_code)+'?v=2';
@@ -1816,7 +1822,7 @@ async function loadRobotAccess(){
       return;
     }
     if(a.status==='TRIAL_AVAILABLE'){
-      target.textContent='24 horas grátis disponíveis. O contador começa quando você ligar o robô pela primeira vez.';
+      target.textContent=durationString(accessTrialSeconds)+' grátis disponíveis. O contador começa quando você ligar o robô pela primeira vez.';
       return;
     }
     const until=a.expires_at?new Date(a.expires_at):null;
