@@ -1239,7 +1239,7 @@ html,body{max-width:100%;overflow-x:clip}
 </div>
 <script>
 const $=id=>document.getElementById(id);
-let activePage='welcome',demoOrders=[],demoBalance=null,refreshTimer=null,resultsRefreshTimer=null,resultsRequestBusy=false,lastRequestKey=null,robotRunning=false;
+let activePage='welcome',demoOrders=[],demoBalance=null,refreshTimer=null,resultsRefreshTimer=null,resultsRequestBusy=false,lastRequestKey=null,robotRunning=false,robotConfiguredMode='demo';
 let dashboardStatusSequence=0;
 let accessExpiresMs=null,accessServerDelta=0,accessMode='UNKNOWN';
 const durationString=seconds=>{
@@ -1490,6 +1490,7 @@ async function refreshDashboard(){
    // Ignore an older response that arrived after a newer status request.
    if(sequence!==dashboardStatusSequence)return null;
    robotRunning=Boolean(status.running);
+   robotConfiguredMode=status.configured_account_mode==='real'?'real':'demo';
    renderScanMonitor(status);
    const available=Boolean(status.auto_buy_enabled);
    $('robotState').textContent=robotRunning?'ATIVO':status.interrupted_after_restart?'INTERROMPIDO':available?'PRONTO':'INDISPONÍVEL';
@@ -1868,7 +1869,7 @@ function renderRealtimeOrders(){
   timeZone:'America/Sao_Paulo',hour:'2-digit',minute:'2-digit',second:'2-digit'
  }).format(new Date())+' · Brasília';
 }
-async function loadDemoOrders(){try{const data=await req('/api/demo/orders');demoOrders=data.items||[];const last=demoOrders[0];$('lastOrder').textContent=last?last.symbol+' · '+last.direction+' · M'+last.duration_minutes+' · '+money(last.stake)+(last.pnl===null?' · Aguardando resultado':' · Resultado '+money(last.pnl)):'Nenhum contrato oficial ainda.';renderOrders();renderRealtimeOrders();return data}catch(e){$('ordersBody').innerHTML='<tr><td colspan="11" class="empty">Não foi possível carregar o histórico.</td></tr>';throw e}}
+async function loadDemoOrders(){try{const data=await req(robotConfiguredMode==='real'?'/api/real/orders':'/api/demo/orders');demoOrders=data.items||[];const last=demoOrders[0];$('lastOrder').textContent=last?last.symbol+' · '+last.direction+' · M'+last.duration_minutes+' · '+money(last.stake)+(last.pnl===null?' · Aguardando resultado':' · Resultado '+money(last.pnl)):'Nenhum contrato oficial ainda.';renderOrders();renderRealtimeOrders();return data}catch(e){$('ordersBody').innerHTML='<tr><td colspan="11" class="empty">Não foi possível carregar o histórico.</td></tr>';throw e}}
 const brasilDateTime=(iso)=>{
  if(!iso)return ['—','—'];
  const d=new Date(iso);
