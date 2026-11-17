@@ -174,3 +174,26 @@ def test_shared_fetch_slots_are_freed_after_waiter_timeout(monkeypatch):
         market._candle_snapshots.clear()
         market._candle_snapshot_times.clear()
     asyncio.run(check())
+
+
+def test_ten_simulated_robots_reuse_one_broker_fetch(monkeypatch):
+    """Ten concurrent analysts share one public data fetch, no trading orders."""
+    async def check():
+        market._candle_snapshots.clear()
+        market._candle_snapshot_times.clear()
+        market._candle_inflight.clear()
+        async def broker(payload,*,expected,timeout):
+            await asyncio.sleep(.015)
+            return _candles()
+        fetch=AsyncMock(side_effect=broker)
+        monkeypatch.setattr(market,"public_request",fetch)
+        responses=await asyncio.gather(*(
+            market.shared_candle_request("R_100",60,165)
+            for _ in range(10)
+        ))
+        assert all(row==responses[0] for row in responses)
+        assert fetch.await_count==1
+        assert len(market._candle_snapshots)<=1
+        market._candle_snapshots.clear()
+        market._candle_snapshot_times.clear()
+    asyncio.run(check())
