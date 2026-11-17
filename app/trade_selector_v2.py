@@ -303,9 +303,7 @@ def strict_closed_bars(message, granularity, *, now):
 async def fetch_closed_timeframe(symbol, seconds, count, *, now):
     if seconds not in (300,900,3600):
         raise MarketError('Timeframe não autorizado')
-    payload=await public_request({
-        'ticks_history':symbol,'style':'candles','granularity':seconds,
-        'count':count,'end':'latest'},expected='candles',timeout=18)
+    payload=await shared_candle_request(symbol,seconds,count,timeout=18)
     return strict_closed_bars(payload,seconds,now=now)
 
 
