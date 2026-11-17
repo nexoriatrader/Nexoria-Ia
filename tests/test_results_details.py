@@ -19,7 +19,11 @@ def test_result_details_are_factual_and_brasilia_time():
     o=order(1,1,datetime(2026,11,12,15,42,13,tzinfo=timezone.utc))
     details=main.order_result_details(o)
     assert details['account_mode']=='demo'
-    assert details['started_at_brasilia']=='2026-11-12T12:42:13-03:00'
+    assert details['started_at_brasilia'] is None  # Never invent Deriv purchase time.
+    assert details['time_source']=='NOT_REPORTED'
+    o.broker_purchase_at=o.created_at
+    assert main.order_result_details(o)['started_at_brasilia']=='2026-11-12T12:42:13-03:00'
+    assert main.order_result_details(o)['time_source']=='DERIV'
     assert details['outcome']=='WIN'
     assert details['progression']['source']=='manual'
     assert main.order_result_details(order(1,2,o.created_at,pnl='-2'))['outcome']=='LOSS'
