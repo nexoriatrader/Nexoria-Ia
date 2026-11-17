@@ -180,3 +180,30 @@ def test_uncertain_real_execution_never_sends_next_buy(session,monkeypatch):
         real_runtime._user_locks.clear()
         real_runtime.last_scan.clear()
         session.close()
+
+
+def test_real_reconcile_missing_official_purchase_time_still_checks_broker(session,monkeypatch):
+    """Local reservation time triggers polling only; never fabricates P/L."""
+    import asyncio
+    from datetime import timedelta
+    from unittest.mock import AsyncMock
+    from app import real_runtime
+    order,_=place(session)
+    confirm_real_order(session,order,{"account_mode":"real",
+        "contract_id":"555666777","buy_price":"1","broker_purchase_time":None})
+    order.created_at=db.utcnow()-timedelta(minutes=20)
+    session.commit()
+    assert order.broker_purchase_at is None
+    monkeypatch.setattr(db,"SessionLocal",
+                        sessionmaker(bind=session.bind,expire_on_commit=False))
+    monkeypatch.setattr(real_runtime,"latest_token",lambda sess,uid:"test-token")
+    mocked=AsyncMock(return_value={"account_mode":"real","contract":{
+        "contract_id":"555666777","is_sold":1,"profit":"-1","status":"lost"}})
+    monkeypatch.setattr(real_runtime,"real_contract_status",mocked)
+    async def check():
+        await real_runtime.reconcile_real_once()
+        assert mocked.await_count==1
+    asyncio.run(check())
+    session.expire_all()
+    assert session.get(db.RealOrder,order.id).state=="SETTLED"
+    assert session.get(db.RealOrder,order.id).pnl=="-1"
