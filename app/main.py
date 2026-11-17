@@ -25,6 +25,7 @@ from .demo import (DemoTradingError, DemoPreBuyDeadlineExceeded, demo_account_ba
 from .demo_ledger import OrderGuardError, reserve, public_order, confirmed, unknown, settle
 from . import real_runtime
 from .real_broker import RealExecutionError, real_account_balance
+from .real_ledger import RealOrderGuardError, real_pilot_limits
 from .autopilot import analyze, quote_assessment
 from .engine import Engine, Settings
 from .market import MarketError, discover_symbols, discover_contracts, indicative_proposal, public_feed_messages
@@ -2057,6 +2058,12 @@ async def start_real_autopilot(request:Request,nexora_sid:str|None=None):
                 raise ValueError()
         except (InvalidOperation,ValueError):
             raise HTTPException(409,'Configure Stop Loss REAL de pelo menos uma entrada e valor válido') from None
+        try:
+            server_max_stake,_,_=real_pilot_limits()
+        except RealOrderGuardError:
+            raise HTTPException(503,'Proteções do piloto REAL indisponíveis') from None
+        if stake>server_max_stake:
+            raise HTTPException(409,'No piloto REAL, reduza a entrada para no máximo US$ '+str(server_max_stake))
         if profile.strategy not in ('pulso_v2','trend','rsi'):
             raise HTTPException(409,'Estratégia REAL inválida')
         try:
