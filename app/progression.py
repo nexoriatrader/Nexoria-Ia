@@ -4,6 +4,8 @@ A cycle = initial attempt + configured Martingales. After all lose, the final
 loss stake is multiplied by the cycle multiplier to seed the next cycle; advance
 the *next* cycle's base by the cycle multiplier. Any win resets both levels.
 A selected number of cycles means ADDITIONAL cycles after the initial cycle.
+After the final loss, start a fresh base-stake sequence without disarming.
+With no cycles selected, exhausting Martingale already resets to base.
 Only Martingale reuses the previous signal. A new cycle awaits the next confirmed\nstrategy signal; uncertain orders keep their own symbol locked until reconciled.
 """
 from dataclasses import dataclass
@@ -90,7 +92,11 @@ def next_entry(*, base, gale_enabled, gales, gale_multiplier, cycles, cycle_mult
             gale=0
             previous=row
             if cycles is not None and cycle>cycles:
-                raise ProgressionHalt('Quantidade de ciclos concluída; robô pausado')
+                # Exhausting the configured recovery sequence resets the stake
+                # to its base for the NEXT independently confirmed signal.
+                # Stop Win/Loss and the broker safeguards still apply.
+                cycle=gale=0
+                previous=None
     stake=(base*((cycle_multiplier*(gale_multiplier**gales))**cycle)*(gale_multiplier**gale)).quantize(
         Decimal('0.01'),rounding=ROUND_HALF_UP)
     # No arbitrary per-trade or cumulative sequence ceiling. Broker-defined
