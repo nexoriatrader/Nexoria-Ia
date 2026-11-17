@@ -119,6 +119,10 @@ def confirm_real_order(session, order, receipt):
     price = _money(receipt.get('buy_price'), 'Preço REAL')
     if price <= 0 or price > _money(order.stake, 'Valor da entrada'):
         raise RealOrderGuardError('Preço de compra REAL ultrapassou o autorizado')
+    actual_duration=receipt.get('duration_minutes')
+    if actual_duration not in (1,3,5,15):
+        raise RealOrderGuardError('Expiração REAL confirmada inválida')
+    order.duration_minutes=actual_duration
     order.contract_id=contract_id
     order.buy_price=str(price)
     order.broker_purchase_at=official_broker_epoch(receipt.get('broker_purchase_time'))
