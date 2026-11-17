@@ -23,8 +23,13 @@ def test_cycle_progression_2_4_8_16_as_requested():
     assert (a.stake,a.cycle,a.gale)==(Decimal('8.00'),1,0)
     a=calculate([row(1,2,-2),row(2,4,-4),row(3,8,-8)])
     assert (a.stake,a.cycle,a.gale)==(Decimal('16.00'),1,1)
-    with pytest.raises(ProgressionHalt,match='ciclos concluída'):
-        calculate([row(1,2,-2),row(2,4,-4),row(3,8,-8),row(4,16,-16)])
+    # Both configured cycles have lost: new confirmed signal restarts at base.
+    exhausted=[row(1,2,-2),row(2,4,-4),row(3,8,-8),row(4,16,-16)]
+    restarted=calculate(exhausted)
+    assert (restarted.stake,restarted.cycle,restarted.gale,restarted.retry)==(Decimal('2.00'),0,0,False)
+    # The new sequence can progress again after the reset.
+    after_reset=calculate(exhausted+[row(5,2,-2)])
+    assert (after_reset.stake,after_reset.cycle,after_reset.gale,after_reset.retry)==(Decimal('4.00'),0,1,True)
 
 def test_win_resets_base_and_cycle():
     orders=[row(1,2,-2),row(2,4,-4),row(3,8,6)]
@@ -89,5 +94,29 @@ def test_cycles_work_without_martingale():
     assert (third.stake,third.cycle,third.gale)==(Decimal('6.25'),2,0)
     reset=next_entry(orders=[row(1,1,-1),row(2,'2.50',2.20)],**only_cycles)
     assert (reset.stake,reset.cycle,reset.gale)==(Decimal('1.00'),0,0)
-    with pytest.raises(ProgressionHalt,match='ciclos concluída'):
-        next_entry(orders=[row(1,1,-1),row(2,'2.50',-2.5),row(3,'6.25',-6.25)],**only_cycles)
+    exhausted=[row(1,1,-1),row(2,'2.50',-2.5),row(3,'6.25',-6.25)]
+    continued=next_entry(orders=exhausted,**only_cycles)
+    assert (continued.stake,continued.cycle,continued.gale,continued.retry)==(Decimal('1.00'),0,0,False)
+    # No frozen state: next losing entry can start a second sequence.
+    continued_again=next_entry(orders=exhausted+[row(4,1,-1)],**only_cycles)
+    assert (continued_again.stake,continued_again.cycle,continued_again.gale,continued_again.retry)==(Decimal('2.50'),1,0,False)
+
+
+def test_martingale_only_exhaustion_resets_without_pausing():
+    mg_only=dict(base='1.00',gale_enabled=True,gales=2,
+                 gale_multiplier='2.50',cycles=0,cycles_enabled=False,
+                 cycle_multiplier='1')
+    losing=[row(1,1,-1),row(2,'2.50',-2.5),row(3,'6.25',-6.25)]
+    result=next_entry(orders=losing,**mg_only)
+    assert (result.stake,result.cycle,result.gale,result.retry)==(Decimal('1.00'),0,0,False)
+    next_signal=next_entry(orders=losing+[row(4,1,-1)],**mg_only)
+    assert (next_signal.stake,next_signal.cycle,next_signal.gale,next_signal.retry)==(Decimal('2.50'),0,1,True)
+
+
+def test_exhausted_cycle_does_not_hide_unsettled_broker_order():
+    config=dict(base='1.00',gale_enabled=False,gales=0,gale_multiplier='1',
+                cycles=2,cycles_enabled=True,cycle_multiplier='2.50')
+    rows=[row(1,1,-1),row(2,'2.50',-2.5),
+          dict(row(3,'6.25',-6.25),state='CONFIRMED',pnl=None)]
+    with pytest.raises(ProgressionHalt,match='não liquidado'):
+        next_entry(orders=rows,**config)

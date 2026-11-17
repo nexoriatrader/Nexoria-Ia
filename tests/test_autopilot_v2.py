@@ -690,6 +690,58 @@ def test_cycle_only_uses_new_signal_any_symbol_and_resets_on_win(tmp_path,monkey
     finally:cleanup(engine)
 
 
+def test_exhausted_cycles_rearm_base_for_fresh_signal_across_assets(tmp_path,monkeypatch):
+    """Exhaustion is a stake reset, not a robot stop or old-symbol retry."""
+    client,factory,engine,uid=prepare(tmp_path,monkeypatch,stop_loss='0.00')
+    try:
+        with factory() as sess:
+            user=sess.get(db.User,uid)
+            sess.add(db.PilotValidationBatch(user_id=uid,after_order_id=0))
+            sess.add(db.RobotRun(user_id=uid,after_order_id=0))
+            sess.add(db.RobotPlan(user_id=uid,requested_martingale=False,
+                                 gale_count=0,cycles_limit=2))
+            sess.add(db.RobotCycleParams(user_id=uid,multiplier='2.50'))
+            for index,(symbol,stake) in enumerate(
+                    [('1HZ75V','2.00'),('R_100','5.00'),('1HZ25V','12.50')],1):
+                order=db.DemoOrder(user_id=uid,request_key=f'exhausted-cycles-{index}',
+                    state='SETTLED',symbol=symbol,direction='PUT',
+                    duration_minutes=15,stake=stake,pnl='-'+stake)
+                sess.add(order);sess.flush()
+                sess.add(db.AutoPilotAttribution(order_id=order.id,user_id=uid,
+                    strategy='pulso_v2',direction='PUT',reason='official LOSS'))
+            sess.commit()
+        with factory() as sess:
+            user=sess.get(db.User,uid)
+            orders=sess.scalars(select(db.DemoOrder).order_by(db.DemoOrder.id)).all()
+            entry,last=main.v2_symbol_recovery(sess,user,orders,
+                sess.get(db.RobotPlan,uid),
+                sess.get(db.RobotCycleParams,uid),
+                sess.get(db.PilotValidationBatch,uid))
+            assert (entry.stake,entry.cycle,entry.gale,entry.retry)==(
+                Decimal('2.00'),0,0,False)
+            assert entry.symbol is None and entry.direction is None
+            assert last.symbol=='1HZ25V'
+            # The first fresh-signal LOSS starts the next cycle series.
+            fourth=db.DemoOrder(user_id=uid,request_key='exhausted-cycles-4',
+                state='SETTLED',symbol='GBPUSD',direction='CALL',
+                duration_minutes=5,stake='2.00',pnl='-2.00')
+            sess.add(fourth);sess.flush()
+            sess.add(db.AutoPilotAttribution(order_id=fourth.id,user_id=uid,
+                strategy='pulso_v2',direction='CALL',reason='next fresh signal'))
+            sess.commit()
+        with factory() as sess:
+            user=sess.get(db.User,uid)
+            orders=sess.scalars(select(db.DemoOrder).order_by(db.DemoOrder.id)).all()
+            entry,last=main.v2_symbol_recovery(sess,user,orders,
+                sess.get(db.RobotPlan,uid),
+                sess.get(db.RobotCycleParams,uid),
+                sess.get(db.PilotValidationBatch,uid))
+            assert (entry.stake,entry.cycle,entry.gale,entry.retry)==(
+                Decimal('5.00'),1,0,False)
+            assert last.symbol=='GBPUSD'
+    finally:cleanup(engine)
+
+
 def test_cycle_only_blocks_until_all_official_orders_settle(tmp_path,monkeypatch):
     client,factory,engine,uid=prepare(tmp_path,monkeypatch,stop_loss='0.00')
     try:
