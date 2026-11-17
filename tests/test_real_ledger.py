@@ -80,3 +80,98 @@ def test_real_contract_settlement_releases_slot_only_with_broker_proof(session):
     assert order.active_slot is None and order.pnl=="1"
     second,created=place(session,"second-12345678")
     assert created and second.id!=order.id
+
+
+def test_real_worker_reserves_and_reconciles_mock_contract(session,monkeypatch):
+    """One simulated REAL execution: no external API calls or real money."""
+    import asyncio
+    import time
+    import json
+    from unittest.mock import AsyncMock
+    from app import real_runtime
+    from app.real_broker import RealPurchaseUncertain
+    session.add(db.AutomationProfile(
+        user_id=1,account_mode="real",real_account_id="CR123",
+        market="derived",symbols_json=json.dumps(["R_100"]),strategy="trend",
+        expiry_minutes=0,indicators_json="[]",direction="AUTO",
+        min_payout="88",news_filter=False))
+    session.commit()
+    session_factory=sessionmaker(bind=session.bind,expire_on_commit=False)
+    monkeypatch.setattr(db,"SessionLocal",session_factory)
+    monkeypatch.setattr(real_runtime,"latest_token",lambda sess,uid:"fake-token")
+    monkeypatch.setattr(real_runtime,"real_available",lambda:True)
+    monkeypatch.setattr(real_runtime,"access_status",lambda sess,uid:{"allowed":True})
+    bar=int(time.time()//60)*60-60
+    candidate={"symbol":"R_100","direction":"CALL","minutes":1,
+               "expiry_options":[1,3,5,15],"last_bar_epoch":bar}
+    monkeypatch.setattr(real_runtime,"confirmed_automation_signal",
+                        AsyncMock(return_value=candidate))
+    buy=AsyncMock(return_value={"account_mode":"real","contract_id":"123456789",
+             "buy_price":"1","broker_purchase_time":1760000000})
+    monkeypatch.setattr(real_runtime,"buy_real_contract",buy)
+    monkeypatch.setattr(real_runtime,"real_contract_status",
+                        AsyncMock(return_value={"account_mode":"real","contract":{
+                          "contract_id":"123456789","is_sold":1,"profit":"0.88",
+                          "status":"won"}}))
+    real_runtime.running.add(1)
+    async def check():
+        await real_runtime._user_scan(1)
+        order=session.query(db.RealOrder).one()
+        assert order.state=="CONFIRMED"
+        assert order.account_id=="CR123"
+        assert buy.await_count==1
+        await real_runtime.reconcile_real_once()
+        session.expire_all()
+        order=session.query(db.RealOrder).one()
+        assert order.state=="SETTLED" and order.pnl=="0.88"
+        assert order.active_slot is None
+    try:
+        asyncio.run(check())
+    finally:
+        real_runtime.running.clear()
+        real_runtime.reasons.clear()
+        real_runtime._user_locks.clear()
+        session.close()
+
+
+def test_uncertain_real_execution_never_sends_next_buy(session,monkeypatch):
+    import asyncio
+    import time
+    import json
+    from unittest.mock import AsyncMock
+    from app import real_runtime
+    from app.real_broker import RealPurchaseUncertain
+    session.add(db.AutomationProfile(user_id=1,account_mode="real",
+        real_account_id="CR123",market="derived",
+        symbols_json=json.dumps(["R_100"]),strategy="trend",
+        expiry_minutes=0,indicators_json="[]",direction="AUTO",
+        min_payout="88",news_filter=False))
+    session.commit()
+    monkeypatch.setattr(db,"SessionLocal",
+                        sessionmaker(bind=session.bind,expire_on_commit=False))
+    monkeypatch.setattr(real_runtime,"latest_token",lambda sess,uid:"fake-token")
+    monkeypatch.setattr(real_runtime,"real_available",lambda:True)
+    monkeypatch.setattr(real_runtime,"access_status",lambda sess,uid:{"allowed":True})
+    bar=int(time.time()//60)*60-60
+    monkeypatch.setattr(real_runtime,"confirmed_automation_signal",
+                        AsyncMock(return_value={"symbol":"R_100","direction":"PUT",
+                            "minutes":1,"expiry_options":[1],"last_bar_epoch":bar}))
+    buy=AsyncMock(side_effect=RealPurchaseUncertain("unknown"))
+    monkeypatch.setattr(real_runtime,"buy_real_contract",buy)
+    real_runtime.running.add(1)
+    async def check():
+        await real_runtime._user_scan(1)
+        session.expire_all()
+        order=session.query(db.RealOrder).one()
+        assert order.state=="UNKNOWN" and order.active_slot=="CR123"
+        assert 1 not in real_runtime.running
+        assert buy.await_count==1
+        with pytest.raises(RealOrderGuardError):
+            place(session,"another-12345678")
+    try:
+        asyncio.run(check())
+    finally:
+        real_runtime.running.clear()
+        real_runtime.reasons.clear()
+        real_runtime._user_locks.clear()
+        session.close()
