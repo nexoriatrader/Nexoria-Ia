@@ -23,12 +23,31 @@ PLANS = {
 }
 
 
+def stripe_expected_livemode():
+    """Select test or live mode explicitly; default to test for offline fixtures."""
+    return os.getenv('NEXORA_STRIPE_MODE', 'test').strip().lower() == 'live'
+
+
 def billing_enabled():
-    return (
-        os.getenv('NEXORA_STRIPE_BILLING_ENABLED', '').lower() == 'true'
-        and bool(os.getenv('STRIPE_SECRET_KEY'))
-        and bool(os.getenv('STRIPE_WEBHOOK_SECRET'))
-    )
+    """Fail closed unless keys, mode and public environment agree."""
+    if os.getenv('NEXORA_STRIPE_BILLING_ENABLED', '').lower() != 'true':
+        return False
+    mode=os.getenv('NEXORA_STRIPE_MODE', '').strip().lower()
+    if mode not in ('test','live'):
+        return False
+    secret=os.getenv('STRIPE_SECRET_KEY', '')
+    webhook=os.getenv('STRIPE_WEBHOOK_SECRET', '')
+    if not webhook.startswith('whsec_'):
+        return False
+    if mode=='live' and not secret.startswith(('sk_live_','rk_live_')):
+        return False
+    if mode=='test' and not secret.startswith(('sk_test_','rk_test_')):
+        return False
+    # A test Checkout must never grant paid access on the public NEXORA site.
+    public_url=os.getenv('NEXORA_PUBLIC_URL', '').rstrip('/')
+    if mode=='test' and public_url=='https://nexoria-ia.onrender.com':
+        return False
+    return True
 
 
 def stripe_signature_valid(payload: bytes, header: str, secret: str, *, now=None):
@@ -79,6 +98,8 @@ async def create_checkout(secret_key: str, *, user_id: int, plan_id: str, site_u
         raise RuntimeError('Não foi possível iniciar o Checkout da Stripe') from exc
     if not isinstance(obj.get('id'), str) or not isinstance(obj.get('url'), str):
         raise RuntimeError('Resposta incompleta da Stripe')
+    if obj.get('livemode') is not stripe_expected_livemode():
+        raise RuntimeError('Modo do Checkout incompatível com o ambiente')
     if not obj['url'].startswith('https://checkout.stripe.com/'):
         raise RuntimeError('Destino de pagamento inesperado')
     return obj
@@ -98,7 +119,8 @@ def apply_paid_checkout(session, stripe_checkout, *, now=None):
     plan = PLANS.get(order.plan_id)
     if not plan:
         return 'unknown_plan'
-    if (stripe_checkout.get('payment_status') != 'paid'
+    if (stripe_checkout.get('livemode') is not stripe_expected_livemode()
+        or stripe_checkout.get('payment_status') != 'paid'
         or stripe_checkout.get('mode') != 'payment'
         or stripe_checkout.get('currency') != 'brl'
         or stripe_checkout.get('amount_total') != plan['cents']
