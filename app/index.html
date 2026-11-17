@@ -1616,7 +1616,7 @@ function askRobotStartConfirmation(profile,risk,catalogue){
  const indicators=(profile.indicators||[]).map(item=>indicatorNames[item]||item);
  const stopAmount=(value)=>Number(value)>0?reviewAmount(value):'Desativado';
  addRobotReviewGroup(box,'Conta e mercado',[
-  ['Modo de operação','Treinamento · conta DEMO (saldo fictício)'],
+  ['Modo de operação',profile.account_mode==='real'?'Conta REAL (dinheiro próprio)':'Treinamento · conta DEMO (saldo fictício)'],
   ['Perfil',presetNames[profile.preset_mode]||'Personalizada'],
   ['Mercado',marketNames[profile.market]||profile.market],
   ['Ativos selecionados',symbols.length+' ativo(s)'],
@@ -1650,6 +1650,7 @@ async function toggleRobot(){
  const button=$('robotButton');
  if(button.dataset.commandPending==='true')return;
  const wasRunning=robotRunning;
+ let pendingAccountMode='demo';
  button.dataset.commandPending='true';
  button.disabled=true;
  if(!wasRunning){
@@ -1661,9 +1662,17 @@ async function toggleRobot(){
     showRobotNotice('Configure e salve sua automação antes de ligar o robô.');
     return;
    }
-   if(profile.account_mode!=='demo'){
-    showRobotNotice('Esta automação está configurada para conta REAL. O envio de ordens reais ainda não está disponível. Escolha Treinamento na configuração.');
-    return;
+   pendingAccountMode=profile.account_mode;
+   if(profile.account_mode==='real'){
+    if(!risk.stop_loss||Number(risk.stop_loss)<Number(risk.stake)||risk.martingale||Number(risk.cycles)>0){
+     showRobotNotice('Conta REAL exige Stop Loss de pelo menos uma entrada e Martingale/ciclos desativados.');
+     return;
+    }
+    const health=await req('/healthz');
+    if(!health.real_orders_enabled){
+     showRobotNotice('Conta REAL ainda não habilitada no servidor para compras automáticas.');
+     return;
+    }
    }
    let catalogue=[];
    try{
@@ -1691,7 +1700,7 @@ async function toggleRobot(){
  try{
    await req(wasRunning?'/api/autopilot/stop':'/api/autopilot/start',
      wasRunning?{method:'POST'}:{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({confirm:'START_DEMO_AUTOPILOT'})});
+      body:JSON.stringify({confirm:pendingAccountMode==='real'?'START_REAL_AUTOPILOT':'START_DEMO_AUTOPILOT'})});
    confirmed=true;
  }catch(e){
    // An HTTP refusal (e.g. 409 Stop Loss) is explicit. An interrupted fetch
