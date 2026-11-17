@@ -904,6 +904,18 @@ html,body{max-width:100%;overflow-x:clip}
       <span id="lastOrder"></span>
     </div>
   </div>
+  <div class="card dash-daily-card" id="dailyResultsCard">
+    <div class="surface-heading">Resultado do dia</div>
+    <p class="helper" id="dailyResetInfo">Desde 00h · Brasília · somente contratos liquidados oficialmente</p>
+    <div class="dash-balance-grid">
+      <div class="dash-balance-tile"><span class="dash-balance-label">TREINAMENTO · DEMO</span>
+        <strong id="profitMetric">—</strong><small>Resultado diário da conta DEMO Deriv</small></div>
+      <div class="dash-balance-tile"><span class="dash-balance-label">CONTA REAL · DERIV</span>
+        <strong id="realProfitMetric">—</strong>
+        <small id="realProfitReason">Aguardando consulta oficial · resultado de toda a conta</small></div>
+    </div>
+    <p class="helper">Este resultado considera a conta na corretora, não apenas sinais do NEXORA. Ganhos e perdas não são garantidos.</p>
+  </div>
   <div class="card dash-realtime-card">
     <div class="dash-realtime-header">
       <div><div class="surface-heading">Análise em Tempo Real</div><p>Acompanhe as operações e o andamento do robô.</p></div>
@@ -1340,6 +1352,33 @@ async function saveOnboarding(event){
 }
 function page(v){document.body.classList.toggle('marketing-mode',v==='welcome');$('primaryNavigation').classList.toggle('hidden',v==='welcome'||v==='setup');for(const name of ['welcome','setup','dashboard','robot-config','results','settings','account','features','strategies'])$(name).classList.toggle('hidden',name!==v);activePage=v;document.querySelectorAll('.nav-link[data-view]').forEach(b=>b.classList.toggle('active',b.dataset.view===v))}
 
+let dailyResultsLoading=false;
+async function loadDailyResults(){
+ if(dailyResultsLoading)return;
+ dailyResultsLoading=true;
+ try{
+  const [demo,real]=await Promise.allSettled([
+   req('/api/demo/results/today'),req('/api/real/results/today')
+  ]);
+  if(demo.status==='fulfilled'){
+   const result=demo.value,pnl=Number(result.pnl);
+   $('profitMetric').textContent=result.pnl!==null&&Number.isFinite(pnl)?money(pnl,'USD'):'—';
+   const next=result.next_reset_at?new Date(result.next_reset_at):null;
+   if(next&&!Number.isNaN(next.getTime()))
+    $('dailyResetInfo').textContent='Desde 00h · Brasília · próximo fechamento '+next.toLocaleString('pt-BR',{timeZone:'America/Sao_Paulo',hour:'2-digit',minute:'2-digit'});
+  }else $('profitMetric').textContent='—';
+  if(real.status==='fulfilled'&&real.value.available&&real.value.pnl!==null){
+   const result=real.value,pnl=Number(result.pnl);
+   $('realProfitMetric').textContent=Number.isFinite(pnl)?money(pnl,result.currency||'USD'):'—';
+   $('realProfitReason').textContent='Dados oficiais da conta Deriv · não apenas do robô';
+  }else{
+   $('realProfitMetric').textContent='—';
+   $('realProfitReason').textContent=real.status==='fulfilled'?(real.value.reason||'Resultado oficial indisponível'):'Não foi possível consultar a Deriv';
+  }
+ }finally{dailyResultsLoading=false;}
+}
+setInterval(()=>{if(activePage==='dashboard')loadDailyResults().catch(()=>{})},120000);
+
 function updateResultsPolling(){
  if(resultsRefreshTimer){clearInterval(resultsRefreshTimer);resultsRefreshTimer=null;}
  if(activePage==='results'||activePage==='dashboard'){
@@ -1360,7 +1399,7 @@ function updateResultsPolling(){
    },activePage==='dashboard'?7000:3000);
  }
 }
-function go(v){page(v);updateResultsPolling();window.scrollTo({top:0,behavior:'smooth'});if(v==='setup')loadOnboarding();if(v==='dashboard'){refreshDashboard();loadDemoOrders().catch(()=>{});}if(v==='robot-config'){initAutomationWizard();setAutomationWizardStep(1);loadAutomationProfile();}if(v==='results'){loadDemoOrders();}if(v==='account'){loadRobotAccess();loadBillingPlans()}if(v==='settings')loadSettings()}
+function go(v){page(v);updateResultsPolling();window.scrollTo({top:0,behavior:'smooth'});if(v==='setup')loadOnboarding();if(v==='dashboard'){refreshDashboard();loadDemoOrders().catch(()=>{});loadDailyResults().catch(()=>{});}if(v==='robot-config'){initAutomationWizard();setAutomationWizardStep(1);loadAutomationProfile();}if(v==='results'){loadDemoOrders();}if(v==='account'){loadRobotAccess();loadBillingPlans()}if(v==='settings')loadSettings()}
 function fail(msg){$('error').textContent=msg||''}
 async function req(path,opts={}){const r=await fetch(path,{credentials:'same-origin',...opts});let data;try{data=await r.json()}catch{throw Error('Resposta inválida do servidor')}if(!r.ok)throw Error(data.detail||'Falha na conexão');return data}
 function startNexoraTrial(event){
@@ -1379,7 +1418,7 @@ async function init(){
      login.href='/auth/deriv/start?ref='+encodeURIComponent(ref);
    });
  }
- try{const s=await req('/api/session');if(!s.authenticated){page('welcome');return}const justConnected=new URLSearchParams(window.location.search).get('login')==='ok';if(justConnected){window.history.replaceState({},'',window.location.pathname);go('setup')}else{page('dashboard');refreshDashboard();loadDemoOrders().catch(()=>{});updateResultsPolling()}refreshTimer=setInterval(()=>{if(activePage==='dashboard'||activePage==='results')refreshDashboard()},30000)}catch(e){fail(e.message);page('welcome')}}
+ try{const s=await req('/api/session');if(!s.authenticated){page('welcome');return}const justConnected=new URLSearchParams(window.location.search).get('login')==='ok';if(justConnected){window.history.replaceState({},'',window.location.pathname);go('setup')}else{page('dashboard');refreshDashboard();loadDemoOrders().catch(()=>{});loadDailyResults().catch(()=>{});updateResultsPolling()}refreshTimer=setInterval(()=>{if(activePage==='dashboard'||activePage==='results')refreshDashboard()},30000)}catch(e){fail(e.message);page('welcome')}}
 function showRobotNotice(reason){
  const box=$('robotStartNotice'),title=$('robotNoticeTitle'),body=$('robotNoticeText'),options=$('robotNoticeOptions');
  if(!reason){box.hidden=true;title.textContent='';body.textContent='';options.hidden=true;return}
