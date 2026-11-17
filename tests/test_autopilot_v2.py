@@ -156,7 +156,7 @@ def test_v2_restart_keeps_old_records_out_of_evaluation(tmp_path,monkeypatch):
         stats=client.get('/api/autopilot/v2/evaluation').json()
         assert stats['active']
         assert stats['submitted']==0
-        assert stats['target']==50 and not stats['target_is_limit']
+        assert stats['target']==200 and not stats['target_is_limit']
         assert client.get('/api/demo/orders').json()['items']==[]
     finally:cleanup(engine)
 
