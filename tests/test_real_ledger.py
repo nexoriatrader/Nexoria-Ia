@@ -101,7 +101,7 @@ def test_real_worker_reserves_and_reconciles_mock_contract(session,monkeypatch):
     monkeypatch.setattr(real_runtime,"latest_token",lambda sess,uid:"fake-token")
     monkeypatch.setattr(real_runtime,"real_available",lambda:True)
     monkeypatch.setattr(real_runtime,"access_status",lambda sess,uid:{"allowed":True})
-    bar=int(time.time()//60)*60-60
+    bar=int(time.time())-60
     candidate={"symbol":"R_100","direction":"CALL","minutes":1,
                "expiry_options":[1,3,5,15],"last_bar_epoch":bar}
     monkeypatch.setattr(real_runtime,"confirmed_automation_signal",
@@ -152,7 +152,7 @@ def test_uncertain_real_execution_never_sends_next_buy(session,monkeypatch):
     monkeypatch.setattr(real_runtime,"latest_token",lambda sess,uid:"fake-token")
     monkeypatch.setattr(real_runtime,"real_available",lambda:True)
     monkeypatch.setattr(real_runtime,"access_status",lambda sess,uid:{"allowed":True})
-    bar=int(time.time()//60)*60-60
+    bar=int(time.time())-60
     monkeypatch.setattr(real_runtime,"confirmed_automation_signal",
                         AsyncMock(return_value={"symbol":"R_100","direction":"PUT",
                             "minutes":1,"expiry_options":[1],"last_bar_epoch":bar}))
