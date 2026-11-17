@@ -5,23 +5,23 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="icon" type="image/svg+xml" href="/favicon.svg">
 <meta name="theme-color" content="#07111e">
-<meta name="description" content="Nexora IA - acesse o melhor e mais prático robô Trader. Acesse e comprove.">
+<meta name="description" content="NEXORA IA: robô de análise e automação conectado à Deriv. Teste gratuito de 24 horas, configurações por etapas e gestão de risco. Operações envolvem perdas.">
 <title>Nexora Robô Automático</title>
 <meta property="og:type" content="website">
 <meta property="og:locale" content="pt_BR">
 <meta property="og:site_name" content="Nexora IA">
 <meta property="og:title" content="Nexora Robô Automático">
-<meta property="og:description" content="Nexora IA - acesse o melhor e mais prático robô Trader. Acesse e comprove.">
+<meta property="og:description" content="NEXORA IA: robô de análise e automação conectado à Deriv. Teste gratuito de 24 horas, configurações por etapas e gestão de risco. Operações envolvem perdas.">
 <meta property="og:url" content="https://nexoria-ia.onrender.com/">
 <meta property="og:image" content="https://i.ibb.co/DfDX477p/social-preview-approved.png">
 <meta property="og:image:secure_url" content="https://i.ibb.co/DfDX477p/social-preview-approved.png">
 <meta property="og:image:type" content="image/png">
 <meta property="og:image:width" content="1731">
 <meta property="og:image:height" content="909">
-<meta property="og:image:alt" content="Nexora IA, robô trader automático — teste grátis por 7 dias">
+<meta property="og:image:alt" content="Nexora IA, robô trader automático — teste grátis por 24 horas">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="Nexora Robô Automático">
-<meta name="twitter:description" content="Nexora IA - acesse o melhor e mais prático robô Trader. Acesse e comprove.">
+<meta name="twitter:description" content="NEXORA IA: robô de análise e automação conectado à Deriv. Teste gratuito de 24 horas, configurações por etapas e gestão de risco. Operações envolvem perdas.">
 <meta name="twitter:image" content="https://i.ibb.co/DfDX477p/social-preview-approved.png">
 <style>
 :root{color-scheme:dark;--bg:#060c15;--panel:#101d2b;--panel2:#132436;--line:#223b50;--ink:#eff8ff;--muted:#94abc1;--blue:#39b9f5;--gold:#f4be52;--gold2:#ffdd8b;--green:#48d6ad;--red:#fa7d88}
@@ -747,11 +747,12 @@ html,body{max-width:100%;overflow-x:clip}
  <div id="inicio" class="lp-hero">
   <div>
    <div class="lp-eyebrow">Nexora - robô inteligente</div>
-   <h1 id="landingHeading">O robô trader automático <em>mais fácil de usar</em></h1>
-   <p class="lp-subtitle">Experimente o NEXORA IA gratuitamente por 7 dias. Configure suas estratégias, e deixe que o robô trabalhe sozinho.</p>
+   <h1 id="landingHeading">Automação e análise de mercado <em>sob seu controle</em></h1>
+   <p class="lp-subtitle">Conheça o NEXORA IA por <strong data-trial-label>24 horas</strong> grátis após seu primeiro login validado na Deriv. Escolha os ativos, configure a estratégia em etapas e decida quando ligar o robô.</p>
    <div class="lp-actions">
-    <a id="lpHeroTrialButton" class="lp-button lp-button-primary" href="/auth/deriv/start" onclick="startNexoraTrial(event)">Teste grátis por 7 dias <span aria-hidden="true">➜</span></a>
+    <a id="lpHeroTrialButton" class="lp-button lp-button-primary" href="/auth/deriv/start" onclick="startNexoraTrial(event)">Teste grátis por <span data-trial-label>24 horas</span> <span aria-hidden="true">➜</span></a>
    </div>
+   <p id="lpLoginNotice" class="lp-auth-notice hidden" role="status"></p>
    <div class="lp-proof"><span><b aria-hidden="true">✓</b> Conexão oficial Deriv</span><span><b aria-hidden="true">ϟ</b> Ativação em poucos passos</span><span><b aria-hidden="true">▥</b> Gestão de risco</span></div>
   </div>
   <div class="lp-mockup" aria-label="Prévia ilustrativa do painel do NEXORA IA">
@@ -775,14 +776,14 @@ html,body{max-width:100%;overflow-x:clip}
    <article class="lp-card"><div class="lp-icon"><svg viewBox="0 0 48 48" width="42" height="42" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6v36M24 6v36M39 6v36"/><rect x="5" y="15" width="8" height="15" rx="2" fill="currentColor" fill-opacity=".18"/><rect x="20" y="9" width="8" height="18" rx="2" fill="currentColor" fill-opacity=".18"/><rect x="35" y="22" width="8" height="14" rx="2" fill="currentColor" fill-opacity=".18"/></svg></div><h3>Operações automáticas</h3><p>Monitore oportunidades e ative o Robô Nexora para operar na sua conta.</p></article>
    <article class="lp-card"><div class="lp-icon"><svg viewBox="0 0 48 48" width="42" height="42" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 38h38M8 33l11-11 8 6 13-17M31 11h9v9"/><circle cx="19" cy="22" r="2" fill="currentColor"/><circle cx="27" cy="28" r="2" fill="currentColor"/></svg></div><h3>Análise em tempo real</h3><p>Acompanhe as condições do mercado e os sinais analisados pelo robô.</p></article>
    <article class="lp-card"><div class="lp-icon"><svg viewBox="0 0 48 48" width="42" height="42" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M24 4l17 7v12c0 11-7 18-17 22C14 41 7 34 7 23V11z"/><path d="M15 24l6 6 13-14"/></svg></div><h3>Gestão de risco</h3><p>Personalize entradas, Stop Win e Stop Loss; operar envolve riscos.</p></article>
-   <article class="lp-card"><div class="lp-icon"><svg viewBox="0 0 48 48" width="42" height="42" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="24" cy="24" r="18"/><path d="M24 13v12l9 5"/><path d="M36 5v10M31 10h10"/></svg></div><h3>Acesso grátis por 7 dias</h3><p>Conheça a plataforma na DEMO e ganhe mais 24h por indicação válida.</p></article>
+   <article class="lp-card"><div class="lp-icon"><svg viewBox="0 0 48 48" width="42" height="42" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="24" cy="24" r="18"/><path d="M24 13v12l9 5"/><path d="M36 5v10M31 10h10"/></svg></div><h3>Acesso grátis por <span data-trial-label>24 horas</span></h3><p>O período começa no primeiro login validado na Deriv. Indicações válidas podem acrescentar 24 horas de acesso.</p></article>
   </div>
  </section>
  <section id="como-funciona" class="lp-section" aria-labelledby="lpStepsTitle">
   <h2 class="lp-section-title" id="lpStepsTitle">Como funciona</h2>
   <div class="lp-steps">
    <article class="lp-step"><span class="lp-step-num" aria-hidden="true">1</span><div><h3>Conecte sua conta</h3><p>Entre com o login oficial da Deriv, sem compartilhar sua senha.</p></div></article>
-   <article class="lp-step"><span class="lp-step-num" aria-hidden="true">2</span><div><h3>Configure o robô</h3><p>Defina os parâmetros e limites das operações em poucos cliques.</p></div></article>
+   <article class="lp-step"><span class="lp-step-num" aria-hidden="true">2</span><div><h3>Configure em 7 etapas</h3><p>Escolha conta, modo, ativos, estratégia e limites antes de salvar o perfil.</p></div></article>
    <article class="lp-step"><span class="lp-step-num" aria-hidden="true">3</span><div><h3>Ative o Robô Nexora</h3><p>Ligue quando quiser e acompanhe os resultados.</p></div></article>
   </div>
  </section>
@@ -791,8 +792,8 @@ html,body{max-width:100%;overflow-x:clip}
   <div><span aria-hidden="true">▥</span> Painel intuitivo</div>
   <div><span aria-hidden="true">▥</span> Resultados registrados</div>
  </div>
- <div class="lp-final"><h2>Comece agora com <br><strong>7 dias grátis</strong></h2><a id="lpFinalTrialButton" class="lp-button lp-button-primary" href="/auth/deriv/start" onclick="startNexoraTrial(event)" aria-label="Iniciar teste gratuito NEXORA IA de 7 dias">Quero testar o NEXORA IA <span aria-hidden="true">➜</span></a></div>
- <p class="lp-disclaimer">Operações financeiras envolvem riscos e podem resultar em perdas. Resultados não são garantidos.</p>
+ <div class="lp-final"><h2>Comece agora com <br><strong><span data-trial-label>24 horas</span> grátis</strong></h2><a id="lpFinalTrialButton" class="lp-button lp-button-primary" href="/auth/deriv/start" onclick="startNexoraTrial(event)" aria-label="Iniciar teste gratuito do NEXORA IA">Quero testar o NEXORA IA <span aria-hidden="true">➜</span></a></div>
+ <p class="lp-disclaimer">Operações em conta REAL envolvem risco de perder capital. O NEXORA não garante lucros, não cancela contratos já comprados ao desligar o robô e não substitui uma avaliação independente de risco.</p>
 </section>
 <section id="setup" class="robot-setup hidden" aria-labelledby="setupTitle">
   <div class="setup-aura" aria-hidden="true"></div>
