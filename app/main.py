@@ -27,7 +27,7 @@ from . import real_runtime
 from .real_broker import RealExecutionError, real_account_balance
 from .autopilot import analyze, quote_assessment
 from .engine import Engine, Settings
-from .market import MarketError, discover_symbols, discover_contracts, indicative_proposal
+from .market import MarketError, discover_symbols, discover_contracts, indicative_proposal, public_feed_messages
 from .strategy_lab import run_lab
 from .single_asset_study import run_single_asset_study
 from .research_persistence import research_loop, latest_study, latest_multitimeframe_study, latest_pullback_study  # read-only research
@@ -186,17 +186,20 @@ async def feed():
     delay=2
     while True:
         try:
-            async with websockets.connect(PUBLIC_WS,ping_interval=20,ping_timeout=20) as ws:
+            async with websockets.connect(PUBLIC_WS,ping_interval=20,ping_timeout=20,
+                                          open_timeout=10,close_timeout=3,
+                                          max_size=1_500_000) as ws:
                 await ws.send(json.dumps({'ticks_history':SYMBOL,'count':100,'end':'latest','style':'ticks'}))
                 await ws.send(json.dumps({'ticks':SYMBOL,'subscribe':1}))
                 async with lock:
-                    market_connected=True
-                    last_market_reason='Cotações públicas conectadas'
+                    # A successful handshake alone is not a verified price feed.
+                    market_connected=False
+                    market_last_tick=0
+                    last_market_reason='Canal aberto; aguardando primeira cotação'
                     for engine in runtimes.values():
-                        engine.connected=True;engine.prices.clear()
+                        engine.connected=False;engine.prices.clear()
                     recent_prices=[]
-                delay=2
-                async for raw in ws:
+                async for raw in public_feed_messages(ws):
                     m=json.loads(raw)
                     if m.get('error'):raise RuntimeError(str(m['error'].get('message','Erro da Deriv')))
                     if m.get('msg_type')=='history':
@@ -206,10 +209,14 @@ async def feed():
                             for engine in runtimes.values():engine.prices.extend(ps)
                     elif m.get('msg_type')=='tick':
                         p=float(m['tick']['quote'])
-                        market_last_tick=asyncio.get_running_loop().time()
                         async with lock:
+                            market_last_tick=asyncio.get_running_loop().time()
+                            market_connected=True
+                            last_market_reason='Cotações públicas conectadas'
+                            delay=2
                             recent_prices=(recent_prices+[p])[-200:]
                             for uid,engine in list(runtimes.items()):
+                                engine.connected=True
                                 engine.prices.append(p)
                                 # Public ticks are used for research only; no local trades.
         except asyncio.CancelledError: raise
@@ -221,7 +228,8 @@ async def feed():
                 close_info = ' close_code=' + str(getattr(frame, 'code', 'unknown'))
             log.warning('Public feed unavailable: %s%s',type(e).__name__,close_info)
             async with lock:
-                market_connected=False;last_market_reason='Conexão interrompida'
+                market_connected=False;market_last_tick=0
+                last_market_reason='Conexão interrompida'
                 for engine in runtimes.values():
                     engine.connected=False
                     engine.last_reason='Conexão de cotações interrompida'
