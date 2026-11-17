@@ -35,10 +35,15 @@ def test_public_and_authenticated_real_flags_agree(tmp_path, monkeypatch):
     client, engine, uid = client_with_user(tmp_path, monkeypatch)
     try:
         monkeypatch.delenv("NEXORA_REAL_AUTOPILOT_ENABLED", raising=False)
+        monkeypatch.delenv("NEXORA_REAL_RELEASE_APPROVED", raising=False)
         assert client.get("/healthz").json()["real_orders_enabled"] is False
         assert client.get("/api/session").json()["real_enabled"] is False
         assert client.get("/api/onboarding/config").json()["real_enabled"] is False
+        # The legacy flag alone cannot enable real-money purchases.
         monkeypatch.setenv("NEXORA_REAL_AUTOPILOT_ENABLED", "true")
+        assert client.get("/healthz").json()["real_orders_enabled"] is False
+        assert client.get("/api/session").json()["real_enabled"] is False
+        monkeypatch.setenv("NEXORA_REAL_RELEASE_APPROVED", "true")
         health = client.get("/healthz").json()
         assert health["real_orders_enabled"] is True
         assert "real" in health["execution_modes"]
@@ -106,3 +111,14 @@ def test_real_confirmation_explains_cash_risk_without_changing_demo_text():
     assert "DINHEIRO REAL" in html
     assert "profile.real_account_id" in html
     assert "conta DEMO conforme os parâmetros salvos" in html
+
+def test_real_orders_never_start_with_only_one_release_flag(monkeypatch):
+    """The independent launch gate is fail-closed, regardless of prior flags."""
+    monkeypatch.setenv("NEXORA_REAL_AUTOPILOT_ENABLED","true")
+    monkeypatch.delenv("NEXORA_REAL_RELEASE_APPROVED",raising=False)
+    assert real_runtime.real_available() is False
+    monkeypatch.setenv("NEXORA_REAL_RELEASE_APPROVED","TRUE")
+    assert real_runtime.real_available() is True
+    monkeypatch.setenv("NEXORA_REAL_AUTOPILOT_ENABLED","false")
+    assert real_runtime.real_available() is False
+
