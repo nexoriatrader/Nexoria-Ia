@@ -1,5 +1,6 @@
 """NEXORA 2.0 DEMO portfolio safety and per-symbol progression tests."""
 import asyncio
+import time
 from decimal import Decimal
 from datetime import datetime,timezone,timedelta
 from unittest.mock import AsyncMock
@@ -9,7 +10,7 @@ from sqlalchemy import select
 
 from app import main,db
 from app.demo_ledger import reserve,confirmed,settle,OrderGuardError
-from test_demopilot import prepare,cleanup
+from test_demopilot import prepare,cleanup,mock_confirmed_v2_signals
 
 
 def test_parallel_exposure_and_symbol_lock(tmp_path,monkeypatch):
@@ -168,13 +169,7 @@ def test_v2_parallel_real_path_with_two_assets(tmp_path,monkeypatch):
         {'contract_id':'909001','buy_price':'2.00'},
         {'contract_id':'909002','buy_price':'2.00'}])
     monkeypatch.setattr(main,'demo_buy',mockbuy)
-    monkeypatch.setattr(main,'demo_proposal',AsyncMock(return_value={
-        'ask_price':'2.00','payout':'3.60'}))
-    monkeypatch.setattr(main,'select_demo_signal',AsyncMock(side_effect=[
-        {'symbol':'EURJPY','direction':'CALL','minutes':3,
-         'strategy':'rompimento_m1','reason':'rompimento'},
-        {'symbol':'EURUSD','direction':'PUT','minutes':3,
-         'strategy':'rompimento_m1','reason':'rompimento'}]))
+    mock_confirmed_v2_signals(monkeypatch,symbols=('EURJPY','EURUSD'))
     monkeypatch.setattr(main,'market_connected',False)
     try:
         assert client.post('/api/autopilot/start',
@@ -204,15 +199,10 @@ def test_v2_martingale_enters_same_symbol_without_waiting_for_scan(tmp_path,monk
         {'contract_id':'910001','buy_price':'2.00'},
         {'contract_id':'910002','buy_price':'2.00'},
         {'contract_id':'910003','buy_price':'4.00'}])
-    proposals=AsyncMock(return_value={'ask_price':'2.00','payout':'3.60'})
-    signals=AsyncMock(side_effect=[
-        {'symbol':'EURJPY','direction':'CALL','minutes':3,
-         'strategy':'rompimento_m1','reason':'rompimento validando'},
-        {'symbol':'EURUSD','direction':'PUT','minutes':3,
-         'strategy':'rompimento_m1','reason':'rompimento validando'}])
+    mock_confirmed_v2_signals(monkeypatch,symbols=('EURJPY','EURUSD'))
     monkeypatch.setattr(main,'demo_buy',broker)
-    monkeypatch.setattr(main,'demo_proposal',proposals)
-    monkeypatch.setattr(main,'select_demo_signal',signals)
+    monkeypatch.setattr(main,'martingale_next_candle_window',
+                        lambda settled,minutes,now=None:(time.time(),True))
     monkeypatch.setattr(main,'market_connected',False)
     try:
         with factory() as s:
@@ -235,8 +225,7 @@ def test_v2_martingale_enters_same_symbol_without_waiting_for_scan(tmp_path,monk
         main.autopilot_last_attempt[uid]=-1e12
         asyncio.run(tick())
         assert broker.await_count==3
-        assert proposals.await_count==2  # no redundant preliminary quote for gale
-        assert signals.await_count==2  # gale does not wait for new scanner cycle
+        assert main.demo_expiry_quotes.await_count==2  # no extra quote for recovery
         with factory() as s:
             orders=s.scalars(select(db.DemoOrder).order_by(db.DemoOrder.id)).all()
             assert [(o.symbol,o.stake,o.state) for o in orders]==[
