@@ -1254,7 +1254,7 @@ html,body{max-width:100%;overflow-x:clip}
 const $=id=>document.getElementById(id);
 let activePage='welcome',demoOrders=[],demoBalance=null,refreshTimer=null,resultsRefreshTimer=null,resultsRequestBusy=false,lastRequestKey=null,robotRunning=false,robotConfiguredMode='demo';
 let dashboardStatusSequence=0;
-let accessExpiresMs=null,accessServerDelta=0,accessMode='UNKNOWN',accessTrialSeconds=7*24*3600;
+let accessExpiresMs=null,accessServerDelta=0,accessMode='UNKNOWN',accessTrialSeconds=24*3600;
 const durationString=seconds=>{
   seconds=Math.max(0,Math.floor(seconds));
   const days=Math.floor(seconds/86400),hours=Math.floor(seconds%86400/3600);
@@ -1403,11 +1403,43 @@ function updateResultsPolling(){
 function go(v){page(v);updateResultsPolling();window.scrollTo({top:0,behavior:'smooth'});if(v==='setup')loadOnboarding();if(v==='dashboard'){refreshDashboard();loadDemoOrders().catch(()=>{});loadDailyResults().catch(()=>{});}if(v==='robot-config'){initAutomationWizard();setAutomationWizardStep(1);loadAutomationProfile();}if(v==='results'){loadDemoOrders();}if(v==='account'){loadRobotAccess();loadBillingPlans()}if(v==='settings')loadSettings()}
 function fail(msg){$('error').textContent=msg||''}
 async function req(path,opts={}){const r=await fetch(path,{credentials:'same-origin',...opts});let data;try{data=await r.json()}catch{throw Error('Resposta inválida do servidor')}if(!r.ok)throw Error(data.detail||'Falha na conexão');return data}
+async function refreshLandingOffer(){
+  // Public server policy is authoritative; the 24h HTML is only a fallback.
+  try{
+    const data=await req('/api/public/offer');
+    const hours=Number(data.trial_hours);
+    if(hours!==24&&hours!==168)return;
+    const label=hours===24?'24 horas':'7 dias';
+    document.querySelectorAll('[data-trial-label]').forEach(el=>el.textContent=label);
+  }catch{
+    // A temporary connection failure should not erase the landing page.
+  }
+}
+function showLandingLoginNotice(reason){
+  const notice=$('lpLoginNotice');
+  const messages={
+    expired:'Sua tentativa de login com a Deriv expirou ou já foi utilizada. Toque em “Teste grátis” ou “Entrar” para iniciar uma nova conexão.',
+    failed:'A Deriv não conseguiu concluir esta tentativa de login. Sua conta não foi alterada. Tente conectar novamente.',
+    cancelled:'O login com a Deriv foi cancelado. Você pode conectar sua conta quando desejar.'
+  };
+  if(!messages[reason]){notice.textContent='';notice.classList.add('hidden');return}
+  notice.textContent=messages[reason];
+  notice.classList.remove('hidden');
+}
+function clearLoginQuery(){
+  const url=new URL(window.location.href);
+  if(!url.searchParams.has('login'))return;
+  url.searchParams.delete('login');
+  window.history.replaceState({},'',url.pathname+url.search+url.hash);
+}
+let nexoraLoginRedirectPending=false;
 function startNexoraTrial(event){
  // Both landing CTA buttons share the same validated destination.
  if(event&&event.button!==undefined&&event.button!==0)return;
  if(event&&(event.ctrlKey||event.metaKey||event.shiftKey||event.altKey))return;
  if(event)event.preventDefault();
+ if(nexoraLoginRedirectPending)return;
+ nexoraLoginRedirectPending=true;
  const ref=new URLSearchParams(window.location.search).get('ref');
  const url='/auth/deriv/start'+(ref&&/^[A-Za-z0-9_-]{8,32}$/.test(ref)?'?ref='+encodeURIComponent(ref):'');
  window.location.assign(url);
@@ -1419,7 +1451,32 @@ async function init(){
      login.href='/auth/deriv/start?ref='+encodeURIComponent(ref);
    });
  }
- try{const s=await req('/api/session');if(!s.authenticated){page('welcome');return}const justConnected=new URLSearchParams(window.location.search).get('login')==='ok';if(justConnected){window.history.replaceState({},'',window.location.pathname);go('setup')}else{page('dashboard');refreshDashboard();loadDemoOrders().catch(()=>{});loadDailyResults().catch(()=>{});updateResultsPolling()}refreshTimer=setInterval(()=>{if(activePage==='dashboard'||activePage==='results')refreshDashboard()},30000)}catch(e){fail(e.message);page('welcome')}}
+ try{
+  const s=await req('/api/session');
+  const loginResult=new URLSearchParams(window.location.search).get('login');
+  if(!s.authenticated){
+    page('welcome');
+    showLandingLoginNotice(loginResult);
+    clearLoginQuery();
+    refreshLandingOffer();
+    return;
+  }
+  clearLoginQuery();
+  showLandingLoginNotice(null);
+  if(loginResult==='ok'){
+    // The former one-page setup is legacy. Only open the seven-step wizard.
+    go('robot-config');
+  }else{
+    page('dashboard');
+    refreshDashboard();
+    loadDemoOrders().catch(()=>{});
+    loadDailyResults().catch(()=>{});
+    updateResultsPolling();
+  }
+  refreshTimer=setInterval(()=>{
+    if(activePage==='dashboard'||activePage==='results')refreshDashboard();
+  },30000);
+ }catch(e){fail(e.message);page('welcome');refreshLandingOffer()}}
 function showRobotNotice(reason){
  const box=$('robotStartNotice'),title=$('robotNoticeTitle'),body=$('robotNoticeText'),options=$('robotNoticeOptions');
  if(!reason){box.hidden=true;title.textContent='';body.textContent='';options.hidden=true;return}
@@ -1851,7 +1908,7 @@ async function loadRobotAccess(){
     accessExpiresMs=a.expires_at?new Date(a.expires_at).getTime():null;
     accessServerDelta=a.server_time?new Date(a.server_time).getTime()-Date.now():0;
     accessTrialSeconds=Number.isFinite(Number(a.trial_hours))&&Number(a.trial_hours)>0?
-      Number(a.trial_hours)*3600:7*24*3600;
+      Number(a.trial_hours)*3600:24*3600;
     updateAccessCountdown();
     $('accountUserId').textContent=String(a.user_id||'—');
     $('referralLink').value=location.origin+'/i/'+encodeURIComponent(a.short_code)+'?v=2';
@@ -1866,7 +1923,7 @@ async function loadRobotAccess(){
       return;
     }
     if(a.status==='TRIAL_AVAILABLE'){
-      target.textContent=durationString(accessTrialSeconds)+' grátis disponíveis. O contador começa quando você ligar o robô pela primeira vez.';
+      target.textContent=durationString(accessTrialSeconds)+' grátis disponíveis. Para novas contas, o período começa no primeiro login validado pela Deriv.';
       return;
     }
     const until=a.expires_at?new Date(a.expires_at):null;
