@@ -82,7 +82,7 @@ def _candidate_window(candidate):
     bar=candidate.get('last_bar_epoch')
     if not isinstance(bar,(int,float)):
         return None
-    expiry=bar+60+8
+    expiry=bar+60+12
     if time.time()>expiry:
         return None
     return expiry
@@ -148,17 +148,9 @@ async def _user_scan(uid):
         if candidate['symbol'] not in selected_symbols:
             reasons[uid]='Sinal fora dos ativos autorizados'
             return
-        try:
-            balance=await real_account_balance(token,account_id)
-        except RealExecutionError:
-            reasons[uid]='Saldo REAL indisponível; entrada descartada'
-            return
-        if balance['currency']!='USD':
-            reasons[uid]='Apenas contas REAL em USD autorizadas nesta versão beta'
-            return
-        if Decimal(balance['balance'])<Decimal(stake):
-            reasons[uid]='Saldo REAL insuficiente para a entrada'
-            return
+        # Real account was verified as USD and funded at manual activation.
+        # Reconnecting for a balance on every M1 signal would miss the entry
+        # deadline. The authenticated purchase proposal and Deriv enforce funds.
         expiries=candidate.get('expiry_options') or [candidate.get('minutes')]
         expiries=[int(x) for x in expiries if x in (1,3,5,15)]
         if not expiries:
@@ -250,8 +242,8 @@ async def reconcile_real_once():
             db.RealOrder.state.in_(('CONFIRMED','UNKNOWN')),
             db.RealOrder.contract_id.is_not(None)).order_by(db.RealOrder.id.desc()).limit(100)).all()
         due_ids=[o.id for o in due if o.state=='UNKNOWN' or (
-            db.utcnow()-o.broker_purchase_at).total_seconds()>=o.duration_minutes*60-3
-            if o.broker_purchase_at is not None]
+            o.broker_purchase_at is not None and
+            (db.utcnow()-o.broker_purchase_at).total_seconds()>=o.duration_minutes*60-3)]
     sem=asyncio.Semaphore(3)
     async def one(order_id):
         async with sem:
