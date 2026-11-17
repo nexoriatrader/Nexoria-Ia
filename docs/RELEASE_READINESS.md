@@ -11,7 +11,8 @@ Não marcar "pronto" apenas porque o deploy aparece como live.
 - [ ] Validar login/dashboard em ambiente real após migração e desabilitar no Dashboard Supabase a opção `Automatically expose new tables`.
 - [ ] Configurar proteção obrigatória da branch main (GitHub Pro ou plano elegível); repositório continua privado no GitHub Free.
 - [x] Habilitar auditoria de segredos no CI da PR #31: `NEXORA repository security audit` aprovado. Não cobre todo o histórico de commits.
-- [ ] Conferir `NEXORA_REAL_AUTOPILOT_ENABLED` no ambiente Render sem revelar o valor das credenciais.
+- [x] Código REAL endurecido: exige simultaneamente `NEXORA_REAL_AUTOPILOT_ENABLED=true` e `NEXORA_REAL_RELEASE_APPROVED=true`; ambos ficam `false` por padrão na ausência de configuração, mesmo após deploy.
+- [ ] Conferir os valores reais dessas duas variáveis no Render antes de integrar a PR à main (o conector não permite leitura dos valores atuais).
 - [ ] Validar conta real com autenticação Deriv, consentimento explícito e compatibilidade da conta; NUNCA fazer compras de produção em teste automatizado.
 - [ ] Rever comunicação de status entre `/healthz`, `/api/session`, `/api/accounts/available`, perfil e configuração inicial.
 - [x] Implementar heartbeat da Deriv e sinalização ONLINE somente após preço real, com testes de recuperação por mocks na PR #31.
