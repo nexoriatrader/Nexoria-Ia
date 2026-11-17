@@ -49,6 +49,7 @@ def test_default_is_seven_days_and_gate_is_off(monkeypatch):
 
 
 def test_expiry_check_zero_seconds_and_referral_extension(monkeypatch):
+    monkeypatch.setenv('NEXORA_TRIAL_HOURS','24')  # Explicit legacy-trial scenario.
     monkeypatch.setenv('NEXORA_ACCESS_CONTROL_ENABLED','true')
     engine=create_engine('sqlite:///:memory:')
     db.Base.metadata.create_all(engine)
