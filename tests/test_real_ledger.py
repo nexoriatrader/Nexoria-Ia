@@ -69,7 +69,7 @@ def test_uncertain_order_never_releases_real_account_slot(session):
 def test_real_contract_settlement_releases_slot_only_with_broker_proof(session):
     order,_=place(session)
     confirm_real_order(session,order,{"account_mode":"real",
-        "contract_id":"123456789","buy_price":"1","broker_purchase_time":1760000000})
+        "contract_id":"123456789","buy_price":"1","duration_minutes":5,"broker_purchase_time":1760000000})
     assert not settle_real_order(session,order,{"contract_id":"123456789",
         "is_sold":0,"profit":"1"})
     with pytest.raises(RealOrderGuardError,match="não corresponde"):
@@ -107,7 +107,7 @@ def test_real_worker_reserves_and_reconciles_mock_contract(session,monkeypatch):
     monkeypatch.setattr(real_runtime,"confirmed_automation_signal",
                         AsyncMock(return_value=candidate))
     buy=AsyncMock(return_value={"account_mode":"real","contract_id":"123456789",
-             "buy_price":"1","broker_purchase_time":1760000000})
+             "buy_price":"1","duration_minutes":1,"broker_purchase_time":1760000000})
     monkeypatch.setattr(real_runtime,"buy_real_contract",buy)
     monkeypatch.setattr(real_runtime,"real_contract_status",
                         AsyncMock(return_value={"account_mode":"real","contract":{
@@ -190,7 +190,7 @@ def test_real_reconcile_missing_official_purchase_time_still_checks_broker(sessi
     from app import real_runtime
     order,_=place(session)
     confirm_real_order(session,order,{"account_mode":"real",
-        "contract_id":"555666777","buy_price":"1","broker_purchase_time":None})
+        "contract_id":"555666777","buy_price":"1","duration_minutes":5,"broker_purchase_time":None})
     order.created_at=db.utcnow()-timedelta(minutes=20)
     session.commit()
     assert order.broker_purchase_at is None
