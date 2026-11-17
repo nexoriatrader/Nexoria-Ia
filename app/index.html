@@ -1976,7 +1976,7 @@ async function loadBillingPlans(){
   const active=Boolean(result.enabled);
   for(const button of buttons){
    button.disabled=!active;
-   button.textContent=active?'PAGAR COM STRIPE':'Pagamento em breve';
+   button.textContent=active?'ADQUIRIR PLANO':'Pagamento em breve';
   }
   note.textContent=active?
    'Checkout seguro da Stripe. Após pagamento confirmado, o prazo é somado automaticamente. Não é renovação recorrente.':
@@ -2001,7 +2001,7 @@ async function startStripeCheckout(plan){
  }catch(e){
   $('accountBillingNote').textContent='Não foi possível abrir o pagamento: '+(e.message||'tente novamente');
   button.disabled=false;
-  button.textContent='PAGAR COM STRIPE';
+  button.textContent='ADQUIRIR PLANO';
  }
 }
 function copyMyReferral(){
