@@ -47,3 +47,11 @@ O repositório ser privado não impede que o HTML, CSS e JavaScript enviados
 ao navegador sejam vistos por visitantes do site. Lógica de negociação,
 permissões, gestão de risco e credenciais devem permanecer exclusivamente
 no backend e ser verificadas sempre pelo servidor.
+
+## Publicação controlada
+A PR #31 agora também exige `NEXORA_REAL_RELEASE_APPROVED=true`
+**além de** `NEXORA_REAL_AUTOPILOT_ENABLED=true` para expor
+operações reais. É uma barreira técnica para deploy; não substitui
+verificação regulatória, autenticação da corretora, consentimento individual
+ou testes de execução. Em homologação e primeiro rollout mantenha ambas
+explicitamente em `false`.
