@@ -110,11 +110,11 @@ def test_onboarding_requires_session_and_never_enables_real_orders(tmp_path,monk
         engine.dispose()
 
 
-def test_third_page_is_part_of_explicit_login_flow():
+def test_legacy_setup_is_not_in_oauth_flow_and_wizard_is_used():
     from pathlib import Path
     html=(Path(__file__).resolve().parents[1]/'app'/'index.html').read_text()
     setup=html.split('<section id="setup"',1)[1].split('<section id="dashboard"',1)[0]
-    assert "go('setup')" in html
+    assert "go('setup')" not in html\n    assert "go('robot-config');" in html\n    assert 'id="autoWizardProgress"' in html
     assert "go('dashboard')" in html
     assert 'É hora de ' in setup
     assert 'configurar seu robô' in setup
