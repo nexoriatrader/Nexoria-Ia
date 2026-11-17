@@ -1257,6 +1257,19 @@ async def available_accounts(request:Request,nexora_sid:str|None=Cookie(default=
             'execution':'DERIV_DEMO_ONLY'}
 
 
+@app.get('/api/real/orders')
+async def real_orders_route(request:Request,nexora_sid:str|None=Cookie(default=None)):
+    """Own-account REAL contracts. Never mix with the DEMO trade ledger."""
+    user=active_user(request,nexora_sid)
+    from .real_ledger import public_real_order
+    with db.SessionLocal() as sess:
+        orders=sess.scalars(select(db.RealOrder).where(
+            db.RealOrder.user_id==user.id).order_by(
+            db.RealOrder.id.desc()).limit(100)).all()
+        return {'items':[public_real_order(o) for o in orders],
+                'account_mode':'real','source':'DERIV_REAL_ORDERS'}
+
+
 @app.get('/api/real/balance')
 async def real_balance_route(request:Request,nexora_sid:str|None=Cookie(default=None)):
     """Read-only real Options account balance, never authorizes purchases.
@@ -1467,7 +1480,7 @@ async def save_automation_profile(request:Request,payload:AutomationProfileReque
     if not set(payload.symbols).issubset(available):
         raise HTTPException(422,'Seleção contém ativo não disponível no mercado escolhido')
     async with autopilot_lock:
-        if user.id in autopilot_enabled:
+        if user.id in autopilot_enabled or user.id in real_runtime.running:
             raise HTTPException(409,'Desligue o robô antes de alterar sua automação')
         with db.SessionLocal() as session:
             profile=session.get(db.AutomationProfile,user.id)
