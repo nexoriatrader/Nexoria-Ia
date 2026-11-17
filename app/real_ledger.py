@@ -1,7 +1,6 @@
 """Durable, account-scoped REAL order ledger. Never touches DEMO tables."""
 from __future__ import annotations
 
-import os
 import re
 from datetime import timezone
 from zoneinfo import ZoneInfo
@@ -29,26 +28,6 @@ def _money(value, label):
     return result
 
 
-def real_pilot_limits():
-    """Mandatory server-side caps independent of user-selected risk controls.
-
-    A missing or malformed setting must not silently remove these bounds.
-    Values are in USD; live rollout only supports USD accounts.
-    """
-    stake_limit=_money(os.getenv('NEXORA_REAL_MAX_STAKE_USD','1.00'),
-                       'Teto REAL do servidor')
-    loss_limit=_money(os.getenv('NEXORA_REAL_MAX_DAILY_LOSS_USD','3.00'),
-                      'Perda diária REAL do servidor')
-    try:
-        daily_orders=int(os.getenv('NEXORA_REAL_MAX_DAILY_ORDERS','3'))
-    except (ValueError, TypeError) as exc:
-        raise RealOrderGuardError('Limite diário REAL do servidor inválido') from exc
-    if (stake_limit<Decimal('0.50') or loss_limit<stake_limit
-            or daily_orders<1 or daily_orders>100):
-        raise RealOrderGuardError('Proteções REAL do servidor inválidas')
-    return stake_limit, loss_limit, daily_orders
-
-
 def _risk_check(orders, stake, stop_loss, max_stake, stop_win='0'):
     # Daily limits roll over at midnight America/Sao_Paulo, but unresolved
     # contracts from a previous day still block new REAL buys.
@@ -57,11 +36,8 @@ def _risk_check(orders, stake, stop_loss, max_stake, stop_win='0'):
     amount = _money(stake, 'Valor da entrada')
     cap = _money(max_stake, 'Limite por entrada')
     stop = _money(stop_loss, 'Stop Loss')
-    server_stake_cap,server_loss_cap,server_order_cap=real_pilot_limits()
     if amount < Decimal('0.50') or cap < Decimal('0.50') or amount > cap:
         raise RealOrderGuardError('Valor de entrada REAL fora do limite autorizado')
-    if amount>server_stake_cap:
-        raise RealOrderGuardError('Entrada acima do limite de segurança do piloto REAL')
     if stop <= 0:
         raise RealOrderGuardError('Stop Loss REAL obrigatório')
     if any(row.state in ACTIVE for row in orders):
@@ -73,11 +49,6 @@ def _risk_check(orders, stake, stop_loss, max_stake, stop_win='0'):
         if instant.tzinfo is None:
             instant=instant.replace(tzinfo=timezone.utc)
         return instant.astimezone(local_zone).date()==current_day
-    official_orders_today=sum(
-        1 for row in orders if row.state not in ('CANCELLED',)
-        and same_local_day(row))
-    if official_orders_today>=server_order_cap:
-        raise RealOrderGuardError('Limite diário de operações do piloto REAL atingido')
     pnl = sum((_money(row.pnl, 'Resultado')
                for row in orders if row.state == 'SETTLED'
                and row.pnl is not None and same_local_day(row)), Decimal('0'))
@@ -86,10 +57,9 @@ def _risk_check(orders, stake, stop_loss, max_stake, stop_win='0'):
         raise RealOrderGuardError('Stop Win inválido')
     if win > 0 and pnl >= win:
         raise RealOrderGuardError('Stop Win REAL atingido')
-    # BOTH the user's stop and the pilot's independent daily loss cap apply.
-    effective_stop=min(stop,server_loss_cap)
-    if pnl <= -effective_stop or pnl - amount < -effective_stop:
-        raise RealOrderGuardError('Stop Loss REAL ou limite diário do piloto atingido')
+    # Only the user's selected stop applies; no arbitrary server daily cap.
+    if pnl <= -stop or pnl - amount < -stop:
+        raise RealOrderGuardError('Stop Loss REAL atingido ou exposição ultrapassaria o limite')
     return amount
 
 

@@ -124,31 +124,11 @@ def test_real_orders_never_start_with_only_one_release_flag(monkeypatch):
 
 
 
-def test_beta_real_start_rejects_oversized_stake_before_deriv_network(tmp_path, monkeypatch):
-    """Even an opted-in user cannot bypass the release pilot cap."""
-    import json
-    client, engine, uid = client_with_user(tmp_path, monkeypatch)
-    monkeypatch.setenv('NEXORA_REAL_AUTOPILOT_ENABLED','true')
-    monkeypatch.setenv('NEXORA_REAL_RELEASE_APPROVED','true')
-    monkeypatch.delenv('NEXORA_REAL_MAX_STAKE_USD',raising=False)
-    try:
-        with db.SessionLocal() as sess:
-            user=sess.get(db.User,uid)
-            user.stake='2'
-            user.stop_loss='5'
-            user.selected_mode='real'
-            sess.add(db.AutomationProfile(
-                user_id=uid,account_mode='real',real_account_id='CR123',
-                market='derived',symbols_json=json.dumps(['R_100']),
-                strategy='trend',expiry_minutes=0,indicators_json='[]',
-                direction='AUTO',min_payout='88',news_filter=False,
-            ))
-            sess.commit()
-        res=client.post('/api/autopilot/start',
-                        json={'confirm':'START_REAL_AUTOPILOT'})
-        assert res.status_code==409
-        assert 'no máximo US$ 1.00' in res.json()['detail']
-        assert uid not in real_runtime.running
-    finally:
-        real_runtime.running.discard(uid)
-        engine.dispose()
+def test_real_activation_uses_user_stake_without_hardcoded_one_dollar_cap():
+    # Do not limit a user's selected stake to an arbitrary pilot value.
+    import inspect
+    source=inspect.getsource(main.start_real_autopilot)
+    assert 'server_max_stake' not in source
+    assert 'real_pilot_limits' not in source
+    assert "stake=Decimal(str(user.stake))" in source
+    assert "stop=Decimal(str(user.stop_loss))" in source

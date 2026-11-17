@@ -209,36 +209,40 @@ def test_real_reconcile_missing_official_purchase_time_still_checks_broker(sessi
     assert session.get(db.RealOrder,order.id).pnl=="-1"
 
 
-def test_real_beta_server_stake_limit_cannot_be_bypassed_by_user_consent(session,monkeypatch):
-    """User authorization is not allowed to increase the server-side cap."""
-    monkeypatch.delenv('NEXORA_REAL_MAX_STAKE_USD',raising=False)
-    with pytest.raises(RealOrderGuardError,match='piloto REAL'):
-        place(session,stake='1.50')
-    monkeypatch.setenv('NEXORA_REAL_MAX_STAKE_USD','2')
-    order,created=place(session,stake='1.50')
-    assert created and order.stake=='1.50'
+def test_real_entry_value_is_chosen_by_user_without_arbitrary_server_cap(session):
+    consent=session.get(db.RealRobotConsent,1)
+    consent.max_stake='50'
+    consent.stop_loss='100'
+    session.commit()
+    order,created=place(session,stake='25')
+    assert created and order.stake=='25'
+    assert order.state=='PENDING'
 
 
-def test_real_beta_daily_loss_cap_is_independent_of_user_stop(monkeypatch):
+def test_user_daily_stop_applies_with_no_fixed_three_dollar_limit():
     from app.real_ledger import _risk_check
     from types import SimpleNamespace
-    monkeypatch.setenv('NEXORA_REAL_MAX_STAKE_USD','1')
-    monkeypatch.setenv('NEXORA_REAL_MAX_DAILY_LOSS_USD','3')
-    monkeypatch.setenv('NEXORA_REAL_MAX_DAILY_ORDERS','5')
-    finished=[SimpleNamespace(state='SETTLED',pnl='-1.50',
-              broker_purchase_at=db.utcnow(),created_at=db.utcnow()) for _ in range(2)]
-    with pytest.raises(RealOrderGuardError,match='limite diário do piloto'):
-        _risk_check(finished,'1','100','100')
+    closed=[SimpleNamespace(state='SETTLED',pnl='-4',
+              broker_purchase_at=db.utcnow(),created_at=db.utcnow())]
+    # User selected 20 USD stop: a prior 4 USD loss does not block 2 USD.
+    assert _risk_check(closed,'2','20','20')==Decimal('2')
+    # User selected 5 USD stop: same exposure must be blocked.
+    with pytest.raises(RealOrderGuardError,match='Stop Loss'):
+        _risk_check(closed,'2','5','20')
 
 
-def test_real_beta_max_daily_orders_and_invalid_config_fail_closed(monkeypatch):
+def test_user_not_arbitrarily_limited_to_three_real_operations_per_day():
     from app.real_ledger import _risk_check
     from types import SimpleNamespace
-    monkeypatch.delenv('NEXORA_REAL_MAX_DAILY_ORDERS',raising=False)
-    finished=[SimpleNamespace(state='SETTLED',pnl='0.50',
-              broker_purchase_at=db.utcnow(),created_at=db.utcnow()) for _ in range(3)]
-    with pytest.raises(RealOrderGuardError,match='Limite diário de operações'):
-        _risk_check(finished,'1','100','100')
-    monkeypatch.setenv('NEXORA_REAL_MAX_STAKE_USD','0')
-    with pytest.raises(RealOrderGuardError,match='Proteções REAL'):
-        _risk_check([], '1','5','5')
+    settled=[SimpleNamespace(state='SETTLED',pnl='0.20',
+             broker_purchase_at=db.utcnow(),created_at=db.utcnow()) for _ in range(6)]
+    assert _risk_check(settled,'1','20','1')==Decimal('1')
+
+
+def test_user_stop_still_blocks_open_contract_even_without_global_caps():
+    from app.real_ledger import _risk_check
+    from types import SimpleNamespace
+    open_order=SimpleNamespace(state='UNKNOWN',pnl=None,
+         broker_purchase_at=None,created_at=db.utcnow())
+    with pytest.raises(RealOrderGuardError,match='contrato aberto'):
+        _risk_check([open_order],'1','20','1')
