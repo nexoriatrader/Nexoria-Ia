@@ -4,10 +4,13 @@ Atualização inicial: 2026-11-17.
 Não marcar "pronto" apenas porque o deploy aparece como live.
 
 ## Bloqueadores observados
-- [ ] GitHub Actions `NEXORA Python tests`: último main = 38 failed, 205 passed.
-- [ ] Resolver divergências reais/legadas de testes sem apagar os controles de risco.
-- [ ] Supabase: 27 tabelas públicas com RLS desligado e permissões de clientes excessivas.
-- [ ] Executar e testar a migração de segurança descrita em `RELEASE_SECURITY_RLS.md`.
+- [x] Na PR #31, GitHub Actions `NEXORA Python tests`: 251 passed, 0 failed. **A branch main ainda usa o commit antigo**.
+- [x] Ajustar e validar testes de regressão do fluxo V2 e regras de risco na PR #31.
+- [x] Supabase: RLS habilitado em 27 tabelas, com privilégios de `anon` e `authenticated` revogados. Migração `20261117181651` aplicada em produção.
+- [x] SQL de segurança aplicado e confirmado por contagens e Security Advisor; acesso direto do papel `postgres` preservado.
+- [ ] Validar login/dashboard em ambiente real após migração e desabilitar no Dashboard Supabase a opção `Automatically expose new tables`.
+- [ ] Configurar proteção obrigatória da branch main (GitHub Pro ou plano elegível); repositório continua privado no GitHub Free.
+- [x] Habilitar auditoria de segredos no CI da PR #31: `NEXORA repository security audit` aprovado. Não cobre todo o histórico de commits.
 - [ ] Conferir `NEXORA_REAL_AUTOPILOT_ENABLED` no ambiente Render sem revelar o valor das credenciais.
 - [ ] Validar conta real com autenticação Deriv, consentimento explícito e compatibilidade da conta; NUNCA fazer compras de produção em teste automatizado.
 - [ ] Rever comunicação de status entre `/healthz`, `/api/session`, `/api/accounts/available`, perfil e configuração inicial.
