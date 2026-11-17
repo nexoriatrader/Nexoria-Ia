@@ -88,6 +88,27 @@ async def market_instruments(force=False):
         return list(items)
 
 
+# Curated presentation only: names come from Deriv active_symbols.
+# These are recognizable instrument preferences, NOT profitability rankings.
+FEATURED_SYMBOLS = {
+    "forex": ("frxEURUSD","frxGBPUSD","frxUSDJPY","frxAUDUSD","frxUSDCAD"),
+    "derived": ("R_10","R_25","R_50","R_75","R_100",
+                "1HZ10V","1HZ25V","1HZ50V","1HZ75V","1HZ100V"),
+    "stocks_indices": ("OTC_SP500","OTC_NASDAQ","OTC_DJI","OTC_FTSE","OTC_NIKKEI"),
+    "commodities": ("frxXAUUSD","frxXAGUSD","frxXTIUSD","frxXBRUSD","frxXPTUSD"),
+}
+
+
+async def featured_instruments_by_group(group):
+    """Up to five real broker-listed options per market; never fabricate assets."""
+    items=await instruments_by_group(group)
+    priorities={symbol.upper():position for position,symbol
+                in enumerate(FEATURED_SYMBOLS[group])}
+    return sorted(items,key=lambda x:(
+        priorities.get(x['symbol'].upper(),9999),
+        x['name'].casefold(),x['symbol']))[:5]
+
+
 async def instruments_by_group(group):
     if group not in GROUPS:
         raise ValueError("Mercado inválido")
