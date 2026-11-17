@@ -190,7 +190,8 @@ async def _user_scan(uid):
                 contract_type=candidate['direction'],stake=stake,
                 duration=expiry,currency='USD',
                 min_payout_ratio=min_ratio,
-                latest_buy_send_epoch=deadline)
+                latest_buy_send_epoch=deadline,
+                duration_options=tuple(expiries) if profile.expiry_minutes==0 else None)
             with db.SessionLocal() as sess:
                 order=sess.get(db.RealOrder,order_id)
                 confirm_real_order(sess,order,receipt)
