@@ -1,7 +1,7 @@
-"""DEMO-only robot access window. No payment credentials stored here.
+"""Shared DEMO/REAL robot access window. No payment credentials stored here.
 
 Enable NEXORA_ACCESS_CONTROL_ENABLED=true only after product/onboarding
-testing. Trial is 24h by default, starting with first verified Deriv registration for new users.
+testing. Trial is seven days by default, starting with first verified Deriv registration for new users.
 All reads use server time; logout/login never renews the trial.
 """
 import os
@@ -12,12 +12,12 @@ from . import db
 
 
 def trial_duration_hours():
-    """24-hour trial; optionally 7 days only when explicitly configured."""
+    """Seven-day launch trial; 24 hours remains available for legacy opt-in."""
     try:
-        hours=int(os.getenv('NEXORA_TRIAL_HOURS','24'))
+        hours=int(os.getenv('NEXORA_TRIAL_HOURS','168'))
     except ValueError:
-        hours=24
-    return hours if hours in (24,168) else 24
+        hours=168
+    return hours if hours in (24,168) else 168
 
 
 def access_control_enabled():
@@ -101,7 +101,7 @@ def register_first_login(session, user, *, created_new, referred_code=None, now=
     """Called only after valid Deriv OAuth, in same DB transaction as login.
 
     New identity only, no repeated login credits, no self-referral.
-    New verified accounts receive 24h entitlement even while enforcement is in pilot mode.
+    New verified accounts receive the configured trial even while enforcement is in pilot mode.
     A referral reward is an atomic, once-per-invitee ledger entry.
     """
     now=utc(now or db.utcnow())
@@ -109,8 +109,9 @@ def register_first_login(session, user, *, created_new, referred_code=None, now=
     if not created_new:
         return
     if session.get(db.RobotAccess,user.id) is None:
-        session.add(db.RobotAccess(user_id=user.id,access_kind='trial_24h',
-                 starts_at=now,expires_at=now+timedelta(hours=24)))
+        hours=trial_duration_hours()
+        session.add(db.RobotAccess(user_id=user.id,access_kind='trial_'+str(hours)+'h',
+                 starts_at=now,expires_at=now+timedelta(hours=hours)))
         session.flush()
     if not referred_code:
         return

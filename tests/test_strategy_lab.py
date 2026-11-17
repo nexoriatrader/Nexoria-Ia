@@ -202,10 +202,13 @@ def test_scanner_historical_comparison_rejects_short_history_and_gaps():
     assert result['payout_adjusted'] is False
 
 
-def test_scanner_ui_explains_sample_size_and_not_broker_profit():
+def test_strategy_education_explains_indicators_without_guaranteeing_profits():
     from pathlib import Path
     html=(Path(__file__).resolve().parents[1]/'app'/'index.html').read_text()
-    assert 'Validação 1/3/5 min (acertos direcionais)' in html
-    assert 'amostra insuficiente' in html
-    assert 'A taxa apresentada mede somente acerto direcional hipotético' in html
-    assert "test.validation" in html
+    assert 'id="strategies"' in html
+    assert 'Índice de Força Relativa' in html
+    assert 'Média Móvel Exponencial' in html
+    assert 'EMA 20' in html
+    assert 'Indicadores e estratégias não garantem resultados' in html
+    assert 'Operações financeiras envolvem riscos' in html
+

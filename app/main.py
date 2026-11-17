@@ -15,7 +15,7 @@ from pydantic import BaseModel
 from sqlalchemy import select, delete, func
 
 from . import db
-from .stripe_billing import PLANS, billing_enabled, create_checkout, stripe_signature_valid, apply_paid_checkout
+from .stripe_billing import PLANS, billing_enabled, stripe_expected_livemode, create_checkout, stripe_signature_valid, apply_paid_checkout
 from .automation_markets import GROUPS as AUTOMATION_GROUPS, instruments_by_group, featured_instruments_by_group
 from .access import (access_control_enabled, access_status, start_trial_on_first_robot_start,
                      register_first_login, referral_report, utc)
@@ -27,7 +27,7 @@ from . import real_runtime
 from .real_broker import RealExecutionError, real_account_balance
 from .autopilot import analyze, quote_assessment
 from .engine import Engine, Settings
-from .market import MarketError, discover_symbols, discover_contracts, indicative_proposal
+from .market import MarketError, discover_symbols, discover_contracts, indicative_proposal, public_feed_messages
 from .strategy_lab import run_lab
 from .single_asset_study import run_single_asset_study
 from .research_persistence import research_loop, latest_study, latest_multitimeframe_study, latest_pullback_study  # read-only research
@@ -186,17 +186,20 @@ async def feed():
     delay=2
     while True:
         try:
-            async with websockets.connect(PUBLIC_WS,ping_interval=20,ping_timeout=20) as ws:
+            async with websockets.connect(PUBLIC_WS,ping_interval=20,ping_timeout=20,
+                                          open_timeout=10,close_timeout=3,
+                                          max_size=1_500_000) as ws:
                 await ws.send(json.dumps({'ticks_history':SYMBOL,'count':100,'end':'latest','style':'ticks'}))
                 await ws.send(json.dumps({'ticks':SYMBOL,'subscribe':1}))
                 async with lock:
-                    market_connected=True
-                    last_market_reason='Cotações públicas conectadas'
+                    # A successful handshake alone is not a verified price feed.
+                    market_connected=False
+                    market_last_tick=0
+                    last_market_reason='Canal aberto; aguardando primeira cotação'
                     for engine in runtimes.values():
-                        engine.connected=True;engine.prices.clear()
+                        engine.connected=False;engine.prices.clear()
                     recent_prices=[]
-                delay=2
-                async for raw in ws:
+                async for raw in public_feed_messages(ws):
                     m=json.loads(raw)
                     if m.get('error'):raise RuntimeError(str(m['error'].get('message','Erro da Deriv')))
                     if m.get('msg_type')=='history':
@@ -206,10 +209,14 @@ async def feed():
                             for engine in runtimes.values():engine.prices.extend(ps)
                     elif m.get('msg_type')=='tick':
                         p=float(m['tick']['quote'])
-                        market_last_tick=asyncio.get_running_loop().time()
                         async with lock:
+                            market_last_tick=asyncio.get_running_loop().time()
+                            market_connected=True
+                            last_market_reason='Cotações públicas conectadas'
+                            delay=2
                             recent_prices=(recent_prices+[p])[-200:]
                             for uid,engine in list(runtimes.items()):
+                                engine.connected=True
                                 engine.prices.append(p)
                                 # Public ticks are used for research only; no local trades.
         except asyncio.CancelledError: raise
@@ -221,7 +228,8 @@ async def feed():
                 close_info = ' close_code=' + str(getattr(frame, 'code', 'unknown'))
             log.warning('Public feed unavailable: %s%s',type(e).__name__,close_info)
             async with lock:
-                market_connected=False;last_market_reason='Conexão interrompida'
+                market_connected=False;market_last_tick=0
+                last_market_reason='Conexão interrompida'
                 for engine in runtimes.values():
                     engine.connected=False
                     engine.last_reason='Conexão de cotações interrompida'
@@ -525,6 +533,29 @@ async def autopilot_once():
                     disarm_autopilot(uid,'Sessão Deriv expirada; conecte novamente')
                     continue
                 orders=sess.scalars(select(db.DemoOrder).where(db.DemoOrder.user_id==uid)).all()
+                # Enforce settled-result stops on EVERY worker tick, even when
+                # the scanner finds no signal. Previously an armed robot could
+                # remain green after reaching Stop Win / Stop Loss indefinitely.
+                boundary=latest_risk_session(sess,uid)
+                after_id=boundary.after_order_id if boundary else 0
+                try:
+                    settled_pnl=sum((
+                        Decimal(str(o.pnl)) for o in orders
+                        if o.state=='SETTLED' and o.pnl is not None
+                        and (o.id or 0)>after_id),Decimal('0'))
+                    stop_win=Decimal(str(user.stop_win))
+                    stop_loss=Decimal(str(user.stop_loss))
+                    if not all(v.is_finite() for v in (settled_pnl,stop_win,stop_loss)):
+                        raise InvalidOperation()
+                except (InvalidOperation,ValueError,TypeError):
+                    disarm_autopilot(uid,'Resultado ou limite de risco inválido; robô desligado')
+                    continue
+                if stop_win>0 and settled_pnl>=stop_win:
+                    disarm_autopilot(uid,'Stop Win atingido; robô desligado')
+                    continue
+                if stop_loss>0 and settled_pnl<=-stop_loss:
+                    disarm_autopilot(uid,'Stop Loss atingido; robô desligado')
+                    continue
                 plan=sess.get(db.RobotPlan,uid)
                 cycle_cfg=sess.get(db.RobotCycleParams,uid)
                 if plan and plan.requested_martingale and plan.cycles_limit:
@@ -1166,7 +1197,8 @@ async def health():
     enabled=os.getenv('NEXORA_DEMO_BUY_ENABLED','false').lower()=='true'
     return {'ok':True,'version':VERSION,'market_connected':market_connected,
             'execution':'DERIV_DEMO_ONLY','automatic_demo_orders_enabled':autopilot_allowed(),
-            'manual_demo_purchase_enabled':enabled,'real_orders_enabled':real_runtime.real_available()}
+            'manual_demo_purchase_enabled':enabled,'real_orders_enabled':real_runtime.real_available(),
+            'execution_modes':['demo']+(['real'] if real_runtime.real_available() else [])}
 
 @app.get('/auth/deriv/start')
 async def login_start(ref:str|None=None):
@@ -1236,7 +1268,7 @@ async def session_info(request:Request,nexora_sid:str|None=Cookie(default=None))
     try:u=active_user(request,nexora_sid)
     except HTTPException:return {'authenticated':False,'demo_accounts':[],'real_enabled':False}
     return {'authenticated':True,'demo_accounts':[{'account_id':u.deriv_account_id,'account_type':'demo'}],
-            'real_enabled':False,'is_admin':False}
+            'real_enabled':real_runtime.real_available(),'is_admin':False}
 
 @app.get('/api/accounts/available')
 async def available_accounts(request:Request,nexora_sid:str|None=Cookie(default=None)):
@@ -1253,8 +1285,8 @@ async def available_accounts(request:Request,nexora_sid:str|None=Cookie(default=
     from .auth_helpers import extract_accounts,real_accounts
     found=real_accounts(extract_accounts(payload))
     return {'demo_accounts':[{'account_id':user.deriv_account_id,'account_type':'demo'}],
-            'real_accounts':found,'real_trading_enabled':False,
-            'execution':'DERIV_DEMO_ONLY'}
+            'real_accounts':found,'real_trading_enabled':real_runtime.real_available(),
+            'execution':'DERIV_REAL_OPT_IN' if real_runtime.real_available() else 'DERIV_DEMO_ONLY'}
 
 
 @app.get('/api/real/orders')
@@ -1343,6 +1375,11 @@ async def logout(request:Request,nexora_sid:str|None=Cookie(default=None)):
         with db.SessionLocal() as s:
             session=s.get(db.Session,hashsecret(nexora_sid))
             if session:
+                # Logout revokes REAL consent too; never leave a live-money
+                # worker running under an authentication session being deleted.
+                async with real_runtime.user_lock(session.user_id):
+                    real_runtime.disarm_real(session.user_id,
+                        'Sessão encerrada; execução REAL desligada')
                 autopilot_enabled.discard(session.user_id)
                 old_consent=s.get(db.AutoPilotResumeConsent,session.user_id)
                 if old_consent:s.delete(old_consent)
@@ -1417,7 +1454,8 @@ def automation_profile_result(profile):
         'real_account_id':profile.real_account_id,
         'min_payout_pct':int(Decimal(profile.min_payout)),
         'preset_mode':profile.preset_mode,
-        'configured':True,'execution':'DERIV_DEMO_ONLY'
+        'configured':True,
+        'execution':'DERIV_REAL_CONFIGURED' if profile.account_mode=='real' else 'DERIV_DEMO_ONLY'
     }
 
 
@@ -1743,6 +1781,8 @@ async def billing_stripe_webhook(request:Request):
         obj=event['data']['object']
     except (ValueError,KeyError,TypeError,AttributeError):
         raise HTTPException(400,'Evento inválido') from None
+    if event.get('livemode') is not stripe_expected_livemode():
+        raise HTTPException(400,'Modo de pagamento incompatível com o ambiente')
     if kind not in ('checkout.session.completed','checkout.session.async_payment_succeeded'):
         return {'received':True}
     if not isinstance(obj,dict):
@@ -2323,7 +2363,9 @@ async def get_onboarding_config(request:Request,nexora_sid:str|None=Cookie(defau
     with db.SessionLocal() as sess:
         plan=sess.get(db.RobotPlan,u.id)
         cycles=sess.get(db.RobotCycleParams,u.id)
-        return {'mode':'demo','real_enabled':False,
+        profile=sess.get(db.AutomationProfile,u.id)
+        return {'mode':profile.account_mode if profile else 'demo',
+                'real_enabled':real_runtime.real_available(),
                 'stake':u.stake,'stop_win':u.stop_win,'stop_loss':u.stop_loss,
                 'martingale':bool(plan.requested_martingale) if plan else False,
                 'gale_count':plan.gale_count if plan else 0,
@@ -2337,7 +2379,7 @@ async def get_onboarding_config(request:Request,nexora_sid:str|None=Cookie(defau
 async def save_onboarding_config(request:Request,payload:OnboardingConfig,
                                  nexora_sid:str|None=Cookie(default=None)):
     u=active_user(request,nexora_sid)
-    if u.id in autopilot_enabled:
+    if u.id in autopilot_enabled or u.id in real_runtime.running:
         raise HTTPException(409,'Desligue o robô antes de salvar uma nova progressão')
     if payload.gale_count not in range(0,6):
         raise HTTPException(422,'Quantidade de Martingales deve estar entre 0 e 5')

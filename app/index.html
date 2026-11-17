@@ -18,7 +18,7 @@
 <meta property="og:image:type" content="image/png">
 <meta property="og:image:width" content="1731">
 <meta property="og:image:height" content="909">
-<meta property="og:image:alt" content="Nexora IA, robô trader automático — teste grátis por 24 horas">
+<meta property="og:image:alt" content="Nexora IA, robô trader automático — teste grátis por 7 dias">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="Nexora Robô Automático">
 <meta name="twitter:description" content="Nexora IA - acesse o melhor e mais prático robô Trader. Acesse e comprove.">
@@ -731,7 +731,7 @@ html,body{max-width:100%;overflow-x:clip}
     </div>
     <p id="robotStartDialogNote" class="helper">Estas são as configurações realmente salvas na sua conta. Confira todos os detalhes antes de ligar o robô.</p>
     <div id="robotStartDialogDetails" class="nexora-start-details"></div>
-    <p class="nexora-start-warning">A ativação autoriza novas operações na conta DEMO conforme os parâmetros salvos. Indicadores e estratégias não garantem resultados.</p>
+    <p id="robotStartDialogWarning" class="nexora-start-warning">Confira o ambiente antes de autorizar novas operações. Indicadores e estratégias não garantem resultados.</p>
     <div class="nexora-start-actions">
       <button type="button" class="outline" onclick="resolveRobotStartDialog(false)">CANCELAR</button>
       <button type="button" class="gold" id="robotStartConfirmButton" onclick="resolveRobotStartDialog(true)">CONFIRMAR E LIGAR ROBÔ</button>
@@ -748,9 +748,9 @@ html,body{max-width:100%;overflow-x:clip}
   <div>
    <div class="lp-eyebrow">Nexora - robô inteligente</div>
    <h1 id="landingHeading">O robô trader automático <em>mais fácil de usar</em></h1>
-   <p class="lp-subtitle">Experimente o NEXORA IA gratuitamente por 24 horas. Configure suas estratégias, e deixe que o robô trabalhe sozinho.</p>
+   <p class="lp-subtitle">Experimente o NEXORA IA gratuitamente por 7 dias. Configure suas estratégias, e deixe que o robô trabalhe sozinho.</p>
    <div class="lp-actions">
-    <a id="lpHeroTrialButton" class="lp-button lp-button-primary" href="/auth/deriv/start" onclick="startNexoraTrial(event)">Teste grátis por 24h <span aria-hidden="true">➜</span></a>
+    <a id="lpHeroTrialButton" class="lp-button lp-button-primary" href="/auth/deriv/start" onclick="startNexoraTrial(event)">Teste grátis por 7 dias <span aria-hidden="true">➜</span></a>
    </div>
    <div class="lp-proof"><span><b aria-hidden="true">✓</b> Conexão oficial Deriv</span><span><b aria-hidden="true">ϟ</b> Ativação em poucos passos</span><span><b aria-hidden="true">▥</b> Gestão de risco</span></div>
   </div>
@@ -775,7 +775,7 @@ html,body{max-width:100%;overflow-x:clip}
    <article class="lp-card"><div class="lp-icon"><svg viewBox="0 0 48 48" width="42" height="42" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6v36M24 6v36M39 6v36"/><rect x="5" y="15" width="8" height="15" rx="2" fill="currentColor" fill-opacity=".18"/><rect x="20" y="9" width="8" height="18" rx="2" fill="currentColor" fill-opacity=".18"/><rect x="35" y="22" width="8" height="14" rx="2" fill="currentColor" fill-opacity=".18"/></svg></div><h3>Operações automáticas</h3><p>Monitore oportunidades e ative o Robô Nexora para operar na sua conta.</p></article>
    <article class="lp-card"><div class="lp-icon"><svg viewBox="0 0 48 48" width="42" height="42" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 38h38M8 33l11-11 8 6 13-17M31 11h9v9"/><circle cx="19" cy="22" r="2" fill="currentColor"/><circle cx="27" cy="28" r="2" fill="currentColor"/></svg></div><h3>Análise em tempo real</h3><p>Acompanhe as condições do mercado e os sinais analisados pelo robô.</p></article>
    <article class="lp-card"><div class="lp-icon"><svg viewBox="0 0 48 48" width="42" height="42" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M24 4l17 7v12c0 11-7 18-17 22C14 41 7 34 7 23V11z"/><path d="M15 24l6 6 13-14"/></svg></div><h3>Gestão de risco</h3><p>Personalize entradas, Stop Win e Stop Loss; operar envolve riscos.</p></article>
-   <article class="lp-card"><div class="lp-icon"><svg viewBox="0 0 48 48" width="42" height="42" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="24" cy="24" r="18"/><path d="M24 13v12l9 5"/><path d="M36 5v10M31 10h10"/></svg></div><h3>Acesso grátis por 24h</h3><p>Conheça a plataforma na DEMO e ganhe mais 24h por indicação válida.</p></article>
+   <article class="lp-card"><div class="lp-icon"><svg viewBox="0 0 48 48" width="42" height="42" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="24" cy="24" r="18"/><path d="M24 13v12l9 5"/><path d="M36 5v10M31 10h10"/></svg></div><h3>Acesso grátis por 7 dias</h3><p>Conheça a plataforma na DEMO e ganhe mais 24h por indicação válida.</p></article>
   </div>
  </section>
  <section id="como-funciona" class="lp-section" aria-labelledby="lpStepsTitle">
@@ -791,7 +791,7 @@ html,body{max-width:100%;overflow-x:clip}
   <div><span aria-hidden="true">▥</span> Painel intuitivo</div>
   <div><span aria-hidden="true">▥</span> Resultados registrados</div>
  </div>
- <div class="lp-final"><h2>Comece agora com <br><strong>24 horas grátis</strong></h2><a id="lpFinalTrialButton" class="lp-button lp-button-primary" href="/auth/deriv/start" onclick="startNexoraTrial(event)" aria-label="Iniciar teste gratuito NEXORA IA de 24 horas">Quero testar o NEXORA IA <span aria-hidden="true">➜</span></a></div>
+ <div class="lp-final"><h2>Comece agora com <br><strong>7 dias grátis</strong></h2><a id="lpFinalTrialButton" class="lp-button lp-button-primary" href="/auth/deriv/start" onclick="startNexoraTrial(event)" aria-label="Iniciar teste gratuito NEXORA IA de 7 dias">Quero testar o NEXORA IA <span aria-hidden="true">➜</span></a></div>
  <p class="lp-disclaimer">Operações financeiras envolvem riscos e podem resultar em perdas. Resultados não são garantidos.</p>
 </section>
 <section id="setup" class="robot-setup hidden" aria-labelledby="setupTitle">
@@ -807,7 +807,7 @@ html,body{max-width:100%;overflow-x:clip}
         <div class="setup-panel-title"><span class="setup-icon" aria-hidden="true">◉</span><div><h2>Modo de operação</h2><p>Selecione o ambiente do robô.</p></div></div>
         <div class="setup-mode-row" role="group" aria-label="Modo de conta">
           <div class="setup-mode selected"><span>◉</span><strong>Treinamento</strong><small>Selecionado</small></div>
-          <div class="setup-mode disabled" aria-disabled="true"><span>◇</span><strong>Conta real</strong><small>Indisponível</small></div>
+          <div class="setup-mode disabled" aria-disabled="true"><span>◇</span><strong>Conta real</strong><small id="setupRealAvailability">Configure na seção Automação</small></div>
         </div>
       </div>
       <div class="setup-panel">
@@ -903,6 +903,18 @@ html,body{max-width:100%;overflow-x:clip}
       <span id="robotMessage"></span><span id="riskSessionMetric"></span><span id="feedState"></span>
       <span id="lastOrder"></span>
     </div>
+  </div>
+  <div class="card dash-daily-card" id="dailyResultsCard">
+    <div class="surface-heading">Resultado do dia</div>
+    <p class="helper" id="dailyResetInfo">Desde 00h · Brasília · somente contratos liquidados oficialmente</p>
+    <div class="dash-balance-grid">
+      <div class="dash-balance-tile"><span class="dash-balance-label">TREINAMENTO · DEMO</span>
+        <strong id="profitMetric">—</strong><small>Resultado diário da conta DEMO Deriv</small></div>
+      <div class="dash-balance-tile"><span class="dash-balance-label">CONTA REAL · DERIV</span>
+        <strong id="realProfitMetric">—</strong>
+        <small id="realProfitReason">Aguardando consulta oficial · resultado de toda a conta</small></div>
+    </div>
+    <p class="helper">Este resultado considera a conta na corretora, não apenas sinais do NEXORA. Ganhos e perdas não são garantidos.</p>
   </div>
   <div class="card dash-realtime-card">
     <div class="dash-realtime-header">
@@ -1241,7 +1253,7 @@ html,body{max-width:100%;overflow-x:clip}
 const $=id=>document.getElementById(id);
 let activePage='welcome',demoOrders=[],demoBalance=null,refreshTimer=null,resultsRefreshTimer=null,resultsRequestBusy=false,lastRequestKey=null,robotRunning=false,robotConfiguredMode='demo';
 let dashboardStatusSequence=0;
-let accessExpiresMs=null,accessServerDelta=0,accessMode='UNKNOWN';
+let accessExpiresMs=null,accessServerDelta=0,accessMode='UNKNOWN',accessTrialSeconds=7*24*3600;
 const durationString=seconds=>{
   seconds=Math.max(0,Math.floor(seconds));
   const days=Math.floor(seconds/86400),hours=Math.floor(seconds%86400/3600);
@@ -1252,7 +1264,11 @@ function updateAccessCountdown(){
   const counter=$('robotAccessCountdown');
   if(!counter)return;
   const mini=$('dashboardAccessCountdown');
-  if(accessMode==='TRIAL_AVAILABLE'){counter.textContent='24:00:00';if(mini)mini.textContent='24h grátis disponíveis';return;}
+  if(accessMode==='TRIAL_AVAILABLE'){
+    counter.textContent=durationString(accessTrialSeconds);
+    if(mini)mini.textContent=durationString(accessTrialSeconds)+' de teste disponíveis';
+    return;
+  }
   if(accessMode==='SUSPENDED'){counter.textContent='SUSPENSO';if(mini)mini.textContent='suspenso';return;}
   if(!accessExpiresMs){counter.textContent='--:--:--';if(mini)mini.textContent='consultando...';return;}
   const remain=Math.max(0,Math.floor((accessExpiresMs-(Date.now()+accessServerDelta))/1000));
@@ -1310,6 +1326,9 @@ async function loadOnboarding(){
  $('setupFeedback').textContent='';
  try{
    const s=await req('/api/onboarding/config');
+   $('setupRealAvailability').textContent=s.real_enabled?
+     'Disponível na seção Automação mediante confirmação':
+     'Aguardando habilitação do servidor';
    $('setupStake').value=s.stake;$('setupWin').value=s.stop_win;$('setupLoss').value=s.stop_loss;
    $('setupMg').checked=Boolean(s.martingale);
    $('setupGales').value=String(s.gale_count||1);
@@ -1333,6 +1352,33 @@ async function saveOnboarding(event){
 }
 function page(v){document.body.classList.toggle('marketing-mode',v==='welcome');$('primaryNavigation').classList.toggle('hidden',v==='welcome'||v==='setup');for(const name of ['welcome','setup','dashboard','robot-config','results','settings','account','features','strategies'])$(name).classList.toggle('hidden',name!==v);activePage=v;document.querySelectorAll('.nav-link[data-view]').forEach(b=>b.classList.toggle('active',b.dataset.view===v))}
 
+let dailyResultsLoading=false;
+async function loadDailyResults(){
+ if(dailyResultsLoading)return;
+ dailyResultsLoading=true;
+ try{
+  const [demo,real]=await Promise.allSettled([
+   req('/api/demo/results/today'),req('/api/real/results/today')
+  ]);
+  if(demo.status==='fulfilled'){
+   const result=demo.value,pnl=Number(result.pnl);
+   $('profitMetric').textContent=result.pnl!==null&&Number.isFinite(pnl)?money(pnl,'USD'):'—';
+   const next=result.next_reset_at?new Date(result.next_reset_at):null;
+   if(next&&!Number.isNaN(next.getTime()))
+    $('dailyResetInfo').textContent='Desde 00h · Brasília · próximo fechamento '+next.toLocaleString('pt-BR',{timeZone:'America/Sao_Paulo',hour:'2-digit',minute:'2-digit'});
+  }else $('profitMetric').textContent='—';
+  if(real.status==='fulfilled'&&real.value.available&&real.value.pnl!==null){
+   const result=real.value,pnl=Number(result.pnl);
+   $('realProfitMetric').textContent=Number.isFinite(pnl)?money(pnl,result.currency||'USD'):'—';
+   $('realProfitReason').textContent='Dados oficiais da conta Deriv · não apenas do robô';
+  }else{
+   $('realProfitMetric').textContent='—';
+   $('realProfitReason').textContent=real.status==='fulfilled'?(real.value.reason||'Resultado oficial indisponível'):'Não foi possível consultar a Deriv';
+  }
+ }finally{dailyResultsLoading=false;}
+}
+setInterval(()=>{if(activePage==='dashboard')loadDailyResults().catch(()=>{})},120000);
+
 function updateResultsPolling(){
  if(resultsRefreshTimer){clearInterval(resultsRefreshTimer);resultsRefreshTimer=null;}
  if(activePage==='results'||activePage==='dashboard'){
@@ -1353,7 +1399,7 @@ function updateResultsPolling(){
    },activePage==='dashboard'?7000:3000);
  }
 }
-function go(v){page(v);updateResultsPolling();window.scrollTo({top:0,behavior:'smooth'});if(v==='setup')loadOnboarding();if(v==='dashboard'){refreshDashboard();loadDemoOrders().catch(()=>{});}if(v==='robot-config'){initAutomationWizard();setAutomationWizardStep(1);loadAutomationProfile();}if(v==='results'){loadDemoOrders();}if(v==='account'){loadRobotAccess();loadBillingPlans()}if(v==='settings')loadSettings()}
+function go(v){page(v);updateResultsPolling();window.scrollTo({top:0,behavior:'smooth'});if(v==='setup')loadOnboarding();if(v==='dashboard'){refreshDashboard();loadDemoOrders().catch(()=>{});loadDailyResults().catch(()=>{});}if(v==='robot-config'){initAutomationWizard();setAutomationWizardStep(1);loadAutomationProfile();}if(v==='results'){loadDemoOrders();}if(v==='account'){loadRobotAccess();loadBillingPlans()}if(v==='settings')loadSettings()}
 function fail(msg){$('error').textContent=msg||''}
 async function req(path,opts={}){const r=await fetch(path,{credentials:'same-origin',...opts});let data;try{data=await r.json()}catch{throw Error('Resposta inválida do servidor')}if(!r.ok)throw Error(data.detail||'Falha na conexão');return data}
 function startNexoraTrial(event){
@@ -1372,7 +1418,7 @@ async function init(){
      login.href='/auth/deriv/start?ref='+encodeURIComponent(ref);
    });
  }
- try{const s=await req('/api/session');if(!s.authenticated){page('welcome');return}const justConnected=new URLSearchParams(window.location.search).get('login')==='ok';if(justConnected){window.history.replaceState({},'',window.location.pathname);go('setup')}else{page('dashboard');refreshDashboard();loadDemoOrders().catch(()=>{});updateResultsPolling()}refreshTimer=setInterval(()=>{if(activePage==='dashboard'||activePage==='results')refreshDashboard()},30000)}catch(e){fail(e.message);page('welcome')}}
+ try{const s=await req('/api/session');if(!s.authenticated){page('welcome');return}const justConnected=new URLSearchParams(window.location.search).get('login')==='ok';if(justConnected){window.history.replaceState({},'',window.location.pathname);go('setup')}else{page('dashboard');refreshDashboard();loadDemoOrders().catch(()=>{});loadDailyResults().catch(()=>{});updateResultsPolling()}refreshTimer=setInterval(()=>{if(activePage==='dashboard'||activePage==='results')refreshDashboard()},30000)}catch(e){fail(e.message);page('welcome')}}
 function showRobotNotice(reason){
  const box=$('robotStartNotice'),title=$('robotNoticeTitle'),body=$('robotNoticeText'),options=$('robotNoticeOptions');
  if(!reason){box.hidden=true;title.textContent='';body.textContent='';options.hidden=true;return}
@@ -1604,6 +1650,9 @@ function reviewAmount(value){
 function askRobotStartConfirmation(profile,risk,catalogue){
  if(robotStartDialogResolver)return Promise.resolve(false);
  const box=$('robotStartDialogDetails');box.replaceChildren();
+ $('robotStartDialogWarning').textContent=profile.account_mode==='real'?
+  'ATENÇÃO: ao confirmar, o NEXORA poderá comprar contratos com DINHEIRO REAL da conta Deriv selecionada. Há risco de perder capital, inclusive antes de uma proteção interromper novas entradas. Nenhuma estratégia garante lucro.':
+  'A ativação autoriza novas operações na conta DEMO conforme os parâmetros salvos. Indicadores e estratégias não garantem resultados.';
  const marketNames={derived:'Índices derivados',volatility:'Índices derivados',
   forex:'Forex',stocks_indices:'Ações e índices',commodities:'Matérias-primas'};
  const strategyNames={pulso_v2:'PULSO V2',trend:'Tendência e Pullback',rsi:'Reversão RSI'};
@@ -1617,6 +1666,7 @@ function askRobotStartConfirmation(profile,risk,catalogue){
  const indicators=(profile.indicators||[]).map(item=>indicatorNames[item]||item);
  const stopAmount=(value)=>Number(value)>0?reviewAmount(value):'Desativado';
  addRobotReviewGroup(box,'Conta e mercado',[
+  ['Conta Deriv',profile.account_mode==='real'?(profile.real_account_id||'Não selecionada'):'Conta de treinamento'],
   ['Modo de operação',profile.account_mode==='real'?'Conta REAL (dinheiro próprio)':'Treinamento · conta DEMO (saldo fictício)'],
   ['Perfil',presetNames[profile.preset_mode]||'Personalizada'],
   ['Mercado',marketNames[profile.market]||profile.market],
@@ -1799,6 +1849,8 @@ async function loadRobotAccess(){
     accessMode=a.status;
     accessExpiresMs=a.expires_at?new Date(a.expires_at).getTime():null;
     accessServerDelta=a.server_time?new Date(a.server_time).getTime()-Date.now():0;
+    accessTrialSeconds=Number.isFinite(Number(a.trial_hours))&&Number(a.trial_hours)>0?
+      Number(a.trial_hours)*3600:7*24*3600;
     updateAccessCountdown();
     $('accountUserId').textContent=String(a.user_id||'—');
     $('referralLink').value=location.origin+'/i/'+encodeURIComponent(a.short_code)+'?v=2';
@@ -1813,7 +1865,7 @@ async function loadRobotAccess(){
       return;
     }
     if(a.status==='TRIAL_AVAILABLE'){
-      target.textContent='24 horas grátis disponíveis. O contador começa quando você ligar o robô pela primeira vez.';
+      target.textContent=durationString(accessTrialSeconds)+' grátis disponíveis. O contador começa quando você ligar o robô pela primeira vez.';
       return;
     }
     const until=a.expires_at?new Date(a.expires_at):null;
