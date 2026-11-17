@@ -807,7 +807,7 @@ html,body{max-width:100%;overflow-x:clip}
         <div class="setup-panel-title"><span class="setup-icon" aria-hidden="true">◉</span><div><h2>Modo de operação</h2><p>Selecione o ambiente do robô.</p></div></div>
         <div class="setup-mode-row" role="group" aria-label="Modo de conta">
           <div class="setup-mode selected"><span>◉</span><strong>Treinamento</strong><small>Selecionado</small></div>
-          <div class="setup-mode disabled" aria-disabled="true"><span>◇</span><strong>Conta real</strong><small>Indisponível</small></div>
+          <div class="setup-mode disabled" aria-disabled="true"><span>◇</span><strong>Conta real</strong><small id="setupRealAvailability">Configure na seção Automação</small></div>
         </div>
       </div>
       <div class="setup-panel">
@@ -1310,6 +1310,9 @@ async function loadOnboarding(){
  $('setupFeedback').textContent='';
  try{
    const s=await req('/api/onboarding/config');
+   $('setupRealAvailability').textContent=s.real_enabled?
+     'Disponível na seção Automação mediante confirmação':
+     'Aguardando habilitação do servidor';
    $('setupStake').value=s.stake;$('setupWin').value=s.stop_win;$('setupLoss').value=s.stop_loss;
    $('setupMg').checked=Boolean(s.martingale);
    $('setupGales').value=String(s.gale_count||1);
