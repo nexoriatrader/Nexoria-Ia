@@ -241,9 +241,18 @@ async def reconcile_real_once():
         due=sess.scalars(select(db.RealOrder).where(
             db.RealOrder.state.in_(('CONFIRMED','UNKNOWN')),
             db.RealOrder.contract_id.is_not(None)).order_by(db.RealOrder.id.desc()).limit(100)).all()
-        due_ids=[o.id for o in due if o.state=='UNKNOWN' or (
-            o.broker_purchase_at is not None and
-            (db.utcnow()-o.broker_purchase_at).total_seconds()>=o.duration_minutes*60-3)]
+        def is_due(order):
+            if order.state=='UNKNOWN':
+                return True
+            when=order.broker_purchase_at
+            if when is None:
+                return False
+            # SQLite integration tests load UTC timestamps without tzinfo;
+            # Postgres provides timezone-aware timestamps. Handle both.
+            if when.tzinfo is None:
+                when=when.replace(tzinfo=timezone.utc)
+            return (db.utcnow()-when).total_seconds()>=order.duration_minutes*60-3
+        due_ids=[o.id for o in due if is_due(o)]
     sem=asyncio.Semaphore(3)
     async def one(order_id):
         async with sem:
