@@ -69,15 +69,19 @@ def test_recovery_only_in_next_candle_opening_window():
     assert main.m1_recovery_window_open(settled,datetime(2026,11,12,15,2,3,tzinfo=timezone.utc)) is True
 
 
-def test_results_table_contains_all_user_requested_columns_and_autorefresh():
+def test_results_table_contains_official_columns_and_autorefresh():
     from pathlib import Path
     html=(Path(__file__).resolve().parents[1]/'app'/'index.html').read_text()
-    section=html.split('<section id="results"',1)[1].split('<section id="lab"',1)[0]
-    for title in ('Data (Brasília)','Horário','Conta','Ativo','Direção','Entrada',
-                  'Etapa','Situação','WIN / LOSS','Resultado','Ação','últimos 3 dias'):
+    section=html.split('<section id="results"',1)[1].split('<section id="features"',1)[0]
+    for title in ('Data da compra (Deriv · Brasília)', 'Horário da compra (Deriv)',
+                  'Conta', 'Ativo', 'Direção', 'Entrada', 'Expiração',
+                  'Etapa', 'Situação', 'WIN / LOSS', 'Resultado'):
         assert title in section
+    assert 'id="ordersBody"' in section
+    assert 'id="resultsLiveStatus"' in section
     assert 'setInterval(async()=>{' in html
-    assert '},3000)' in html
+    assert "activePage==='dashboard'?7000:3000" in html
     assert 'America/Sao_Paulo' in html
     assert "p.cycle===null" in html
     assert "p.martingale===null" in html
+
