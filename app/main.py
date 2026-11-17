@@ -1166,7 +1166,8 @@ async def health():
     enabled=os.getenv('NEXORA_DEMO_BUY_ENABLED','false').lower()=='true'
     return {'ok':True,'version':VERSION,'market_connected':market_connected,
             'execution':'DERIV_DEMO_ONLY','automatic_demo_orders_enabled':autopilot_allowed(),
-            'manual_demo_purchase_enabled':enabled,'real_orders_enabled':real_runtime.real_available()}
+            'manual_demo_purchase_enabled':enabled,'real_orders_enabled':real_runtime.real_available(),
+            'execution_modes':['demo']+(['real'] if real_runtime.real_available() else [])}
 
 @app.get('/auth/deriv/start')
 async def login_start(ref:str|None=None):
@@ -1236,7 +1237,7 @@ async def session_info(request:Request,nexora_sid:str|None=Cookie(default=None))
     try:u=active_user(request,nexora_sid)
     except HTTPException:return {'authenticated':False,'demo_accounts':[],'real_enabled':False}
     return {'authenticated':True,'demo_accounts':[{'account_id':u.deriv_account_id,'account_type':'demo'}],
-            'real_enabled':False,'is_admin':False}
+            'real_enabled':real_runtime.real_available(),'is_admin':False}
 
 @app.get('/api/accounts/available')
 async def available_accounts(request:Request,nexora_sid:str|None=Cookie(default=None)):
@@ -1253,8 +1254,8 @@ async def available_accounts(request:Request,nexora_sid:str|None=Cookie(default=
     from .auth_helpers import extract_accounts,real_accounts
     found=real_accounts(extract_accounts(payload))
     return {'demo_accounts':[{'account_id':user.deriv_account_id,'account_type':'demo'}],
-            'real_accounts':found,'real_trading_enabled':False,
-            'execution':'DERIV_DEMO_ONLY'}
+            'real_accounts':found,'real_trading_enabled':real_runtime.real_available(),
+            'execution':'DERIV_REAL_OPT_IN' if real_runtime.real_available() else 'DERIV_DEMO_ONLY'}
 
 
 @app.get('/api/real/orders')
@@ -1417,7 +1418,8 @@ def automation_profile_result(profile):
         'real_account_id':profile.real_account_id,
         'min_payout_pct':int(Decimal(profile.min_payout)),
         'preset_mode':profile.preset_mode,
-        'configured':True,'execution':'DERIV_DEMO_ONLY'
+        'configured':True,
+        'execution':'DERIV_REAL_CONFIGURED' if profile.account_mode=='real' else 'DERIV_DEMO_ONLY'
     }
 
 
@@ -2323,7 +2325,9 @@ async def get_onboarding_config(request:Request,nexora_sid:str|None=Cookie(defau
     with db.SessionLocal() as sess:
         plan=sess.get(db.RobotPlan,u.id)
         cycles=sess.get(db.RobotCycleParams,u.id)
-        return {'mode':'demo','real_enabled':False,
+        profile=sess.get(db.AutomationProfile,u.id)
+        return {'mode':profile.account_mode if profile else 'demo',
+                'real_enabled':real_runtime.real_available(),
                 'stake':u.stake,'stop_win':u.stop_win,'stop_loss':u.stop_loss,
                 'martingale':bool(plan.requested_martingale) if plan else False,
                 'gale_count':plan.gale_count if plan else 0,
@@ -2337,7 +2341,7 @@ async def get_onboarding_config(request:Request,nexora_sid:str|None=Cookie(defau
 async def save_onboarding_config(request:Request,payload:OnboardingConfig,
                                  nexora_sid:str|None=Cookie(default=None)):
     u=active_user(request,nexora_sid)
-    if u.id in autopilot_enabled:
+    if u.id in autopilot_enabled or u.id in real_runtime.running:
         raise HTTPException(409,'Desligue o robô antes de salvar uma nova progressão')
     if payload.gale_count not in range(0,6):
         raise HTTPException(422,'Quantidade de Martingales deve estar entre 0 e 5')
