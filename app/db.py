@@ -287,6 +287,51 @@ class DemoOrder(Base):
     updated_at = Column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
     __table_args__ = (UniqueConstraint('user_id', 'request_key', name='uq_demo_order_request'),)
 
+
+class RealOrder(Base):
+    """Real-money order ledger. Never co-mingle DEMO results or pending slots.
+
+    A unique per-account live slot survives restarts and unknown buy responses.
+    Only a verified broker settlement releases the slot.
+    """
+    __tablename__ = 'real_orders'
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey('users.id'), nullable=False, index=True)
+    account_id = Column(String(100), nullable=False)
+    request_key = Column(String(64), nullable=False)
+    active_slot = Column(String(100), nullable=True, unique=True)
+    state = Column(String(16), nullable=False, default='PENDING')
+    contract_id = Column(String(100), nullable=True, unique=True)
+    symbol = Column(String(50), nullable=False)
+    direction = Column(String(10), nullable=False)
+    duration_minutes = Column(Integer, nullable=False)
+    stake = Column(String(20), nullable=False)
+    currency = Column(String(20), nullable=False)
+    buy_price = Column(String(20), nullable=True)
+    pnl = Column(String(30), nullable=True)
+    broker_status = Column(String(40), nullable=True)
+    broker_purchase_at = Column(DateTime(timezone=True), nullable=True)
+    error_summary = Column(String(255), nullable=True)
+    created_at = Column(DateTime(timezone=True), default=utcnow, nullable=False)
+    updated_at = Column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
+    __table_args__ = (
+        UniqueConstraint('account_id', 'request_key', name='uq_real_order_request'),
+        Index('ix_real_order_account_state', 'account_id', 'state'),
+    )
+
+
+class RealRobotConsent(Base):
+    """Opt-in REAL activation is separate from saved settings or DEMO consent."""
+    __tablename__ = 'real_robot_consents'
+    user_id = Column(Integer, ForeignKey('users.id'), primary_key=True)
+    account_id = Column(String(100), nullable=False)
+    max_stake = Column(String(20), nullable=False)
+    stop_loss = Column(String(20), nullable=False)
+    created_at = Column(DateTime(timezone=True), default=utcnow, nullable=False)
+    revoked_at = Column(DateTime(timezone=True), nullable=True)
+
+
+
 class AutoPilotAttribution(Base):
     """Strategy attribution for verified broker orders (no simulated fills)."""
     __tablename__ = 'autopilot_attributions'
