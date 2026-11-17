@@ -21,8 +21,8 @@ def test_dashboard_always_shows_both_balances_and_live_fetch():
     dashboard=html.split('<section id="dashboard"',1)[1].split('<section id="results"',1)[0]
     assert 'id="balanceMetric"' in dashboard
     assert 'id="realBalanceMetric"' in dashboard
-    assert 'Saldo Treinamento' in dashboard
-    assert 'Saldo Conta Real' in dashboard
+    assert 'Saldo conta DEMO' in dashboard
+    assert 'Saldo conta REAL' in dashboard
     assert '/api/real/balance' in html
     assert 'loadRealBalance()' in html
 
@@ -63,7 +63,7 @@ def test_daily_card_shows_separate_demo_and_real_results():
     assert 'CONTA REAL · DERIV' in dashboard
     assert '/api/demo/results/today' in html
     assert '/api/real/results/today' in html
-    assert "value.textContent='—';" in html
+    assert "$('realProfitMetric').textContent='—';" in html
 
 
 def test_real_profit_table_uses_only_official_settled_trades_in_brasilia_window():
