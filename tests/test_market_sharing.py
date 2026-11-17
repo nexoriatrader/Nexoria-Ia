@@ -48,7 +48,7 @@ def test_shared_candle_cache_rolls_on_new_candle(monkeypatch):
         calls=AsyncMock(return_value=_candles())
         monkeypatch.setattr(market,"public_request",calls)
         await market.shared_candle_request("R_25",60,165)
-        clock[0]=179.9
+        clock[0]=125.9
         await market.shared_candle_request("R_25",60,165)
         assert calls.await_count==1
         clock[0]=180.1
@@ -115,4 +115,62 @@ def test_missing_newly_closed_bar_is_not_cached(monkeypatch):
         assert calls.await_count==2
         market._candle_snapshots.clear()
         market._candle_inflight.clear()
+    asyncio.run(check())
+
+
+def test_shared_cache_expires_after_strategy_window(monkeypatch):
+    async def check():
+        market._candle_snapshots.clear()
+        market._candle_snapshot_times.clear()
+        market._candle_inflight.clear()
+        clock=[120.1]
+        monkeypatch.setattr(time,"time",lambda:clock[0])
+        response={"candles":[{"epoch":60,"open":"1","close":"1",
+                             "high":"1.1","low":"0.9"}]}
+        fetch=AsyncMock(return_value=response)
+        monkeypatch.setattr(market,"public_request",fetch)
+        await market.shared_candle_request("R_25",60,165)
+        clock[0]=131.9
+        await market.shared_candle_request("R_25",60,165)
+        assert fetch.await_count==1
+        clock[0]=132.2
+        await market.shared_candle_request("R_25",60,165)
+        assert fetch.await_count==2
+        assert len(market._candle_snapshots)==1
+        market._candle_snapshots.clear()
+        market._candle_snapshot_times.clear()
+    asyncio.run(check())
+
+
+def test_shared_cache_remains_bounded_when_users_switch_assets(monkeypatch):
+    async def check():
+        market._candle_snapshots.clear()
+        market._candle_snapshot_times.clear()
+        market._candle_inflight.clear()
+        fetch=AsyncMock(return_value=_candles())
+        monkeypatch.setattr(market,"public_request",fetch)
+        for i in range(70):
+            await market.shared_candle_request("R_"+str(i),60,165)
+        assert len(market._candle_snapshots)<=market._CANDLE_CACHE_MAX_ITEMS
+        assert len(market._candle_snapshot_times)<=market._CANDLE_CACHE_MAX_ITEMS
+        market._candle_snapshots.clear()
+        market._candle_snapshot_times.clear()
+    asyncio.run(check())
+
+
+def test_shared_fetch_slots_are_freed_after_waiter_timeout(monkeypatch):
+    async def check():
+        market._candle_snapshots.clear()
+        market._candle_snapshot_times.clear()
+        market._candle_inflight.clear()
+        async def slow_fetch(payload,*,expected,timeout):
+            await asyncio.sleep(.03)
+            return _candles()
+        monkeypatch.setattr(market,"public_request",slow_fetch)
+        with pytest.raises(TimeoutError):
+            await market.shared_candle_request("R_77",60,165,timeout=.001)
+        await asyncio.sleep(.06)
+        assert not market._candle_inflight
+        market._candle_snapshots.clear()
+        market._candle_snapshot_times.clear()
     asyncio.run(check())
