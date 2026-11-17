@@ -1779,6 +1779,33 @@ async def billing_plans():
                        'currency':'BRL','amount_cents':v['cents']} for key,v in PLANS.items()]}
 
 
+@app.get('/api/billing/checkout/status')
+async def billing_checkout_status(request:Request,session_id:str,
+                                  nexora_sid:str|None=Cookie(default=None)):
+    """Read-only fulfillment status; a success URL is never payment proof.
+
+    A Stripe-hosted redirect might arrive before its signed webhook. The
+    authenticated customer can only inspect their own stored checkout, and
+    this endpoint does not retrieve/accept client payment claims or grant time.
+    """
+    user=active_user(request,nexora_sid)
+    if not re.fullmatch(r'cs_[a-zA-Z0-9_-]{4,240}',session_id):
+        raise HTTPException(404,'Pagamento não encontrado')
+    with db.SessionLocal() as sess:
+        order=sess.get(db.StripeAccessPurchase,session_id)
+        if order is None or order.user_id!=user.id:
+            raise HTTPException(404,'Pagamento não encontrado')
+        plan=PLANS.get(order.plan_id)
+        if not plan:
+            raise HTTPException(503,'Plano indisponível')
+        grant=sess.get(db.RobotAccess,user.id)
+        return {'plan_id':order.plan_id,'plan_name':plan['name'],
+                'amount_cents':order.amount_cents,'currency':'BRL',
+                'status':order.status,'confirmed':order.status=='PAID',
+                'access_expires_at':(utc(grant.expires_at).isoformat()
+                  if order.status=='PAID' and grant else None)}
+
+
 @app.post('/api/billing/checkout')
 async def billing_checkout(request:Request,payload:BillingCheckoutRequest,
                            nexora_sid:str|None=Cookie(default=None)):
@@ -1825,10 +1852,25 @@ async def billing_stripe_webhook(request:Request):
         raise HTTPException(400,'Evento inválido') from None
     if event.get('livemode') is not stripe_expected_livemode():
         raise HTTPException(400,'Modo de pagamento incompatível com o ambiente')
-    if kind not in ('checkout.session.completed','checkout.session.async_payment_succeeded'):
+    if kind not in ('checkout.session.completed','checkout.session.async_payment_succeeded',
+                    'checkout.session.async_payment_failed','checkout.session.expired'):
         return {'received':True}
-    if not isinstance(obj,dict):
+    if not isinstance(obj,dict) or obj.get('livemode') is not stripe_expected_livemode():
         raise HTTPException(400,'Sessão de pagamento inválida')
+    if kind in ('checkout.session.async_payment_failed','checkout.session.expired'):
+        new_status='FAILED' if kind=='checkout.session.async_payment_failed' else 'EXPIRED'
+        sid=obj.get('id')
+        if not isinstance(sid,str):
+            raise HTTPException(400,'Sessão de pagamento inválida')
+        with db.SessionLocal() as sess:
+            order=sess.get(db.StripeAccessPurchase,sid,with_for_update=True)
+            if order is None:
+                # Allow Stripe to retry after checkout creation is committed.
+                raise HTTPException(503,'Checkout ainda não registrado')
+            if order.status=='PENDING':
+                order.status=new_status
+                sess.commit()
+        return {'received':True,'status':new_status}
     if obj.get('payment_status')!='paid':
         return {'received':True,'status':'awaiting_payment'}
     with db.SessionLocal() as sess:
