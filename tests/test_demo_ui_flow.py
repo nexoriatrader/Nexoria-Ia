@@ -107,7 +107,7 @@ def test_authenticated_oauth_requires_initial_setup_before_user_starts_robot():
     assert 'id="setupForm"' in html
     assert 'id="setupStake"' in html
     assert 'id="setupLoss"' in html
-    assert "const loginResult=new URLSearchParams(window.location.search).get('login');" in html
+    assert "const loginResult=params.get('login');" in html
     assert "go('robot-config');" in html
     assert "go('setup')" not in html
     assert "page('dashboard')" in html
