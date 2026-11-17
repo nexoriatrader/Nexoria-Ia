@@ -78,3 +78,31 @@ def test_initial_setup_explains_real_requires_separate_explicit_opt_in():
     assert "Disponível na seção Automação mediante confirmação" in html
     assert "Aguardando habilitação do servidor" in html
     assert "START_REAL_AUTOPILOT" in html
+
+def test_logout_revokes_real_consent_and_disarms_real_worker(tmp_path, monkeypatch):
+    client, engine, uid = client_with_user(tmp_path, monkeypatch)
+    try:
+        with db.SessionLocal() as sess:
+            sess.add(db.RealRobotConsent(
+                user_id=uid, account_id="R001",
+                max_stake="1.00", stop_loss="5.00"))
+            sess.commit()
+        real_runtime.running.add(uid)
+        response = client.post("/api/logout")
+        assert response.status_code == 200
+        assert uid not in real_runtime.running
+        with db.SessionLocal() as sess:
+            assert sess.get(db.RealRobotConsent, uid).revoked_at is not None
+            assert sess.get(db.Session, hashsecret("release-session")) is None
+    finally:
+        real_runtime.running.discard(uid)
+        engine.dispose()
+
+
+def test_real_confirmation_explains_cash_risk_without_changing_demo_text():
+    html = (Path(__file__).resolve().parents[1] / "app" / "index.html").read_text(encoding="utf-8")
+    assert 'id="robotStartDialogWarning"' in html
+    assert "profile.account_mode==='real'?" in html
+    assert "DINHEIRO REAL" in html
+    assert "profile.real_account_id" in html
+    assert "conta DEMO conforme os parâmetros salvos" in html
