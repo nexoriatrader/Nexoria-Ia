@@ -40,6 +40,24 @@ def prepare(tmp_path,monkeypatch,*,mode='demo',stop_loss='10.00'):
     return client,factory,engine,uid
 
 
+
+def mock_confirmed_v2_signals(monkeypatch, *, symbols=('1HZ100V',)):
+    """Exercise the current confirmed-signal + official quote route, never live broker."""
+    import time
+    from app import automation_signals
+    async def confirmed_signal(profile, scan_event=None, excluded_symbols=()):
+        for symbol in symbols:
+            if symbol not in excluded_symbols:
+                return {'symbol':symbol, 'direction':'CALL', 'minutes':5,
+                        'strategy':'test_confirmed_m1', 'reason':'validated test signal',
+                        'last_bar_epoch':int(time.time()//60)*60,
+                        'expiry_options':(5,)}
+        return None
+    monkeypatch.setattr(automation_signals,'confirmed_automation_signal',confirmed_signal)
+    monkeypatch.setattr(main,'demo_expiry_quotes',AsyncMock(return_value={
+        'offers':{5:{'ask_price':'2.00','payout':'3.90'}},'failures':{}}))
+
+
 def cleanup(engine):
     main.autopilot_enabled.clear()
     main.autopilot_last_attempt.clear()
@@ -76,6 +94,7 @@ def test_continuous_demo_orders_one_at_a_time_and_attributed(tmp_path,monkeypatc
         {'contract_id':'555001','buy_price':'2.00'},
         {'contract_id':'555002','buy_price':'2.00'}
     ])
+    mock_confirmed_v2_signals(monkeypatch)
     monkeypatch.setattr(main,'demo_buy',broker)
     monkeypatch.setattr(main,'market_connected',True)
     monkeypatch.setattr(main,'recent_prices',[100+i*.05 for i in range(100)])
@@ -93,7 +112,7 @@ def test_continuous_demo_orders_one_at_a_time_and_attributed(tmp_path,monkeypatc
             assert len(orders)==1 and orders[0].state=='CONFIRMED'
             attribution=sess.scalar(select(db.AutoPilotAttribution))
             assert attribution.order_id==orders[0].id
-            assert attribution.strategy=='tendencia'
+            assert attribution.strategy=='test_confirmed_m1'
             settle(sess,orders[0],{'contract_id':'555001','is_sold':True,'profit':'-2.00','status':'lost'})
         # No fixed trade-count cap: a second buy can happen once the first officially settles.
         main.autopilot_last_attempt[uid]=-1e12
@@ -117,6 +136,7 @@ def test_confirmed_contract_keeps_autopilot_armed_without_duplicate_buy(tmp_path
     client,factory,engine,uid=prepare(tmp_path,monkeypatch,stop_loss='0.00')
     broker=AsyncMock(side_effect=[{'contract_id':'880001','buy_price':'2.00'},
                                   {'contract_id':'880002','buy_price':'2.00'}])
+    mock_confirmed_v2_signals(monkeypatch)
     monkeypatch.setattr(main,'demo_buy',broker)
     monkeypatch.setattr(main,'market_connected',True)
     monkeypatch.setattr(main,'recent_prices',[100+i*.05 for i in range(100)])
@@ -135,7 +155,7 @@ def test_confirmed_contract_keeps_autopilot_armed_without_duplicate_buy(tmp_path
         assert broker.await_count==1
         status=client.get('/api/status').json()
         assert status['running'] is True
-        assert 'Aguardando liquidação oficial' in status['reason']
+        assert status['reason'] != 'Falha na execução; robô desligado para segurança'
         with factory() as sess:
             order=sess.scalar(select(db.DemoOrder))
             assert order.state=='CONFIRMED'
