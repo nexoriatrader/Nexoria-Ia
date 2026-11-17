@@ -18,6 +18,7 @@ def prepare(tmp_path,monkeypatch,*,mode='demo',stop_loss='10.00'):
     monkeypatch.setattr(db,'SessionLocal',factory)
     monkeypatch.setenv('NEXORA_DEMO_BUY_ENABLED','true')
     monkeypatch.setenv('NEXORA_AUTOPILOT_DEMO_ENABLED','true')
+    monkeypatch.setenv('NEXORA_V2_ENABLED','true')
     main.autopilot_enabled.clear()
     main.autopilot_last_attempt.clear()
     main.autopilot_reasons.clear()
@@ -27,6 +28,9 @@ def prepare(tmp_path,monkeypatch,*,mode='demo',stop_loss='10.00'):
                      stake='2.00',stop_loss=stop_loss,stop_win='20.00')
         s.add(user);s.flush()
         uid=user.id
+        s.add(db.AutomationProfile(user_id=uid,account_mode='demo',
+                market='volatility',strategy='pulso_v2',expiry_minutes=0,
+                symbols_json='["1HZ100V"]',news_filter=False))
         s.add(db.Session(session_hash=hashsecret('pilot-sid'),user_id=uid,
                          token_encrypted=encrypt('token-dummy'),
                          expires_at=db.utcnow()+timedelta(hours=1)))
