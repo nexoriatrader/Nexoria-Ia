@@ -2189,6 +2189,8 @@ async def status(request:Request,nexora_sid:str|None=Cookie(default=None)):
     real_running=user.id in real_runtime.running
     with db.SessionLocal() as sess:
         interrupted=sess.get(db.RobotRun,user.id) is not None and user.id not in autopilot_enabled
+        configured_profile=sess.get(db.AutomationProfile,user.id)
+        configured_account_mode=configured_profile.account_mode if configured_profile else 'demo'
         batch=sess.get(db.PilotValidationBatch,user.id)
         selected_strategy='pulso_v2' if v2_enabled() else 'unavailable'
         mode='V2_PULSO' if v2_enabled() else 'V1_SINGLE_ASSET'
@@ -2200,6 +2202,7 @@ async def status(request:Request,nexora_sid:str|None=Cookie(default=None)):
                 'ticks':len(engine.prices),'execution':'DERIV_REAL' if real_running else 'DERIV_DEMO_ONLY',
                 'running':real_running or user.id in autopilot_enabled,'auto_buy_enabled':autopilot_allowed() or real_runtime.real_available(),
                 'real_orders_enabled':real_runtime.real_available(),
+                'configured_account_mode':configured_account_mode,
                 'interrupted_after_restart':interrupted,
                 'autopilot_version':mode,
                 'selected_strategy':selected_strategy,
