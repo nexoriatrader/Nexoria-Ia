@@ -1282,6 +1282,10 @@ html,body{max-width:100%;overflow-x:clip}
       <article class="account-plan"><span class="account-plan-name">TRIMESTRAL</span><h3>90 dias</h3><div class="account-plan-price"><small>R$</small> 99,00</div><p>Acesso ao robô no plano trimestral.</p><button class="outline account-plan-checkout" type="button" disabled data-plan="trimestral" onclick="startStripeCheckout('trimestral')">Em breve</button></article>
     </div>
     <p id="accountBillingNote" class="account-plans-note" role="status">Consultando disponibilidade do pagamento Stripe...</p>
+    <div id="accountCheckoutResult" class="account-plans-note hidden" role="status" aria-live="polite">
+      <p id="accountCheckoutStatus"></p>
+      <button id="accountCheckoutRefresh" type="button" class="outline hidden" onclick="refreshStripeCheckoutStatus()">VERIFICAR CONFIRMAÇÃO</button>
+    </div>
   </section>
 </section>
 
@@ -1494,19 +1498,32 @@ async function init(){
  }
  try{
   const s=await req('/api/session');
-  const loginResult=new URLSearchParams(window.location.search).get('login');
+  const params=new URLSearchParams(window.location.search);
+  const loginResult=params.get('login');
+  const paymentResult=params.get('payment');
+  const checkoutSessionId=params.get('session_id');
   if(!s.authenticated){
     page('welcome');
     showLandingLoginNotice(loginResult);
+    if(paymentResult){
+      const notice=$('lpLoginNotice');
+      notice.textContent='Conecte novamente sua conta Deriv para conferir seu pagamento. A volta do Checkout, sozinha, não confirma uma cobrança.';
+      notice.classList.remove('hidden');
+    }
     clearLoginQuery();
+    clearStripeCheckoutQuery();
     refreshLandingOffer();
     return;
   }
   clearLoginQuery();
+  clearStripeCheckoutQuery();
   showLandingLoginNotice(null);
   if(loginResult==='ok'){
     // The former one-page setup is legacy. Only open the seven-step wizard.
     go('robot-config');
+  }else if(paymentResult==='success'||paymentResult==='cancelled'){
+    go('account');
+    handleStripeCheckoutReturn(paymentResult,checkoutSessionId).catch(e=>fail(e.message));
   }else{
     page('dashboard');
     refreshDashboard();
@@ -1898,6 +1915,58 @@ async function loadRealBalance(){
    value.textContent='—';
    reason.textContent='Não foi possível atualizar o saldo real';
  }
+}
+let lastStripeCheckoutSessionId=null;
+async function refreshStripeCheckoutStatus(){
+ const output=$('accountCheckoutStatus'),box=$('accountCheckoutResult'),button=$('accountCheckoutRefresh');
+ if(!lastStripeCheckoutSessionId)return;
+ box.classList.remove('hidden');
+ button.classList.remove('hidden');
+ button.disabled=true;
+ output.textContent='Consultando confirmação do pagamento, sem criar outra cobrança...';
+ try{
+  const result=await req('/api/billing/checkout/status?session_id='+encodeURIComponent(lastStripeCheckoutSessionId));
+  if(result.status==='PAID'){
+   output.textContent='Pagamento confirmado pela Stripe. Seu período de acesso foi atualizado. Consulte a validade em Minha Conta.';
+   button.classList.add('hidden');
+   lastStripeCheckoutSessionId=null;
+   await loadRobotAccess();
+  }else if(result.status==='FAILED'){
+   output.textContent='A Stripe informou falha no pagamento. Nenhum novo período de acesso foi liberado.';
+   button.classList.add('hidden');
+  }else if(result.status==='EXPIRED'){
+   output.textContent='A sessão de pagamento expirou sem confirmação. Nenhum novo período foi liberado.';
+   button.classList.add('hidden');
+  }else{
+   output.textContent='Checkout concluído ou aberto. Aguardando confirmação oficial da Stripe; o acesso só será renovado após o webhook validado.';
+  }
+ }catch(e){
+  output.textContent='Não foi possível confirmar este pagamento na sua conta: '+(e.message||'tente novamente');
+ }finally{button.disabled=false;}
+}
+async function handleStripeCheckoutReturn(payment,sessionId){
+ const box=$('accountCheckoutResult'),output=$('accountCheckoutStatus'),button=$('accountCheckoutRefresh');
+ if(payment!=='success'&&payment!=='cancelled')return;
+ box.classList.remove('hidden');
+ button.classList.add('hidden');
+ if(payment==='cancelled'){
+   output.textContent='Você voltou do Checkout sem concluir a compra. Nenhum período adicional foi confirmado.';
+   return;
+ }
+ if(!sessionId||!/^cs_[a-zA-Z0-9_-]{4,240}$/.test(sessionId)){
+  output.textContent='Não foi possível identificar o Checkout. Consulte seu acesso em Minha Conta ou procure o suporte.';
+  return;
+ }
+ // The redirect itself is NOT proof of payment. Only signed webhooks grant time.
+ lastStripeCheckoutSessionId=sessionId;
+ await refreshStripeCheckoutStatus();
+}
+function clearStripeCheckoutQuery(){
+ const url=new URL(window.location.href);
+ if(!url.searchParams.has('payment')&&!url.searchParams.has('session_id'))return;
+ url.searchParams.delete('payment');
+ url.searchParams.delete('session_id');
+ window.history.replaceState({},'',url.pathname+url.search+url.hash);
 }
 async function loadBillingPlans(){
  const buttons=[...document.querySelectorAll('#account .account-plan-checkout')];
