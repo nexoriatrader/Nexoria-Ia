@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import re
+from datetime import timezone
+from zoneinfo import ZoneInfo
 from decimal import Decimal, InvalidOperation
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
@@ -26,7 +28,11 @@ def _money(value, label):
     return result
 
 
-def _risk_check(orders, stake, stop_loss, max_stake):
+def _risk_check(orders, stake, stop_loss, max_stake, stop_win='0'):
+    # Daily limits roll over at midnight America/Sao_Paulo, but unresolved
+    # contracts from a previous day still block new REAL buys.
+    local_zone=ZoneInfo('America/Sao_Paulo')
+    current_day=db.utcnow().astimezone(local_zone).date()
     amount = _money(stake, 'Valor da entrada')
     cap = _money(max_stake, 'Limite por entrada')
     stop = _money(stop_loss, 'Stop Loss')
@@ -36,9 +42,21 @@ def _risk_check(orders, stake, stop_loss, max_stake):
         raise RealOrderGuardError('Stop Loss REAL obrigatório')
     if any(row.state in ACTIVE for row in orders):
         raise RealOrderGuardError('Conta REAL com contrato aberto ou incerto')
+    def same_local_day(order):
+        instant=order.broker_purchase_at or order.created_at
+        if instant is None:
+            return False
+        if instant.tzinfo is None:
+            instant=instant.replace(tzinfo=timezone.utc)
+        return instant.astimezone(local_zone).date()==current_day
     pnl = sum((_money(row.pnl, 'Resultado')
-               for row in orders if row.state == 'SETTLED' and row.pnl is not None),
-              Decimal('0'))
+               for row in orders if row.state == 'SETTLED'
+               and row.pnl is not None and same_local_day(row)), Decimal('0'))
+    win = _money(stop_win, 'Stop Win')
+    if win < 0:
+        raise RealOrderGuardError('Stop Win inválido')
+    if win > 0 and pnl >= win:
+        raise RealOrderGuardError('Stop Win REAL atingido')
     if pnl <= -stop or pnl - amount < -stop:
         raise RealOrderGuardError('Stop Loss REAL atingido ou exposição ultrapassaria o limite')
     return amount
@@ -76,7 +94,7 @@ def reserve_real_order(session, user, *, account_id, request_key,
         return previous, False
     orders = session.scalars(select(db.RealOrder).where(
         db.RealOrder.account_id == account_id)).all()
-    amount = _risk_check(orders, stake, consent.stop_loss, consent.max_stake)
+    amount = _risk_check(orders, stake, consent.stop_loss, consent.max_stake, locked.stop_win)
     order = db.RealOrder(
         user_id=user.id, account_id=account_id, request_key=request_key,
         active_slot=account_id, state='PENDING', symbol=symbol,
