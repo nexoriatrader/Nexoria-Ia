@@ -978,12 +978,12 @@ html,body{max-width:100%;overflow-x:clip}
         <label class="auto-choice"><input type="radio" name="autoMarket" value="commodities"> Matérias-primas <small>Ouro, prata, petróleo e outros</small></label>
       </div>
       <div class="auto-step"><span>04</span><strong>Ativos autorizados pelo usuário</strong></div>
-      <p class="helper">Escolha os ativos do mercado selecionado. Catálogo atualizado pela Deriv.</p>
-      <p class="helper auto-assets-tip">Até 5 ativos são selecionados automaticamente ao escolher o mercado. Marque ou desmarque individualmente os ativos que deseja operar.</p>
+      <p class="helper">Escolha entre os cinco ativos destacados deste mercado, com disponibilidade consultada na Deriv.</p>
+      <p class="helper auto-assets-tip">Exibimos até cinco ativos por mercado para simplificar a seleção e reduzir análises repetidas. Marque somente os que deseja operar.</p>
       <div class="actions" style="margin:4px 0 10px">
         <button type="button" class="outline" onclick="selectAutomationAssets(false)">LIMPAR SELEÇÃO</button>
       </div>
-      <div class="field"><label for="autoAssetSearch">Buscar ativo</label><input id="autoAssetSearch" type="search" placeholder="Nome ou código do ativo" oninput="renderAutomationAssets()"></div>
+      <div class="field hidden"><label for="autoAssetSearch">Buscar ativo</label><input id="autoAssetSearch" type="search" placeholder="Nome ou código do ativo" oninput="renderAutomationAssets()"></div>
       <div id="automationSymbols" class="auto-symbols"><p class="helper">Carregando ativos...</p></div>
       <div class="auto-step"><span>05</span><strong>Estratégia de análise</strong></div>
       <div class="auto-options">
@@ -2152,7 +2152,7 @@ async function changeAutomationMarket(){
   automationProfileSaved=false;
   feedback.textContent=automationSelected.size?
    automationSelected.size+' ativos principais pré-selecionados. Você pode alterar a seleção.':
-   'Nenhum ativo retornado pela Deriv para este mercado.';
+   'Nenhum dos ativos destacados está disponível neste mercado na Deriv.';
  }catch(e){if(requestId===automationMarketRequest)feedback.textContent='Não foi possível consultar o mercado: '+e.message}
 }
 document.querySelectorAll('input[name="autoMarket"]').forEach(x=>x.addEventListener('change',changeAutomationMarket));

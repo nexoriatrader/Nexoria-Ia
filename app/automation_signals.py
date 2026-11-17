@@ -11,7 +11,7 @@ import json
 import math
 import time
 
-from .market import MarketError, public_request
+from .market import MarketError, public_request, shared_candle_request
 from .trade_selector_v2 import strict_closed_bars, supported
 from .pulso_live import confirmed_pulso_signal
 
@@ -179,10 +179,7 @@ async def confirmed_automation_signal(profile, scan_event=None, excluded_symbols
                     if time.time()>=deadline:
                         reason='janela_expirada'
                         return None
-                    raw=await public_request({
-                        'ticks_history':symbol,'style':'candles','granularity':60,
-                        'count':115,'end':'latest'
-                    },expected='candles',timeout=7)
+                    raw=await shared_candle_request(symbol,60,165,timeout=7)
                     closed=strict_closed_bars(raw,60,now=time.time())
                     if len(closed)<85 or closed[-1]['epoch']+60!=bucket:
                         reason='velas_insuficientes'

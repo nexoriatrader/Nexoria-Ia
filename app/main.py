@@ -16,7 +16,7 @@ from sqlalchemy import select, delete, func
 
 from . import db
 from .stripe_billing import PLANS, billing_enabled, create_checkout, stripe_signature_valid, apply_paid_checkout
-from .automation_markets import GROUPS as AUTOMATION_GROUPS, instruments_by_group
+from .automation_markets import GROUPS as AUTOMATION_GROUPS, instruments_by_group, featured_instruments_by_group
 from .access import (access_control_enabled, access_status, start_trial_on_first_robot_start,
                      register_first_login, referral_report, utc)
 from .demo import (DemoTradingError, DemoPreBuyDeadlineExceeded, demo_account_balance,
@@ -1418,8 +1418,8 @@ async def save_automation_profile(request:Request,payload:AutomationProfileReque
         raise HTTPException(422,'Mercado ou estratégia inválidos')
     if payload.expiry_minutes not in (0,1,3,5,15):
         raise HTTPException(422,'Expiração inválida')
-    if not 1<=len(payload.symbols)<=50 or len(payload.symbols)!=len(set(payload.symbols)):
-        raise HTTPException(422,'Selecione de 1 a 50 ativos diferentes')
+    if not 1<=len(payload.symbols)<=5 or len(payload.symbols)!=len(set(payload.symbols)):
+        raise HTTPException(422,'Selecione de 1 a 5 ativos diferentes')
     if any(not re.fullmatch(r'[A-Za-z0-9_]{2,30}',x) for x in payload.symbols):
         raise HTTPException(422,'Símbolo inválido')
     if payload.news_minutes_before not in (0,15,30,60) or payload.news_minutes_after not in (0,15,30,60):
@@ -1453,7 +1453,7 @@ async def save_automation_profile(request:Request,payload:AutomationProfileReque
             raise HTTPException(403,'Conta REAL não pertence à sessão autenticada')
     # Validate membership in the actual broker catalog, not a fabricated list.
     try:
-        instruments=await instruments_by_group('derived' if payload.market=='volatility' else payload.market)
+        instruments=await featured_instruments_by_group('derived' if payload.market=='volatility' else payload.market)
         available={item['symbol'] for item in instruments}
     except (MarketError,TimeoutError,OSError):
         raise HTTPException(503,'Catálogo da Deriv indisponível; configuração não salva') from None
@@ -1495,7 +1495,7 @@ async def automation_catalogue(request:Request,market:str='volatility',
     if market not in (*AUTOMATION_GROUPS,'volatility'):
         raise HTTPException(422,'Mercado inválido')
     try:
-        items=await instruments_by_group('derived' if market=='volatility' else market)
+        items=await featured_instruments_by_group('derived' if market=='volatility' else market)
     except (MarketError,TimeoutError,OSError):
         raise HTTPException(503,'Não foi possível consultar os ativos Deriv') from None
     return {'market':market,'markets':AUTOMATION_GROUPS,

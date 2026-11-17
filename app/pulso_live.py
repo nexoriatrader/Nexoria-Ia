@@ -9,7 +9,7 @@ import asyncio
 import os
 import time
 import logging
-from .market import MarketError, public_request
+from .market import MarketError, public_request, shared_candle_request
 from .trade_selector_v2 import strict_closed_bars, supported, catalogue
 from .nexora_pulso_v2 import make_variants
 
@@ -30,10 +30,7 @@ async def _candidate_for_symbol(symbol, bucket, *, deadline, direction="AUTO", m
     if time.time()>=deadline:
         return reject('janela_expirada')
     # Historical signal warm-up requires >110 bars. Do not infer gaps.
-    raw=await public_request({
-        "ticks_history":symbol,"style":"candles",
-        "granularity":60,"count":165,"end":"latest"
-    },expected="candles",timeout=8)
+    raw=await shared_candle_request(symbol,60,165,timeout=8)
     bars=strict_closed_bars(raw,60,now=time.time())
     if len(bars)<135 or bars[-1]["epoch"]+60!=bucket:
         return reject('velas_insuficientes')
