@@ -44,7 +44,7 @@ def test_shared_candle_cache_rolls_on_new_candle(monkeypatch):
         market._candle_snapshots.clear()
         market._candle_inflight.clear()
         clock=[120.1]
-        monkeypatch.setattr(market.time,"time",lambda:clock[0],raising=False)
+        monkeypatch.setattr(time,"time",lambda:clock[0])
         calls=AsyncMock(return_value=_candles())
         monkeypatch.setattr(market,"public_request",calls)
         await market.shared_candle_request("R_25",60,165)
