@@ -108,6 +108,17 @@ def confirm_real_order(session, order, receipt):
     session.commit()
 
 
+
+def cancel_unsubmitted_real_order(session, order, reason):
+    """Release reservation only when broker buy was provably never dispatched."""
+    if order.state != 'PENDING':
+        raise RealOrderGuardError('Somente tentativa não enviada pode ser cancelada')
+    order.state='CANCELLED'
+    order.error_summary=str(reason)[:200]
+    order.active_slot=None
+    session.commit()
+
+
 def mark_real_unknown(session, order):
     if order.state=='PENDING':
         order.state='UNKNOWN'
