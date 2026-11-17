@@ -144,3 +144,49 @@ def test_paid_checkout_rejects_mismatched_livemode(tmp_path, monkeypatch):
             session.commit()
     finally:
         engine.dispose()
+
+
+def test_stripe_checkout_rejects_mismatched_api_mode(monkeypatch):
+    import asyncio
+    import httpx
+    from app import stripe_billing
+
+    monkeypatch.setenv('NEXORA_STRIPE_MODE','live')
+
+    class FakeStripeClient:
+        async def __aenter__(self): return self
+        async def __aexit__(self,*args): return False
+        async def post(self,url,**kwargs):
+            return httpx.Response(200,request=httpx.Request('POST',url),
+                json={'id':'cs_test_wrong_mode','livemode':False,
+                      'url':'https://checkout.stripe.com/c/test'})
+
+    monkeypatch.setattr(stripe_billing.httpx,'AsyncClient',
+                        lambda **kwargs:FakeStripeClient())
+    import pytest
+    with pytest.raises(RuntimeError,match='Modo do Checkout incompatível'):
+        asyncio.run(stripe_billing.create_checkout(
+            'sk_live_fixture',user_id=1,plan_id='mensal',
+            site_url='https://nexoria-ia.onrender.com'))
+
+
+def test_webhook_rejects_signed_test_event_while_live_mode_is_required(monkeypatch):
+    from fastapi.testclient import TestClient
+    from app.main import app
+    import time
+
+    monkeypatch.setenv('NEXORA_STRIPE_BILLING_ENABLED','true')
+    monkeypatch.setenv('NEXORA_STRIPE_MODE','live')
+    monkeypatch.setenv('STRIPE_SECRET_KEY','sk_live_fixture')
+    monkeypatch.setenv('STRIPE_WEBHOOK_SECRET','whsec_local_fixture')
+    monkeypatch.setenv('NEXORA_PUBLIC_URL','https://nexoria-ia.onrender.com')
+    body=json.dumps({'type':'checkout.session.completed',
+        'livemode':False,'data':{'object':{'id':'cs_test_mock','livemode':False}}}).encode()
+    now=int(time.time())
+    digest=hmac.new(b'whsec_local_fixture',
+        str(now).encode()+b'.'+body,hashlib.sha256).hexdigest()
+    header=f't={now},v1={digest}'
+    result=TestClient(app).post('/api/billing/stripe/webhook',content=body,
+        headers={'stripe-signature':header,'content-type':'application/json'})
+    assert result.status_code==400
+    assert result.json()['detail']=='Modo de pagamento incompatível com o ambiente'
