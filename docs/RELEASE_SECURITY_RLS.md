@@ -1,4 +1,4 @@
-# NEXORA — proteção do banco Supabase antes do lançamento
+# NEXORA — proteção do banco Supabase aplicada (17/11/2026)
 
 Data de auditoria: 2026-11-17. Projeto: xpkulrzwkecnwvxzymyq.
 
@@ -8,13 +8,9 @@ Data de auditoria: 2026-11-17. Projeto: xpkulrzwkecnwvxzymyq.
 - O backend atual usa SQLAlchemy/psycopg por `DATABASE_URL`, não um cliente Supabase JS.
 - O proprietário das tabelas conferidas é `postgres`; esta implementação depende do uso do papel proprietário no backend. CONFIRMAR a identidade de conexão efetiva antes da aplicação.
 
-## Migração proposta (NÃO APLICADA)
+## Histórico da migração aplicada
 
-Atenção: executar inicialmente em ambiente de homologação e testar OAuth, dashboard,
-edição de preferências, histórico, assinatura e operação DEMO. Aplicar em produção apenas
-após validar que o backend conecta como proprietário e que nenhum cliente usa PostgREST
-com papel `anon` ou `authenticated`. As tabelas são dados privados de servidor,
-portanto não devem expor políticas públicas. A operação REAL deve continuar desligada.
+Migração de produção registrada no Supabase como `secure_nexora_public_rls_revoke_client_grants_20261117`, versão `20261117181651`. **Já aplicada**. O comando registrado abaixo resume os mecanismos implantados; consulte `SUPABASE_PUBLIC_SECURITY_MIGRATION.md` para o SQL de produção e plano de contingência. A validação com login real no site e a revisão do Data API ainda são pendências.
 
 ```sql
 BEGIN;
@@ -45,9 +41,11 @@ SELECT count(*) AS total,
        ) AS authenticated_can_select
 FROM pg_tables WHERE schemaname = 'public';
 ```
+**Verificação pós-migração confirmada:** 27/27 tabelas com RLS, 0 com SELECT por `anon` e 0 com SELECT/INSERT por `authenticated`. Registros e direitos do papel `postgres` preservados.
+
 Critério de aprovação: `rls_enabled = total`, `anon_can_select = 0`,
 `authenticated_can_select = 0`, sem regressão no backend. Reexecutar Supabase
-Security Advisors e testes de acesso negativo por papéis sem privilégios.
+Security Advisors e testes de acesso negativo por papéis sem privilégios. O advisor retornou apenas `rls_enabled_no_policy` (INFO), esperado para tabelas privadas sem políticas públicas.
 Se algum futuro recurso exigir Data API, adicionar GRANT mínimo e política RLS
 específica com autenticação e verificação de propriedade; nunca `USING (true)`
 em tabelas de usuários/ordens.
