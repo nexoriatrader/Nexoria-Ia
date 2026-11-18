@@ -798,6 +798,7 @@ html,body{max-width:100%;overflow-x:clip}
    <p class="lp-subtitle">Conheça o NEXORA IA por <strong data-trial-label>24 horas</strong> grátis após seu primeiro login validado na Deriv. Escolha os ativos, configure a estratégia em etapas e decida quando ligar o robô.</p>
    <div class="lp-actions">
     <a id="lpHeroTrialButton" class="lp-button lp-button-primary" href="/auth/deriv/start" onclick="startNexoraTrial(event)">Teste grátis por <span data-trial-label>24 horas</span> <span aria-hidden="true">➜</span></a>
+    <a id="lpHeroRegisterButton" class="lp-button" href="/auth/deriv/start?register=true" onclick="startNexoraTrial(event,true)" title="Criar conta através do fluxo oficial de cadastro da Deriv e voltar à NEXORA">Primeira vez na Deriv? Criar conta</a>
    </div>
    <p id="lpLoginNotice" class="lp-auth-notice hidden" role="status"></p>
    <div class="lp-proof"><span><b aria-hidden="true">✓</b> Conexão oficial Deriv</span><span><b aria-hidden="true">ϟ</b> Ativação em poucos passos</span><span><b aria-hidden="true">▥</b> Gestão de risco</span></div>
@@ -1104,7 +1105,7 @@ html,body{max-width:100%;overflow-x:clip}
       <div class="field"><label for="autoCycles">Ciclos adicionais (não exigem Martingale)</label><select id="autoCycles" onchange="toggleAutomationProgressions('cycles')"><option value="0">Desativados</option><option value="1">1 ciclo</option><option value="2">2 ciclos</option><option value="3">3 ciclos</option><option value="4">4 ciclos</option><option value="5">5 ciclos</option></select></div>
       <div id="autoCycleSettings" class="field hidden"><label for="autoCycleMultiplier">Multiplicador dos ciclos</label><input id="autoCycleMultiplier" type="number" min="1" step=".1" value="2.00"></div>
       <div class="auto-step"><span>07</span><strong>Filtros e proteções</strong></div>
-      <label class="auto-choice"><input type="checkbox" id="autoNews" onchange="showAutomationNews()"> Filtro de notícias econômicas <small>Defina o intervalo de proteção antes e após os eventos</small></label>
+      <label class="auto-choice"><input type="checkbox" id="autoNews" onchange="showAutomationNews()"> Filtro de notícias econômicas <small>Indisponível: calendário econômico de impacto ainda não conectado. Selecionar este filtro impede ativar o robô.</small></label>
       <div id="autoNewsWindows" class="settings-grid hidden">
         <div class="field"><label for="autoNewsBefore">Pausar antes</label><select id="autoNewsBefore"><option value="15">15 minutos</option><option value="30" selected>30 minutos</option><option value="60">60 minutos</option></select></div>
         <div class="field"><label for="autoNewsAfter">Retomar depois</label><select id="autoNewsAfter"><option value="15">15 minutos</option><option value="30" selected>30 minutos</option><option value="60">60 minutos</option></select></div>
@@ -1507,15 +1508,18 @@ function clearLoginQuery(){
 let nexoraLoginRedirectPending=false;
 // A mobile back-navigation may restore this page from cache; allow a fresh login.
 window.addEventListener('pageshow',()=>{nexoraLoginRedirectPending=false;});
-function startNexoraTrial(event){
- // Both landing CTA buttons share the same validated destination.
+function startNexoraTrial(event,register=false){
+ // The registration CTA explicitly requests Deriv OAuth signup; regular users sign in.
  if(event&&event.button!==undefined&&event.button!==0)return;
  if(event&&(event.ctrlKey||event.metaKey||event.shiftKey||event.altKey))return;
  if(event)event.preventDefault();
  if(nexoraLoginRedirectPending)return;
  nexoraLoginRedirectPending=true;
  const ref=new URLSearchParams(window.location.search).get('ref');
- const url='/auth/deriv/start'+(ref&&/^[A-Za-z0-9_-]{8,32}$/.test(ref)?'?ref='+encodeURIComponent(ref):'');
+ const params=new URLSearchParams();
+ if(ref&&/^[A-Za-z0-9_-]{8,32}$/.test(ref))params.set('ref',ref);
+ if(register)params.set('register','true');
+ const url='/auth/deriv/start'+(params.toString()?'?'+params.toString():'');
  window.location.assign(url);
 }
 async function init(){
@@ -1524,6 +1528,8 @@ async function init(){
    document.querySelectorAll('a[href="/auth/deriv/start"]').forEach(login=>{
      login.href='/auth/deriv/start?ref='+encodeURIComponent(ref);
    });
+   const registration=$('lpHeroRegisterButton');
+   if(registration)registration.href='/auth/deriv/start?register=true&ref='+encodeURIComponent(ref);
  }
  try{
   const s=await req('/api/session');
@@ -2462,6 +2468,7 @@ function toggleAutomationProgressions(changed=''){
 }
 function showAutomationNews(){
  $('autoNewsWindows').classList.toggle('hidden',!$('autoNews').checked);
+ if($('autoNews').checked){const feedback=$('autoConfigFeedback');if(feedback)feedback.textContent='Filtro indisponível: ainda não há calendário econômico confiável conectado. Desative para operar.';}
  renderAutomationSummary();
 }
 function selectAutomationAssets(all){

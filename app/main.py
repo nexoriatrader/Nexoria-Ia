@@ -1233,7 +1233,7 @@ def oauth_recovery_redirect(nexora_sid:str|None, *, reason:str='expired'):
 
 
 @app.get('/auth/deriv/start')
-async def login_start(request:Request,ref:str|None=None):
+async def login_start(request:Request,ref:str|None=None,register:bool=False):
     # OAuth must begin on the same host where Deriv will return the browser.
     # During migration, route visitors to the configured canonical host BEFORE
     # creating the PKCE state cookie. This preserves legacy invite links.
@@ -1242,7 +1242,12 @@ async def login_start(request:Request,ref:str|None=None):
     if not current or not canonical:
         raise HTTPException(503,'Endereço de login não configurado')
     if current!=canonical:
-        suffix=('?ref='+ref) if ref and re.fullmatch(r'[A-Za-z0-9_-]{8,32}',ref) else ''
+        params=[]
+        if ref and re.fullmatch(r'[A-Za-z0-9_-]{8,32}',ref):
+            params.append('ref='+ref)
+        if register:
+            params.append('register=true')
+        suffix=('?'+'&'.join(params)) if params else ''
         return RedirectResponse(canonical+'/auth/deriv/start'+suffix,status_code=302)
     state,verifier=make_login()
     if ref and not re.fullmatch(r'[A-Za-z0-9_-]{8,32}',ref):
@@ -1255,7 +1260,7 @@ async def login_start(request:Request,ref:str|None=None):
         s.add(db.LoginFlow(state_hash=hashsecret(state),
                            verifier_encrypted=encrypt(verifier),referral_code=ref))
         s.commit()
-    response=RedirectResponse(build_authorize_url(state,verifier),302)
+    response=RedirectResponse(build_authorize_url(state,verifier,register=register),302)
     response.set_cookie('nexora_state',state,max_age=600,**cookie_options())
     return response
 

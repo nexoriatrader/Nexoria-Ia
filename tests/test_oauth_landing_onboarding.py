@@ -23,6 +23,42 @@ def local_client(tmp_path, monkeypatch):
     return TestClient(main.app),factory,engine
 
 
+def test_new_users_start_with_half_dollar_while_existing_settings_remain(tmp_path):
+    engine=create_engine(f"sqlite:///{tmp_path}/stake.sqlite")
+    db.Base.metadata.create_all(engine)
+    factory=sessionmaker(bind=engine)
+    try:
+        with factory() as sess:
+            new=db.User(deriv_account_id="DEFAULT-050")
+            existing=db.User(deriv_account_id="SAVED-200",stake="2.00")
+            sess.add_all([new,existing])
+            sess.commit()
+            assert sess.get(db.User,new.id).stake=="0.50"
+            assert sess.get(db.User,existing.id).stake=="2.00"
+    finally:
+        engine.dispose()
+
+
+def test_deriv_first_signup_uses_registered_callback_and_preserves_referral(tmp_path,monkeypatch):
+    from app.security import build_authorize_url,REDIRECT
+    client,factory,engine=local_client(tmp_path,monkeypatch)
+    try:
+        response=client.get('/auth/deriv/start',
+            params={'register':'true','ref':'ABCD1234'},follow_redirects=False)
+        assert response.status_code==302
+        qs=parse_qs(urlsplit(response.headers['location']).query)
+        assert qs['prompt']==['registration']
+        assert qs['redirect_uri']==[REDIRECT]
+        assert qs['state'][0]
+        from app.security import hashsecret
+        with factory() as sess:
+            flow=sess.get(db.LoginFlow,hashsecret(qs['state'][0]))
+            assert flow.referral_code=='ABCD1234'
+        assert 'nexora_state=' in response.headers.get('set-cookie','')
+    finally:
+        client.close();engine.dispose()
+
+
 def test_public_offer_is_24h_by_default_and_referrals_remain_one_day(monkeypatch):
     monkeypatch.delenv("NEXORA_TRIAL_HOURS",raising=False)
     with TestClient(main.app) as client:
