@@ -1105,11 +1105,6 @@ html,body{max-width:100%;overflow-x:clip}
       <div class="field"><label for="autoCycles">Ciclos adicionais (não exigem Martingale)</label><select id="autoCycles" onchange="toggleAutomationProgressions('cycles')"><option value="0">Desativados</option><option value="1">1 ciclo</option><option value="2">2 ciclos</option><option value="3">3 ciclos</option><option value="4">4 ciclos</option><option value="5">5 ciclos</option></select></div>
       <div id="autoCycleSettings" class="field hidden"><label for="autoCycleMultiplier">Multiplicador dos ciclos</label><input id="autoCycleMultiplier" type="number" min="1" step=".1" value="2.00"></div>
       <div class="auto-step"><span>07</span><strong>Filtros e proteções</strong></div>
-      <label class="auto-choice"><input type="checkbox" id="autoNews" onchange="showAutomationNews()"> Filtro de notícias econômicas <small>Indisponível: calendário econômico de impacto ainda não conectado. Selecionar este filtro impede ativar o robô.</small></label>
-      <div id="autoNewsWindows" class="settings-grid hidden">
-        <div class="field"><label for="autoNewsBefore">Pausar antes</label><select id="autoNewsBefore"><option value="15">15 minutos</option><option value="30" selected>30 minutos</option><option value="60">60 minutos</option></select></div>
-        <div class="field"><label for="autoNewsAfter">Retomar depois</label><select id="autoNewsAfter"><option value="15">15 minutos</option><option value="30" selected>30 minutos</option><option value="60">60 minutos</option></select></div>
-      </div>
       <p class="helper">Defina seus limites para personalizar sua automação.</p>
       <div id="autoConfigSummary" class="auto-summary">Selecione os ativos para configurar o robô.</div>
       <button type="button" class="gold" id="autoSaveButton" onclick="saveAutomationProfile()">SALVAR CONFIGURAÇÃO E IR AO PAINEL</button>
@@ -1838,11 +1833,6 @@ function askRobotStartConfirmation(profile,risk,catalogue){
   ['Martingale',risk.martingale?'Ativo · '+risk.gale_count+' tentativa(s) · '+risk.multiplier+'×':'Desativado'],
   ['Ciclos',Number(risk.cycles)>0?'Ativos · '+risk.cycles+' ciclo(s) · '+risk.cycle_multiplier+'×':'Desativados']
  ]);
- addRobotReviewGroup(box,'Filtros adicionais',[
-  ['Filtro de notícias',profile.news_filter?'Ativado':'Desativado'],
-  ['Pausa antes de notícias',profile.news_filter?profile.news_minutes_before+' minuto(s)':'Não se aplica'],
-  ['Retomada após notícias',profile.news_filter?profile.news_minutes_after+' minuto(s)':'Não se aplica']
- ]);
  robotStartDialogPreviousFocus=document.activeElement;
  $('robotStartDialog').classList.remove('hidden');
  $('robotStartConfirmButton').focus();
@@ -2275,8 +2265,7 @@ async function applyAutomationPreset(mode){
   $('autoMultiplier').value=conservative?'2.00':'2.00';
   $('autoCycles').value='0';
   $('autoCycleMultiplier').value='2.00';
-  $('autoNews').checked=false;
-  toggleAutomationProgressions();showAutomationNews();
+  toggleAutomationProgressions();
   clearAutomationErrors();
   automationProfileSaved=false;
   setAutomationPresetMode(mode,conservative?
@@ -2466,11 +2455,6 @@ function toggleAutomationProgressions(changed=''){
  $('autoCycleSettings').classList.toggle('hidden',$('autoCycles').value==='0');
  renderAutomationSummary();
 }
-function showAutomationNews(){
- $('autoNewsWindows').classList.toggle('hidden',!$('autoNews').checked);
- if($('autoNews').checked){const feedback=$('autoConfigFeedback');if(feedback)feedback.textContent='Filtro indisponível: ainda não há calendário econômico confiável conectado. Desative para operar.';}
- renderAutomationSummary();
-}
 function selectAutomationAssets(all){
  automationSelected=new Set(all?automationAssets.map(x=>x.symbol):[]);
  renderAutomationAssets();
@@ -2500,8 +2484,7 @@ function renderAutomationSummary(){
  node.textContent=automationRadio('autoMode')?.toUpperCase()+' · '+automationRadio('autoMarket')?.toUpperCase()+
   ' · '+automationRadio('autoStrategy')+' · Expiração AUTO M1/M3/M5/M15 · '+automationSelected.size+
   ' ativo(s) · '+$('autoDirection').value+' · entrada US$ '+$('autoStake').value+
-  ' · stop win US$ '+$('autoWin').value+' · stop loss US$ '+$('autoLoss').value+
-  ' · notícias: '+($('autoNews').checked?'solicitado (bloqueia ativação)':'desligado');
+  ' · stop win US$ '+$('autoWin').value+' · stop loss US$ '+$('autoLoss').value;
 }
 async function loadAutomationProfile(){
  const feedback=$('autoConfigFeedback');
@@ -2521,9 +2504,6 @@ async function loadAutomationProfile(){
   automationSelected=new Set(profile.configured?
    profile.symbols.filter(symbol=>automationAssets.some(item=>item.symbol===symbol)):
    suggestedAutomationAssets(selectedMarket,automationAssets));
-  $('autoNews').checked=Boolean(profile.news_filter);
-  $('autoNewsBefore').value=String(profile.news_minutes_before);
-  $('autoNewsAfter').value=String(profile.news_minutes_after);
   $('autoPayout').value=String(profile.min_payout_pct??88);
   $('autoDirection').value=profile.direction||'AUTO';
   updateStrategyIndicators(profile.configured?(profile.indicators||[]):undefined);
@@ -2535,7 +2515,7 @@ async function loadAutomationProfile(){
   $('autoMultiplier').value=String(risk.multiplier||'2.00');
   $('autoCycles').value=String(risk.cycles||'0');
   $('autoCycleMultiplier').value=String(risk.cycle_multiplier||'2.00');
-  renderAutomationAssets();showAutomationNews();toggleAutomationProgressions();
+  renderAutomationAssets();toggleAutomationProgressions();
   automationProfileSaved=Boolean(profile.configured);
   setAutomationPresetMode(profile.preset_mode||'custom',
    profile.preset_mode==='conservative'?'Conservadora · parâmetros salvos. Revise os percentuais ao mudar o saldo.':
@@ -2555,8 +2535,8 @@ async function saveAutomationProfile(){
  try{
   const profile={account_mode:automationRadio('autoMode'),market:automationRadio('autoMarket'),
    symbols:[...automationSelected],strategy:automationRadio('autoStrategy'),
-   expiry_minutes:0,news_filter:$('autoNews').checked,
-   news_minutes_before:Number($('autoNewsBefore').value),news_minutes_after:Number($('autoNewsAfter').value),
+   expiry_minutes:0,news_filter:false,
+   news_minutes_before:30,news_minutes_after:30,
    max_daily_orders:0,
    indicators:[...document.querySelectorAll('#autoIndicators input:checked')].map(x=>x.value),
    direction:$('autoDirection').value,
@@ -2572,9 +2552,7 @@ async function saveAutomationProfile(){
    cycles:cycles,cycle_multiplier:cycles!=='0'?$('autoCycleMultiplier').value:'2.00'};
   await req('/api/onboarding/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(risk)});
   automationProfileSaved=true;
-  feedback.textContent='Configuração salva. '+(profile.news_filter?
-   'Filtro de notícias salvo.':
-   'Preferências registradas.');
+  feedback.textContent='Configuração salva. Preferências registradas.';
   renderAutomationSummary();fail('');
   go('dashboard');
  }catch(e){automationProfileSaved=false;feedback.textContent='Não foi possível concluir a configuração: '+e.message}
