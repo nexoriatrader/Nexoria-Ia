@@ -1105,7 +1105,7 @@ html,body{max-width:100%;overflow-x:clip}
       <div class="field"><label for="autoCycles">Ciclos adicionais (não exigem Martingale)</label><select id="autoCycles" onchange="toggleAutomationProgressions('cycles')"><option value="0">Desativados</option><option value="1">1 ciclo</option><option value="2">2 ciclos</option><option value="3">3 ciclos</option><option value="4">4 ciclos</option><option value="5">5 ciclos</option></select></div>
       <div id="autoCycleSettings" class="field hidden"><label for="autoCycleMultiplier">Multiplicador dos ciclos</label><input id="autoCycleMultiplier" type="number" min="1" step=".1" value="2.00"></div>
       <div class="auto-step"><span>07</span><strong>Filtros e proteções</strong></div>
-      <label class="auto-choice"><input type="checkbox" id="autoNews" onchange="showAutomationNews()"> Filtro de notícias econômicas <small>Defina o intervalo de proteção antes e após os eventos</small></label>
+      <label class="auto-choice"><input type="checkbox" id="autoNews" onchange="showAutomationNews()"> Filtro de notícias econômicas <small>Indisponível: calendário econômico de impacto ainda não conectado. Selecionar este filtro impede ativar o robô.</small></label>
       <div id="autoNewsWindows" class="settings-grid hidden">
         <div class="field"><label for="autoNewsBefore">Pausar antes</label><select id="autoNewsBefore"><option value="15">15 minutos</option><option value="30" selected>30 minutos</option><option value="60">60 minutos</option></select></div>
         <div class="field"><label for="autoNewsAfter">Retomar depois</label><select id="autoNewsAfter"><option value="15">15 minutos</option><option value="30" selected>30 minutos</option><option value="60">60 minutos</option></select></div>
@@ -2468,6 +2468,7 @@ function toggleAutomationProgressions(changed=''){
 }
 function showAutomationNews(){
  $('autoNewsWindows').classList.toggle('hidden',!$('autoNews').checked);
+ if($('autoNews').checked){const feedback=$('autoConfigFeedback');if(feedback)feedback.textContent='Filtro indisponível: ainda não há calendário econômico confiável conectado. Desative para operar.';}
  renderAutomationSummary();
 }
 function selectAutomationAssets(all){
