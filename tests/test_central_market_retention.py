@@ -53,12 +53,12 @@ def test_retention_preserves_latest_per_strategy_and_financial_tables(monkeypatc
                     period_from=stamp, period_to=stamp, payload_json="{}"))
         session.commit()
     deleted = research_retention.cleanup_research_reports(now=now, session_factory=factory)
-    assert deleted == 14  # keep newest 6 of each key (7 older than 7 days)
+    assert deleted == 10  # five snapshots older than seven days per key
     with factory() as session:
         for key in ("study_a", "study_b"):
             rows = session.scalars(select(HistoricalResearchReport)
                 .where(HistoricalResearchReport.research_key == key)).all()
-            assert len(rows) == 6
+            assert len(rows) == 8
         assert research_retention.cleanup_research_reports(now=now, session_factory=factory) == 0
     engine.dispose()
 
