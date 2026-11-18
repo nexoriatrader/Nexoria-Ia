@@ -1317,14 +1317,10 @@ html,body{max-width:100%;overflow-x:clip}
       <article class="account-plan account-plan-featured"><span class="account-plan-name">MENSAL</span><h3>30 dias</h3><div class="account-plan-price"><small>R$</small> 49,90</div><p>Acesso ao robô no plano mensal.</p><button class="outline account-plan-checkout" type="button" disabled data-plan="mensal" onclick="startStripeCheckout('mensal')">Em breve</button></article>
       <article class="account-plan"><span class="account-plan-name">TRIMESTRAL</span><h3>90 dias</h3><div class="account-plan-price"><small>R$</small> 99,00</div><p>Acesso ao robô no plano trimestral.</p><button class="outline account-plan-checkout" type="button" disabled data-plan="trimestral" onclick="startStripeCheckout('trimestral')">Em breve</button></article>
     </div>
-    <div class="account-stripe-test-plan" role="group" aria-label="Plano temporário para testar a integração Stripe">
-      <div><strong>TESTE STRIPE · 1 HORA</strong><span>Plano temporário de verificação · R$ 0,50</span></div>
-      <button class="outline account-plan-checkout" type="button" disabled data-plan="teste_1h" onclick="startStripeCheckout('teste_1h')">Em breve</button>
-    </div>
-    <div id="stripeTestPlan" class="hidden" style="margin-top:13px;padding:13px 15px;border:1px dashed #bd9956;border-radius:13px;background:#182937;">
+    <div id="stripeTestPlan" class="account-stripe-test-plan hidden" role="group" aria-label="Plano temporário de verificação da Stripe">
       <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;justify-content:space-between">
         <div><strong style="color:#f7d381">TESTE DE PAGAMENTO · 1 HORA</strong><div style="font-size:12px;color:#adc6d6">Cobrança real de R$ 0,50. Após confirmação, acrescenta 1 hora ao seu acesso.</div></div>
-        <button class="outline account-plan-checkout" type="button" disabled data-plan="teste_1h" onclick="startStripeCheckout('teste_1h')" style="width:auto;min-height:39px;margin:0;transform:none;white-space:nowrap">ADQUIRIR TESTE · R$ 0,50</button>
+        <button class="outline account-plan-checkout" type="button" disabled data-plan="teste_1h" onclick="startStripeCheckout('teste_1h')">ADQUIRIR TESTE · R$ 0,50</button>
       </div>
     </div>
     <p id="accountBillingNote" class="account-plans-note" role="status">Consultando disponibilidade do pagamento Stripe...</p>
