@@ -15,6 +15,7 @@ from pydantic import BaseModel
 from sqlalchemy import select, delete, func
 
 from . import db
+from .public_urls import origin_for_request, checkout_return_origin, nexora_referral_origin
 from .stripe_billing import PLANS, billing_enabled, stripe_expected_livemode, create_checkout, stripe_signature_valid, apply_paid_checkout
 from .automation_markets import GROUPS as AUTOMATION_GROUPS, instruments_by_group, featured_instruments_by_group
 from .access import (access_control_enabled, access_status, start_trial_on_first_robot_start,
@@ -1069,8 +1070,8 @@ async def headers(request:Request, call_next):
     if request.method in ('POST','PUT','PATCH','DELETE'):
         origin=request.headers.get('origin')
         if origin:
-            expected=os.getenv('NEXORA_PUBLIC_URL','http://localhost:8000').rstrip('/')
-            if origin.rstrip('/')!=expected:
+            expected=origin_for_request(request)
+            if not expected or origin.rstrip('/')!=expected:
                 return JSONResponse({'detail':'Origem não autorizada'},403)
     response=await call_next(request)
     response.headers.update({'Cache-Control':'no-store','X-Content-Type-Options':'nosniff','Referrer-Policy':'no-referrer',
@@ -1764,7 +1765,8 @@ async def my_access_status(request:Request,nexora_sid:str|None=Cookie(default=No
         status=access_status(sess,user.id)
         referral=referral_report(sess,user.id)
         sess.commit()
-        return {**status,**referral,'user_id':'NXR-'+str(user.id).zfill(6)}
+        return {**status,**referral,'user_id':'NXR-'+str(user.id).zfill(6),
+                'referral_base_url':nexora_referral_origin()}
 
 
 class BillingCheckoutRequest(BaseModel):
@@ -1814,9 +1816,11 @@ async def billing_checkout(request:Request,payload:BillingCheckoutRequest,
         raise HTTPException(503,'Pagamentos ainda não configurados')
     if payload.plan_id not in PLANS:
         raise HTTPException(422,'Plano inválido')
-    site_url=os.getenv('NEXORA_PUBLIC_URL','https://nexoria-ia.onrender.com').rstrip('/')
-    if not site_url.startswith('https://') or urlsplit(site_url).hostname not in (
-            'nexoria-ia.onrender.com',):
+    # Checkout returns to the exact verified host that initiated the payment.
+    # Both the legacy Render host and the new www host are explicitly allowlisted.
+    site_url=checkout_return_origin(request)
+    if not site_url or (site_url.startswith('http://') and
+                        os.getenv('NEXORA_STRIPE_MODE','').lower()!='test'):
         raise HTTPException(503,'URL pública de cobrança não configurada')
     try:
         checkout=await create_checkout(os.environ['STRIPE_SECRET_KEY'],
