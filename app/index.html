@@ -620,6 +620,13 @@ html,body{max-width:100%;overflow-x:clip}
 .account-plan p{font-size:12px;color:#aabfd0;margin-top:10px}
 .account-plan-checkout{width:100%;min-height:42px;margin-top:auto;transform:translateY(9px)}.account-plan-checkout:disabled{opacity:.7}.account-plan-checkout:not(:disabled){border-color:#d4b06d;color:#ffe3a1}
 .account-plans-note{font-size:11px;color:#92adbf;line-height:1.6;margin-top:13px}
+.account-stripe-test-plan{display:flex;justify-content:space-between;align-items:center;gap:14px;margin-top:12px;padding:12px 15px;border:1px dashed #a38647;border-radius:14px;background:#251e1333}
+.account-stripe-test-plan>div{display:flex;flex-direction:column;gap:2px;min-width:0}
+.account-stripe-test-plan strong{color:#f5d58b;font-size:12px;letter-spacing:.04em}
+.account-stripe-test-plan span{color:#aabfd0;font-size:12px}
+.account-stripe-test-plan .account-plan-checkout{width:auto;min-width:154px;margin:0;transform:none;white-space:nowrap}
+@media(max-width:480px){.account-stripe-test-plan{flex-direction:column;align-items:stretch;gap:8px}.account-stripe-test-plan .account-plan-checkout{width:100%}}
+
 .account-plans-swipe-hint{display:none;font-size:11px;color:#a9c4d5;margin-top:10px}
 @media(max-width:700px){#account .account-plans-grid{display:flex;flex-wrap:nowrap;gap:12px;overflow-x:auto;overflow-y:hidden;overscroll-behavior-x:contain;scroll-snap-type:x mandatory;scroll-padding-inline:2px;-webkit-overflow-scrolling:touch;padding:3px 2px 15px;scrollbar-width:none}#account .account-plans-grid::-webkit-scrollbar{display:none}#account .account-plans-grid>.account-plan{box-sizing:border-box;flex:0 0 86%;width:86%;max-width:86%;scroll-snap-align:start;min-height:225px;padding:18px 19px}#account .account-plan-checkout{white-space:nowrap;font-size:12px;letter-spacing:0;padding-inline:8px} .account-plan-foot{padding-top:10px}.account-plans-swipe-hint{display:block}}
 /* Mobile Minha Conta sequence: remaining access, plans, referral, identity/sign-out. */
@@ -1309,6 +1316,10 @@ html,body{max-width:100%;overflow-x:clip}
       <article class="account-plan"><span class="account-plan-name">QUINZENAL</span><h3>15 dias</h3><div class="account-plan-price"><small>R$</small> 29,90</div><p>Acesso ao robô por 15 dias.</p><button class="outline account-plan-checkout" type="button" disabled data-plan="quinzenal" onclick="startStripeCheckout('quinzenal')">Em breve</button></article>
       <article class="account-plan account-plan-featured"><span class="account-plan-name">MENSAL</span><h3>30 dias</h3><div class="account-plan-price"><small>R$</small> 49,90</div><p>Acesso ao robô no plano mensal.</p><button class="outline account-plan-checkout" type="button" disabled data-plan="mensal" onclick="startStripeCheckout('mensal')">Em breve</button></article>
       <article class="account-plan"><span class="account-plan-name">TRIMESTRAL</span><h3>90 dias</h3><div class="account-plan-price"><small>R$</small> 99,00</div><p>Acesso ao robô no plano trimestral.</p><button class="outline account-plan-checkout" type="button" disabled data-plan="trimestral" onclick="startStripeCheckout('trimestral')">Em breve</button></article>
+    </div>
+    <div class="account-stripe-test-plan" role="group" aria-label="Plano temporário para testar a integração Stripe">
+      <div><strong>TESTE STRIPE · 1 HORA</strong><span>Plano temporário de verificação · R$ 0,50</span></div>
+      <button class="outline account-plan-checkout" type="button" disabled data-plan="teste_1h" onclick="startStripeCheckout('teste_1h')">Em breve</button>
     </div>
     <p id="accountBillingNote" class="account-plans-note" role="status">Consultando disponibilidade do pagamento Stripe...</p>
     <div id="accountCheckoutResult" class="account-plans-note hidden" role="status" aria-live="polite">
