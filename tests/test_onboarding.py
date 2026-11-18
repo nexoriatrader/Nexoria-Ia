@@ -137,7 +137,7 @@ def test_account_page_identity_referrals_and_plan_catalog_are_separate():
     html=(Path(__file__).resolve().parents[1]/'app'/'index.html').read_text()
     account=html.split('<section id="account"',1)[1].split('<p id="error"',1)[0]
     assert 'id="accountUserId"' in account
-    assert 'Corretora conectada' in account
+    assert 'CORRETORA CONECTADA' in account.upper()
     assert 'onclick="logout()"' in account
     assert 'Deriv Demo <span class="pill">' not in account
     assert 'id="accountBalance"' not in account
