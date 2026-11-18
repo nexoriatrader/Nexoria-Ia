@@ -20,7 +20,7 @@ class User(Base):
     id = Column(Integer, primary_key=True)
     deriv_account_id = Column(String(100), unique=True, nullable=False, index=True)
     created_at = Column(DateTime(timezone=True), default=utcnow)
-    stake = Column(String(20), default='2.00', nullable=False)
+    stake = Column(String(20), default='0.50', nullable=False)
     martingale = Column(Boolean, default=False, nullable=False)
     multiplier = Column(String(20), default='2.00', nullable=False)
     stop_win = Column(String(20), default='0.00', nullable=False)
