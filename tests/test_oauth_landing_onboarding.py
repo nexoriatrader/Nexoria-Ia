@@ -39,6 +39,37 @@ def test_new_users_start_with_half_dollar_while_existing_settings_remain(tmp_pat
         engine.dispose()
 
 
+def test_deriv_oauth_partner_token_on_existing_login_and_signup(monkeypatch):
+    from app.security import build_authorize_url, REDIRECT
+    # The same tracking token from NEXORA's external Deriv partner link is
+    # now carried directly through OAuth, including the single-button flow.
+    monkeypatch.setenv("DERIV_AFFILIATE_TRACKING_TOKEN","HR6MZB6Q499Z")
+    monkeypatch.setenv("DERIV_AFFILIATE_UTM_CAMPAIGN","nexora_ia")
+    monkeypatch.delenv("DERIV_AFFILIATE_UTM_SOURCE",raising=False)
+    for register in (False, True):
+        url=build_authorize_url("safe-state","random-verifier",register=register)
+        query=parse_qs(urlsplit(url).query)
+        assert query["t"]==["HR6MZB6Q499Z"]
+        assert query["utm_medium"]==["affiliate"]
+        assert query["utm_campaign"]==["nexora_ia"]
+        assert "utm_source" not in query
+        assert query["redirect_uri"]==[REDIRECT]
+        assert query["state"]==["safe-state"]
+        assert query["code_challenge_method"]==["S256"]
+        assert ("prompt" in query)==register
+    monkeypatch.setenv("DERIV_AFFILIATE_UTM_SOURCE","VERIFIED_PARTNER_ID")
+    query=parse_qs(urlsplit(build_authorize_url("state","verifier")).query)
+    assert query["utm_source"]==["VERIFIED_PARTNER_ID"]
+
+
+def test_deriv_oauth_does_not_include_unvalidated_tracking_values(monkeypatch):
+    from app.security import build_authorize_url
+    monkeypatch.setenv("DERIV_AFFILIATE_TRACKING_TOKEN","INVALID&redirect_uri=bad")
+    query=parse_qs(urlsplit(build_authorize_url("state","verifier")).query)
+    assert "t" not in query
+    assert "utm_medium" not in query
+
+
 def test_deriv_first_signup_uses_registered_callback_and_preserves_referral(tmp_path,monkeypatch):
     from app.security import build_authorize_url,REDIRECT
     client,factory,engine=local_client(tmp_path,monkeypatch)

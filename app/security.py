@@ -24,9 +24,23 @@ def build_authorize_url(state, verifier, *, register=False):
     params={'response_type':'code','client_id':CLIENT_ID,'redirect_uri':REDIRECT,
         'scope':'trade','state':state,'code_challenge':pkce_challenge(verifier),'code_challenge_method':'S256'}
     if register:
-        # Deriv OAuth supports this prompt for first-time account registration.
-        # Consent callback still returns to the registered NEXORA redirect_uri.
+        # OAuth sign-up also returns to the registered NEXORA callback.
         params['prompt']='registration'
+    # Deriv partner tracking belongs on the OAuth authorization URL, not on the
+    # app callback or in the internal NEXORA referral code. Preserve PKCE and
+    # send only the original partner token used in our public Deriv link.
+    affiliate_token=os.getenv('DERIV_AFFILIATE_TRACKING_TOKEN','HR6MZB6Q499Z').strip()
+    if affiliate_token and affiliate_token.isalnum() and len(affiliate_token)<=80:
+        params['t']=affiliate_token
+        params['utm_medium']='affiliate'
+        campaign=os.getenv('DERIV_AFFILIATE_UTM_CAMPAIGN','nexora_ia').strip()
+        if campaign and len(campaign)<=80 and all(c.isalnum() or c in '_-' for c in campaign):
+            params['utm_campaign']=campaign
+        # utm_source must be the actual Deriv partner ID, NOT a guessed ID or
+        # the OAuth app ID. Provision after confirming in Partners dashboard.
+        partner_id=os.getenv('DERIV_AFFILIATE_UTM_SOURCE','').strip()
+        if partner_id and len(partner_id)<=80 and all(c.isalnum() or c in '_-' for c in partner_id):
+            params['utm_source']=partner_id
     return AUTH_URL + '?' + urlencode(params)
 def make_login(): return secrets.token_urlsafe(32),secrets.token_urlsafe(64)
 def make_session_id(): return secrets.token_urlsafe(32)
