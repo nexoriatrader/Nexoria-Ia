@@ -766,6 +766,7 @@ html,body{max-width:100%;overflow-x:clip}
   <button class="nav-link" data-view="results" type="button" onclick="go('results')">Resultados do Robô</button>
   <button class="nav-link" data-view="features" type="button" onclick="go('features')">Entenda as Funcionalidades</button>
   <button class="nav-link" data-view="strategies" type="button" onclick="go('strategies')">Conheça os Indicadores e Estratégias</button>
+  <a class="nav-link nav-broker-link" href="https://t.deriv.link/?t=HR6MZB6Q499Z" target="_blank" rel="noopener noreferrer sponsored" aria-label="Abrir a corretora Deriv (link de indicação externo)">Acessar Corretora ↗</a>
 </nav>
 
 <div id="robotStartDialog" class="nexora-start-overlay hidden" role="presentation">
@@ -787,7 +788,7 @@ html,body{max-width:100%;overflow-x:clip}
 <section id="welcome" class="lp hidden" aria-labelledby="landingHeading">
  <nav class="lp-nav" aria-label="Navegação inicial">
   <a class="lp-logo" href="#inicio" aria-label="NEXORA IA, início"><img src="/brand/logo-nexora-v21.svg" alt="NEXORA IA — Robô Trader Automático"></a>
-  <div class="lp-links"><a href="#inicio">Início</a><a href="#recursos">Recursos</a><a href="#como-funciona">Como funciona</a><a href="#resultados">Resultados</a><a class="lp-signin" href="/auth/deriv/start">Entrar</a></div>
+  <div class="lp-links"><a href="#inicio">Início</a><a href="#recursos">Recursos</a><a href="#como-funciona">Como funciona</a><a href="#resultados">Resultados</a><a class="lp-signin" href="/auth/deriv/start">Entrar</a><a href="https://t.deriv.link/?t=HR6MZB6Q499Z" target="_blank" rel="noopener noreferrer sponsored" aria-label="Acessar corretora Deriv, link externo de indicação">Corretora ↗</a></div>
  </nav>
  <div id="inicio" class="lp-hero">
   <div>
@@ -2048,7 +2049,7 @@ async function loadRobotAccess(){
       Number(a.trial_hours)*3600:24*3600;
     updateAccessCountdown();
     $('accountUserId').textContent=String(a.user_id||'—');
-    $('referralLink').value=location.origin+'/i/'+encodeURIComponent(a.short_code)+'?v=2';
+    $('referralLink').value=(a.referral_base_url||location.origin)+'/i/'+encodeURIComponent(a.short_code)+'?v=2';
     $('referralSummary').textContent=(a.confirmed_referrals||0)+' indicações válidas · '+(a.bonus_hours||0)+' horas ganhas';
     if(!a.enforced){
       const expiry=a.expires_at?new Date(a.expires_at):null;
