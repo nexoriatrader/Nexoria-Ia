@@ -16,7 +16,7 @@ from sqlalchemy import select, delete, func
 
 from . import db
 from .public_urls import origin_for_request, checkout_return_origin, nexora_referral_origin, canonical_origin
-from .stripe_billing import PLANS, billing_enabled, stripe_expected_livemode, create_checkout, stripe_signature_valid, apply_paid_checkout
+from .stripe_billing import PLANS, billing_enabled, stripe_expected_livemode, create_checkout, stripe_signature_valid, apply_paid_checkout, plan_can_purchase, test_plan_enabled
 from .automation_markets import GROUPS as AUTOMATION_GROUPS, instruments_by_group, featured_instruments_by_group
 from .access import (access_control_enabled, access_status, start_trial_on_first_robot_start,
                      register_first_login, referral_report, trial_duration_hours, utc)
@@ -1787,8 +1787,10 @@ class BillingCheckoutRequest(BaseModel):
 async def billing_plans():
     return {'enabled': billing_enabled(),
             'recurring': False,
-            'plans': [{'id':key,'name':v['name'],'days':v['days'],
-                       'currency':'BRL','amount_cents':v['cents']} for key,v in PLANS.items()]}
+            'plans': [{'id':key,'name':v['name'],'days':v.get('days',0),
+                       'hours':v.get('hours',0),'temporary':key=='teste_1h',
+                       'currency':'BRL','amount_cents':v['cents']} for key,v in PLANS.items()
+                       if key!='teste_1h' or test_plan_enabled()]}
 
 
 @app.get('/api/billing/checkout/status')
@@ -1824,7 +1826,7 @@ async def billing_checkout(request:Request,payload:BillingCheckoutRequest,
     user=active_user(request,nexora_sid)
     if not billing_enabled():
         raise HTTPException(503,'Pagamentos ainda não configurados')
-    if payload.plan_id not in PLANS:
+    if not plan_can_purchase(payload.plan_id):
         raise HTTPException(422,'Plano inválido')
     # Checkout returns to the exact verified host that initiated the payment.
     # Both the legacy Render host and the new www host are explicitly allowlisted.
