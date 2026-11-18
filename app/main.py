@@ -1787,7 +1787,8 @@ class BillingCheckoutRequest(BaseModel):
 async def billing_plans():
     return {'enabled': billing_enabled(),
             'recurring': False,
-            'plans': [{'id':key,'name':v['name'],'days':v['days'],
+            'plans': [{'id':key,'name':v['name'],'days':v.get('days',0),
+                       'hours':v.get('hours',0),'temporary':key=='teste_1h',
                        'currency':'BRL','amount_cents':v['cents']} for key,v in PLANS.items()]}
 
 
