@@ -20,6 +20,8 @@ PLANS = {
     'quinzenal': {'name': 'NEXORA Quinzenal — 15 dias', 'days': 15, 'cents': 2990},
     'mensal': {'name': 'NEXORA Mensal — 30 dias', 'days': 30, 'cents': 4990},
     'trimestral': {'name': 'NEXORA Trimestral — 90 dias', 'days': 90, 'cents': 9900},
+    # Remove after one successful end-to-end real checkout verification.
+    'teste_1h': {'name': 'NEXORA — Teste Stripe 1 hora', 'hours': 1, 'cents': 50},
 }
 
 
@@ -139,7 +141,9 @@ def apply_paid_checkout(session, stripe_checkout, *, now=None):
         session.add(grant)
         session.flush()
     # Suspension stays suspended; buying time never overrides administrative blocks.
-    grant.expires_at = max(utc(grant.expires_at), now) + timedelta(days=plan['days'])
+    grant.expires_at = max(utc(grant.expires_at), now) + (
+        timedelta(hours=plan['hours']) if 'hours' in plan
+        else timedelta(days=plan['days']))
     grant.access_kind = 'paid_' + order.plan_id
     order.status = 'PAID'
     order.paid_at = now
