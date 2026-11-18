@@ -234,3 +234,63 @@ def test_webhook_rejects_signed_test_event_while_live_mode_is_required(monkeypat
         headers={'stripe-signature':header,'content-type':'application/json'})
     assert result.status_code==400
     assert result.json()['detail']=='Modo de pagamento incompatível com o ambiente'
+
+def test_temporary_one_hour_plan_requires_explicit_flag(monkeypatch):
+    from app.stripe_billing import plan_can_purchase, test_plan_enabled
+    monkeypatch.delenv('NEXORA_STRIPE_TEST_PLAN_ENABLED',raising=False)
+    assert not test_plan_enabled()
+    assert not plan_can_purchase('teste_1h')
+    assert plan_can_purchase('mensal')
+    monkeypatch.setenv('NEXORA_STRIPE_TEST_PLAN_ENABLED','true')
+    assert plan_can_purchase('teste_1h')
+    assert PLANS['teste_1h']['cents']==50
+    assert PLANS['teste_1h']['hours']==1
+    assert 'days' not in PLANS['teste_1h']
+
+
+def test_signed_test_plan_payment_adds_exactly_one_hour_once(tmp_path,monkeypatch):
+    from app.stripe_billing import apply_paid_checkout
+    monkeypatch.setenv('NEXORA_STRIPE_MODE','test')
+    engine,factory,uid=fixture(tmp_path)
+    now=datetime(2026,11,18,12,0,tzinfo=timezone.utc)
+    try:
+        with factory() as session:
+            session.add(db.StripeAccessPurchase(
+                checkout_session_id='cs_test_1h',
+                user_id=uid,plan_id='teste_1h',amount_cents=50,status='PENDING'))
+            start=session.get(db.RobotAccess,uid).expires_at
+            session.commit()
+        paid={'id':'cs_test_1h','mode':'payment','livemode':False,
+              'payment_status':'paid','currency':'brl','amount_total':50,
+              'client_reference_id':str(uid),
+              'metadata':{'user_id':str(uid),'plan_id':'teste_1h'}}
+        with factory() as session:
+            assert apply_paid_checkout(session,paid,now=now)=='applied'
+            session.commit()
+            after=session.get(db.RobotAccess,uid).expires_at
+            assert after-start==timedelta(hours=1)
+            assert apply_paid_checkout(session,paid,now=now)=='already_applied'
+            session.commit()
+            assert session.get(db.RobotAccess,uid).expires_at==after
+    finally:
+        engine.dispose()
+
+
+def test_test_plan_rejects_wrong_amount_before_credit(tmp_path,monkeypatch):
+    from app.stripe_billing import apply_paid_checkout
+    monkeypatch.setenv('NEXORA_STRIPE_MODE','test')
+    engine,factory,uid=fixture(tmp_path)
+    try:
+        with factory() as session:
+            session.add(db.StripeAccessPurchase(
+                checkout_session_id='cs_test_1h',
+                user_id=uid,plan_id='teste_1h',amount_cents=50,status='PENDING'))
+            session.commit()
+        payload={'id':'cs_test_1h','mode':'payment','livemode':False,
+            'payment_status':'paid','currency':'brl','amount_total':1,
+            'client_reference_id':str(uid),'metadata':{'user_id':str(uid),'plan_id':'teste_1h'}}
+        with factory() as session:
+            assert apply_paid_checkout(session,payload)=='invalid_payment'
+            assert session.get(db.StripeAccessPurchase,'cs_test_1h').status=='PENDING'
+    finally:
+        engine.dispose()
