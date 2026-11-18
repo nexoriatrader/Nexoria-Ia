@@ -108,6 +108,50 @@ def test_checkout_catalog_fixed_to_configured_brl_amounts():
     assert PLANS['trimestral']['days']==90 and PLANS['trimestral']['cents']==9900
 
 
+def test_temporary_fifty_cent_plan_adds_exactly_one_hour_and_is_idempotent(tmp_path):
+    assert PLANS['teste_1h']=={'name':'NEXORA — Teste Stripe 1 hora',
+                               'hours':1,'cents':50}
+    engine,factory,uid=fixture(tmp_path)
+    now=datetime(2026,11,18,12,0,tzinfo=timezone.utc)
+    try:
+        with factory() as sess:
+            order=sess.get(db.StripeAccessPurchase,'cs_test_local')
+            order.plan_id='teste_1h'
+            order.amount_cents=50
+            sess.commit()
+        payment=paid_object(uid,amount_total=50,
+                    metadata={'user_id':str(uid),'plan_id':'teste_1h'})
+        with factory() as sess:
+            assert apply_paid_checkout(sess,payment,now=now)=='applied'
+            sess.commit()
+            expiry=sess.get(db.RobotAccess,uid).expires_at.replace(tzinfo=timezone.utc)
+            assert expiry==datetime(2026,11,21,1,0,tzinfo=timezone.utc)
+            assert apply_paid_checkout(sess,payment,now=now)=='already_applied'
+            assert sess.get(db.RobotAccess,uid).expires_at.replace(tzinfo=timezone.utc)==expiry
+        with factory() as sess:
+            assert sess.get(db.StripeAccessPurchase,'cs_test_local').status=='PAID'
+    finally:
+        engine.dispose()
+
+
+def test_temporary_plan_rejects_unpaid_or_incorrect_amount(tmp_path):
+    engine,factory,uid=fixture(tmp_path)
+    try:
+        with factory() as sess:
+            order=sess.get(db.StripeAccessPurchase,'cs_test_local')
+            order.plan_id='teste_1h'
+            order.amount_cents=50
+            sess.commit()
+        valid=paid_object(uid,amount_total=50,
+                    metadata={'user_id':str(uid),'plan_id':'teste_1h'})
+        with factory() as sess:
+            assert apply_paid_checkout(sess,dict(valid,payment_status='unpaid'))=='invalid_payment'
+            assert apply_paid_checkout(sess,dict(valid,amount_total=49))=='invalid_payment'
+            assert sess.get(db.StripeAccessPurchase,'cs_test_local').status=='PENDING'
+    finally:
+        engine.dispose()
+
+
 def test_stripe_test_mode_never_activates_public_paid_access(monkeypatch):
     monkeypatch.setenv('NEXORA_STRIPE_BILLING_ENABLED','true')
     monkeypatch.setenv('STRIPE_WEBHOOK_SECRET','whsec_test_fixture')
