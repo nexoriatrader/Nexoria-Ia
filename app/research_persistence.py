@@ -149,6 +149,11 @@ async def research_loop():
             removed = await asyncio.to_thread(cleanup_research_reports)
             if removed:
                 logger.info("Research retention removed %s old snapshots", removed)
+            from .shared_market_store import enabled, prune_expired
+            if enabled():
+                pruned = await asyncio.to_thread(prune_expired)
+                if pruned:
+                    logger.info("Expired shared market snapshots removed: %s", pruned)
             existing = await asyncio.to_thread(latest_study)
             last = datetime.fromisoformat(existing["generated_at"]) if existing and existing.get("generated_at") else None
             stale = not last or datetime.now(timezone.utc) - last > timedelta(hours=24)
