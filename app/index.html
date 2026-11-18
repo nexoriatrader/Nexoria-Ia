@@ -798,7 +798,6 @@ html,body{max-width:100%;overflow-x:clip}
    <p class="lp-subtitle">Conheça o NEXORA IA por <strong data-trial-label>24 horas</strong> grátis após seu primeiro login validado na Deriv. Escolha os ativos, configure a estratégia em etapas e decida quando ligar o robô.</p>
    <div class="lp-actions">
     <a id="lpHeroTrialButton" class="lp-button lp-button-primary" href="/auth/deriv/start" onclick="startNexoraTrial(event)">Teste grátis por <span data-trial-label>24 horas</span> <span aria-hidden="true">➜</span></a>
-    <a id="lpHeroRegisterButton" class="lp-button" href="/auth/deriv/start?register=true" onclick="startNexoraTrial(event,true)" title="Criar conta através do fluxo oficial de cadastro da Deriv e voltar à NEXORA">Primeira vez na Deriv? Criar conta</a>
    </div>
    <p id="lpLoginNotice" class="lp-auth-notice hidden" role="status"></p>
    <div class="lp-proof"><span><b aria-hidden="true">✓</b> Conexão oficial Deriv</span><span><b aria-hidden="true">ϟ</b> Ativação em poucos passos</span><span><b aria-hidden="true">▥</b> Gestão de risco</span></div>
@@ -1523,8 +1522,6 @@ async function init(){
    document.querySelectorAll('a[href="/auth/deriv/start"]').forEach(login=>{
      login.href='/auth/deriv/start?ref='+encodeURIComponent(ref);
    });
-   const registration=$('lpHeroRegisterButton');
-   if(registration)registration.href='/auth/deriv/start?register=true&ref='+encodeURIComponent(ref);
  }
  try{
   const s=await req('/api/session');
