@@ -1984,6 +1984,14 @@ async def admin_multi_timeframe_research(request:Request):
     return report
 
 
+@app.get('/api/admin/news/calendar-diagnostic')
+async def admin_news_calendar_diagnostic(request:Request):
+    """Owner-only read-only calendar probe; never activates news trading filter."""
+    require_nexora_admin(request)
+    from .news_calendar_probe import probe_calendar
+    return await probe_calendar()
+
+
 @app.get('/api/admin/research/m1-history')
 async def admin_m1_history(request:Request):
     """Owner-only read-only coverage status; never exposes trading controls."""
