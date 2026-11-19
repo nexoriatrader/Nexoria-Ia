@@ -35,4 +35,6 @@ jobs:
       - name: Compile Python sources
         run: python -m compileall -q app tests
       - name: Unit and integration-mock tests
-        run: python -m pytest -q
+        run: python -m pytest -q --ignore=tests/test_readonly_dashboard_load.py
+      - name: Local synthetic 10-user read-only latency probe
+        run: python -m pytest -q -s tests/test_readonly_dashboard_load.py
