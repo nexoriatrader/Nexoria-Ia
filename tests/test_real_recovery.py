@@ -48,7 +48,7 @@ def seed(session, *, uid=1, account="CR101", state="PENDING",
     age=db.utcnow()-timedelta(minutes=age_minutes)
     order=db.RealOrder(
         user_id=uid,account_id=account,request_key=request,
-        active_slot=account if active is None else active,
+        active_slot=account if active is None else (None if active is False else active),
         state=state,contract_id=contract,
         symbol="R_100",direction="CALL",duration_minutes=5,
         stake="1",currency="USD",created_at=age,updated_at=age)
@@ -118,8 +118,8 @@ def test_stale_pending_with_known_contract_is_not_guessed_settled(repo):
 
 def test_final_states_unchanged_when_sweeping(repo):
     with repo() as s:
-        settled=seed(s,state="SETTLED",request="done-12345678",active="",contract="321123321")
-        cancelled=seed(s,state="CANCELLED",request="cancel-12345678",active="")
+        settled=seed(s,state="SETTLED",request="done-12345678",active=False,contract="321123321")
+        cancelled=seed(s,state="CANCELLED",request="cancel-12345678",active=False)
         assert promote_stale_pending_to_unknown(s)==[]
         assert s.get(db.RealOrder,settled).state=="SETTLED"
         assert s.get(db.RealOrder,cancelled).state=="CANCELLED"
