@@ -314,6 +314,7 @@ def test_html_renders_unknown_and_explicit_confirmed_open_labels():
     source=(Path(__file__).resolve().parents[1]/"app"/"index.html").read_text()
     assert "id=\"dashOperationalDetails\"" in source
     assert "runningUnknown?'NÃO CONFIRMADO'" in source
+    assert "$('dashScanStatus').textContent='ESTADO NÃO CONFIRMADO'" in source
     assert "CONFIRMED_OPEN_UNSETTLED:'Contrato confirmado · aberto · não liquidado'" in source
     assert "runningUnknown||(!robotRunning&&!available)" in source
     assert "'Não liquidado'" in source
