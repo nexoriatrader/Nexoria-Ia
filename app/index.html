@@ -2133,7 +2133,11 @@ function renderRealtimeOrders(){
   if(settled&&state==='WIN'){outcome.className='dash-trade-outcome win';label.textContent='WIN';value.textContent=money(order.pnl);}
   else if(settled&&state==='LOSS'){outcome.className='dash-trade-outcome loss';label.textContent='LOSS';value.textContent=money(order.pnl);}
   else if(settled){outcome.className='dash-trade-outcome';label.textContent='ENCERRADA';value.textContent=order.pnl===null?'—':money(order.pnl);}
-  else {outcome.className='dash-trade-outcome pending';label.textContent=order.state==='UNKNOWN'?'CONFERINDO':'EM ANDAMENTO';value.textContent='Aguardando';}
+  else {outcome.className='dash-trade-outcome pending';
+    label.textContent=order.state==='CONFIRMED'?'CONFIRMADO · ABERTO'
+      :order.state==='UNKNOWN'?'RESULTADO INCERTO'
+      :order.state==='PENDING'?'RESERVA PENDENTE':'SITUAÇÃO NÃO CONFIRMADA';
+    value.textContent='Não liquidado';}
   outcome.append(label,value);tile.append(main,outcome);list.append(tile);
  }
  $('dashRealtimeSynced').textContent='Atualizado '+new Intl.DateTimeFormat('pt-BR',{
@@ -2196,7 +2200,8 @@ function renderOrders(){
    const row=document.createElement('tr');
    const [date,time]=brasilDateTime(o.started_at_brasilia||o.broker_purchase_at);
    const result=o.outcome||'PENDING';
-   const outcome=result==='WIN'?'WIN':result==='LOSS'?'LOSS':result==='DRAW'?'EMPATE':result==='UNKNOWN'?'INDEFINIDO':'PENDENTE';
+   const outcome=o.state==='CONFIRMED'?'ABERTO':o.state==='UNKNOWN'?'INDEFINIDO':
+    result==='WIN'?'WIN':result==='LOSS'?'LOSS':result==='DRAW'?'EMPATE':'PENDENTE';
    const columns=[date,time,o.account_mode==='demo'?'Treinamento':o.account_mode==='real'?'Real':'Não registrada',
       o.symbol,o.direction,money(o.stake),Number.isInteger(Number(o.duration_minutes))&&Number(o.duration_minutes)>0?'M'+o.duration_minutes:'—',tradeStage(o),contractStageLabel(o),outcome,
       o.state==='SETTLED'&&o.pnl!==null?money(o.pnl):'Não liquidado'];
