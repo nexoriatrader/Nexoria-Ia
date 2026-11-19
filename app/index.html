@@ -2390,6 +2390,20 @@ async function changeAutomationAccount(selectedAccount){
   if(selectedAccount)input.value=selectedAccount;
  }catch(e){$('autoConfigFeedback').textContent='Não foi possível consultar suas contas: '+e.message}
 }
+function clearUnsavedAutomationRiskOnAccountChange(){
+ // The selected account/mode is not persisted until Save. Require an explicit
+ // value rather than silently copying a different account's risk preferences.
+ for(const id of ['autoStake','autoWin','autoLoss'])$(id).value='';
+ $('autoMg').checked=false;$('autoGales').value='1';
+ $('autoMultiplier').value='2.00';$('autoCycles').value='0';
+ $('autoCycleMultiplier').value='2.00';
+ automationProfileSaved=false;
+ renderAutomationSummary();toggleAutomationProgressions();
+}
+document.querySelectorAll('input[name="autoMode"]').forEach(input=>
+ input.addEventListener('change',clearUnsavedAutomationRiskOnAccountChange));
+$('autoRealAccount').addEventListener('change',clearUnsavedAutomationRiskOnAccountChange);
+
 async function changeAutomationMarket(){
  const feedback=$('autoConfigFeedback'),market=automationRadio('autoMarket'),requestId=++automationMarketRequest;
  clearAutomationInvalid('automationSymbols');
@@ -2505,9 +2519,10 @@ async function loadAutomationProfile(){
   $('autoPayout').value=String(profile.min_payout_pct??88);
   $('autoDirection').value=profile.direction||'AUTO';
   updateStrategyIndicators(profile.configured?(profile.indicators||[]):undefined);
-  $('autoStake').value=risk.stake;
-  $('autoWin').value=risk.stop_win;
-  $('autoLoss').value=risk.stop_loss;
+  // Never fill a new REAL account with DEMO amounts or values from another account.
+  $('autoStake').value=risk.stake??'';
+  $('autoWin').value=risk.stop_win??'';
+  $('autoLoss').value=risk.stop_loss??'';
   $('autoMg').checked=Boolean(risk.martingale);
   $('autoGales').value=String(risk.gale_count||1);
   $('autoMultiplier').value=String(risk.multiplier||'2.00');
