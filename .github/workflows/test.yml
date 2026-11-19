@@ -4,6 +4,7 @@ on:
     branches:
       - main
       - feature/nexora-autopilot-research-v06
+      - feature/p0-01-isolamento-config-demo-real
   pull_request:
     branches:
       - main
