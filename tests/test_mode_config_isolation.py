@@ -281,11 +281,11 @@ def test_automation_ui_does_not_prefill_risk_across_unsaved_mode_switches():
     from pathlib import Path
     html = (Path(__file__).resolve().parents[1] / "app" / "index.html").read_text()
     assert "function clearUnsavedAutomationRiskOnAccountChange()" in html
-    assert "input.addEventListener('change',clearUnsavedAutomationRiskOnAccountChange)" in html
-    assert "$('autoRealAccount').addEventListener('change',clearUnsavedAutomationRiskOnAccountChange)" in html
-    for field in ("autoStake", "autoWin", "autoLoss"):
-        assert f"$('\\{field}')" not in html  # No escaped, non-functional DOM references.
-        assert f"$('\\{field}').value" not in html
-        assert f"$('\\{field}').value=risk" not in html
-        assert f"$('\\{field}').value" not in html
-        assert f"$('\\{field}')" not in html
+    clear = html.split("function clearUnsavedAutomationRiskOnAccountChange(){", 1)[1]
+    clear = clear.split("async function changeAutomationMarket()", 1)[0]
+    assert "['autoStake','autoWin','autoLoss']" in clear
+    assert "input.addEventListener('change',clearUnsavedAutomationRiskOnAccountChange)" in clear
+    assert "$('autoRealAccount').addEventListener('change',clearUnsavedAutomationRiskOnAccountChange)" in clear
+    assert "$('autoStake').value=risk.stake??'';" in html
+    assert "$('autoWin').value=risk.stop_win??'';" in html
+    assert "$('autoLoss').value=risk.stop_loss??'';" in html
