@@ -63,6 +63,23 @@ def _risk_check(orders, stake, stop_loss, max_stake, stop_win='0'):
     return amount
 
 
+def validated_real_stop_loss(settings, consent):
+    """Check the saved REAL limit against the explicit consent snapshot.
+
+    Consent.stop_loss is NOT an independent administrator threshold: it was
+    copied from the account-specific limit at activation. Any disagreement is
+    an invalid authorization snapshot and fails closed rather than silently
+    choosing a larger or smaller stop. No DEMO settings are consulted.
+    """
+    saved = _money(settings.stop_loss, 'Stop Loss REAL da conta')
+    authorized = _money(consent.stop_loss, 'Stop Loss REAL autorizado')
+    if saved <= 0 or authorized <= 0 or saved != authorized:
+        raise RealOrderGuardError(
+            'Stop Loss REAL divergente da autorização; reautorize a conta'
+        )
+    return saved
+
+
 def reserve_real_order(session, user, *, account_id, request_key,
                        symbol, direction, duration, stake, currency):
     """Reserve before any broker I/O; user row lock serializes concurrent requests.
@@ -96,9 +113,13 @@ def reserve_real_order(session, user, *, account_id, request_key,
     mode_settings = session.get(db.AccountRiskSettings, (user.id, 'real', account_id))
     if mode_settings is None:
         raise RealOrderGuardError('Configuração REAL específica da conta ausente')
+    # Refuse stale/mismatched consent before evaluating a reservation.
+    # The source of truth is the selected REAL account, not DEMO or
+    # a potentially stale authorization snapshot.
+    stop_loss = validated_real_stop_loss(mode_settings, consent)
     orders = session.scalars(select(db.RealOrder).where(
         db.RealOrder.account_id == account_id)).all()
-    amount = _risk_check(orders, stake, consent.stop_loss, consent.max_stake,
+    amount = _risk_check(orders, stake, stop_loss, consent.max_stake,
                          mode_settings.stop_win)
     order = db.RealOrder(
         user_id=user.id, account_id=account_id, request_key=request_key,
