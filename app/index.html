@@ -1774,9 +1774,9 @@ async function refreshDashboard(){
    return status;
  }catch(e){
    if(sequence!==dashboardStatusSequence)return null;
-   $('feedState').textContent='○ Comunicação temporariamente indisponível. Estado atual não confirmado.';
-   // A cached label cannot prove worker liveness in another process.
-   robotRunning=false;
+   $('feedState').textContent='○ Comunicação temporariamente indisponível. Último estado do robô preservado, mas sem confirmação atual.';
+   // Preserve the local last-known flag for legacy consumers, but the UI
+   // explicitly marks it stale and disables controls; no activity is inferred.
    $('robotState').textContent='DESATUALIZADO';
    $('robotMessage').textContent='Não foi possível confirmar a execução. Tente atualizar antes de tomar decisões.';
    $('robotLiveLabel').textContent='ESTADO NÃO CONFIRMADO';
