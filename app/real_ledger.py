@@ -93,9 +93,13 @@ def reserve_real_order(session, user, *, account_id, request_key,
         db.RealOrder.request_key == request_key))
     if previous is not None:
         return previous, False
+    mode_settings = session.get(db.AccountRiskSettings, (user.id, 'real', account_id))
+    if mode_settings is None:
+        raise RealOrderGuardError('Configuração REAL específica da conta ausente')
     orders = session.scalars(select(db.RealOrder).where(
         db.RealOrder.account_id == account_id)).all()
-    amount = _risk_check(orders, stake, consent.stop_loss, consent.max_stake, locked.stop_win)
+    amount = _risk_check(orders, stake, consent.stop_loss, consent.max_stake,
+                         mode_settings.stop_win)
     order = db.RealOrder(
         user_id=user.id, account_id=account_id, request_key=request_key,
         active_slot=account_id, state='PENDING', symbol=symbol,
