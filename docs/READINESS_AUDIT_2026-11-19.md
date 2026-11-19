@@ -118,6 +118,51 @@ Consulta agregada ao Supabase em 19/11/2026, sem examinar dados de usuários:
 - **Render:** valores de variáveis de ambiente, métricas privadas, logs recentes e deploy efetivo **não foram verificados** nesta revisão. O workflow de monitoramento não comprova disponibilidade contínua nem estado do robô.
 - **Corretora:** nenhuma conta autenticada de usuário nem contrato real foi consultado ou acionado.
 
+## Render — verificação do serviço no workspace confirmado (19/11/2026)
+
+Workspace `My Workspace` (`tea-dbqd7rqjnfac738bd5dg`), serviço `Nexoria-Ia` (`srv-dbqd9rdg1s2s73e0difg`). **Apenas leitura**, sem alterar variáveis, deploy, escala ou contas.
+
+| Campo | Resultado |
+| --- | --- |
+| Versão efetivamente implantada | Deploy `dep-dbv0orbm8hqs73afnc90`, status `live`, commit `d51aedba27458057e2803346da85f887fd7aede9` |
+| Data do deploy | 18/11/2026 às 20:38 UTC |
+| Plano / quantidade configurada | Render `free`, 1 instância; Uvicorn com 1 worker |
+| Região | Oregon |
+| Health-check HTTP configurado | `healthCheckPath` vazio; investigar adoção de `/healthz` após validar que o endpoint reflete prontidão sem depender de serviços externos transitórios |
+| Limites de recurso observados | CPU 0,15 unidade; memória cerca de 537 MB (métricas do Render) |
+| CPU observada | ~0,013–0,023 unidade por ponto; sem evidência de saturação constante nessa janela |
+| Memória observada | ~157–177 MB por ponto; abaixo do limite exibido |
+| HTTP p50, p95 e contagem de requisições | Render retornou séries vazias nesse serviço; **não é possível calcular tempo de resposta ou taxa de erro a partir delas** |
+
+Janela de amostragem: aproximadamente 18/11 às 18:00 UTC até 19/11 às 18:45 UTC, resolução de 15 minutos nas métricas de recurso. São amostras, não máximos absolutos entre coletas. Recursos podem se comportar de forma diferente sob tráfego real.
+
+### Interrupções de consulta pública à Deriv
+
+Os logs do Render contêm avisos `ConnectionClosedError` de consultas públicas, principalmente `endpoint=candles`. Os intervalos abaixo foram consultados separadamente e os resultados não foram paginados porque cada consulta indicou `hasMore=false`:
+
+| Intervalo UTC | Avisos retornados |
+| --- | ---: |
+| 18/11 18:00–20:38 (antes do último deploy) | 20 |
+| 18/11 20:38–19/11 04:00 | 51 |
+| 19/11 04:00–11:00 | 40 |
+| 19/11 11:00–18:45 | 6 |
+
+O código `app/market.py` mantém até duas conexões WebSocket públicas reutilizáveis e tenta novamente após interrupção. Muitos desses avisos registram `attempt=1/2`, não uma falha definitiva após retry. **Não se pode inferir taxa de falha de ordens, desconexão de todos os usuários ou queda real de serviço apenas pela quantidade de avisos.** A redução na janela final é observável, mas requer acompanhamento em períodos comparáveis antes de concluir que o problema foi resolvido.
+
+Consultas filtradas por HTTP 5xx não retornaram registros no intervalo examinado, mas, sem contagem total de solicitações e diante da ausência de métricas HTTP, isso **não comprova taxa zero de erros**.
+
+### Instrumentação mínima proposta (ainda em PR)
+
+O workflow de smoke passa a registrar `elapsed_ms` em cada requisição pública já existente (`/healthz`, `/api/session` e 4 GETs de acesso negado). Isso é latência observada a partir do runner CI, com pouquíssimas amostras e possíveis efeitos de rede/cold start; **não é um p95 real dos usuários**. A alteração não aumenta o número de chamadas e não executa ordens. Precisa passar no CI da revisão atualizada.
+
+### Próximas ações
+
+- [ ] Verificar logs de novos `ConnectionClosedError` em intervalos comparáveis e registrar taxa de falha definitiva após as tentativas, sem alterar a execução de ordens.
+- [ ] Obter métricas reais de latência p50/p95 e volume HTTP por rota via instrumentação observacional segura; a API Render devolveu dados vazios.
+- [ ] Avaliar a configuração de health-check HTTP `/healthz` em homologação, sem aplicá-la antes de testar o endpoint e o comportamento de reinício.
+- [ ] Rodar teste de carga **somente de leitura e com dados sintéticos**, acompanhado de CPU, memória e tempos de resposta.
+- [ ] Confirmar backups, restauração e plano de monitoramento antes de concluir homologação.
+
 ## Critério de conclusão
 
 Só classificar este trabalho como *homologação técnica concluída* após registrar evidências reproduzíveis para controle de acesso, CI, desempenho, falhas de rede/reinício, isolamento entre usuários, restauração, monitoramento e revisão de conformidade. Homologação técnica **não** equivale a autorização para ativar negociação automática com dinheiro real.
