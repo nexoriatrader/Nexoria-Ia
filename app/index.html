@@ -1619,6 +1619,7 @@ async function loadAutopilotReadiness(){
 }
 function renderScanMonitor(status){
  const card=$('dashScanMonitor');if(!card||!status)return;
+ const unknown=('running_now' in status)&&status.running_now===null;
  const running=('running_now' in status)?status.running_now===true:Boolean(status.running),data=status.scan_progress;
  const at=data?.last_checked_at||data?.last_scan_at;
  const date=at?new Date(at):null;
@@ -1628,7 +1629,10 @@ function renderScanMonitor(status){
  card.classList.toggle('waiting',running&&!checking);
  $('dashScanUpdated').textContent=date&&!Number.isNaN(date.getTime())?
   'Leitura '+new Intl.DateTimeFormat('pt-BR',{timeZone:'America/Sao_Paulo',hour:'2-digit',minute:'2-digit',second:'2-digit'}).format(date):'—';
- if(!running){
+ if(unknown){
+  $('dashScanStatus').textContent='ESTADO NÃO CONFIRMADO';
+  $('dashScanCaption').textContent='A execução do scanner pode estar em outro processo; estado desconhecido.';
+ }else if(!running){
   $('dashScanStatus').textContent='ROBÔ DESLIGADO';
   $('dashScanCaption').textContent='Ligue o robô para acompanhar as verificações do scanner.';
  }else if(!fresh){
@@ -1665,7 +1669,9 @@ function renderScanMonitor(status){
  };
  const counts=running&&data?.reason_counts?Object.entries(data.reason_counts).filter(([reason,n])=>Number(n)>0):[];
  const diagnostic=$('dashScanReasons');
- if(!running){
+ if(unknown){
+  diagnostic.textContent='Estado da varredura não confirmado entre processos. Não presuma parada ou atividade.';
+ }else if(!running){
   diagnostic.textContent='Robô desligado. Nenhuma varredura em andamento.';
  }else if(!data?.last_scan_at){
   diagnostic.textContent='Aguardando a primeira análise de uma vela M1 fechada.';
