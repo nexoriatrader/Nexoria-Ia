@@ -33,13 +33,15 @@ jobs:
                   try:
                       req=urllib.request.Request(base+path,headers={
                           "User-Agent":"NEXORA-Release-Smoke/1.0","Accept":"application/json"})
+                      started=time.perf_counter()
                       with urllib.request.urlopen(req,timeout=30) as res:
                           if res.status!=200:
                               raise ValueError("Unexpected HTTP status")
                           payload=json.load(res)
                       if not isinstance(payload,dict) or not valid(payload):
                           raise ValueError("Unexpected endpoint response")
-                      print(path, "OK: HTTP 200 with expected public structure")
+                      elapsed_ms=round((time.perf_counter()-started)*1000)
+                      print(path, "OK: HTTP 200 with expected public structure", f"elapsed_ms={elapsed_ms}")
                       last_error=None
                       break
                   except (urllib.error.URLError,ValueError,TimeoutError,OSError) as exc:
@@ -62,6 +64,7 @@ jobs:
                       req=urllib.request.Request(base+path,headers={
                           "User-Agent":"NEXORA-Release-Smoke/1.0",
                           "Accept":"application/json"})
+                      started=time.perf_counter()
                       try:
                           with urllib.request.urlopen(req,timeout=15) as res:
                               raise ValueError("Sensitive route unexpectedly exposed: HTTP "+str(res.status))
@@ -70,7 +73,8 @@ jobs:
                               raise ValueError("Expected HTTP 401, got HTTP "+str(exc.code)) from exc
                           if "no-store" not in exc.headers.get("Cache-Control","").lower():
                               raise ValueError("Unauthorized response not marked no-store")
-                      print(path,"OK: anonymous access rejected (HTTP 401, no-store)")
+                      elapsed_ms=round((time.perf_counter()-started)*1000)
+                      print(path,"OK: anonymous access rejected (HTTP 401, no-store)",f"elapsed_ms={elapsed_ms}")
                       last_error=None
                       break
                   except (urllib.error.URLError,ValueError,TimeoutError,OSError) as exc:
