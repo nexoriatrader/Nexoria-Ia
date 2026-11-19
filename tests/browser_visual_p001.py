@@ -66,6 +66,11 @@ def run():
     class QuietHandler(SimpleHTTPRequestHandler):
         def log_message(self,*args):
             return
+        def do_GET(self):
+            # Match the existing FastAPI /brand/ static-asset route locally.
+            if self.path.startswith("/brand/"):
+                self.path="/static/"+self.path[len("/brand/"):]
+            return super().do_GET()
     server = ThreadingHTTPServer(("127.0.0.1", 0),
         partial(QuietHandler, directory=str(HTML.parent)))
     Thread(target=server.serve_forever,daemon=True).start()
