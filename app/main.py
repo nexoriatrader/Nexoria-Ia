@@ -1563,10 +1563,7 @@ async def get_automation_profile(request:Request,nexora_sid:str|None=Cookie(defa
         return automation_profile_result(session.get(db.AutomationProfile,user.id))
 
 
-@app.post('/api/automation/profile')
-async def save_automation_profile(request:Request,payload:AutomationProfileRequest,
-                                  nexora_sid:str|None=Cookie(default=None)):
-    user,token=active_session(request,nexora_sid)
+async def _validate_automation_profile_payload(payload,token):
     if payload.account_mode not in ('demo','real'):
         raise HTTPException(422,'Modo de conta inválido')
     if payload.market not in (*AUTOMATION_GROUPS, 'volatility') or payload.strategy not in ('pulso_v2','trend','rsi'):
@@ -1614,28 +1611,40 @@ async def save_automation_profile(request:Request,payload:AutomationProfileReque
         raise HTTPException(503,'Catálogo da Deriv indisponível; configuração não salva') from None
     if not set(payload.symbols).issubset(available):
         raise HTTPException(422,'Seleção contém ativo não disponível no mercado escolhido')
+
+
+def _apply_automation_profile(session,user,payload):
+    profile=session.get(db.AutomationProfile,user.id)
+    if profile is None:
+        profile=db.AutomationProfile(user_id=user.id)
+        session.add(profile)
+    profile.market=payload.market
+    profile.account_mode=payload.account_mode
+    profile.symbols_json=json.dumps(sorted(payload.symbols))
+    profile.strategy=payload.strategy
+    profile.expiry_minutes=0
+    profile.news_filter=payload.news_filter
+    profile.news_minutes_before=payload.news_minutes_before
+    profile.news_minutes_after=payload.news_minutes_after
+    profile.max_daily_orders=0  # Daily operation-count cap retired; risk gates remain active.
+    profile.indicators_json=json.dumps(sorted(payload.indicators))
+    profile.direction=payload.direction
+    profile.real_account_id=payload.real_account_id if payload.account_mode=='real' else None
+    profile.min_payout=str(payload.min_payout_pct)
+    profile.preset_mode=payload.preset_mode
+    return profile
+
+
+@app.post('/api/automation/profile')
+async def save_automation_profile(request:Request,payload:AutomationProfileRequest,
+                                  nexora_sid:str|None=Cookie(default=None)):
+    user,token=active_session(request,nexora_sid)
+    await _validate_automation_profile_payload(payload,token)
     async with autopilot_lock:
         if user.id in autopilot_enabled or user.id in real_runtime.running:
             raise HTTPException(409,'Desligue o robô antes de alterar sua automação')
         with db.SessionLocal() as session:
-            profile=session.get(db.AutomationProfile,user.id)
-            if profile is None:
-                profile=db.AutomationProfile(user_id=user.id)
-                session.add(profile)
-            profile.market=payload.market
-            profile.account_mode=payload.account_mode
-            profile.symbols_json=json.dumps(sorted(payload.symbols))
-            profile.strategy=payload.strategy
-            profile.expiry_minutes=0
-            profile.news_filter=payload.news_filter
-            profile.news_minutes_before=payload.news_minutes_before
-            profile.news_minutes_after=payload.news_minutes_after
-            profile.max_daily_orders=0  # Daily operation-count cap retired; risk gates remain active.
-            profile.indicators_json=json.dumps(sorted(payload.indicators))
-            profile.direction=payload.direction
-            profile.real_account_id=payload.real_account_id if payload.account_mode=='real' else None
-            profile.min_payout=str(payload.min_payout_pct)
-            profile.preset_mode=payload.preset_mode
+            profile=_apply_automation_profile(session,user,payload)
             session.commit()
             result=automation_profile_result(profile)
     return {**result,'saved':True,'running':False,
@@ -2565,12 +2574,7 @@ async def get_onboarding_config(request:Request,mode:str|None=None,
                 'cycles_execution_enabled':selected_mode=='demo'}
 
 
-@app.post('/api/onboarding/config')
-async def save_onboarding_config(request:Request,payload:OnboardingConfig,
-                                 nexora_sid:str|None=Cookie(default=None)):
-    u=active_user(request,nexora_sid)
-    if u.id in autopilot_enabled or u.id in real_runtime.running:
-        raise HTTPException(409,'Desligue o robô antes de salvar uma nova progressão')
+def _validated_onboarding_risk(payload):
     if payload.gale_count not in range(0,6):
         raise HTTPException(422,'Quantidade de Martingales deve estar entre 0 e 5')
     if payload.cycles not in ('0','1','2','3','4','5'):
@@ -2589,6 +2593,16 @@ async def save_onboarding_config(request:Request,payload:OnboardingConfig,
                                  'martingale':False,'multiplier':'2'})
     except ValueError as e:
         raise HTTPException(422,str(e)) from None
+    return settings,gale_factor,cycle_factor
+
+
+@app.post('/api/onboarding/config')
+async def save_onboarding_config(request:Request,payload:OnboardingConfig,
+                                 nexora_sid:str|None=Cookie(default=None)):
+    u=active_user(request,nexora_sid)
+    if u.id in autopilot_enabled or u.id in real_runtime.running:
+        raise HTTPException(409,'Desligue o robô antes de salvar uma nova progressão')
+    settings,gale_factor,cycle_factor=_validated_onboarding_risk(payload)
     async with autopilot_lock:
         if u.id in autopilot_enabled or u.id in real_runtime.running:
             raise HTTPException(409,'Desligue o robô antes de salvar uma nova progressão')
@@ -2653,6 +2667,104 @@ async def save_onboarding_config(request:Request,payload:OnboardingConfig,
     return {'ok':True,'execution_mode':'DERIV_DEMO_ONLY',
             'martingale_execution_enabled':True,'cycles_execution_enabled':True,
             'message':'Configuração salva. Ative o AutoPilot separadamente no painel.'}
+
+
+
+class AtomicAutomationConfigurationRequest(BaseModel):
+    profile: AutomationProfileRequest
+    risk: OnboardingConfig
+
+
+@app.post('/api/automation/configuration')
+async def save_atomic_automation_configuration(
+    request:Request, payload:AtomicAutomationConfigurationRequest,
+    nexora_sid:str|None=Cookie(default=None)
+):
+    """Persist UI profile + risk together; never authorizes a broker operation.
+
+    Retain the legacy endpoints for compatibility. This endpoint uses only one
+    SQLAlchemy transaction and never copies REAL values from DEMO preferences.
+    """
+    user,token=active_session(request,nexora_sid)
+    await _validate_automation_profile_payload(payload.profile,token)
+    settings,gale_factor,cycle_factor=_validated_onboarding_risk(payload.risk)
+    if user.id in autopilot_enabled or user.id in real_runtime.running:
+        raise HTTPException(409,'Desligue o robô antes de alterar as configurações')
+    async with autopilot_lock:
+        if user.id in autopilot_enabled or user.id in real_runtime.running:
+            raise HTTPException(409,'Desligue o robô antes de alterar as configurações')
+        async with lock:
+            with db.SessionLocal() as sess:
+                try:
+                    stored=sess.get(db.User,user.id,with_for_update=True)
+                    if stored is None:
+                        raise HTTPException(401,'Sessão expirada')
+                    mode=payload.profile.account_mode
+                    if mode=='real':
+                        selected_id=payload.profile.real_account_id
+                        unresolved=sess.scalar(select(db.RealOrder.id).where(
+                            db.RealOrder.user_id==user.id,
+                            db.RealOrder.account_id==selected_id,
+                            db.RealOrder.state.in_(('PENDING','CONFIRMED','UNKNOWN'))).limit(1))
+                        if unresolved:
+                            raise HTTPException(409,'Aguarde reconciliação do contrato REAL antes de alterar preferências')
+                        save_settings(sess,stored,'real',selected_id,
+                                      stake=settings.stake,stop_win=settings.stop_win,
+                                      stop_loss=settings.stop_loss,
+                                      martingale=payload.risk.martingale,
+                                      gale_count=payload.risk.gale_count,
+                                      multiplier=gale_factor,
+                                      cycles=int(payload.risk.cycles),
+                                      cycle_multiplier=cycle_factor)
+                    else:
+                        pending=sess.scalar(select(db.DemoOrder.id).where(
+                            db.DemoOrder.user_id==user.id,
+                            db.DemoOrder.state.in_(('PENDING','CONFIRMED','UNKNOWN'))).limit(1))
+                        if pending:
+                            raise HTTPException(409,'Aguarde a liquidação DEMO antes de alterar preferências')
+                        stored.stake=str(settings.stake)
+                        stored.stop_win=str(settings.stop_win)
+                        stored.stop_loss=str(settings.stop_loss)
+                        stored.martingale=False
+                        stored.multiplier='2.00'
+                        plan=sess.get(db.RobotPlan,user.id)
+                        if plan is None:
+                            plan=db.RobotPlan(user_id=user.id)
+                            sess.add(plan)
+                        plan.requested_martingale=payload.risk.martingale
+                        plan.gale_count=payload.risk.gale_count
+                        plan.requested_multiplier=str(gale_factor)
+                        plan.cycles_limit=int(payload.risk.cycles)
+                        cfg=sess.get(db.RobotCycleParams,user.id)
+                        if cfg is None:
+                            cfg=db.RobotCycleParams(user_id=user.id)
+                            sess.add(cfg)
+                        cfg.multiplier=str(cycle_factor)
+                        save_settings(sess,stored,'demo',stored.deriv_account_id,
+                                      stake=settings.stake,stop_win=settings.stop_win,
+                                      stop_loss=settings.stop_loss,
+                                      martingale=payload.risk.martingale,
+                                      gale_count=payload.risk.gale_count,
+                                      multiplier=gale_factor,
+                                      cycles=int(payload.risk.cycles),
+                                      cycle_multiplier=cycle_factor)
+                        run=sess.get(db.RobotRun,user.id)
+                        if run:
+                            sess.delete(run)
+                    profile=_apply_automation_profile(sess,stored,payload.profile)
+                    sess.commit()
+                    result=automation_profile_result(profile)
+                except Exception:
+                    sess.rollback()
+                    raise
+            if payload.profile.account_mode=='demo':
+                # The user is stopped and no DEMO contracts are pending; next
+                # DEMO runtime read must reconstruct with committed preferences.
+                runtimes.pop(user.id,None)
+    return {**result,'saved':True,'risk_saved':True,'running':False,
+            'ready_to_start':(payload.profile.account_mode=='demo'
+                              and not payload.profile.news_filter),
+            'note':'Perfil e preferências gravados em uma única transação. Nenhuma operação ativada.'}
 
 
 # The 30-day single-symbol study is isolated from all trading controls.
