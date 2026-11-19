@@ -180,6 +180,24 @@ A auditoria do `app/index.html` identificou solicitações repetidas por telas:
 
 Impacto esperado: menos leituras redundantes e menos atualizações fora da página visível. **Não há ainda benchmark p50/p95 antes/depois**, portanto não afirmar uma melhora percentual, nem confundir redução de chamadas GET com melhor qualidade ou velocidade de execução de operações.
 
+## Ensaio de concorrência local e recuperação de tela — 19/11/2026
+
+**Ambiente:** GitHub Actions Ubuntu + Python 3.12 + SQLite temporário. Não é benchmark no Render nem na Deriv; não acessa dados de clientes, não chama APIs do broker e não dispara ordens.
+
+- `tests/test_readonly_dashboard_load.py`: 10 usuários sintéticos independentes, 3 passes por usuário em 3 endpoints GET privados (`/api/automation/profile`, `/api/demo/orders`, `/api/real/orders`) = **90 leituras**, com `ThreadPoolExecutor(max_workers=10)`. Exige isolamento dos históricos em cada resposta.
+- O teste evita iniciar o lifespan de `TestClient`, para que scanners e tarefas de fundo não sejam ativados. As funções de compra também são substituídas por mocks que rejeitam chamadas.
+- `.github/workflows/test.yml`: testes gerais e ensaio de concorrência executados em etapas separadas para publicar `p50`/`p95` nos logs do CI. Nenhuma meta numérica de tempo é imposta, pois a velocidade varia entre runners.
+- `tests/test_dashboard_failure_recovery.py`: executa com Node o código real de `refreshDashboard()` extraído do HTML e simula primeiro um GET de status com falha, depois uma resposta válida. Verifica que a falha não troca o estado visível do robô por um falso desligamento e que a recuperação volta a usar o estado do servidor, sem POSTs.
+
+| Execução CI | Leituras | p50 local | p95 local | Máximo local |
+| --- | ---: | ---: | ---: | ---: |
+| Commit `60fcd0f5` (19/11) | 90 | 70,41 ms | 105,34 ms | 119,98 ms |
+| Commit `45c1128e` (19/11) | 90 | 48,82 ms | 79,29 ms | 87,24 ms |
+
+Na última execução consultada (`45c1128e`), **311 testes gerais passaram**, o ensaio separado de 10 usuários passou e os outros três fluxos CI (segurança, progressão e smoke público) passaram. Os tempos variam entre execuções mesmo sem alteração na lógica medida.
+
+**Limites dos resultados:** são leituras locais em SQLite sob concorrência de threads e não medem latência entre cliente, Render (Oregon), Supabase e corretora, nem carga de 10 sessões reais. A meta de testar 10 usuários simultâneos em Demo hospedado, com p95 e recursos Render, **permanece pendente**.
+
 ## Critério de conclusão
 
 Só classificar este trabalho como *homologação técnica concluída* após registrar evidências reproduzíveis para controle de acesso, CI, desempenho, falhas de rede/reinício, isolamento entre usuários, restauração, monitoramento e revisão de conformidade. Homologação técnica **não** equivale a autorização para ativar negociação automática com dinheiro real.
