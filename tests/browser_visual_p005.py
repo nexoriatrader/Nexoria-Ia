@@ -79,6 +79,8 @@ def run():
             page.evaluate("page('dashboard')")
             page.evaluate("async () => await refreshDashboard()")
             assert page.locator("#robotState").inner_text()=="NÃO CONFIRMADO"
+            assert page.locator("#dashScanStatus").inner_text()=="ESTADO NÃO CONFIRMADO"
+            assert "não confirmado entre processos" in page.locator("#dashScanReasons").inner_text()
             assert page.locator("#robotButton").is_disabled()
             detail=page.locator("#dashOperationalDetails").inner_text()
             assert "confirmados e abertos (não liquidados)" in detail
