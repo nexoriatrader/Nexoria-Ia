@@ -2593,14 +2593,16 @@ async function saveAutomationProfile(){
    min_payout_pct:Number($('autoPayout').value),
    real_account_id:automationRadio('autoMode')==='real'?$('autoRealAccount').value:null,
    preset_mode:autoPresetMode};
-  await req('/api/automation/profile',{method:'POST',headers:{'Content-Type':'application/json'},
-   body:JSON.stringify(profile)});
   const mg=$('autoMg').checked,cycles=$('autoCycles').value;
   const risk={stake:String(stake),stop_win:String(win),stop_loss:String(loss),
    martingale:mg,gale_count:mg?Number($('autoGales').value):0,
    multiplier:mg?$('autoMultiplier').value:'2.00',
    cycles:cycles,cycle_multiplier:cycles!=='0'?$('autoCycleMultiplier').value:'2.00'};
-  await req('/api/onboarding/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(risk)});
+  // Profile and risk are committed atomically; a rejected request leaves
+  // the previous complete configuration unchanged.
+  await req('/api/automation/configuration',{method:'POST',
+   headers:{'Content-Type':'application/json'},
+   body:JSON.stringify({profile,risk})});
   automationProfileSaved=true;
   feedback.textContent='Configuração salva. Preferências registradas.';
   renderAutomationSummary();fail('');
