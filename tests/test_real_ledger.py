@@ -21,6 +21,8 @@ def session():
                          stop_loss="5",stop_win="0",selected_mode="demo"))
         sess.add(db.RealRobotConsent(user_id=1,account_id="CR123",
                    max_stake="2",stop_loss="5"))
+        sess.add(db.AccountRiskSettings(user_id=1,account_mode="real",
+                   account_id="CR123",stake="1",stop_win="0",stop_loss="5"))
         sess.commit()
         yield sess
     engine.dispose()
