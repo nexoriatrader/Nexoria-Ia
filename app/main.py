@@ -26,6 +26,7 @@ from .demo import (DemoTradingError, DemoPreBuyDeadlineExceeded, demo_account_ba
                    prepare_demo_buy_socket)
 from .demo_ledger import OrderGuardError, reserve, public_order, confirmed, unknown, settle
 from . import real_runtime
+from .restart_consistency import revoke_stale_real_consent_after_restart
 from .real_broker import RealExecutionError, real_account_balance
 from .autopilot import analyze, quote_assessment
 from .engine import Engine, Settings
@@ -297,6 +298,7 @@ def restore_demo_autopilot_consent():
         for uid in ids:
             user=sess.get(db.User,uid)
             run=sess.get(db.RobotRun,uid)
+            profile=sess.get(db.AutomationProfile,uid)
             orders=sess.scalars(select(db.DemoOrder).where(db.DemoOrder.user_id==uid)).all()
             sessions=sess.scalars(select(db.Session).where(
                 db.Session.user_id==uid).order_by(db.Session.created_at.desc())).all()
@@ -314,7 +316,9 @@ def restore_demo_autopilot_consent():
             reason=None
             if not access_status(sess,uid)['allowed']:
                 reason='Acesso ao robô expirado ou ainda não ativado'
-            if reason is None and (not user or not run or user.selected_mode!='demo' or user.martingale):
+            if reason is None and (not user or not run or user.selected_mode!='demo'
+                                   or user.martingale
+                                   or (profile is not None and profile.account_mode!='demo')):
                 reason='Retomada bloqueada: configuração ou conta DEMO inválida'
             elif reason is None and not valid_auth:
                 reason='Retomada bloqueada: sessão Deriv expirada ou indisponível'
@@ -1040,13 +1044,41 @@ async def reconcile_confirmed_loop():
         await asyncio.sleep(1)
 
 
+def prepare_service_restart():
+    """Rebuild safe process state from durable records; no order or broker I/O.
+
+    DEMO only resumes with its pre-existing explicit consent and validation.
+    REAL workers never resume automatically and stale consent is revoked.
+    """
+    global market_connected, market_last_tick, last_market_reason
+    autopilot_enabled.clear()
+    autopilot_last_attempt.clear()
+    v2_last_scan.clear()
+    v2_gate_last_log.clear()
+    autopilot_reasons.clear()
+    automation_scan_progress.clear()
+    runtimes.clear()
+    recent_prices.clear()
+    market_connected=False
+    market_last_tick=0.0
+    last_market_reason='Aguardando conexão após reinicialização'
+    real_runtime.reset_volatile_runtime_on_start()
+    with db.SessionLocal() as sess:
+        revoked=revoke_stale_real_consent_after_restart(sess)
+    # Existing DEMO opt-in is restored only after REAL is disarmed.
+    restore_demo_autopilot_consent()
+    log.info('Service restart prepared: REAL consents revoked=%s; REAL workers inactive',revoked)
+    return {'real_consents_revoked':revoked,'real_workers_running':False}
+
+
 @asynccontextmanager
 async def lifespan(app):
-    global market_task, reconcile_task, autopilot_task, research_worker_task, m1_research_task, real_task, real_reconciliation_task
+    global market_task, reconcile_task, autopilot_task, market_selfcheck_task
+    global research_worker_task, m1_research_task, real_task, real_reconciliation_task
     if os.getenv('NEXORA_PUBLIC_URL','').startswith('https://') and db.DB_URL.startswith('sqlite:'):
         raise RuntimeError('Não usar SQLite efêmero em implantação pública: configure DATABASE_URL de Postgres')
     db.init_db()
-    restore_demo_autopilot_consent()
+    prepare_service_restart()
     market_task=asyncio.create_task(feed())
     reconcile_task=asyncio.create_task(reconcile_confirmed_loop())
     autopilot_task=asyncio.create_task(autopilot_loop())
