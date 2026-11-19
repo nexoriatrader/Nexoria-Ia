@@ -333,3 +333,44 @@ def test_demo_risk_checks_ignore_real_saved_stops_and_consent(session):
     # REAL ledger ignores the intentionally divergent DEMO stop entirely.
     order,created=place(session,"isolated-12345678",stake="1")
     assert created and order.state=="PENDING"
+
+
+def test_real_worker_disarms_stale_stop_snapshot_before_signal_or_broker_call(session,monkeypatch):
+    """No broker/network calls when saved REAL and consent stop limits diverge."""
+    import asyncio
+    import json
+    from unittest.mock import AsyncMock
+    from app import real_runtime
+
+    consent=session.get(db.RealRobotConsent,1)
+    consent.stop_loss="9.00"
+    configured=session.get(db.AccountRiskSettings,(1,"real","CR123"))
+    configured.stop_loss="5.00"
+    session.add(db.AutomationProfile(user_id=1,account_mode="real",
+        real_account_id="CR123",market="derived",
+        symbols_json=json.dumps(["R_100"]),strategy="trend",
+        expiry_minutes=0,indicators_json="[]",direction="AUTO",
+        min_payout="88",news_filter=False))
+    session.commit()
+    monkeypatch.setattr(db,"SessionLocal",sessionmaker(bind=session.bind,expire_on_commit=False))
+    monkeypatch.setattr(real_runtime,"real_available",lambda:True)
+    monkeypatch.setattr(real_runtime,"access_status",lambda sess,uid:{"allowed":True})
+    monkeypatch.setattr(real_runtime,"latest_token",lambda sess,uid:"synthetic-token")
+    signal=AsyncMock(side_effect=AssertionError("No scan with invalid stop authorization"))
+    buy=AsyncMock(side_effect=AssertionError("No broker orders"))
+    monkeypatch.setattr(real_runtime,"confirmed_automation_signal",signal)
+    monkeypatch.setattr(real_runtime,"buy_real_contract",buy)
+    real_runtime.last_scan.pop(1,None)
+    real_runtime.running.add(1)
+    try:
+        asyncio.run(real_runtime._user_scan(1))
+        assert 1 not in real_runtime.running
+        assert "Stop Loss REAL" in real_runtime.reasons[1]
+        assert session.query(db.RealOrder).count()==0
+        signal.assert_not_awaited()
+        buy.assert_not_awaited()
+    finally:
+        real_runtime.running.discard(1)
+        real_runtime.last_scan.pop(1,None)
+        real_runtime.reasons.pop(1,None)
+        real_runtime._user_locks.clear()
