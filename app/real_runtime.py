@@ -25,7 +25,7 @@ from .real_broker import (RealExecutionError, RealPurchaseUncertain,
 from .real_ledger import (
     ACTIVE, RealOrderGuardError, cancel_unsubmitted_real_order,
     confirm_real_order, mark_real_unknown, public_real_order,
-    reserve_real_order, settle_real_order,
+    reserve_real_order, settle_real_order, validated_real_stop_loss,
 )
 from .security import decrypt
 
@@ -146,11 +146,15 @@ async def _user_scan(uid):
             if mode_settings.martingale or mode_settings.cycles_limit:
                 disarm_real(uid,'Progressões REAL não habilitadas')
                 return
+            try:
+                validated_real_stop_loss(mode_settings, consent)
+            except RealOrderGuardError:
+                disarm_real(uid,'Stop Loss REAL diverge do consentimento; reautorize')
+                return
             # Snapshot immutable values before broker network requests.
             account_id=consent.account_id
             stake=mode_settings.stake
             min_ratio=str(Decimal('1')+Decimal(profile.min_payout)/Decimal('100'))
-            stop_loss=consent.stop_loss
             selected_symbols=list(json.loads(profile.symbols_json))
             if not selected_symbols or len(selected_symbols)>5:
                 disarm_real(uid,'Seleção de ativos REAL inválida')
