@@ -91,6 +91,45 @@ def test_demo_unchanged_request_keeps_existing_idempotency(sessions):
         assert not replayed and same.id==original.id
 
 
+
+def test_demo_default_stake_change_rejects_replayed_key_without_override(sessions):
+    """Effective default stake changes 1 -> 2: replay must fail closed."""
+    with sessions() as s:
+        user=s.get(db.User,1)
+        user.stake="1.00"
+        s.commit()
+        original,created=demo_reserve(
+            s,user,request_key="demo-default-stake-003",
+            symbol="R_100",direction="CALL",minutes=5
+        )
+        assert created and original.stake=="1.00"
+        before=(original.id,original.request_key,original.state,
+                original.active_slot,original.stake,original.contract_id,
+                original.pnl,original.created_at)
+        user.stake="2.00"
+        s.commit()
+        with pytest.raises(OrderGuardError,match="reutilizada com dados divergentes"):
+            demo_reserve(
+                s,user,request_key="demo-default-stake-003",
+                symbol="R_100",direction="CALL",minutes=5
+            )
+        s.expire_all()
+        persisted=s.get(db.DemoOrder,original.id)
+        after=(persisted.id,persisted.request_key,persisted.state,
+               persisted.active_slot,persisted.stake,persisted.contract_id,
+               persisted.pnl,persisted.created_at)
+        assert after==before
+        assert s.query(db.DemoOrder).count()==1
+        # An explicit override with the original amount remains a true replay.
+        same,replayed=demo_reserve(
+            s,user,request_key="demo-default-stake-003",
+            symbol="R_100",direction="CALL",minutes=5,
+            stake_override="1.0"
+        )
+        assert not replayed and same.id==original.id
+
+
+
 def test_stale_unknown_writer_cannot_override_confirmed_record(sessions):
     with sessions() as creating:
         new,_=_reserve(creating)
