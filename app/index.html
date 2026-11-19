@@ -1445,13 +1445,14 @@ async function loadDailyResults(){
   }
  }finally{dailyResultsLoading=false;}
 }
-setInterval(()=>{if(activePage==='dashboard')loadDailyResults().catch(()=>{})},120000);
+setInterval(()=>{if(!document.hidden&&activePage==='dashboard')loadDailyResults().catch(()=>{})},120000);
 
 function updateResultsPolling(){
  if(resultsRefreshTimer){clearInterval(resultsRefreshTimer);resultsRefreshTimer=null;}
  if(activePage==='results'||activePage==='dashboard'){
    resultsRefreshTimer=setInterval(async()=>{
-     if(resultsRequestBusy)return;
+     // Hidden tabs do not need UI-only refreshes; the server keeps running independently.
+     if(document.hidden||resultsRequestBusy)return;
      resultsRequestBusy=true;
      try{
        await loadDemoOrders();
@@ -1559,7 +1560,7 @@ async function init(){
   }
   refreshTimer=setInterval(()=>{
     // The results page already polls its own orders every 3s; avoid a full dashboard fan-out.
-    if(activePage==='dashboard')refreshDashboard();
+    if(!document.hidden&&activePage==='dashboard')refreshDashboard();
   },30000);
  }catch(e){fail(e.message);page('welcome');refreshLandingOffer()}}
 function showRobotNotice(reason){
