@@ -1397,7 +1397,7 @@ async function loadOnboarding(){
    $('setupRealAvailability').textContent=s.real_enabled?
      'Disponível na seção Automação mediante confirmação':
      'Aguardando habilitação do servidor';
-   $('setupStake').value=s.stake;$('setupWin').value=s.stop_win;$('setupLoss').value=s.stop_loss;
+   $('setupStake').value=s.stake??'';$('setupWin').value=s.stop_win??'';$('setupLoss').value=s.stop_loss??'';
    $('setupMg').checked=Boolean(s.martingale);
    $('setupGales').value=String(s.gale_count||1);
    $('setupMultiplier').value=s.multiplier||'2.0';
@@ -2575,7 +2575,7 @@ async function loadSettings(){
  $('configFeedback').textContent='';
  try{
    const s=await req('/api/onboarding/config');
-   $('stake').value=s.stake;$('sw').value=s.stop_win;$('sl').value=s.stop_loss;
+   $('stake').value=s.stake??'';$('sw').value=s.stop_win??'';$('sl').value=s.stop_loss??'';
    $('mg').checked=Boolean(s.martingale);
    $('mgCount').value=String(s.gale_count||1);
    $('mult').value=s.multiplier||'2.0';
