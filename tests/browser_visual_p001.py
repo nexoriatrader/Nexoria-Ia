@@ -73,7 +73,7 @@ def run():
         page.evaluate("() => {page('robot-config');initAutomationWizard();setAutomationWizardStep(2)}")
         assert page.locator('input[name="autoMode"][value="demo"]').is_checked()
         page.locator('input[name="autoMode"][value="real"]').check()
-        page.locator('#autoRealAccount option[value="CRONE"]').wait_for()
+        page.locator('#autoRealAccount option[value="CRONE"]').wait_for(state='attached')
         assert page.locator('#autoRealAccountWrapper').is_visible()
         page.locator('#autoRealAccount').select_option('CRONE')
         state(page,{"stake":"7.00","win":"19.00","loss":"14.00"},"REAL_ONE")
