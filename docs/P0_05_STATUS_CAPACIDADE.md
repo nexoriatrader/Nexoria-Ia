@@ -94,7 +94,20 @@ Um contrato `CONFIRMED` integra `open_unsettled` e `confirmed_open_count`, jamai
 
 - Branch: `feature/p0-05-status-capacidade`
 - Base: `65571b6b25bf46d1a6d570775411b5fa0345256a` (P0-04).
-- PR da P0-05: **rascunho**, baseada na branch P0-04, sem merge.
+- PR da P0-05: [**#49**](https://github.com/nexoriatrader/Nexoria-Ia/pull/49), **aberta em rascunho**, com base na branch da P0-04, sem merge.
 - Nenhum deploy, Supabase de produção, ordem Deriv ou mudança de gates.
 - Pendências herdadas: confirmar flags administrativas efetivas no Render e inventariar clientes externos que ainda usem APIs legadas separadas.
-- **CI de código e de SHA documental:** inserir os links e resultados exatos após a conclusão do GitHub Actions, sem reutilizar evidência de commits anteriores.
+- **SHA de implementação, teste e revisão visual:** `389cf6752ad8b71b2bc514ed6795680ff6b2e844` — [CI #44633021057](https://github.com/nexoriatrader/Nexoria-Ia/actions/runs/44633021057) **aprovado**: **435 testes gerais aprovados, 16 omitidos, 1 aviso; 16 testes PostgreSQL descartáveis aprovados; 1 teste de carga somente leitura aprovado; navegador Chromium aprovado**. A execução usa dados sintéticos e bloqueia rede externa.
+- A atualização deste relatório gera um commit **exclusivamente documental** com SHA próprio, sujeito à sua própria verificação de CI antes da aprovação final.
+
+## Revisão visual separada e correção detectada
+
+A revisão visual do painel real em Chromium (a partir do HTML da branch, sem autenticação ou APIs de corretora) detectou uma inconsistência que os testes de endpoint não encontraram: inicialmente, o painel principal mostrava **NÃO CONFIRMADO**, enquanto o subpainel do scanner ainda dizia **ROBÔ DESLIGADO**. Isso era um risco de representação, pois outro processo poderia estar executando.
+
+A correção em `app/index.html::renderScanMonitor` tornou o scanner também triestado: em `running_now=null`, apresenta **ESTADO NÃO CONFIRMADO**, texto de diagnóstico de observação entre processos e nenhuma afirmação de parada. O teste Chromium verifica explicitamente esse rótulo, o histórico `CONFIRMED` aberto e não liquidado, controle desabilitado, e sinalização **DESATUALIZADO** quando a API de status falha. Capturas da renderização real foram examinadas em desktop e em viewport móvel.
+
+**Revisão de compatibilidade:** `tests/test_dashboard_failure_recovery.py` continuou aprovado. Numa falha de rede, o último `robotRunning` local é mantido somente para consumidores legados, enquanto a interface declara estado desconhecido e desativa o controle. Assim, não se inventa uma parada do robô nem se afirma que ele segue ativo.
+
+**Revisão de desempenho:** `contract_summary` utiliza consultas SQL agregadas filtradas por usuário e conta, mais consulta limitada ao estado do registro mais recente. Não varre/monta todos os registros do histórico em cada atualização.
+
+**Fronteira da revisão:** houve auditoria de diff, testes de regressão independentes do fluxo de UI e inspeção de screenshots; **a aprovação humana independente externa ainda é necessária**. O fato de o CI estar verde não é autorização para implantar ou habilitar REAL.
