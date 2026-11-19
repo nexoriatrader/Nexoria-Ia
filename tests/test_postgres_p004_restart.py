@@ -99,8 +99,15 @@ def test_postgresql_restart_preserves_unresolved_contracts_and_old_progression()
                 symbol="R_100",direction="PUT",duration_minutes=5,
                 stake="1.25",currency="USD"))
             s.commit()
+        # The ephemeral CI service also contains consent fixtures from
+        # earlier tests. Startup revokes *all* stale REAL consents, not just
+        # this scenario's user, so compare with the actual pre-start count.
+        with Session() as before_start:
+            expected=sum(1 for consent in before_start.scalars(
+                select(db.RealRobotConsent)).all() if consent.revoked_at is None)
+            assert expected>=1
         with Session() as first:
-            assert revoke_stale_real_consent_after_restart(first)==1
+            assert revoke_stale_real_consent_after_restart(first)==expected
         with Session() as fresh:
             consent=fresh.get(db.RealRobotConsent,uid)
             assert consent.revoked_at is not None
