@@ -136,9 +136,19 @@ async def _user_scan(uid):
             if not token:
                 disarm_real(uid,'Sessão Deriv expirada; reconecte a conta REAL')
                 return
+            # An account-specific persisted REAL configuration is mandatory.
+            # Never inherit DEMO values from the User compatibility columns.
+            mode_settings=sess.get(db.AccountRiskSettings,
+                                   (uid,'real',consent.account_id))
+            if mode_settings is None:
+                disarm_real(uid,'Configuração REAL da conta ausente; nenhuma compra permitida')
+                return
+            if mode_settings.martingale or mode_settings.cycles_limit:
+                disarm_real(uid,'Progressões REAL não habilitadas')
+                return
             # Snapshot immutable values before broker network requests.
             account_id=consent.account_id
-            stake=user.stake
+            stake=mode_settings.stake
             min_ratio=str(Decimal('1')+Decimal(profile.min_payout)/Decimal('100'))
             stop_loss=consent.stop_loss
             selected_symbols=list(json.loads(profile.symbols_json))
