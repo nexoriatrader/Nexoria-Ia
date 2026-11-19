@@ -15,6 +15,7 @@ from pydantic import BaseModel
 from sqlalchemy import select, delete, func
 
 from . import db
+from .mode_settings import settings_for, save_settings
 from .public_urls import origin_for_request, checkout_return_origin, nexora_referral_origin, canonical_origin
 from .stripe_billing import PLANS, billing_enabled, stripe_expected_livemode, create_checkout, stripe_signature_valid, apply_paid_checkout, plan_can_purchase, test_plan_enabled
 from .automation_markets import GROUPS as AUTOMATION_GROUPS, instruments_by_group, featured_instruments_by_group
@@ -2469,8 +2470,14 @@ async def config(request:Request, config:Config,nexora_sid:str|None=Cookie(defau
         except ValueError as e:raise HTTPException(409,str(e)) from None
         with db.SessionLocal() as sess:
             stored=sess.get(db.User,u.id)
+            previous=settings_for(sess,stored,'demo',stored.deriv_account_id)
             stored.stake=str(settings.stake);stored.stop_win=str(settings.stop_win);stored.stop_loss=str(settings.stop_loss)
             stored.multiplier='2.00';stored.martingale=False
+            save_settings(sess,stored,'demo',stored.deriv_account_id,
+                          stake=settings.stake,stop_win=settings.stop_win,
+                          stop_loss=settings.stop_loss,martingale=previous['martingale'],
+                          gale_count=previous['gale_count'],multiplier=previous['multiplier'],
+                          cycles=int(previous['cycles']),cycle_multiplier=previous['cycle_multiplier'])
             sess.commit()
     return {'ok':True}
 
@@ -2504,18 +2511,17 @@ def parse_progression_multiplier(value, label):
 async def get_onboarding_config(request:Request,nexora_sid:str|None=Cookie(default=None)):
     u=active_user(request,nexora_sid)
     with db.SessionLocal() as sess:
-        plan=sess.get(db.RobotPlan,u.id)
-        cycles=sess.get(db.RobotCycleParams,u.id)
         profile=sess.get(db.AutomationProfile,u.id)
-        return {'mode':profile.account_mode if profile else 'demo',
-                'real_enabled':real_runtime.real_available(),
-                'stake':u.stake,'stop_win':u.stop_win,'stop_loss':u.stop_loss,
-                'martingale':bool(plan.requested_martingale) if plan else False,
-                'gale_count':plan.gale_count if plan else 0,
-                'multiplier':plan.requested_multiplier if plan else '2.00',
-                'cycles':str(plan.cycles_limit) if plan and plan.cycles_limit is not None else '0',
-                'cycle_multiplier':cycles.multiplier if cycles else '2.00',
-                'martingale_execution_enabled':True,'cycles_execution_enabled':True}
+        mode=profile.account_mode if profile else 'demo'
+        if mode=='real' and not profile.real_account_id:
+            raise HTTPException(409,'Selecione uma conta REAL antes de consultar preferências')
+        if mode not in ('demo','real'):
+            raise HTTPException(409,'Modalidade inválida')
+        account_id=profile.real_account_id if mode=='real' else u.deriv_account_id
+        snapshot=settings_for(sess,u,mode,account_id)
+        return {**snapshot, 'real_enabled':real_runtime.real_available(),
+                'martingale_execution_enabled':mode=='demo',
+                'cycles_execution_enabled':mode=='demo'}
 
 
 @app.post('/api/onboarding/config')
@@ -2543,8 +2549,28 @@ async def save_onboarding_config(request:Request,payload:OnboardingConfig,
     except ValueError as e:
         raise HTTPException(422,str(e)) from None
     async with autopilot_lock:
-        if u.id in autopilot_enabled:
+        if u.id in autopilot_enabled or u.id in real_runtime.running:
             raise HTTPException(409,'Desligue o robô antes de salvar uma nova progressão')
+        # REAL settings are isolated and never configure the DEMO runtime,
+        # its legacy User/RobotPlan fields, or a purchase consent.
+        with db.SessionLocal() as sess:
+            profile=sess.get(db.AutomationProfile,u.id)
+            mode=profile.account_mode if profile else 'demo'
+            if mode not in ('demo','real'):
+                raise HTTPException(409,'Modalidade inválida')
+            if mode=='real':
+                if not profile.real_account_id:
+                    raise HTTPException(409,'Selecione uma conta REAL antes de salvar preferências')
+                save_settings(sess,u,'real',profile.real_account_id,
+                              stake=settings.stake,stop_win=settings.stop_win,
+                              stop_loss=settings.stop_loss,
+                              martingale=payload.martingale,gale_count=payload.gale_count,
+                              multiplier=gale_factor,cycles=int(payload.cycles),
+                              cycle_multiplier=cycle_factor)
+                sess.commit()
+                return {'ok':True,'execution_mode':'DERIV_REAL_CONFIGURED_ONLY',
+                        'martingale_execution_enabled':False,'cycles_execution_enabled':False,
+                        'message':'Preferências REAL isoladas por conta; nenhuma execução autorizada.'}
         async with lock:
             engine=rt_for(u)
             try:engine.configure(settings)
@@ -2571,6 +2597,13 @@ async def save_onboarding_config(request:Request,payload:OnboardingConfig,
                 if not cp:
                     cp=db.RobotCycleParams(user_id=u.id);sess.add(cp)
                 cp.multiplier=str(cycle_factor)
+                # Keep a versioned DEMO snapshot while retaining the existing
+                # legacy fields so DEMO AutoPilot, limits and older clients work.
+                save_settings(sess,stored,'demo',stored.deriv_account_id,
+                              stake=settings.stake,stop_win=settings.stop_win,
+                              stop_loss=settings.stop_loss,martingale=payload.martingale,
+                              gale_count=payload.gale_count,multiplier=gale_factor,
+                              cycles=int(payload.cycles),cycle_multiplier=cycle_factor)
                 # Changing configuration invalidates any previously armed sequence.
                 run=sess.get(db.RobotRun,u.id)
                 if run:
