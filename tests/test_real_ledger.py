@@ -105,6 +105,14 @@ def test_real_worker_reserves_and_reconciles_mock_contract(session,monkeypatch):
     monkeypatch.setattr(db,"SessionLocal",session_factory)
     monkeypatch.setattr(real_runtime,"latest_token",lambda sess,uid:"fake-token")
     monkeypatch.setattr(real_runtime,"real_available",lambda:True)
+    # SQLite cannot lock consent across processes. This is an explicit
+    # synthetic-only stand-in; production row locking is proven on PostgreSQL.
+    from contextlib import contextmanager
+    @contextmanager
+    def simulated_consent_guard(user_id, account_id):
+        yield True
+    monkeypatch.setattr(real_runtime,"locked_real_consent_for_send",
+                        simulated_consent_guard)
     monkeypatch.setattr(real_runtime,"access_status",lambda sess,uid:{"allowed":True})
     bar=int(time.time())-60
     candidate={"symbol":"R_100","direction":"CALL","minutes":1,
@@ -159,6 +167,14 @@ def test_uncertain_real_execution_never_sends_next_buy(session,monkeypatch):
                         sessionmaker(bind=session.bind,expire_on_commit=False))
     monkeypatch.setattr(real_runtime,"latest_token",lambda sess,uid:"fake-token")
     monkeypatch.setattr(real_runtime,"real_available",lambda:True)
+    # SQLite cannot lock consent across processes. This is an explicit
+    # synthetic-only stand-in; production row locking is proven on PostgreSQL.
+    from contextlib import contextmanager
+    @contextmanager
+    def simulated_consent_guard(user_id, account_id):
+        yield True
+    monkeypatch.setattr(real_runtime,"locked_real_consent_for_send",
+                        simulated_consent_guard)
     monkeypatch.setattr(real_runtime,"access_status",lambda sess,uid:{"allowed":True})
     bar=int(time.time())-60
     monkeypatch.setattr(real_runtime,"confirmed_automation_signal",
