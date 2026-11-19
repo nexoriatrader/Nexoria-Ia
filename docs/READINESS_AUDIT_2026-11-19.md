@@ -1,0 +1,95 @@
+# NEXORA IA — auditoria de prontidão técnica (19/11/2026)
+
+**Escopo:** autenticação, privacidade, CI, confiabilidade, observabilidade e preparação para testes em ambiente de demonstração.  
+**Fora do escopo:** habilitar ordens financeiras reais, remover limites de risco, aprovar oferta pública de serviços financeiros ou executar contratos para validar a implantação.
+
+## Resumo executivo
+
+**Estado: EM HOMOLOGAÇÃO — não aprovado para liberar a conta REAL.**
+
+Esta revisão não deve ser interpretada como auditoria regulatória, autorização de comercialização ou certificação de segurança. Foram feitas consultas somente leitura ao GitHub e Supabase. Nenhuma operação financeira foi executada e nenhuma configuração de execução do Render foi alterada.
+
+## Evidências confirmadas nesta revisão
+
+| Item | Evidência | Resultado |
+| --- | --- | --- |
+| Código em produção pretendido | `main`, commit `d51aedba27458057e2803346da85f887fd7aede9`, 18/11/2026 | Verificado no GitHub; deploy Render não aferido |
+| PR de segurança #31 | Pull request incorporada à `main` em 17/11/2026 | Confirmado no GitHub |
+| GitHub Actions (último HEAD consultado) | `NEXORA Python tests`, `NEXORA repository security audit`, `NEXORA production public smoke check`, `NEXORA access and referral tests` | Execuções concluídas com `success` em 18/11/2026; não se afirma número de testes nesse HEAD |
+| RLS `public` | `pg_tables`: 28 de 28 tabelas com `rowsecurity` | Confirmado via SQL de leitura em 19/11/2026 |
+| Permissões `anon` e `authenticated` | `has_table_privilege` para SELECT e INSERT nas 28 tabelas | 0 tabelas com tais permissões diretas |
+| Supabase Security Advisor | `rls_enabled_no_policy` (INFO) | Alerta informativo, consistente com backend SQLAlchemy sem cliente público |
+| Supabase Performance Advisor | `unused_index` (INFO) em 9 índices | Não remover índices sem medir consultas e impacto |
+| Smoke público existente | `/healthz` e `/api/session` | CI passou no HEAD consultado |
+
+SQL executado (agregação sem ler informações dos usuários):
+
+```sql
+SELECT
+  count(*) AS table_count,
+  count(*) FILTER (WHERE rowsecurity) AS rls_enabled,
+  count(*) FILTER (
+    WHERE has_table_privilege('anon', format('%I.%I', schemaname, tablename), 'SELECT')
+  ) AS anon_select,
+  count(*) FILTER (
+    WHERE has_table_privilege('authenticated', format('%I.%I', schemaname, tablename), 'SELECT')
+  ) AS authenticated_select,
+  count(*) FILTER (
+    WHERE has_table_privilege('anon', format('%I.%I', schemaname, tablename), 'INSERT')
+  ) AS anon_insert,
+  count(*) FILTER (
+    WHERE has_table_privilege('authenticated', format('%I.%I', schemaname, tablename), 'INSERT')
+  ) AS authenticated_insert
+FROM pg_tables
+WHERE schemaname = 'public';
+```
+
+Resultado: `table_count=28`, `rls_enabled=28`, `anon_select=0`, `authenticated_select=0`, `anon_insert=0`, `authenticated_insert=0`.
+
+**Limite da prova:** as contagens não substituem teste de isolamento entre sessões de usuários, privilégios por outras roles, exposição por futuras tabelas, inspeção de segredos ou validação da configuração efetiva do serviço.
+
+## Reforço de segurança proposto nesta branch
+
+A verificação CI `.github/workflows/render-public-smoke.yml` passa a consultar, **sem cookies ou tokens**, quatro endpoints privados com método GET:
+
+- `/api/status`
+- `/api/automation/profile`
+- `/api/demo/orders`
+- `/api/real/orders`
+
+Critério: todos devem responder **HTTP 401**, com `Cache-Control: no-store`. A verificação falha se houver acesso anônimo ou resposta inesperada. Ela **não** chama endpoints de ativação, envio de ordens, login ou mudança de configuração.
+
+**Importante:** a alteração é uma proposta em PR. A execução do CI após o PR é necessária para confirmar que o novo teste passa; os testes anteriores não cobrem automaticamente a modificação recém-criada.
+
+## Pendências para homologação
+
+### Prioridade 1 — segurança / controle de acesso
+- [ ] Validar login e sessão após migração de RLS, inclusive encerramento, expiração e acesso sem autenticação.
+- [ ] Executar testes de isolamento entre duas contas distintas; uma não pode ler ou alterar dados de outra.
+- [ ] Revisar proteção de `main` no plano GitHub disponível; alterações devem passar por PR e CI antes de qualquer merge.
+- [ ] Conferir no painel Supabase as opções de exposição automática de tabelas futuras e os privilégios padrão (sem conceder acesso público).
+- [ ] Revisar a gestão de credenciais e o histórico do GitHub quanto a possíveis segredos expostos, sem copiá-los para relatórios.
+
+### Prioridade 2 — confiabilidade / desempenho
+- [ ] Medir tempos de primeira abertura (Render Free), API de sessão, status e painel; coletar p50/p95 de latência.
+- [ ] Verificar logs do Render depois da PR #31: reinícios, `ConnectionClosedError`, CPU, memória e conexões Postgres.
+- [ ] Fazer teste de carga somente leitura/simulado com múltiplas sessões, sem enviar contratos.
+- [ ] Validar idempotência, reconciliação e interrupção segura diante de falhas usando mocks e dados sintéticos.
+- [ ] Validar rotinas de backup e **restauração** com dados fictícios; monitoramento de falhas e canal de suporte.
+
+### Prioridade 3 — produto / conformidade
+- [ ] Confirmar com análise jurídica e termos dos provedores se a atividade pretendida é permitida nos mercados atendidos, inclusive elegibilidade por idade.
+- [ ] Revisar avisos de risco, publicidade, suporte, tratamento de dados e resolução de incidentes.
+- [ ] Distinguir no produto resultados simulados de resultados confirmados, sem prometer taxa de acerto ou lucratividade.
+- [ ] Obter avaliação independente do risco e das obrigações aplicáveis antes de qualquer decisão de oferta com fundos reais.
+
+## Infraestrutura e limitações desta auditoria
+
+- **GitHub:** branch `main` e CI consultados; este documento está em uma branch de revisão, não em produção.
+- **Supabase:** consultas agregadas e advisors verificados, sem migrações ou modificações.
+- **Render:** valores de variáveis de ambiente, métricas privadas, logs recentes e deploy efetivo **não foram verificados** nesta revisão. O workflow de monitoramento não comprova disponibilidade contínua nem estado do robô.
+- **Corretora:** nenhuma conta autenticada de usuário nem contrato real foi consultado ou acionado.
+
+## Critério de conclusão
+
+Só classificar este trabalho como *homologação técnica concluída* após registrar evidências reproduzíveis para controle de acesso, CI, desempenho, falhas de rede/reinício, isolamento entre usuários, restauração, monitoramento e revisão de conformidade. Homologação técnica **não** equivale a autorização para ativar negociação automática com dinheiro real.
