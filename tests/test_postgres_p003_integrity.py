@@ -187,3 +187,64 @@ def test_stale_settlement_from_independent_process_cannot_overwrite_pnl():
                 db.RealOrder.contract_id=="808080808")).all().__len__()==1
     finally:
         engine.dispose()
+
+
+def _crash_before_commit(dsn, order_id, reached):
+    """Die inside an uncommitted synthetic transaction (independent OS process)."""
+    from sqlalchemy import update
+    engine=create_engine(dsn,pool_pre_ping=True)
+    conn=engine.connect()
+    transaction=conn.begin()
+    conn.execute(update(db.RealOrder).where(
+        db.RealOrder.id==order_id,db.RealOrder.state=="PENDING"
+    ).values(state="CANCELLED",active_slot=None))
+    reached.set()
+    # Simulate abrupt service loss; PostgreSQL rolls back the open transaction.
+    os._exit(23)
+
+
+def test_process_crash_rolls_back_uncommitted_slot_release():
+    dsn=_safe_dsn()
+    engine=create_engine(dsn,pool_pre_ping=True)
+    Session=sessionmaker(bind=engine,expire_on_commit=False)
+    try:
+        db.Base.metadata.create_all(engine)
+        with Session() as s:
+            u=db.User(deriv_account_id="VP3ABRUPT",selected_mode="demo")
+            s.add(u);s.flush()
+            uid=u.id
+            o=db.RealOrder(user_id=uid,account_id="CRP3CRASH",
+                request_key="p3-crash-key-003",active_slot="CRP3CRASH",
+                state="PENDING",symbol="R_100",direction="CALL",
+                duration_minutes=5,stake="1",currency="USD")
+            s.add(o);s.commit()
+            oid=o.id
+        ctx=multiprocessing.get_context("spawn")
+        reached=ctx.Event()
+        worker=ctx.Process(target=_crash_before_commit,args=(dsn,oid,reached))
+        worker.start()
+        try:
+            assert reached.wait(timeout=25), "Synthetic transaction was never staged"
+            worker.join(timeout=25)
+            assert worker.exitcode==23, "Expected controlled child-process crash"
+        finally:
+            if worker.is_alive():
+                worker.terminate()
+                worker.join(timeout=5)
+        with Session() as s:
+            row=s.get(db.RealOrder,oid)
+            assert row.state=="PENDING"
+            assert row.active_slot=="CRP3CRASH"
+            assert row.pnl is None and row.contract_id is None
+            second=db.RealOrder(user_id=uid,account_id="CRP3CRASH",
+                request_key="p3-crash-replay-003",active_slot="CRP3CRASH",
+                state="PENDING",symbol="R_100",direction="CALL",
+                duration_minutes=5,stake="1",currency="USD")
+            s.add(second)
+            with pytest.raises(IntegrityError):
+                s.commit()
+            s.rollback()
+            assert len(s.scalars(select(db.RealOrder).where(
+                db.RealOrder.account_id=="CRP3CRASH")).all())==1
+    finally:
+        engine.dispose()
