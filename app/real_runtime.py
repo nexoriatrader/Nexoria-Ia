@@ -14,7 +14,7 @@ import time
 from decimal import Decimal
 from datetime import timezone
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 
 from . import db
 from .access import access_status
@@ -82,6 +82,47 @@ def latest_token(sess, uid):
         except Exception:
             continue
     return None
+
+
+def revoke_real_consent_for_stop(uid):
+    """F01: revoke only this authenticated user's persisted REAL consent.
+
+    Use a database row lock (PostgreSQL) so the existing send guard from P0-04
+    and a stop request serialize on the SAME consent record. No broker access,
+    order edits, new consent or account selection happens here.
+
+    The account identifier comes exclusively from the consent owned by uid,
+    never from a local running set or a potentially stale profile. Missing and
+    already-revoked consent are safe, distinguishable idempotent outcomes.
+    """
+    with db.SessionLocal() as sess:
+        try:
+            consent=sess.scalar(select(db.RealRobotConsent).where(
+                db.RealRobotConsent.user_id==uid).with_for_update())
+            if consent is None:
+                # No authorization exists to revoke; never manufacture one.
+                return {'status':'NO_CONSENT','account_id':None,
+                        'revocation_persisted':None}
+            account_id=consent.account_id
+            if consent.revoked_at is not None:
+                return {'status':'ALREADY_REVOKED','account_id':account_id,
+                        'revocation_persisted':True}
+            # Bound by authenticated user AND stored account, with a
+            # conditional predicate preventing unintended updates.
+            changed=sess.execute(update(db.RealRobotConsent).where(
+                db.RealRobotConsent.user_id==uid,
+                db.RealRobotConsent.account_id==account_id,
+                db.RealRobotConsent.revoked_at.is_(None)
+            ).values(revoked_at=db.utcnow()).execution_options(
+                synchronize_session=False))
+            if changed.rowcount!=1:
+                raise RuntimeError('Revogação REAL não confirmada no banco')
+            sess.commit()
+            return {'status':'REVOKED_NOW','account_id':account_id,
+                    'revocation_persisted':True}
+        except Exception:
+            sess.rollback()
+            raise
 
 
 def disarm_real(uid,why):
