@@ -284,8 +284,10 @@ def test_automation_ui_does_not_prefill_risk_across_unsaved_mode_switches():
     clear = html.split("function clearUnsavedAutomationRiskOnAccountChange(){", 1)[1]
     clear = clear.split("async function changeAutomationMarket()", 1)[0]
     assert "['autoStake','autoWin','autoLoss']" in clear
-    assert "input.addEventListener('change',clearUnsavedAutomationRiskOnAccountChange)" in clear
-    assert "$('autoRealAccount').addEventListener('change',clearUnsavedAutomationRiskOnAccountChange)" in clear
+    assert "restoreSelectedAutomationRisk()" in clear
+    assert "$('autoRealAccount').addEventListener('change',()=>{" in clear
+    assert "++automationRiskRequest" in clear
+    assert "requestId!==automationRiskRequest" in clear
     assert "$('autoStake').value=risk.stake??'';" in html
     assert "$('autoWin').value=risk.stop_win??'';" in html
     assert "$('autoLoss').value=risk.stop_loss??'';" in html
