@@ -2516,20 +2516,53 @@ def parse_progression_multiplier(value, label):
 
 
 @app.get('/api/onboarding/config')
-async def get_onboarding_config(request:Request,nexora_sid:str|None=Cookie(default=None)):
-    u=active_user(request,nexora_sid)
+async def get_onboarding_config(request:Request,mode:str|None=None,
+                                account_id:str|None=None,
+                                nexora_sid:str|None=Cookie(default=None)):
+    """Read only the selected user's DEMO or verified REAL account preferences.
+
+    Optional query parameters support UI account switching before a profile
+    is saved. A different REAL account must be verified in the OAuth list;
+    this endpoint never uses OTP, proposals or purchase APIs.
+    """
+    u,token=active_session(request,nexora_sid)
     with db.SessionLocal() as sess:
         profile=sess.get(db.AutomationProfile,u.id)
-        mode=profile.account_mode if profile else 'demo'
-        if mode=='real' and not profile.real_account_id:
-            raise HTTPException(409,'Selecione uma conta REAL antes de consultar preferências')
-        if mode not in ('demo','real'):
-            raise HTTPException(409,'Modalidade inválida')
-        account_id=profile.real_account_id if mode=='real' else u.deriv_account_id
-        snapshot=settings_for(sess,u,mode,account_id)
+        saved_mode=profile.account_mode if profile else 'demo'
+        selected_mode=mode if mode is not None else saved_mode
+        if selected_mode not in ('demo','real'):
+            raise HTTPException(422,'Modalidade inválida')
+        if selected_mode=='demo':
+            if account_id is not None and account_id!=u.deriv_account_id:
+                raise HTTPException(403,'Conta DEMO não pertence à sessão')
+            selected_account=u.deriv_account_id
+        else:
+            selected_account=account_id if account_id is not None else (
+                profile.real_account_id if profile and saved_mode=='real' else None)
+            if not selected_account:
+                raise HTTPException(409,'Selecione uma conta REAL antes de consultar preferências')
+            if not re.fullmatch(r'[A-Za-z0-9]{2,100}',selected_account):
+                raise HTTPException(422,'Identificador REAL inválido')
+            stored_account=(profile.real_account_id if profile and saved_mode=='real'
+                            else None)
+            if selected_account!=stored_account:
+                try:
+                    async with httpx.AsyncClient(timeout=15) as client:
+                        result=await client.get(
+                            'https://api.derivws.com/trading/v1/options/accounts',
+                            headers={'Authorization':f'Bearer {token}'})
+                        result.raise_for_status()
+                        accounts=result.json()
+                except (httpx.HTTPError,ValueError):
+                    raise HTTPException(503,'Não foi possível confirmar a conta REAL') from None
+                from .auth_helpers import extract_accounts, real_accounts
+                owned={row['account_id'] for row in real_accounts(extract_accounts(accounts))}
+                if selected_account not in owned:
+                    raise HTTPException(403,'Conta REAL não pertence à sessão autenticada')
+        snapshot=settings_for(sess,u,selected_mode,selected_account)
         return {**snapshot, 'real_enabled':real_runtime.real_available(),
-                'martingale_execution_enabled':mode=='demo',
-                'cycles_execution_enabled':mode=='demo'}
+                'martingale_execution_enabled':selected_mode=='demo',
+                'cycles_execution_enabled':selected_mode=='demo'}
 
 
 @app.post('/api/onboarding/config')
