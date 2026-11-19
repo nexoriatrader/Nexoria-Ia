@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import select, update
+from sqlalchemy import or_, select, update
 
 from . import db
 
@@ -116,22 +116,23 @@ def account_recovery_summary(session, user_id: int, account_id: str | None) -> d
     """Read-only, user/account-scoped summary; no financial access or effects."""
     if not account_id:
         return {"account_id": None, "active_count": 0, "pending_count": 0,
-                "unknown_count": 0, "review_count": 0, "blocked": False,
+                "unknown_count": 0, "review_count": 0, "blocked": None,
                 "reason": "Selecione uma conta para consultar suas pendências"}
     rows = session.scalars(select(db.RealOrder).where(
         db.RealOrder.user_id == user_id,
         db.RealOrder.account_id == account_id,
-        db.RealOrder.state.in_(("PENDING", "UNKNOWN", "CONFIRMED")),
+        or_(db.RealOrder.state.in_(("PENDING", "UNKNOWN", "CONFIRMED")),
+            db.RealOrder.active_slot.is_not(None)),
     )).all()
     classified = [classify_unresolved_real_order(row) for row in rows]
     blocked = any(x["account_blocked"] for x in classified)
     return {
         "account_id": account_id,
-        "active_count": len(rows),
+        "active_count": sum(row.state in ACTIVE_REAL for row in rows),
         "pending_count": sum(o.state == "PENDING" for o in rows),
         "unknown_count": sum(o.state == "UNKNOWN" for o in rows),
         "review_count": sum(x["needs_manual_review"] for x in classified),
         "blocked": blocked,
-        "reason": ("Há operações sem conclusão confirmada; novas ordens permanecem bloqueadas"
+        "reason": ("Há pendências ou inconsistências; revisão obrigatória antes de novas ordens"
                    if blocked else "Nenhuma operação REAL pendente nesta conta"),
     }
