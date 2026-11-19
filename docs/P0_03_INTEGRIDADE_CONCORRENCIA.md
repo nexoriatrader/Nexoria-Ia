@@ -18,7 +18,7 @@
 
 - **Novo `app/order_integrity.py`:** compara semanticamente requests idempotentes e audita somente os registros do usuário/conta selecionados, sem importar `real_broker`, utilizar tokens ou emitir ordens.
 - **`app/real_ledger.py`:** proíbe replay divergente, exige auditoria de integridade aprovada e aplica atualizações condicionais às transições de estado. Evita sobrescrever contrato liquidado e preserva slot diante de conflito.
-- **`app/demo_ledger.py`:** mantém retorno da mesma tentativa DEMO quando parâmetros coincidem; recusa conteúdo incompatível com chave já persistida. Configurações e estratégias DEMO não foram alteradas.
+- **`app/demo_ledger.py`:** resolve o stake efetivo a partir da configuração DEMO atual (ou de `stake_override`) **antes** da consulta de idempotência. A função `demo_replay_matches` em `app/order_integrity.py` compara o valor efetivo em todos os casos, inclusive sem override. Replay com mesmo valor continua idempotente; valor divergente é recusado sem alterar o registro antigo. As estratégias DEMO não foram alteradas.
 - **`app/real_recovery.py`:** inclui sumário de integridade no resultado existente e trata anomalias como bloqueantes. Nenhum fluxo financeiro novo.
 - **Novos `tests/test_p003_integrity.py` e `tests/test_postgres_p003_integrity.py`:** casos de idempotência divergente, duas sessões com objetos antigos, duas liquidações simuladas, crash com rollback, auditorias imutáveis, unicidade entre processos e separação de usuários.
 - **`.github/workflows/test.yml`:** CI da branch P0-03, com os testes PostgreSQL adicionados ao serviço descartável de localhost. `NEXORA_REAL_AUTOPILOT_ENABLED=false` e `NEXORA_REAL_RELEASE_APPROVED=false` nesse job.
@@ -66,5 +66,30 @@ Essas pendências continuam registradas na PR #45 e não impedem revisão técni
 - PR P0-03: [#47](https://github.com/nexoriatrader/Nexoria-Ia/pull/47), **aberta em rascunho**, baseada na branch P0-02 (PR #46), nunca em `main`.
 - P0-01 e P0-02: não mescladas, sem deploy.
 - P0-04 e seguintes: **não iniciadas**.
-- CI do commit de implementação e relatório `c8fd987c3d93cd969825c2bcc48bb36af81d85d2`: [GitHub Actions #44619667191](https://github.com/nexoriatrader/Nexoria-Ia/actions/runs/44619667191), **aprovado**. Suíte geral: **396 aprovados, 8 omitidos, 1 aviso**; teste de carga somente leitura: **1 aprovado**; PostgreSQL descartável: **8 aprovados**; job Chromium (P0-01) omitido porque nenhuma alteração visual foi realizada.
-- Esta atualização documental gera um commit posterior, com SHA próprio; verificar seu CI separadamente e não confundir os dois commits.
+- CI verificado dos dois ajustes solicitados na revisão independente, commit de código/testes `943ef34c6fe58bb7183d4129be8a918121b96d62`: [GitHub Actions #44622312604](https://github.com/nexoriatrader/Nexoria-Ia/actions/runs/44622312604), **aprovado**. Suíte geral: **397 aprovados, 10 omitidos, 1 aviso**; carga somente leitura: **1 aprovado**; PostgreSQL descartável: **10 aprovados**; Chromium da P0-01 omitido (interface sem alterações).
+- Este relatório gera um commit exclusivamente documental com SHA próprio. A referência acima identifica a execução exata do código/testes revisados, sem confundir o commit documental com o de implementação.
+
+## Ajustes de revisão independente — validação final
+
+### Divergência do stake padrão DEMO corrigida
+
+**Problema confirmado:** o `demo_replay_matches` antigo tratava `stake_override=None` como dispensa da comparação de stake. A mesma chave podia retornar um registro com valor antigo após alteração do stake padrão.
+
+**Correção:** `demo_ledger.reserve` lê o stake efetivo (`locked_user.stake` sem override, ou o override explícito) **antes** da busca pela chave de requisição, e o passa obrigatoriamente para `demo_replay_matches`. A comparação usa `Decimal` com rejeição de valores inválidos; não há tolerância para valor divergente.
+
+**Regressão demonstrada:** `test_demo_default_stake_change_rejects_replayed_key_without_override` em `tests/test_p003_integrity.py` cria DEMO sintética com 1,00 USD, altera o valor padrão para 2,00 USD, tenta a mesma chave sem override e verifica a rejeição; confere todos os campos fundamentais do registro original e quantidade de registros igual a um. Um override explícito de 1,0 continua reconhecido como replay do mesmo valor, preservando compatibilidade.
+
+### Concorrência da função da aplicação em processos independentes
+
+**Novo ensaio:** `test_cross_process_application_real_reservation_never_duplicates` em `tests/test_postgres_p003_integrity.py` inicia dois processos de sistema operacional separados, com conexões SQLAlchemy independentes e início simultâneo coordenado. Cada processo chama **a própria função existente** `reserve_real_order` contra PostgreSQL 16 descartável, com usuário, consentimento e configuração de conta **inteiramente fictícios**, sem token de corretora, API ou `real_broker`.
+
+Foram testados dois casos: requisições com chaves **diferentes** para a mesma conta (uma única reserva persistida e a tentativa concorrente recusada), e requisições com **a mesma chave** (uma única reserva persistida e a segunda requisição reconhecida como idempotente ou bloqueada conservadoramente em caso de corrida). O banco é consultado após os processos terminarem para verificar uma só linha, `PENDING` com slot preservado e ausência de identificador de contrato, P/L ou segunda reserva.
+
+**Correção de isolamento da suíte:** a primeira execução do novo teste reutilizou um identificador de conta fictícia entre os dois cenários, fazendo o segundo encontrar o slot ativo deixado pelo primeiro. O ledger recusou corretamente ambas as tentativas. As fixtures foram separadas por cenário; o CI final subsequente aprovou ambos, sem mudanças na lógica REAL.
+
+### Evidências e aceitação
+
+- Código e testes: commit `943ef34c6fe58bb7183d4129be8a918121b96d62`.
+- [CI #44622312604](https://github.com/nexoriatrader/Nexoria-Ia/actions/runs/44622312604): **397 aprovados, 10 omitidos, 1 aviso** na suíte geral; **10 aprovados** no PostgreSQL descartável, incluindo as duas execuções de `reserve_real_order`; **1 teste de carga somente leitura aprovado**.
+- Confirmação externa: **nenhuma**. Os testes não executam ordens financeiras nem demonstram autorização para operar. As flags administrativas continuam desativadas no CI.
+- A PR #47 permanece aberta e em rascunho, sem merge, deploy ou migração Supabase; P0-04 não foi iniciada.
