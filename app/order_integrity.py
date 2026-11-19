@@ -34,13 +34,13 @@ def real_replay_matches(previous, *, user_id, account_id, symbol, direction,
 
 
 def demo_replay_matches(previous, *, user_id, symbol, direction, minutes,
-                        stake_override=None) -> bool:
-    """An omitted stake override reuses legacy DEMO request semantics."""
+                        effective_stake) -> bool:
+    """A replay must match the amount currently requested, including the default."""
     return (
         previous.user_id == user_id and previous.symbol == symbol
         and previous.direction == direction
         and previous.duration_minutes == minutes
-        and (stake_override is None or _same_amount(previous.stake, stake_override))
+        and _same_amount(previous.stake, effective_stake)
     )
 
 
