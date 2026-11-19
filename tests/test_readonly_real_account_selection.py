@@ -214,3 +214,32 @@ def test_single_account_history_is_still_visible_without_selection(session_clien
     data=client.get('/api/real/orders').json()
     assert data['account_id']=='R111'
     assert [order['symbol'] for order in data['items']]==['R_50']
+
+
+def test_balance_fallback_reads_only_selected_real_channel(session_client,monkeypatch):
+    client,_=session_client
+    from app import real_readonly
+    def without_selected_balance(self):
+        items=[dict(item) for item in ACCOUNTS]
+        items[-1].pop('balance')
+        return {'data':items}
+    monkeypatch.setattr(FakeResponse,'json',without_selected_balance)
+    broker_read=AsyncMock(return_value={
+        'available':True,'balance':'22.75','currency':'EUR',
+        'account_id':'R222','reason':None})
+    monkeypatch.setattr(real_readonly,'fetch_real_balance',broker_read)
+    response=client.get('/api/real/balance')
+    assert response.status_code==200
+    assert response.json()['account_id']=='R222'
+    broker_read.assert_awaited_once_with('synthetic-token','R222')
+
+
+def test_demo_balance_stays_on_demo_account(session_client,monkeypatch):
+    client,_=session_client
+    read_demo=AsyncMock(return_value={
+        'balance':'1000.00','currency':'USD','demo_only':True})
+    monkeypatch.setattr(main,'demo_account_balance',read_demo)
+    response=client.get('/api/demo/balance')
+    assert response.status_code==200
+    assert response.json()['demo_only'] is True
+    read_demo.assert_awaited_once_with('synthetic-token','V111')
