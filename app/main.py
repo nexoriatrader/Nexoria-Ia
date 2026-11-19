@@ -1353,11 +1353,23 @@ async def real_orders_route(request:Request,nexora_sid:str|None=Cookie(default=N
     user=active_user(request,nexora_sid)
     from .real_ledger import public_real_order
     with db.SessionLocal() as sess:
-        orders=sess.scalars(select(db.RealOrder).where(
-            db.RealOrder.user_id==user.id).order_by(
-            db.RealOrder.id.desc()).limit(100)).all()
+        profile=sess.get(db.AutomationProfile,user.id)
+        selected=(profile.real_account_id if profile and profile.account_mode=='real'
+                  else None)
+        account_ids=set(sess.scalars(select(db.RealOrder.account_id).where(
+            db.RealOrder.user_id==user.id).distinct()).all())
+        if selected is None and len(account_ids)>1:
+            return {'items':[],'account_mode':'real','account_id':None,
+                    'source':'DERIV_REAL_ORDERS',
+                    'reason':'Selecione uma conta REAL para consultar o histórico correspondente'}
+        selected=selected or (next(iter(account_ids)) if account_ids else None)
+        stmt=select(db.RealOrder).where(db.RealOrder.user_id==user.id)
+        if selected is not None:
+            stmt=stmt.where(db.RealOrder.account_id==selected)
+        orders=sess.scalars(stmt.order_by(db.RealOrder.id.desc()).limit(100)).all()
         return {'items':[public_real_order(o) for o in orders],
-                'account_mode':'real','source':'DERIV_REAL_ORDERS'}
+                'account_mode':'real','account_id':selected,
+                'source':'DERIV_REAL_ORDERS'}
 
 
 def readonly_real_account_selection(user_id:int, accounts:list):
