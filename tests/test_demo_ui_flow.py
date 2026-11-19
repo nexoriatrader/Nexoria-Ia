@@ -207,5 +207,5 @@ def test_results_view_avoids_unnecessary_full_dashboard_polling():
     html=load_ui()
     assert "resultsRefreshTimer=setInterval(" in html
     assert "activePage==='dashboard'?7000:3000" in html
-    assert "if(activePage==='dashboard')refreshDashboard();" in html
+    assert "if(!document.hidden&&activePage==='dashboard')refreshDashboard();" in html
     assert "if(activePage==='dashboard'||activePage==='results')refreshDashboard();" not in html
