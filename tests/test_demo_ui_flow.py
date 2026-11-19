@@ -186,3 +186,24 @@ def test_header_has_official_broker_access_instead_of_demo_badge():
     assert 'id="primaryNavigation"' in html
     assert 'id="robotButton"' in html
 
+
+
+def test_dashboard_navigation_reuses_existing_history_refresh():
+    """Avoid duplicate history requests without changing the read-only poller or robot controls."""
+    html=load_ui()
+    navigation=html.split("function go(v){",1)[1].split("\nfunction fail(",1)[0]
+    assert "if(v==='dashboard'){refreshDashboard();loadDailyResults().catch(()=>{});}" in navigation
+    assert "loadDemoOrders().catch(()=>{})" not in html
+    # Refreshing the dashboard already fetches the account-specific official history.
+    refresh=html.split("async function refreshDashboard(){",1)[1].split(
+        "\nlet robotStartDialogResolver=",1)[0]
+    assert "await Promise.allSettled([loadRobotAccess(),loadDemoBalance(),loadDemoOrders()" in refresh
+
+
+def test_results_view_avoids_unnecessary_full_dashboard_polling():
+    """Results page keeps its dedicated history polling, not the dashboard fan-out."""
+    html=load_ui()
+    assert "resultsRefreshTimer=setInterval(" in html
+    assert "activePage==='dashboard'?7000:3000" in html
+    assert "if(activePage==='dashboard')refreshDashboard();" in html
+    assert "if(activePage==='dashboard'||activePage==='results')refreshDashboard();" not in html
