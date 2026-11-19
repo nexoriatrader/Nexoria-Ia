@@ -100,18 +100,20 @@ def reserve(session, user, *, request_key, symbol, direction, minutes,
     locked_user=session.get(db.User,user.id,with_for_update=True)
     if not locked_user:
         raise OrderGuardError('Conta DEMO indisponível')
+    # Resolve the requested value before the replay lookup. Using the current
+    # persisted DEMO setting also covers calls without an explicit override.
+    chosen_stake=locked_user.stake if stake_override is None else str(stake_override)
     previous=session.scalar(select(db.DemoOrder).where(
         db.DemoOrder.user_id==user.id,db.DemoOrder.request_key==request_key))
     if previous:
         if not demo_replay_matches(
             previous,user_id=user.id,symbol=symbol,direction=direction,
-            minutes=minutes,stake_override=stake_override
+            minutes=minutes,effective_stake=chosen_stake
         ):
             raise OrderGuardError('Chave DEMO reutilizada com dados divergentes')
         return previous,False
     entries=session.scalars(select(db.DemoOrder).where(
         db.DemoOrder.user_id==user.id)).all()
-    chosen_stake=user.stake if stake_override is None else str(stake_override)
     boundary=session.scalars(select(db.RiskSession).where(
         db.RiskSession.user_id==user.id).order_by(db.RiskSession.id.desc()).limit(1)).first()
     order_guard(locked_user,entries,chosen_stake,
