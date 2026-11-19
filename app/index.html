@@ -991,6 +991,7 @@ html,body{max-width:100%;overflow-x:clip}
       <div class="dash-realtime-live"><span class="dash-live-pulse" aria-hidden="true"></span><strong id="dashRealtimeState">AGUARDANDO</strong></div>
     </div>
     <div class="dash-realtime-status" id="dashRealtimeDescription" role="status">Consultando o estado do robô...</div>
+    <p class="helper" id="dashOperationalDetails" role="status" aria-live="polite">Configuração, autorização, atividade e contratos: aguardando confirmação do servidor.</p>
     <div class="dash-scan-monitor" id="dashScanMonitor" aria-label="Atividade real do scanner">
       <div class="dash-scan-monitor-head"><span class="dash-scan-dot" aria-hidden="true"></span><strong id="dashScanStatus">AGUARDANDO</strong><small id="dashScanUpdated">—</small></div>
       <div class="dash-scan-grid">
@@ -1610,7 +1611,7 @@ async function loadAutopilotReadiness(){
 }
 function renderScanMonitor(status){
  const card=$('dashScanMonitor');if(!card||!status)return;
- const running=Boolean(status.running),data=status.scan_progress;
+ const running=('running_now' in status)?status.running_now===true:Boolean(status.running),data=status.scan_progress;
  const at=data?.last_checked_at||data?.last_scan_at;
  const date=at?new Date(at):null;
  const fresh=date&&!Number.isNaN(date.getTime())&&Date.now()-date.getTime()<120000&&Date.now()-date.getTime()>=-5000;
@@ -1679,25 +1680,34 @@ async function refreshDashboard(){
    const status=await req('/api/status');
    // Ignore an older response that arrived after a newer status request.
    if(sequence!==dashboardStatusSequence)return null;
-   robotRunning=Boolean(status.running);
-   robotConfiguredMode=status.configured_account_mode==='real'?'real':'demo';
+   const hasVerifiedStatus=Object.prototype.hasOwnProperty.call(status,'running_now');
+   const runningUnknown=hasVerifiedStatus&&status.running_now===null;
+   robotRunning=hasVerifiedStatus?status.running_now===true:Boolean(status.running);
+   robotConfiguredMode=status.configured_mode==='real'||status.configured_account_mode==='real'?'real':'demo';
    renderScanMonitor(status);
    const available=Boolean(status.auto_buy_enabled);
-   $('robotState').textContent=robotRunning?'ATIVO':status.interrupted_after_restart?'INTERROMPIDO':available?'PRONTO':'INDISPONÍVEL';
-   $('robotMessage').textContent=status.reason||'Aguardando oportunidades no mercado DEMO';
+   $('robotState').textContent=runningUnknown?'NÃO CONFIRMADO':robotRunning?'ATIVO':status.interrupted_after_restart?'INTERROMPIDO':available?'PRONTO':'INDISPONÍVEL';
+   $('robotMessage').textContent=runningUnknown
+     ?'Atividade não confirmada entre processos. Consulte novamente antes de acionar o robô.'
+     :(status.reason||'Aguardando oportunidades no mercado DEMO');
+   const operational=$('dashOperationalDetails');
+   if(operational&&hasVerifiedStatus)operational.textContent=operationalStatusText(status);
    const liveCard=$('robotLiveCard');
    liveCard.classList.toggle('offline',!robotRunning);
-   $('robotLiveLabel').textContent=robotRunning?'ROBÔ ONLINE':'ROBÔ OFFLINE';
-   $('dashRealtimeState').textContent=robotRunning?'ROBÔ ONLINE':'ROBÔ OFFLINE';
+   $('robotLiveLabel').textContent=runningUnknown?'ESTADO NÃO CONFIRMADO':robotRunning?'ROBÔ ONLINE':'ROBÔ OFFLINE';
+   $('dashRealtimeState').textContent=runningUnknown?'NÃO CONFIRMADO':robotRunning?'ROBÔ ONLINE':'ROBÔ OFFLINE';
    $('dashRealtimeState').parentElement.classList.toggle('offline',!robotRunning);
-   $('dashRealtimeDescription').textContent=robotRunning
-    ?(status.reason||'Buscando oportunidades nos ativos selecionados.')
-    :(status.reason||'Robô desligado. Ative para iniciar as análises.');
+   $('dashRealtimeDescription').textContent=runningUnknown
+    ?'Não há confirmação de execução global. Outro processo pode ter estado diferente.'
+    :robotRunning
+      ?(status.reason||'Buscando oportunidades nos ativos selecionados.')
+      :(status.reason||'Robô desligado. Ative para iniciar as análises.');
    if(!demoOrders.length)renderRealtimeOrders();
-   $('robotLiveCopy').textContent=robotRunning
-     ?'Análise em tempo real'
-     :(status.interrupted_after_restart?'Execução interrompida. Confira o aviso antes de ativar.'
-       :available?'Análises pausadas. Ative quando desejar.':'AutoPilot indisponível.');
+   $('robotLiveCopy').textContent=runningUnknown?'Estado desconhecido ou não confirmado; não presuma que está desligado.'
+     :robotRunning
+       ?'Análise em tempo real'
+       :(status.interrupted_after_restart?'Execução interrompida. Confira o aviso antes de ativar.'
+         :available?'Análises pausadas. Ative quando desejar.':'AutoPilot indisponível.');
    const isV2=status.autopilot_version==='V2_MULTI_ASSET';
    $('autopilotVersion').textContent='Robô Trader I.A';
    // Match the server's active_market() UTC session rule, regardless of robot ON/OFF.
@@ -1709,7 +1719,7 @@ async function refreshDashboard(){
    $('forexScheduleDot').classList.toggle('active',forexSelected);
    $('volScheduleDot').classList.toggle('active',!forexSelected);
    $('robotButton').textContent=robotRunning?'DESLIGAR ROBÔ':'LIGAR ROBÔ';
-   $('robotButton').disabled=(!robotRunning&&!available)||$('robotButton').dataset.commandPending==='true';
+   $('robotButton').disabled=runningUnknown||(!robotRunning&&!available)||$('robotButton').dataset.commandPending==='true';
    $('robotButton').setAttribute('aria-disabled',String($('robotButton').disabled));
    $('robotButton').style.background=robotRunning?'linear-gradient(135deg,#fa9b9d,#dc5269)':'';
    if(robotRunning)showRobotNotice('');
@@ -2112,7 +2122,33 @@ function renderRealtimeOrders(){
   timeZone:'America/Sao_Paulo',hour:'2-digit',minute:'2-digit',second:'2-digit'
  }).format(new Date())+' · Brasília';
 }
-async function loadDemoOrders(){try{const data=await req(robotConfiguredMode==='real'?'/api/real/orders':'/api/demo/orders');demoOrders=data.items||[];const last=demoOrders[0];$('lastOrder').textContent=last?last.symbol+' · '+last.direction+' · M'+last.duration_minutes+' · '+money(last.stake)+(last.pnl===null?' · Aguardando resultado':' · Resultado '+money(last.pnl)):'Nenhum contrato oficial ainda.';renderOrders();renderRealtimeOrders();return data}catch(e){$('ordersBody').innerHTML='<tr><td colspan="11" class="empty">Não foi possível carregar o histórico.</td></tr>';throw e}}
+function contractStageLabel(o){
+ const stage=o.contract_stage||({PENDING:'RESERVED_UNCONFIRMED',CONFIRMED:'CONFIRMED_OPEN_UNSETTLED',UNKNOWN:'UNKNOWN_UNRESOLVED',SETTLED:'SETTLED',CANCELLED:'CANCELLED'}[o.state]);
+ return ({
+  RESERVED_UNCONFIRMED:'Reserva pendente · compra não confirmada',
+  CONFIRMED_OPEN_UNSETTLED:'Contrato confirmado · aberto · não liquidado',
+  UNKNOWN_UNRESOLVED:'Resultado incerto · requer reconciliação',
+  SETTLED:'Contrato liquidado',
+  CANCELLED:'Reserva cancelada'
+ })[stage]||'Situação não confirmada';
+}
+function operationalStatusText(status){
+ const real=status.real_capability||{},contracts=status.contracts||{};
+ const yesNo=v=>v===true?'sim':v===false?'não':'não confirmado';
+ const running=status.running_now===true?'confirmado neste processo':status.running_now===false
+   ?'bloqueado ou parado por condição verificável':'desconhecido entre processos';
+ const contractText=contracts.known===false?'contratos: situação desconhecida'
+  :('contratos: '+(contracts.counts?.PENDING||0)+' reservas pendentes, '+
+     (contracts.confirmed_open_count||0)+' confirmados e abertos (não liquidados), '+
+     (contracts.counts?.UNKNOWN||0)+' incertos, '+
+     (contracts.settled_count||0)+' liquidados');
+ return 'Modo configurado: '+(status.configured_mode==='real'?'REAL':'DEMO')+
+   ' · Recurso técnico REAL: '+yesNo(real.technical_feature_enabled)+
+   ' · Aprovação administrativa REAL: '+yesNo(real.administrative_release_approved)+
+   ' · Consentimento da conta REAL: '+yesNo(real.account_authorized)+
+   ' · Execução observada: '+running+' · '+contractText+'.';
+}
+async function loadDemoOrders(){try{const data=await req(robotConfiguredMode==='real'?'/api/real/orders':'/api/demo/orders');demoOrders=data.items||[];const last=demoOrders[0];$('lastOrder').textContent=last?last.symbol+' · '+last.direction+' · M'+last.duration_minutes+' · '+money(last.stake)+' · '+contractStageLabel(last)+(last.state==='SETTLED'&&last.pnl!==null?' · Resultado '+money(last.pnl):''):'Nenhum contrato oficial ainda.';renderOrders();renderRealtimeOrders();return data}catch(e){$('ordersBody').innerHTML='<tr><td colspan="11" class="empty">Não foi possível carregar o histórico.</td></tr>';throw e}}
 const brasilDateTime=(iso)=>{
  if(!iso)return ['—','—'];
  const d=new Date(iso);
@@ -2144,8 +2180,8 @@ function renderOrders(){
    const result=o.outcome||'PENDING';
    const outcome=result==='WIN'?'WIN':result==='LOSS'?'LOSS':result==='DRAW'?'EMPATE':result==='UNKNOWN'?'INDEFINIDO':'PENDENTE';
    const columns=[date,time,o.account_mode==='demo'?'Treinamento':o.account_mode==='real'?'Real':'Não registrada',
-      o.symbol,o.direction,money(o.stake),Number.isInteger(Number(o.duration_minutes))&&Number(o.duration_minutes)>0?'M'+o.duration_minutes:'—',tradeStage(o),o.state,outcome,
-      o.pnl===null?'Pendente':money(o.pnl)];
+      o.symbol,o.direction,money(o.stake),Number.isInteger(Number(o.duration_minutes))&&Number(o.duration_minutes)>0?'M'+o.duration_minutes:'—',tradeStage(o),contractStageLabel(o),outcome,
+      o.state==='SETTLED'&&o.pnl!==null?money(o.pnl):'Não liquidado'];
    for(let i=0;i<columns.length;i++){
      const td=document.createElement('td');td.textContent=columns[i];
      if(i===9&&result==='WIN')td.className='positive';
