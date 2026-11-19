@@ -4,7 +4,10 @@ Run in the isolated branch CI only. No live API or financial action.
 Screenshots are emitted as JPEG strings in CI logs for external visual review.
 """
 import base64
+from functools import partial
+from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from threading import Thread
 from playwright.sync_api import sync_playwright
 
 HTML = Path(__file__).resolve().parents[1] / "app" / "index.html"
@@ -58,6 +61,15 @@ def state(page, expected, label):
     print("P0_BROWSER_STATE_" + label + "=" + str(actual),flush=True)
 
 def run():
+    # A loopback-only temporary server resolves real project /static assets.
+    # This is not a production deploy and cannot contact external services.
+    class QuietHandler(SimpleHTTPRequestHandler):
+        def log_message(self,*args):
+            return
+    server = ThreadingHTTPServer(("127.0.0.1", 0),
+        partial(QuietHandler, directory=str(HTML.parent)))
+    Thread(target=server.serve_forever,daemon=True).start()
+    base = f"http://127.0.0.1:{server.server_port}"
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True,args=["--no-sandbox"])
         context = browser.new_context(viewport={"width":1060,"height":770},
@@ -66,10 +78,10 @@ def run():
         errors=[]
         page.on("pageerror", lambda err:errors.append(str(err)))
         page.add_init_script(SYNTHETIC_FETCH)
-        # Block every network request to avoid OAuth, Deriv or Render contact.
-        page.route("http://**/*",lambda route:route.abort())
-        page.route("https://**/*",lambda route:route.abort())
-        page.goto(HTML.as_uri(),wait_until="domcontentloaded")
+        # Allow only localhost static files; browser fetch is synthetic.
+        page.route("**/*",lambda route:route.continue_()
+                   if route.request.url.startswith(base+"/") else route.abort())
+        page.goto(base+"/index.html",wait_until="domcontentloaded")
         page.evaluate("() => {page('robot-config');initAutomationWizard();setAutomationWizardStep(2)}")
         assert page.locator('input[name="autoMode"][value="demo"]').is_checked()
         page.locator('input[name="autoMode"][value="real"]').check()
@@ -77,6 +89,7 @@ def run():
         assert page.locator('#autoRealAccountWrapper').is_visible()
         page.locator('#autoRealAccount').select_option('CRONE')
         state(page,{"stake":"7.00","win":"19.00","loss":"14.00"},"REAL_ONE")
+        record(page,"REAL_ONE_MODE_DESKTOP")
         page.evaluate("setAutomationWizardStep(6)")
         record(page,"REAL_ONE_DESKTOP")
 
@@ -101,6 +114,7 @@ def run():
         assert not errors, "Unexpected browser JavaScript errors: "+str(errors)
         print("P0_BROWSER_VISUAL_OK: desktop/mobile, REAL1, REAL2, DEMO; no network or POST",flush=True)
         browser.close()
+    server.shutdown()
 
 if __name__=="__main__":
     run()
