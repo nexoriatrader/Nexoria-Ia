@@ -187,7 +187,9 @@ def settle_real_order(session, order, contract):
 
 
 def public_real_order(order):
-    return {
+    # Read-only recovery status; NEVER indicates permission to submit a trade.
+    from .real_recovery import classify_unresolved_real_order
+    return {'recovery': classify_unresolved_real_order(order),
         'id':order.id,'state':order.state,'symbol':order.symbol,
         'direction':order.direction,'stake':order.stake,'currency':order.currency,
         'duration_minutes':order.duration_minutes,'buy_price':order.buy_price,
