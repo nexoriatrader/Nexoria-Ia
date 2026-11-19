@@ -26,6 +26,7 @@ from .demo import (DemoTradingError, DemoPreBuyDeadlineExceeded, demo_account_ba
                    prepare_demo_buy_socket)
 from .demo_ledger import OrderGuardError, reserve, public_order, confirmed, unknown, settle
 from . import real_runtime
+from .status_contract import evaluate_user_status
 from .restart_consistency import revoke_stale_real_consent_after_restart
 from .real_broker import RealExecutionError, real_account_balance
 from .autopilot import analyze, quote_assessment
@@ -1232,7 +1233,13 @@ async def health():
     return {'ok':True,'version':VERSION,'market_connected':market_connected,
             'execution':'DERIV_DEMO_ONLY','automatic_demo_orders_enabled':autopilot_allowed(),
             'manual_demo_purchase_enabled':enabled,'real_orders_enabled':real_runtime.real_available(),
-            'execution_modes':['demo']+(['real'] if real_runtime.real_available() else [])}
+            'execution_modes':['demo']+(['real'] if real_runtime.real_available() else []),
+            # Process-local connectivity is not a global worker-status claim.
+            'status_contract_version':2,'worker_status_scope':'PROCESS_LOCAL',
+            'technical_real_feature_enabled':
+                os.getenv('NEXORA_REAL_AUTOPILOT_ENABLED','false').strip().lower()=='true',
+            'real_administrative_release_approved':
+                os.getenv('NEXORA_REAL_RELEASE_APPROVED','false').strip().lower()=='true'}
 
 @app.get('/api/public/offer')
 async def public_offer():
@@ -1357,8 +1364,10 @@ async def callback(code:str|None=None,state:str|None=None,error:str|None=None,
 @app.get('/api/session')
 async def session_info(request:Request,nexora_sid:str|None=Cookie(default=None)):
     try:u=active_user(request,nexora_sid)
-    except HTTPException:return {'authenticated':False,'demo_accounts':[],'real_enabled':False}
-    return {'authenticated':True,'demo_accounts':[{'account_id':u.deriv_account_id,'account_type':'demo'}],
+    except HTTPException:return {'authenticated':False,'session_valid':False,'demo_accounts':[],'real_enabled':False}
+    return {'authenticated':True,'session_valid':True,
+            'status_contract_version':2,
+            'demo_accounts':[{'account_id':u.deriv_account_id,'account_type':'demo'}],
             'real_enabled':real_runtime.real_available(),'is_admin':False}
 
 @app.get('/api/accounts/available')
@@ -1852,8 +1861,20 @@ async def autopilot_readiness(request:Request,nexora_sid:str|None=Cookie(default
         access=access_status(sess,user.id)
         if access['status']=='SUSPENDED' or (access['enforced'] and access['status']=='EXPIRED'):
             reason='Acesso do robô suspenso ou expirado. Conquiste horas por indicação ou consulte o suporte.'
+        profile=sess.get(db.AutomationProfile,user.id)
+        operational=evaluate_user_status(
+            sess,user,profile=profile,
+            local_demo=user.id in autopilot_enabled,
+            local_real=user.id in real_runtime.running,
+            demo_scheduler=autopilot_task,real_scheduler=real_task,
+            demo_gate=autopilot_allowed(),real_gate=real_runtime.real_available(),
+            real_feature_gate=os.getenv('NEXORA_REAL_AUTOPILOT_ENABLED','false').strip().lower()=='true',
+            real_release_approved=os.getenv('NEXORA_REAL_RELEASE_APPROVED','false').strip().lower()=='true')
     return {'ready':reason is None,'reason':reason,'access':access,
-            'execution':'DERIV_DEMO_ONLY','real_orders_enabled':False}
+            'execution':'DERIV_DEMO_ONLY','real_orders_enabled':False,
+            'status_contract_version':2,'running_now':operational['running_now'],
+            'running_evidence':operational['running_evidence'],
+            'reconciliation_pending':operational['reconciliation_pending']}
 
 
 @app.get('/api/access/status')
@@ -2427,13 +2448,22 @@ async def status(request:Request,nexora_sid:str|None=Cookie(default=None)):
         interrupted=sess.get(db.RobotRun,user.id) is not None and user.id not in autopilot_enabled
         configured_profile=sess.get(db.AutomationProfile,user.id)
         configured_account_mode=configured_profile.account_mode if configured_profile else 'demo'
+        status_v2=evaluate_user_status(
+            sess,user,profile=configured_profile,
+            local_demo=user.id in autopilot_enabled,
+            local_real=real_running,
+            demo_scheduler=autopilot_task,real_scheduler=real_task,
+            demo_gate=autopilot_allowed(),real_gate=real_runtime.real_available(),
+            real_feature_gate=os.getenv('NEXORA_REAL_AUTOPILOT_ENABLED','false').strip().lower()=='true',
+            real_release_approved=os.getenv('NEXORA_REAL_RELEASE_APPROVED','false').strip().lower()=='true')
         batch=sess.get(db.PilotValidationBatch,user.id)
         selected_strategy='pulso_v2' if v2_enabled() else 'unavailable'
         mode='V2_PULSO' if v2_enabled() else 'V1_SINGLE_ASSET'
         upgrade_needed=bool(v2_enabled() and batch is None and user.id in autopilot_enabled)
     async with lock:
         engine=rt_for(user)
-        return {'connected':engine.connected,'symbol':engine.symbol,
+        return {**status_v2,
+                'connected':engine.connected,'symbol':engine.symbol,
                 'latest_price':engine.prices[-1] if engine.prices else None,
                 'ticks':len(engine.prices),'execution':'DERIV_REAL' if real_running else 'DERIV_DEMO_ONLY',
                 'running':real_running or user.id in autopilot_enabled,'auto_buy_enabled':autopilot_allowed() or real_runtime.real_available(),
