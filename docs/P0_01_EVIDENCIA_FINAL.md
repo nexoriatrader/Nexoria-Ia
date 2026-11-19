@@ -47,10 +47,56 @@ O teste PostgreSQL exige `NEXORA_P0_EPHEMERAL_PG=yes` e um DSN `postgresql+psyco
 
 ## Observações e limites
 
-1. Testes JavaScript são funcionais em Node com DOM sintético; não são uma auditoria manual em navegador real.
+1. Os testes JavaScript em Node continuam válidos; foi adicionada inspeção visual em navegador Chromium real (sem login, usando contas e APIs sintéticas), em desktop e celular. Não equivale a homologação em navegador conectado à produção.
 2. Os testes de SQLite e PostgreSQL descartável não provam impacto de migração no banco de produção, que não foi modificado.
-3. O formulário de automação mantém as duas escritas existentes (perfil e risco) em operações separadas; uma transação única entre ambas pode ser considerada numa revisão de UX/consistência, sem confundir esse débito com o isolamento dos valores persistidos.
+3. O assistente de automação agora usa gravação atômica do perfil e dos limites. As rotas legadas de gravação separada foram preservadas para compatibilidade; clientes externos que continuem combinando ambas ainda precisam migrar para a nova rota atômica.
 4. Estados UNKNOWN/PENDING e reinicialização permanecem reservados para P0-02/P0-04; não foram implementados nesta etapa.
 5. Nenhum adaptador de compra foi habilitado ou chamado; validações de risco aqui não constituem autorização para negociações com dinheiro real.
 
 **Aceitação recomendada:** registrar logs do CI no commit final, inspecionar o diff da PR #45, manter PR como rascunho e preservar a branch `main` sem merge.
+
+
+## Verificação adicional de encerramento — 19/11/2026
+
+### 1. Inspeção visual manual em navegador
+
+**Procedimento realizado:** `tests/browser_visual_p001.py` abre o HTML da própria branch em Chromium/Playwright através de servidor temporário em `127.0.0.1` com mapeamento dos arquivos `/brand/`. Toda API é interceptada por respostas sintéticas e as requisições externas são bloqueadas. O teste navega na interface existente, aciona os seletores reais da UI e registra capturas de tela em desktop (1060×770) e celular (390×844); as capturas foram **inspecionadas visualmente** na revisão.
+
+**Evidência da seleção e dos valores apresentados:**
+
+| Modalidade fictícia | Stake | Stop Win | Stop Loss | Resultado |
+| --- | ---: | ---: | ---: | --- |
+| REAL CRONE | 7,00 | 19,00 | 14,00 | Campos da conta CRONE exibidos |
+| REAL CRTWO | 3,00 | 9,00 | 6,00 | Campos atualizados ao alternar conta |
+| DEMO | 2,50 | 12,00 | 8,00 | Preferências DEMO restauradas, seletor REAL ocultado |
+
+A alternância em desktop e a apresentação responsiva no celular não mostraram erros de valor ou campos de limite sobrepostos na área inspecionada. O teste também confirma que não são enviados POSTs nem ordens; o navegador não acessa Deriv, Render ou o banco de produção. A logomarca, inicialmente ausente na primeira execução por ser servida por rota FastAPI não simulada, foi corrigida no **harness local** mapeando `/brand/` para os arquivos existentes, sem alterar a aplicação.
+
+**Ressalva:** são imagens e interações feitas com a interface real, mas contas/retornos de API simulados; falta homologação com sessão autenticada real em ambiente controlado, exclusivamente de leitura, caso seja exigida.
+
+### 2. Inconsistência do salvamento e correção aplicada
+
+**Diagnóstico confirmado:** `saveAutomationProfile()` fazia `POST /api/automation/profile` e só após sucesso enviava `POST /api/onboarding/config`. Cada handler gravava separadamente no banco. Falha da segunda requisição poderia deixar perfil novo com risco antigo ou ausente.
+
+**Correção em branch:** adicionada `POST /api/automation/configuration`, com corpo `{profile,risk}`, reaproveitando as mesmas validações de perfil, seleção/posse da conta autenticada, catálogo, stake e progressão. O frontend envia **uma única solicitação**. O backend usa **uma única sessão SQLAlchemy e uma confirmação** para `AutomationProfile`, `AccountRiskSettings` e os espelhos legados DEMO quando aplicáveis. Qualquer erro gera `rollback()`, mantendo a configuração anterior. O endpoint apenas salva dados, não concede consentimento de execução e não compra contratos. Os endpoints legados continuam intactos para preservar compatibilidade.
+
+**Evidências:** `tests/test_atomic_profile_settings.py` cobre sucesso, falha de validação, erro injetado **após staging/flush do perfil e antes do commit**, ausência de dados parcialmente persistidos, robô ligado, conta REAL autorizada e não autorizada fictícias e ausência de chamadas à corretora.
+
+**Limite de compatibilidade:** clientes externos que chamam as APIs legadas em separado ainda poderão criar estados parcialmente salvos. A integração oficial do configurador ficou atômica; recomendar migração gradual dos consumidores legados e manutenção das verificações que recusam parâmetros REAL ausentes ou divergentes.
+
+### 3. Duas proteções administrativas independentes
+
+`app/real_runtime.py::real_available()` mantém a operação lógica **E** sobre `NEXORA_REAL_AUTOPILOT_ENABLED` e `NEXORA_REAL_RELEASE_APPROVED`, ambas `false` na ausência de configuração. Salvar configurações no novo endpoint não altera flags, consentimentos nem o estado do worker. `tests/test_release_modes.py` valida comportamento com uma só flag ligada; os jobs de CI rodam com ambas desativadas ou padrão OFF.
+
+A configuração **efetiva do serviço Render** não foi lida nesta revisão, por não existir workspace confirmado nesta sessão; portanto a conclusão é uma **verificação dos guardas em código e testes**, não uma afirmação de valores atuais do ambiente hospedado.
+
+### 4. Critérios de encerramento e preservação
+
+- Inspeção das capturas reais do Chromium e alternância entre contas sintéticas: **concluída**.
+- Falha parcial de gravação no configurador principal: **corrigida**; teste de rollback: **concluído**.
+- Gates financeiros de código e valores padrão: **preservados**; sem confirmação de flags efetivas Render.
+- PostgreSQL efêmero, restore e reversão do esquema: **concluídos anteriormente, sem Supabase**.
+- Nenhuma migração de produção, merge, deploy, OTP, proposta de compra ou contrato Deriv: **realizado = nenhum**.
+- P0-02: **não iniciada**.
+
+Ver o status atualizado no [CI da branch P0-01](https://github.com/nexoriatrader/Nexoria-Ia/actions/workflows/test.yml) e na [PR #45](https://github.com/nexoriatrader/Nexoria-Ia/pull/45). O SHA final e a contagem dos testes são registrados no relatório de entrega, após conclusão do último CI.
