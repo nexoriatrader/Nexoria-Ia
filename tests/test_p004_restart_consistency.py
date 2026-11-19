@@ -267,3 +267,59 @@ def test_lifespan_cancels_all_worker_tasks_including_public_selfcheck(isolated,m
     assert not main.real_task or main.real_task.cancelled()
     real_buy.assert_not_awaited()
     demo_buy.assert_not_awaited()
+
+
+def test_poll_discards_stale_real_running_flag_after_external_revocation(isolated):
+    sessions,_,real_buy,demo_buy=isolated
+    real_runtime.running.add(1)
+    with sessions() as external_process:
+        row=external_process.get(db.RealRobotConsent,1)
+        row.revoked_at=db.utcnow()
+        external_process.commit()
+    changed=real_runtime.disarm_revoked_real_workers()
+    assert changed==[1]
+    assert 1 not in real_runtime.running
+    assert "revogada" in real_runtime.reasons[1]
+    assert real_runtime.disarm_revoked_real_workers()==[]
+    real_buy.assert_not_awaited()
+    demo_buy.assert_not_awaited()
+
+
+def test_poll_leaves_other_users_active_and_does_not_rewrite_consent(isolated):
+    sessions,_,real_buy,_=isolated
+    with sessions() as s:
+        s.add(db.User(id=2,deriv_account_id="V_P004_SECOND",selected_mode="demo"))
+        s.add(db.RealRobotConsent(user_id=2,account_id="CRP004SECOND",
+                                  max_stake="1",stop_loss="3"))
+        one=s.get(db.RealRobotConsent,1)
+        one.revoked_at=db.utcnow()
+        s.commit()
+    real_runtime.running.update((1,2))
+    assert real_runtime.disarm_revoked_real_workers()==[1]
+    assert real_runtime.running=={2}
+    with sessions() as fresh:
+        assert fresh.get(db.RealRobotConsent,1).revoked_at is not None
+        assert fresh.get(db.RealRobotConsent,2).revoked_at is None
+    real_buy.assert_not_awaited()
+
+
+def test_final_send_guard_fails_closed_on_sqlite_without_touching_orders(isolated):
+    from app.restart_consistency import locked_real_consent_for_send
+    sessions,_,real_buy,_=isolated
+    with locked_real_consent_for_send(1,"CRP004") as authorized:
+        assert authorized is False
+    with sessions() as s:
+        assert s.get(db.RealRobotConsent,1).revoked_at is None
+        assert s.query(db.RealOrder).count()==0
+    real_buy.assert_not_awaited()
+
+
+def test_missing_real_consent_also_disarms_stale_process_flag(isolated):
+    sessions,_,real_buy,_=isolated
+    with sessions() as s:
+        s.delete(s.get(db.RealRobotConsent,1))
+        s.commit()
+    real_runtime.running.add(1)
+    assert real_runtime.disarm_revoked_real_workers()==[1]
+    assert 1 not in real_runtime.running
+    real_buy.assert_not_awaited()
