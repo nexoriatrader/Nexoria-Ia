@@ -160,6 +160,7 @@ def test_summary_cannot_mix_accounts_or_users_or_demo(repo):
         assert account_recovery_summary(s,1,"CR202")["active_count"]==0
         assert account_recovery_summary(s,2,"CR101")["active_count"]==0
         assert account_recovery_summary(s,1,None)["reason"]
+        assert account_recovery_summary(s,1,None)["blocked"] is None
         user=s.get(db.User,1)
         assert user.stop_loss=="888"
 
@@ -343,3 +344,21 @@ def test_recovery_batch_limit_is_bounded_and_does_not_release_slots(repo):
             row=s.get(db.RealOrder,oid)
             assert row.state=="UNKNOWN"
             assert row.active_slot==row.account_id
+
+
+def test_closed_row_with_orphaned_active_slot_is_reported_as_integrity_issue(repo):
+    """Terminal state with a held slot cannot be displayed as fully unblocked."""
+    with repo() as s:
+        oid=seed(s,state="SETTLED",request="orphan-12345678")
+        row=s.get(db.RealOrder,oid)
+        assert row.active_slot=="CR101"
+        diagnosis=classify_unresolved_real_order(row)
+        assert diagnosis["status"]=="INTEGRITY_REVIEW"
+        assert diagnosis["account_blocked"] is True
+        overview=account_recovery_summary(s,1,"CR101")
+        assert overview["active_count"]==0
+        assert overview["review_count"]==1
+        assert overview["blocked"] is True
+        assert promote_stale_pending_to_unknown(s)==[]
+        s.expire_all()
+        assert s.get(db.RealOrder,oid).active_slot=="CR101"
