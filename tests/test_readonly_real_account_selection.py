@@ -161,3 +161,56 @@ def test_readonly_balance_must_be_authenticated(session_client):
     client.cookies.clear()
     assert client.get('/api/real/balance').status_code==401
     assert client.get('/api/real/results/today').status_code==401
+
+
+def seed_synthetic_real_history(factory):
+    with factory() as session:
+        user=session.query(db.User).one()
+        for account,symbol in (('R111','R_50'),('R222','R_75')):
+            session.add(db.RealOrder(
+                user_id=user.id,account_id=account,
+                request_key='synthetic-history-'+account,
+                state='SETTLED',contract_id='synthetic-contract-'+account,
+                symbol=symbol,direction='CALL',duration_minutes=5,
+                stake='1.00',currency='USD',pnl='0.50'))
+        session.commit()
+
+
+def test_real_history_only_shows_selected_account(session_client):
+    client,factory=session_client
+    seed_synthetic_real_history(factory)
+    response=client.get('/api/real/orders')
+    assert response.status_code==200
+    result=response.json()
+    assert result['account_id']=='R222'
+    assert [order['symbol'] for order in result['items']]==['R_75']
+    assert result['source']=='DERIV_REAL_ORDERS'
+
+
+def test_multiple_histories_without_selection_do_not_mix(session_client):
+    client,factory=session_client
+    seed_synthetic_real_history(factory)
+    set_selection(factory,None,mode='demo')
+    result=client.get('/api/real/orders')
+    assert result.status_code==200
+    data=result.json()
+    assert data['items']==[]
+    assert data['account_id'] is None
+    assert 'Selecione uma conta REAL' in data['reason']
+
+
+def test_single_account_history_is_still_visible_without_selection(session_client):
+    client,factory=session_client
+    with factory() as session:
+        user=session.query(db.User).one()
+        session.add(db.RealOrder(
+            user_id=user.id,account_id='R111',
+            request_key='one-synthetic-account',state='SETTLED',
+            contract_id='one-synthetic-contract',
+            symbol='R_50',direction='PUT',duration_minutes=5,
+            stake='1.00',currency='USD',pnl='-1.00'))
+        session.commit()
+    set_selection(factory,None,mode='demo')
+    data=client.get('/api/real/orders').json()
+    assert data['account_id']=='R111'
+    assert [order['symbol'] for order in data['items']]==['R_50']
