@@ -1460,6 +1460,14 @@ function updateResultsPolling(){
        if(activePage==='dashboard'){
          const scanStatus=await req('/api/status');
          renderScanMonitor(scanStatus);
+         if($('dashOperationalDetails')&&'running_now' in scanStatus){
+           $('dashOperationalDetails').textContent=operationalStatusText(scanStatus);
+           if(scanStatus.running_now===null){
+             $('robotState').textContent='NÃO CONFIRMADO';
+             $('dashRealtimeState').textContent='NÃO CONFIRMADO';
+             $('robotButton').disabled=true;
+           }
+         }
        }
        if(activePage==='results')$('resultsLiveStatus').textContent='Atualização automática 🟢';
      }catch(e){
@@ -1766,8 +1774,18 @@ async function refreshDashboard(){
    return status;
  }catch(e){
    if(sequence!==dashboardStatusSequence)return null;
-   $('feedState').textContent='○ Comunicação temporariamente indisponível. Último estado do robô preservado.';
-   // Keep the last known status; do not imply that the server stopped trading.
+   $('feedState').textContent='○ Comunicação temporariamente indisponível. Estado atual não confirmado.';
+   // A cached label cannot prove worker liveness in another process.
+   robotRunning=false;
+   $('robotState').textContent='DESATUALIZADO';
+   $('robotMessage').textContent='Não foi possível confirmar a execução. Tente atualizar antes de tomar decisões.';
+   $('robotLiveLabel').textContent='ESTADO NÃO CONFIRMADO';
+   $('dashRealtimeState').textContent='NÃO CONFIRMADO';
+   $('dashRealtimeDescription').textContent='Falha na consulta do estado; não presuma que o robô está parado ou ativo.';
+   $('robotButton').disabled=true;
+   $('robotButton').setAttribute('aria-disabled','true');
+   if($('dashOperationalDetails'))
+     $('dashOperationalDetails').textContent='Dados operacionais desatualizados · sem confirmação de execução ou liquidação.';
    return null;
  }
 }
