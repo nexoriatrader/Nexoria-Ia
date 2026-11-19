@@ -1353,6 +1353,7 @@ async def real_orders_route(request:Request,nexora_sid:str|None=Cookie(default=N
     """Own-account REAL contracts. Never mix with the DEMO trade ledger."""
     user=active_user(request,nexora_sid)
     from .real_ledger import public_real_order
+    from .real_recovery import account_recovery_summary
     with db.SessionLocal() as sess:
         profile=sess.get(db.AutomationProfile,user.id)
         selected=(profile.real_account_id if profile and profile.account_mode=='real'
@@ -1362,6 +1363,7 @@ async def real_orders_route(request:Request,nexora_sid:str|None=Cookie(default=N
         if selected is None and len(account_ids)>1:
             return {'items':[],'account_mode':'real','account_id':None,
                     'source':'DERIV_REAL_ORDERS',
+                    'recovery':account_recovery_summary(sess,user.id,None),
                     'reason':'Selecione uma conta REAL para consultar o histórico correspondente'}
         selected=selected or (next(iter(account_ids)) if account_ids else None)
         stmt=select(db.RealOrder).where(db.RealOrder.user_id==user.id)
@@ -1370,6 +1372,7 @@ async def real_orders_route(request:Request,nexora_sid:str|None=Cookie(default=N
         orders=sess.scalars(stmt.order_by(db.RealOrder.id.desc()).limit(100)).all()
         return {'items':[public_real_order(o) for o in orders],
                 'account_mode':'real','account_id':selected,
+                'recovery':account_recovery_summary(sess,user.id,selected),
                 'source':'DERIV_REAL_ORDERS'}
 
 
