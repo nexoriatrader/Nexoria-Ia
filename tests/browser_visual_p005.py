@@ -90,8 +90,14 @@ def run():
                 "contractStageLabel({state:'SETTLED'})"
             )=="Contrato liquidado"
             capture(page,"UNKNOWN_DESKTOP")
+            page.locator("#dashOperationalDetails").scroll_into_view_if_needed()
+            capture(page,"DETAILS_DESKTOP")
+            assert page.evaluate(
+                "() => document.getElementById('ordersBody').textContent.includes('Contrato confirmado · aberto · não liquidado')"
+            )
             page.set_viewport_size({"width":390,"height":844})
-            capture(page,"UNKNOWN_MOBILE")
+            page.locator("#dashOperationalDetails").scroll_into_view_if_needed()
+            capture(page,"DETAILS_MOBILE")
 
             page.evaluate("window.p005FailStatus=true")
             page.evaluate("async () => await refreshDashboard()")
