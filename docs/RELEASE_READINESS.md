@@ -16,7 +16,8 @@ Não marcar "pronto" apenas porque o deploy aparece como live.
 - [ ] Validar conta real com autenticação Deriv, consentimento explícito e compatibilidade da conta; NUNCA fazer compras de produção em teste automatizado.
 - [ ] Rever comunicação de status entre `/healthz`, `/api/session`, `/api/accounts/available`, perfil e configuração inicial.
 - [x] Implementar heartbeat da Deriv e sinalização ONLINE somente após preço real, com testes de recuperação por mocks na PR #31.
-- [ ] Verificar nos logs e métricas do Render se houve redução de `ConnectionClosedError` após a integração da PR #31. O merge no GitHub não confirma a estabilidade do deploy.
+- [x] Inspecionar serviço e último deploy no Render: commit `d51aedba` está live desde 18/11/2026 20:38 UTC. Métricas mostraram CPU/memória sem saturação contínua na amostragem; latência HTTP e volume de requisições retornaram séries vazias.
+- [ ] Acompanhar `ConnectionClosedError` em janelas comparáveis: avisos de consultas públicas persistem após o deploy, sobretudo na primeira tentativa; monitorar falhas definitivas sem confundi-las com retries recuperados.
 - [ ] Testar idempotência, contrato UNKNOWN, liquidação, saldo insuficiente, reconexão, reinício e limites de Stop Loss/Stop Win.
 - [x] Separar Stripe TEST/LIVE por variáveis explícitas, validar modo de sessão/evento e bloquear créditos de teste em ambiente público, com testes.
 - [ ] Confirmar conta Stripe LIVE apta para a atividade econômica, webhook e chaves live; testar transação supervisionada, estorno e evento duplicado sem exposição de segredos.
@@ -38,7 +39,7 @@ Não marcar "pronto" apenas porque o deploy aparece como live.
 - [x] Consultados Supabase Advisors: avisos apenas informativos (`rls_enabled_no_policy` e `unused_index`); não foram aplicadas alterações de esquema.
 - [ ] Revisar a expansão do smoke público sem autenticação para rotas privadas (`/api/status`, `/api/automation/profile`, `/api/demo/orders`, `/api/real/orders`). A verificação deve ser somente leitura e exigir `401` e `Cache-Control: no-store`.
 - [ ] Validar acesso autenticado e isolamento entre dois usuários; os testes de resposta anônima não substituem testes de autorização por proprietário.
-- [ ] Medir latência p50/p95, tempo de despertar Render Free, RAM/CPU e concorrência para o painel, sem disparar operações.
+- [ ] Medir latência p50/p95 de usuários, tempo de despertar Render Free e concorrência para o painel, sem disparar operações; a checagem em CI agora registra `elapsed_ms` por GET público, mas não substitui métricas agregadas.
 - [ ] Confirmar backups/restauração e monitoramento operacional antes de qualquer decisão de lançamento.
 
 Relatório detalhado: `docs/READINESS_AUDIT_2026-11-19.md`.
