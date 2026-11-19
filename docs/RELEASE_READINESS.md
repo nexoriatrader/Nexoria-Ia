@@ -40,6 +40,8 @@ Não marcar "pronto" apenas porque o deploy aparece como live.
 - [ ] Revisar a expansão do smoke público sem autenticação para rotas privadas (`/api/status`, `/api/automation/profile`, `/api/demo/orders`, `/api/real/orders`). A verificação deve ser somente leitura e exigir `401` e `Cache-Control: no-store`.
 - [ ] Validar acesso autenticado e isolamento entre dois usuários; os testes de resposta anônima não substituem testes de autorização por proprietário.
 - [ ] Medir latência p50/p95 de usuários, tempo de despertar Render Free e concorrência para o painel, sem disparar operações; a checagem em CI agora registra `elapsed_ms` por GET público, mas não substitui métricas agregadas.
+- [x] Ensaiar concorrência **local** com 10 sessões sintéticas independentes (90 GETs), medindo p50/p95 em SQLite: duas execuções CI aprovadas; não equivale a carga de 10 usuários reais no Render.
+- [x] Validar em Node o comportamento de `refreshDashboard()` diante de perda temporária de status e recuperação posterior; estado anterior preservado até nova resposta oficial, sem POST.
 - [ ] Confirmar backups/restauração e monitoramento operacional antes de qualquer decisão de lançamento.
 
 Relatório detalhado: `docs/READINESS_AUDIT_2026-11-19.md`.
