@@ -5,10 +5,11 @@ import re
 from datetime import timezone
 from zoneinfo import ZoneInfo
 from decimal import Decimal, InvalidOperation
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.exc import IntegrityError
 from . import db
 from .demo_ledger import official_broker_epoch
+from .order_integrity import audit_real_account, real_replay_matches
 
 
 ACTIVE = ('PENDING', 'CONFIRMED', 'UNKNOWN')
@@ -109,6 +110,11 @@ def reserve_real_order(session, user, *, account_id, request_key,
         db.RealOrder.account_id == account_id,
         db.RealOrder.request_key == request_key))
     if previous is not None:
+        if not real_replay_matches(
+            previous,user_id=user.id,account_id=account_id,symbol=symbol,
+            direction=direction,duration=duration,stake=stake,currency=currency
+        ):
+            raise RealOrderGuardError('Chave idempotente REAL reutilizada com dados divergentes')
         return previous, False
     mode_settings = session.get(db.AccountRiskSettings, (user.id, 'real', account_id))
     if mode_settings is None:
@@ -117,6 +123,10 @@ def reserve_real_order(session, user, *, account_id, request_key,
     # The source of truth is the selected REAL account, not DEMO or
     # a potentially stale authorization snapshot.
     stop_loss = validated_real_stop_loss(mode_settings, consent)
+    # Existing contradictory ledger data is a reason to stop, not to try a
+    # fresh reservation. Only local database records are inspected.
+    if audit_real_account(session, user.id, account_id)['requires_review']:
+        raise RealOrderGuardError('Integridade dos registros REAL exige revisão')
     orders = session.scalars(select(db.RealOrder).where(
         db.RealOrder.account_id == account_id)).all()
     amount = _risk_check(orders, stake, stop_loss, consent.max_stake,
@@ -145,11 +155,25 @@ def confirm_real_order(session, order, receipt):
     price = _money(receipt.get('buy_price'), 'Preço REAL')
     if price <= 0 or price > _money(order.stake, 'Valor da entrada'):
         raise RealOrderGuardError('Preço de compra REAL ultrapassou o autorizado')
-    order.contract_id=contract_id
-    order.buy_price=str(price)
-    order.broker_purchase_at=official_broker_epoch(receipt.get('broker_purchase_time'))
-    order.state='CONFIRMED'
-    session.commit()
+    # Conditional SQL state transition is atomic across service processes.
+    # A stale PENDING ORM object cannot overwrite an UNKNOWN/SETTLED row.
+    try:
+        changed=session.execute(update(db.RealOrder).where(
+            db.RealOrder.id==order.id,
+            db.RealOrder.state=='PENDING',
+            db.RealOrder.active_slot==order.account_id,
+        ).values(contract_id=contract_id,buy_price=str(price),
+                 broker_purchase_at=official_broker_epoch(receipt.get('broker_purchase_time')),
+                 state='CONFIRMED',
+                 updated_at=db.utcnow()).execution_options(synchronize_session=False))
+        if changed.rowcount!=1:
+            session.rollback()
+            raise RealOrderGuardError('Confirmação REAL perdeu concorrência ou reserva inválida')
+        session.commit()
+        session.refresh(order)
+    except IntegrityError as exc:
+        session.rollback()
+        raise RealOrderGuardError('Identificador REAL já registrado') from exc
 
 
 
@@ -157,17 +181,33 @@ def cancel_unsubmitted_real_order(session, order, reason):
     """Release reservation only when broker buy was provably never dispatched."""
     if order.state != 'PENDING':
         raise RealOrderGuardError('Somente tentativa não enviada pode ser cancelada')
-    order.state='CANCELLED'
-    order.error_summary=str(reason)[:200]
-    order.active_slot=None
+    changed=session.execute(update(db.RealOrder).where(
+        db.RealOrder.id==order.id,db.RealOrder.state=='PENDING',
+        db.RealOrder.active_slot==order.account_id,
+    ).values(state='CANCELLED',error_summary=str(reason)[:200],
+             active_slot=None,updated_at=db.utcnow())
+     .execution_options(synchronize_session=False))
+    if changed.rowcount!=1:
+        session.rollback()
+        raise RealOrderGuardError('Cancelamento REAL concorrente: estado incerto, reserva preservada')
     session.commit()
+    session.refresh(order)
 
 
 def mark_real_unknown(session, order):
     if order.state=='PENDING':
-        order.state='UNKNOWN'
-        order.error_summary='Resultado REAL incerto: reconciliação obrigatória'
+        changed=session.execute(update(db.RealOrder).where(
+            db.RealOrder.id==order.id,db.RealOrder.state=='PENDING',
+            db.RealOrder.active_slot==order.account_id,
+        ).values(state='UNKNOWN',
+                 error_summary='Resultado REAL incerto: reconciliação obrigatória',
+                 updated_at=db.utcnow()).execution_options(synchronize_session=False))
+        if changed.rowcount!=1:
+            session.rollback()
+            session.expire(order)
+            return
         session.commit()
+        session.refresh(order)
 
 
 def settle_real_order(session, order, contract):
@@ -178,11 +218,22 @@ def settle_real_order(session, order, contract):
     if contract.get('is_sold') not in (True,1,'1'):
         return False
     profit=_money(contract.get('profit'),'Lucro ou prejuízo REAL')
-    order.pnl=str(profit)
-    order.broker_status=str(contract.get('status','settled'))[:40]
-    order.state='SETTLED'
-    order.active_slot=None
+    # Only the first confirmed settlement wins across threads or workers.
+    # A duplicated delayed callback must not rewrite a terminal P/L.
+    changed=session.execute(update(db.RealOrder).where(
+        db.RealOrder.id==order.id,db.RealOrder.contract_id==order.contract_id,
+        db.RealOrder.state.in_(ACTIVE),db.RealOrder.active_slot==order.account_id,
+    ).values(pnl=str(profit),broker_status=str(contract.get('status','settled'))[:40],
+             state='SETTLED',active_slot=None,updated_at=db.utcnow())
+      .execution_options(synchronize_session=False))
+    if changed.rowcount!=1:
+        session.rollback()
+        session.refresh(order)
+        if order.state=='SETTLED':
+            return False
+        raise RealOrderGuardError('Liquidação REAL concorrente ou reserva inconsistente')
     session.commit()
+    session.refresh(order)
     return True
 
 
