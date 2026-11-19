@@ -10,6 +10,7 @@ from sqlalchemy.exc import IntegrityError
 from . import db
 from .demo_ledger import official_broker_epoch
 from .order_integrity import audit_real_account, real_replay_matches
+from .status_contract import contract_stage
 
 
 ACTIVE = ('PENDING', 'CONFIRMED', 'UNKNOWN')
@@ -241,7 +242,8 @@ def public_real_order(order):
     # Read-only recovery status; NEVER indicates permission to submit a trade.
     from .real_recovery import classify_unresolved_real_order
     return {'recovery': classify_unresolved_real_order(order),
-        'id':order.id,'state':order.state,'symbol':order.symbol,
+        'id':order.id,'state':order.state,'contract_stage':contract_stage(order.state),
+        'symbol':order.symbol,
         'direction':order.direction,'stake':order.stake,'currency':order.currency,
         'duration_minutes':order.duration_minutes,'buy_price':order.buy_price,
         'pnl':order.pnl,'broker_status':order.broker_status,
