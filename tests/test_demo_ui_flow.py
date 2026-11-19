@@ -192,8 +192,10 @@ def test_dashboard_navigation_reuses_existing_history_refresh():
     """Avoid duplicate history requests without changing the read-only poller or robot controls."""
     html=load_ui()
     navigation=html.split("function go(v){",1)[1].split("\nfunction fail(",1)[0]
-    assert "if(v==='dashboard'){refreshDashboard();loadDailyResults().catch(()=>{});}" in navigation
-    assert "loadDemoOrders().catch(()=>{})" not in html
+    assert "if(v==='dashboard'){refreshDashboard().then(status=>{if(!status)loadDemoOrders().catch(()=>{});});loadDailyResults().catch(()=>{});}" in navigation
+    # On an ordinary dashboard update, history is fetched within refreshDashboard().
+    # A failed status request still triggers one read-only history fallback.
+    assert "if(!status)loadDemoOrders().catch(()=>{});" in navigation
     # Refreshing the dashboard already fetches the account-specific official history.
     refresh=html.split("async function refreshDashboard(){",1)[1].split(
         "\nlet robotStartDialogResolver=",1)[0]
