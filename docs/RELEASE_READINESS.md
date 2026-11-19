@@ -33,6 +33,17 @@ Não marcar "pronto" apenas porque o deploy aparece como live.
 4. Publicação do Render só após revisão/merge aprovado; branch de correções não é deploy.
 5. Aprovar piloto de poucos usuários após revisão de segurança e autenticação; expandir gradualmente.
 
+## Revisão de identidade de contas e dados Real — 19/11/2026
+
+- [x] Corrigir consultas de saldo e resultado do dia para respeitarem `automation_profiles.real_account_id` e confirmarem que a conta permanece na lista OAuth da sessão atual.
+- [x] Impedir escolha arbitrária da primeira conta Real quando existem várias vinculadas.
+- [x] Restringir histórico Real de leitura à conta selecionada, sem apagar registros; uma única conta histórica continua acessível sem seleção.
+- [x] Adicionar testes totalmente sintéticos de contas múltiplas, seleção antiga, saldo Demo separado, histórico e WebSocket de saldo apenas de leitura.
+- [ ] Verificar a interface com múltiplas contas reais de teste sem transmitir ordens, medindo saldo e resultados contra respostas oficiais.
+- [ ] Revisar a autorização e a conformidade financeira separadamente; a autenticação OAuth e o consentimento do usuário não constituem aprovação de lançamento de negociações automáticas com dinheiro real.
+
+Documentação: `docs/REAL_ACCOUNT_READONLY_AUDIT_2026-11-19.md`. O escopo desta correção é **somente leitura**, não execução de ordens.
+
 ## Auditoria de continuidade — 19/11/2026
 - [x] Consultado HEAD da branch `main` (`d51aedba`): testes Python, auditoria de segurança e smoke público com conclusão `success` na última execução relevante consultada (18/11/2026).
 - [x] Consultados privilégios PostgreSQL via SQL read-only: 28/28 tabelas com RLS; 0 `SELECT` e 0 `INSERT` para `anon` / `authenticated`.
