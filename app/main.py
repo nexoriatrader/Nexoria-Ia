@@ -1360,6 +1360,31 @@ async def real_orders_route(request:Request,nexora_sid:str|None=Cookie(default=N
                 'account_mode':'real','source':'DERIV_REAL_ORDERS'}
 
 
+def readonly_real_account_selection(user_id:int, accounts:list):
+    """Choose a balance/results account from the saved profile and OAuth list.
+
+    This helper only returns account metadata; it never activates execution.
+    With multiple real accounts, the user must explicitly select one.
+    """
+    from .auth_helpers import real_accounts,real_balance
+    verified=real_accounts(accounts)
+    with db.SessionLocal() as session:
+        profile=session.get(db.AutomationProfile,user_id)
+        selected=(profile.real_account_id if profile and profile.account_mode=='real'
+                  else None)
+    if not verified:
+        return None,'Nenhuma conta real vinculada foi identificada'
+    ids={row['account_id'] for row in verified}
+    if selected is not None and selected not in ids:
+        return None,'A conta REAL selecionada não está disponível nesta sessão Deriv'
+    if selected is None and len(ids)>1:
+        return None,'Selecione uma conta REAL nas configurações para consultar seus dados'
+    entry=real_balance(accounts,selected)
+    if entry is None:
+        return None,'Não foi possível identificar a conta REAL com segurança'
+    return entry,None
+
+
 @app.get('/api/real/balance')
 async def real_balance_route(request:Request,nexora_sid:str|None=Cookie(default=None)):
     """Read-only real Options account balance, never authorizes purchases.
@@ -1376,11 +1401,11 @@ async def real_balance_route(request:Request,nexora_sid:str|None=Cookie(default=
             payload=response.json()
     except (httpx.HTTPError,ValueError):
         raise HTTPException(502,'Não foi possível consultar as contas reais na Deriv') from None
-    from .auth_helpers import extract_accounts,real_balance
-    entry=real_balance(extract_accounts(payload))
+    from .auth_helpers import extract_accounts
+    entry,selection_error=readonly_real_account_selection(user.id,extract_accounts(payload))
     if entry is None:
         return {'available':False,'balance':None,'currency':None,'account_id':None,
-                'reason':'Nenhuma conta real vinculada foi identificada'}
+                'reason':selection_error}
     if not entry['available']:
         # Account discovery does not always include a balance. Ask the
         # authenticated real Options channel for READ-ONLY balance only.
@@ -1410,10 +1435,11 @@ async def real_results_today(request:Request,nexora_sid:str|None=Cookie(default=
                 headers={'Authorization':f'Bearer {token}'})
             response.raise_for_status()
             payload=response.json()
-        from .auth_helpers import extract_accounts,real_balance
-        account=real_balance(extract_accounts(payload))
+        from .auth_helpers import extract_accounts
+        account,selection_error=readonly_real_account_selection(
+            user.id,extract_accounts(payload))
         if account is None:
-            return {**unavailable,'reason':'Nenhuma conta real vinculada identificada'}
+            return {**unavailable,'reason':selection_error}
         from .real_readonly import RealBalanceError,fetch_real_daily_profit
         try:
             result=await fetch_real_daily_profit(token,account['account_id'],
