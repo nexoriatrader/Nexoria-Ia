@@ -51,11 +51,14 @@ def test_real_risk_enforces_stake_cap_and_stop(session):
     with pytest.raises(RealOrderGuardError,match="limite"):
         place(session,stake="4")
     consent=session.get(db.RealRobotConsent,1)
+    settings=session.get(db.AccountRiskSettings,(1,'real','CR123'))
     consent.stop_loss="0"
+    settings.stop_loss="0"
     session.commit()
-    with pytest.raises(RealOrderGuardError,match="obrigatório"):
+    with pytest.raises(RealOrderGuardError,match="Stop Loss"):
         place(session)
     consent.stop_loss="0.50"
+    settings.stop_loss="0.50"
     session.commit()
     with pytest.raises(RealOrderGuardError,match="Stop Loss"):
         place(session,stake="1")
@@ -215,6 +218,7 @@ def test_real_entry_value_is_chosen_by_user_without_arbitrary_server_cap(session
     consent=session.get(db.RealRobotConsent,1)
     consent.max_stake='50'
     consent.stop_loss='100'
+    session.get(db.AccountRiskSettings,(1,'real','CR123')).stop_loss='100'
     session.commit()
     order,created=place(session,stake='25')
     assert created and order.stake=='25'
@@ -248,3 +252,84 @@ def test_user_stop_still_blocks_open_contract_even_without_global_caps():
          broker_purchase_at=None,created_at=db.utcnow())
     with pytest.raises(RealOrderGuardError,match='contrato aberto'):
         _risk_check([open_order],'1','20','1')
+
+
+@pytest.mark.parametrize("saved,authorized", [
+    ("3", "8"), ("8", "3"), ("0", "3"), ("5", "0"),
+])
+def test_real_stop_loss_mismatch_fails_closed_before_reservation(session,saved,authorized):
+    """Mismatch NEVER silently chooses the larger/smaller stop."""
+    account=session.get(db.AccountRiskSettings,(1,"real","CR123"))
+    consent=session.get(db.RealRobotConsent,1)
+    demo=session.get(db.User,1)
+    demo.stop_loss="900.00"  # Must never govern REAL
+    account.stop_loss=saved
+    consent.stop_loss=authorized
+    session.commit()
+    with pytest.raises(RealOrderGuardError,match="divergente"):
+        place(session,"mismatch-12345678")
+    assert session.query(db.RealOrder).count()==0
+
+
+def test_real_stop_loss_uses_selected_account_not_demo_user_values(session):
+    """Saved REAL=7 + authorized=7, DEMO=100: stop 7 must block."""
+    demo=session.get(db.User,1)
+    demo.stop_loss="100"
+    demo.stop_win="0.10"
+    account=session.get(db.AccountRiskSettings,(1,"real","CR123"))
+    account.stop_loss="7"
+    account.stop_win="99"
+    consent=session.get(db.RealRobotConsent,1)
+    consent.stop_loss="7"
+    session.add(db.RealOrder(
+        user_id=1,account_id="CR123",request_key="settled-12345678",
+        active_slot=None,state="SETTLED",contract_id="999111222",
+        symbol="R_100",direction="CALL",duration_minutes=5,
+        stake="6",currency="USD",pnl="-6.50",
+        broker_purchase_at=db.utcnow()
+    ))
+    session.commit()
+    with pytest.raises(RealOrderGuardError,match="Stop Loss"):
+        place(session,"new-order-12345678",stake="1")
+    assert session.query(db.RealOrder).count()==1
+
+
+def test_real_stop_win_ignores_demo_stop_win_and_uses_account_value(session):
+    demo=session.get(db.User,1)
+    demo.stop_win="0"
+    demo.stop_loss="1"
+    account=session.get(db.AccountRiskSettings,(1,"real","CR123"))
+    account.stop_win="2"
+    account.stop_loss="8"
+    consent=session.get(db.RealRobotConsent,1)
+    consent.stop_loss="8"
+    session.add(db.RealOrder(
+        user_id=1,account_id="CR123",request_key="closed-12345678",
+        active_slot=None,state="SETTLED",contract_id="999111223",
+        symbol="R_100",direction="CALL",duration_minutes=5,
+        stake="2",currency="USD",pnl="2.20",
+        broker_purchase_at=db.utcnow()
+    ))
+    session.commit()
+    with pytest.raises(RealOrderGuardError,match="Stop Win"):
+        place(session,"next-win-12345678")
+    assert session.query(db.RealOrder).count()==1
+
+
+def test_demo_risk_checks_ignore_real_saved_stops_and_consent(session):
+    from app.demo_ledger import order_guard,OrderGuardError
+    demo=session.get(db.User,1)
+    demo.stop_loss="1"
+    demo.stop_win="0"
+    account=session.get(db.AccountRiskSettings,(1,"real","CR123"))
+    account.stop_loss="100"
+    account.stop_win="100"
+    consent=session.get(db.RealRobotConsent,1)
+    consent.stop_loss="100"
+    session.commit()
+    # DEMO risk check uses ONLY user legacy DEMO stop_loss=1.
+    with pytest.raises(OrderGuardError,match="Stop Loss"):
+        order_guard(demo,[],"2")
+    # REAL ledger ignores the intentionally divergent DEMO stop entirely.
+    order,created=place(session,"isolated-12345678",stake="1")
+    assert created and order.state=="PENDING"
