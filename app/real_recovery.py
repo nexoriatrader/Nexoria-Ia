@@ -15,6 +15,7 @@ from datetime import datetime, timedelta, timezone
 from sqlalchemy import or_, select, update
 
 from . import db
+from .order_integrity import audit_real_account
 
 ACTIVE_REAL = frozenset(("PENDING", "UNKNOWN", "CONFIRMED"))
 DEFAULT_PENDING_GRACE_SECONDS = 15 * 60
@@ -125,7 +126,9 @@ def account_recovery_summary(session, user_id: int, account_id: str | None) -> d
             db.RealOrder.active_slot.is_not(None)),
     )).all()
     classified = [classify_unresolved_real_order(row) for row in rows]
-    blocked = any(x["account_blocked"] for x in classified)
+    integrity = audit_real_account(session,user_id,account_id)
+    blocked = (any(x["account_blocked"] for x in classified)
+               or integrity["requires_review"])
     return {
         "account_id": account_id,
         "active_count": sum(row.state in ACTIVE_REAL for row in rows),
@@ -133,6 +136,7 @@ def account_recovery_summary(session, user_id: int, account_id: str | None) -> d
         "unknown_count": sum(o.state == "UNKNOWN" for o in rows),
         "review_count": sum(x["needs_manual_review"] for x in classified),
         "blocked": blocked,
+        "integrity": integrity,
         "reason": ("Há pendências ou inconsistências; revisão obrigatória antes de novas ordens"
                    if blocked else "Nenhuma operação REAL pendente nesta conta"),
     }
