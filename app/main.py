@@ -2183,20 +2183,21 @@ async def start_real_autopilot(request:Request,nexora_sid:str|None=None):
         raise HTTPException(409,'Desligue o robô DEMO antes de iniciar a conta REAL')
     with db.SessionLocal() as sess:
         profile=sess.get(db.AutomationProfile,user.id)
-        plan=sess.get(db.RobotPlan,user.id)
         if not profile or profile.account_mode!='real' or not profile.real_account_id:
             raise HTTPException(409,'Selecione e salve uma conta REAL nas configurações')
+        mode_settings=sess.get(db.AccountRiskSettings,
+                               (user.id,'real',profile.real_account_id))
+        if mode_settings is None:
+            raise HTTPException(409,'Configure os limites REAL separadamente para a conta selecionada')
         if profile.news_filter:
             raise HTTPException(409,'Filtro de notícias indisponível; desative para usar REAL')
-        if plan and (plan.requested_martingale or plan.cycles_limit):
+        if mode_settings.martingale or mode_settings.cycles_limit:
             raise HTTPException(409,'Conta REAL beta exige Martingale e ciclos desativados')
-        if user.martingale:
-            raise HTTPException(409,'Desative Martingale nas configurações atuais')
         if not access_status(sess,user.id)['allowed']:
             raise HTTPException(403,'Acesso ao robô expirado ou suspenso')
         try:
-            stake=Decimal(str(user.stake))
-            stop=Decimal(str(user.stop_loss))
+            stake=Decimal(str(mode_settings.stake))
+            stop=Decimal(str(mode_settings.stop_loss))
             if not stake.is_finite() or not stop.is_finite() or stake<Decimal('0.50') or stop<stake:
                 raise ValueError()
         except (InvalidOperation,ValueError):
