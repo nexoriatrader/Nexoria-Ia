@@ -7,6 +7,7 @@ import re
 from sqlalchemy import select, func
 from sqlalchemy.exc import IntegrityError
 from . import db
+from .order_integrity import demo_replay_matches
 
 ACTIVE = {'PENDING', 'CONFIRMED', 'UNKNOWN'}
 
@@ -102,6 +103,11 @@ def reserve(session, user, *, request_key, symbol, direction, minutes,
     previous=session.scalar(select(db.DemoOrder).where(
         db.DemoOrder.user_id==user.id,db.DemoOrder.request_key==request_key))
     if previous:
+        if not demo_replay_matches(
+            previous,user_id=user.id,symbol=symbol,direction=direction,
+            minutes=minutes,stake_override=stake_override
+        ):
+            raise OrderGuardError('Chave DEMO reutilizada com dados divergentes')
         return previous,False
     entries=session.scalars(select(db.DemoOrder).where(
         db.DemoOrder.user_id==user.id)).all()
