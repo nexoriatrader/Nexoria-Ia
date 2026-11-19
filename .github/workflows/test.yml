@@ -5,6 +5,7 @@ on:
       - main
       - feature/nexora-autopilot-research-v06
       - feature/p0-01-isolamento-config-demo-real
+      - feature/p0-02-safe-unresolved-recovery
   pull_request:
     branches:
       - main
