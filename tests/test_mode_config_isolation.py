@@ -291,3 +291,36 @@ def test_automation_ui_does_not_prefill_risk_across_unsaved_mode_switches():
     assert "$('autoStake').value=risk.stake??'';" in html
     assert "$('autoWin').value=risk.stop_win??'';" in html
     assert "$('autoLoss').value=risk.stop_loss??'';" in html
+
+
+def test_readonly_unsaved_account_preview_checks_oauth_ownership(context,monkeypatch):
+    client, sessions, uid = context
+    class FakeResponse:
+        def raise_for_status(self):
+            return None
+        def json(self):
+            return {"data":{"accounts":[
+                {"account_id":"CRONE","account_type":"real","currency":"USD"},
+                {"account_id":"CRTWO","account_type":"real","currency":"USD"},
+            ]}}
+    class MockAccountsClient:
+        def __init__(self,*args,**kwargs):
+            pass
+        async def __aenter__(self):
+            return self
+        async def __aexit__(self,*args):
+            return False
+        async def get(self,url,headers=None):
+            assert url.endswith("/trading/v1/options/accounts")
+            assert headers and headers["Authorization"].startswith("Bearer ")
+            return FakeResponse()
+    monkeypatch.setattr(main.httpx,"AsyncClient",MockAccountsClient)
+    r=client.get("/api/onboarding/config?mode=real&account_id=CRONE")
+    assert r.status_code==200,r.text
+    assert r.json()["configured"] is False and r.json()["stake"] is None
+    assert r.json()["account_id"]=="CRONE"
+    bad=client.get("/api/onboarding/config?mode=real&account_id=CRFOREIGN")
+    assert bad.status_code==403
+    bad_demo=client.get("/api/onboarding/config?mode=demo&account_id=VOTHER")
+    assert bad_demo.status_code==403
+    assert client.get("/api/onboarding/config?mode=demo").json()["mode"]=="demo"
