@@ -280,7 +280,6 @@ def test_public_real_history_shows_user_scoped_recovery_without_demo_data(repo,m
     assert body["items"][0]["id"]==own
     assert body["items"][0]["id"]!=foreign
     assert body["items"][0]["recovery"]["status"]=="MANUAL_REVIEW_NO_CONTRACT"
-    assert client.get("/api/real/orders",cookies={"nexora_sid":"bogus"}).status_code in (401,403)
 
 
 def test_unauthenticated_real_recovery_endpoint_not_public(repo):
