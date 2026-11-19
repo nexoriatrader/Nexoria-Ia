@@ -296,14 +296,16 @@ def test_status_contract_is_read_only_and_preserves_real_ledger(context):
         select_real(s,with_consent=True)
         o=seed_real(s)
         s.commit()
-        original=(o.id,o.state,o.active_slot,o.contract_id,o.pnl,o.updated_at)
+        original=(o.id,o.state,o.active_slot,o.contract_id,o.pnl,
+                  o.updated_at.replace(tzinfo=None) if o.updated_at else None)
     for _ in range(3):
         data=client.get("/api/status").json()
         assert data["contracts"]["settled_count"]==0
         client.get("/api/autopilot/readiness")
     with Session() as s:
         o=s.query(db.RealOrder).one()
-        assert (o.id,o.state,o.active_slot,o.contract_id,o.pnl,o.updated_at)==original
+        assert (o.id,o.state,o.active_slot,o.contract_id,o.pnl,
+                o.updated_at.replace(tzinfo=None) if o.updated_at else None)==original
         assert s.get(db.RealRobotConsent,1).revoked_at is None
     never_buy.assert_not_awaited()
 
