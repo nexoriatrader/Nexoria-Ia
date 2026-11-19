@@ -250,7 +250,7 @@ def test_process_crash_rolls_back_uncommitted_slot_release():
         engine.dispose()
 
 
-def _application_reservation_writer(dsn, user_id, request_key, go, ready, out):
+def _application_reservation_writer(dsn, user_id, account_id, request_key, go, ready, out):
     """Only the existing ledger's DB reservation function; NO broker I/O."""
     from app.real_ledger import reserve_real_order, RealOrderGuardError
     engine=create_engine(dsn,pool_pre_ping=True)
@@ -267,7 +267,7 @@ def _application_reservation_writer(dsn, user_id, request_key, go, ready, out):
                 return
             try:
                 order,created=reserve_real_order(
-                    s,user,account_id="CRP3APP",request_key=request_key,
+                    s,user,account_id=account_id,request_key=request_key,
                     symbol="R_100",direction="CALL",duration=5,
                     stake="1",currency="USD"
                 )
@@ -294,6 +294,7 @@ def test_cross_process_application_real_reservation_never_duplicates(same_key):
     Session=sessionmaker(bind=engine,expire_on_commit=False)
     try:
         db.Base.metadata.create_all(engine)
+        account_id=("CRP3APPSAME" if same_key else "CRP3APPDIFF")
         with Session() as s:
             user=db.User(
                 deriv_account_id=("VP3APP_SAME" if same_key else "VP3APP_DISTINCT"),
@@ -303,11 +304,11 @@ def test_cross_process_application_real_reservation_never_duplicates(same_key):
             s.flush()
             uid=user.id
             s.add(db.RealRobotConsent(
-                user_id=uid,account_id="CRP3APP",
+                user_id=uid,account_id=account_id,
                 max_stake="2",stop_loss="10"
             ))
             s.add(db.AccountRiskSettings(
-                user_id=uid,account_mode="real",account_id="CRP3APP",
+                user_id=uid,account_mode="real",account_id=account_id,
                 stake="1",stop_win="0",stop_loss="10"
             ))
             s.commit()
@@ -316,7 +317,7 @@ def test_cross_process_application_real_reservation_never_duplicates(same_key):
         ]
         ctx=multiprocessing.get_context("spawn")
         results=_parallel(ctx,_application_reservation_writer,[
-            (dsn,uid,key) for key in keys
+            (dsn,uid,account_id,key) for key in keys
         ])
         statuses=[item[0] for item in results]
         assert statuses.count("created")==1,results
@@ -327,18 +328,18 @@ def test_cross_process_application_real_reservation_never_duplicates(same_key):
             assert statuses.count("guarded")==1,results
         with Session() as check:
             saved=check.scalars(select(db.RealOrder).where(
-                db.RealOrder.account_id=="CRP3APP",
+                db.RealOrder.account_id==account_id,
                 db.RealOrder.user_id==uid
             )).all()
             assert len(saved)==1
             first=saved[0]
             assert first.state=="PENDING"
-            assert first.active_slot=="CRP3APP"
+            assert first.active_slot==account_id
             assert first.contract_id is None and first.pnl is None
             assert first.stake=="1"
             assert first.request_key in keys
             assert not check.scalars(select(db.RealOrder).where(
-                db.RealOrder.account_id=="CRP3APP",
+                db.RealOrder.account_id==account_id,
                 db.RealOrder.user_id==uid,
                 db.RealOrder.id!=first.id
             )).first()
