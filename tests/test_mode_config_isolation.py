@@ -225,3 +225,67 @@ def test_real_start_cannot_use_demo_fallback_when_mode_config_missing(context, m
     assert "Configure os limites REAL separadamente" in response.json()["detail"]
     with sessions() as s:
         assert s.query(db.RealOrder).count() == 0
+
+
+def test_user_id_is_part_of_account_scoped_preferences(context):
+    client, sessions, uid = context
+    choose_real(sessions, uid, "CR_SHARED_SYNTHETIC")
+    assert client.post("/api/onboarding/config", json=REAL).status_code == 200
+    with sessions() as s:
+        second = db.User(deriv_account_id="V_OTHER_DEMO", selected_mode="demo")
+        s.add(second)
+        s.flush()
+        other = second.id
+        s.add(db.AutomationProfile(user_id=other, account_mode="real",
+                                   real_account_id="CR_SHARED_SYNTHETIC"))
+        s.add(db.Session(session_hash=hashsecret("other-sid"), user_id=other,
+                         token_encrypted=encrypt("other-synthetic-token"),
+                         expires_at=db.utcnow() + timedelta(hours=2)))
+        s.commit()
+    second_client = TestClient(main.app)
+    second_client.cookies.set("nexora_sid", "other-sid")
+    assert second_client.get("/api/onboarding/config").json()["stake"] is None
+    other_values = dict(REAL, stake="1.00", stop_win="3.00", stop_loss="2.00")
+    assert second_client.post("/api/onboarding/config", json=other_values).status_code == 200
+    assert second_client.get("/api/onboarding/config").json()["stake"] == "1.00"
+    assert client.get("/api/onboarding/config").json()["stake"] == "7.00"
+    with sessions() as s:
+        assert s.get(db.AccountRiskSettings,(uid,"real","CR_SHARED_SYNTHETIC")).stake == "7.00"
+        assert s.get(db.AccountRiskSettings,(other,"real","CR_SHARED_SYNTHETIC")).stake == "1.00"
+
+
+def test_account_specific_preferences_dont_change_demo_legacy_endpoint(context):
+    client, sessions, uid = context
+    assert client.post("/api/onboarding/config", json=DEMO).status_code == 200
+    choose_real(sessions, uid, "CR_ONE")
+    assert client.post("/api/onboarding/config", json=REAL).status_code == 200
+    old = client.get("/api/config/current").json()
+    assert old["execution"] == "DERIV_DEMO_ONLY"
+    assert old["stake"] == "2.50" and old["stop_loss"] == "8.00"
+
+
+def test_mode_config_schema_is_additive_and_repeatable(context):
+    client, sessions, uid = context
+    choose_real(sessions, uid, "CR_ONE")
+    assert client.post("/api/onboarding/config", json=REAL).status_code == 200
+    with sessions() as s:
+        database_engine = s.bind
+        db.Base.metadata.create_all(database_engine, checkfirst=True)
+        db.Base.metadata.create_all(database_engine, checkfirst=True)
+        saved = s.get(db.AccountRiskSettings, (uid, "real", "CR_ONE"))
+        assert saved.revision == 1
+        assert saved.stake == "7.00"
+
+
+def test_automation_ui_does_not_prefill_risk_across_unsaved_mode_switches():
+    from pathlib import Path
+    html = (Path(__file__).resolve().parents[1] / "app" / "index.html").read_text()
+    assert "function clearUnsavedAutomationRiskOnAccountChange()" in html
+    assert "input.addEventListener('change',clearUnsavedAutomationRiskOnAccountChange)" in html
+    assert "$('autoRealAccount').addEventListener('change',clearUnsavedAutomationRiskOnAccountChange)" in html
+    for field in ("autoStake", "autoWin", "autoLoss"):
+        assert f"$('\\{field}')" not in html  # No escaped, non-functional DOM references.
+        assert f"$('\\{field}').value" not in html
+        assert f"$('\\{field}').value=risk" not in html
+        assert f"$('\\{field}').value" not in html
+        assert f"$('\\{field}')" not in html
