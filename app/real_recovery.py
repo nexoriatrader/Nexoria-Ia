@@ -103,6 +103,9 @@ def promote_stale_pending_to_unknown(session, *, now: datetime | None = None,
             if result.rowcount == 1:
                 changed.append(order.id)
         session.commit()
+        # SQL UPDATE bypasses ORM identity-map synchronization on some
+        # drivers; callers must not observe a stale PENDING object.
+        session.expire_all()
     except Exception:
         session.rollback()
         raise
