@@ -2371,7 +2371,9 @@ function setAutomationRadio(name,value){
  const field=document.querySelector('input[name="'+name+'"][value="'+value+'"]');
  if(field)field.checked=true;
 }
+let automationRiskRequest=0,automationAccountRequest=0;
 async function changeAutomationAccount(selectedAccount){
+ const requestId=++automationAccountRequest;
  const isReal=automationRadio('autoMode')==='real';
  $('autoRealAccountWrapper').classList.toggle('hidden',!isReal);
  if(!isReal)return;
@@ -2381,6 +2383,7 @@ async function changeAutomationAccount(selectedAccount){
  input.append(defaultOption);
  try{
   const response=await req('/api/accounts/available');
+  if(requestId!==automationAccountRequest||automationRadio('autoMode')!=='real')return;
   for(const acct of response.real_accounts||[]){
    const option=document.createElement('option');
    option.value=acct.account_id;
@@ -2391,6 +2394,7 @@ async function changeAutomationAccount(selectedAccount){
  }catch(e){$('autoConfigFeedback').textContent='Não foi possível consultar suas contas: '+e.message}
 }
 function clearUnsavedAutomationRiskOnAccountChange(){
+ ++automationRiskRequest; // Invalidate older account preview requests.
  // The selected account/mode is not persisted until Save. Require an explicit
  // value rather than silently copying a different account's risk preferences.
  for(const id of ['autoStake','autoWin','autoLoss'])$(id).value='';
@@ -2400,9 +2404,36 @@ function clearUnsavedAutomationRiskOnAccountChange(){
  automationProfileSaved=false;
  renderAutomationSummary();toggleAutomationProgressions();
 }
-document.querySelectorAll('input[name="autoMode"]').forEach(input=>
- input.addEventListener('change',clearUnsavedAutomationRiskOnAccountChange));
-$('autoRealAccount').addEventListener('change',clearUnsavedAutomationRiskOnAccountChange);
+async function restoreSelectedAutomationRisk(){
+ const mode=automationRadio('autoMode');
+ const account=mode==='real'?$('autoRealAccount').value:'';
+ const requestId=++automationRiskRequest;
+ if(mode==='real'&&!account)return;
+ const path='/api/onboarding/config?mode='+encodeURIComponent(mode)+
+   (mode==='real'?'&account_id='+encodeURIComponent(account):'');
+ try{
+  const risk=await req(path);
+  if(requestId!==automationRiskRequest||automationRadio('autoMode')!==mode||
+     (mode==='real'&&$('autoRealAccount').value!==account))return;
+  $('autoStake').value=risk.stake??'';
+  $('autoWin').value=risk.stop_win??'';
+  $('autoLoss').value=risk.stop_loss??'';
+  $('autoMg').checked=Boolean(risk.martingale);
+  $('autoGales').value=String(risk.gale_count||1);
+  $('autoMultiplier').value=String(risk.multiplier||'2.00');
+  $('autoCycles').value=String(risk.cycles||'0');
+  $('autoCycleMultiplier').value=String(risk.cycle_multiplier||'2.00');
+  toggleAutomationProgressions();
+  renderAutomationSummary();
+ }catch(e){
+  if(requestId===automationRiskRequest)
+   $('autoConfigFeedback').textContent='Preferências não disponíveis: '+e.message;
+ }
+}
+$('autoRealAccount').addEventListener('change',()=>{
+ clearUnsavedAutomationRiskOnAccountChange();
+ restoreSelectedAutomationRisk().catch(()=>{});
+});
 
 async function changeAutomationMarket(){
  const feedback=$('autoConfigFeedback'),market=automationRadio('autoMarket'),requestId=++automationMarketRequest;
@@ -2422,8 +2453,13 @@ async function changeAutomationMarket(){
  }catch(e){if(requestId===automationMarketRequest)feedback.textContent='Não foi possível consultar o mercado: '+e.message}
 }
 document.querySelectorAll('input[name="autoMarket"]').forEach(x=>x.addEventListener('change',changeAutomationMarket));
-document.querySelectorAll('input[name="autoMode"]').forEach(x=>x.addEventListener('change',()=>{
- changeAutomationAccount();renderAutomationSummary();
+document.querySelectorAll('input[name="autoMode"]').forEach(x=>x.addEventListener('change',async()=>{
+ clearUnsavedAutomationRiskOnAccountChange();
+ const requestId=automationRiskRequest;
+ await changeAutomationAccount();
+ if(requestId!==automationRiskRequest)return;
+ await restoreSelectedAutomationRisk();
+ renderAutomationSummary();
 }));
 const automationStrategyDefaults={
  pulso_v2:{indicators:['ATR'],label:'PULSO V2: os indicadores escolhidos são filtros opcionais; mais filtros podem reduzir a frequência de sinais.'},
@@ -2499,6 +2535,7 @@ function renderAutomationSummary(){
   ' · stop win US$ '+$('autoWin').value+' · stop loss US$ '+$('autoLoss').value;
 }
 async function loadAutomationProfile(){
+ ++automationRiskRequest; // Ignore stale on-change risk previews.
  const feedback=$('autoConfigFeedback');
  try{
   const [profile,risk]=await Promise.all([
