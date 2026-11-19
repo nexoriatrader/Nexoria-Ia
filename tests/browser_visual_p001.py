@@ -80,8 +80,10 @@ def run():
         page.evaluate("setAutomationWizardStep(6)")
         record(page,"REAL_ONE_DESKTOP")
 
+        page.evaluate("setAutomationWizardStep(2)")
         page.locator('#autoRealAccount').select_option('CRTWO')
         state(page,{"stake":"3.00","win":"9.00","loss":"6.00"},"REAL_TWO")
+        page.evaluate("setAutomationWizardStep(6)")
         record(page,"REAL_TWO_DESKTOP")
 
         page.evaluate("setAutomationWizardStep(2)")
