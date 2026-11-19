@@ -2581,13 +2581,22 @@ async function save(){
 }
 async function logout(){try{await req('/api/logout',{method:'POST'});if(refreshTimer)clearInterval(refreshTimer);if(resultsRefreshTimer)clearInterval(resultsRefreshTimer);page('welcome');demoOrders=[];demoBalance=null;fail('')}catch(e){fail(e.message)}}
 
-// When a user returns from the Deriv account page, read both balances again.
+// Refresh read-only cards once when returning from a background tab or account page.
+// The running robot is server-side; no start/stop commands are sent here.
 let derivReturnRefreshAt=0;
-window.addEventListener('focus',()=>{
- if(activePage!=='dashboard'||Date.now()-derivReturnRefreshAt<4000)return;
+function refreshVisiblePageOnReturn(){
+ if(document.hidden||Date.now()-derivReturnRefreshAt<4000)return;
+ if(activePage!=='dashboard'&&activePage!=='results')return;
  derivReturnRefreshAt=Date.now();
- Promise.allSettled([loadDemoBalance(),loadRealBalance()]);
-});
+ if(activePage==='dashboard'){
+   refreshDashboard().then(status=>{if(!status)loadDemoOrders().catch(()=>{});}).catch(()=>{});
+   loadDailyResults().catch(()=>{});
+ }else{
+   loadDemoOrders().catch(()=>{});
+ }
+}
+document.addEventListener('visibilitychange',refreshVisiblePageOnReturn);
+window.addEventListener('focus',refreshVisiblePageOnReturn);
 init();
 </script>
 </body></html>
