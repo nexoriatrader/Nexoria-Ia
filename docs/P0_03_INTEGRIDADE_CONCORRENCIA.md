@@ -63,7 +63,8 @@ Essas pendências continuam registradas na PR #45 e não impedem revisão técni
 ## Estado de revisão
 
 - Branch: `feature/p0-03-integridade-concorrencia`
-- PR P0-03: a abrir **em rascunho**, usando a branch P0-02 como base, nunca `main`
-- P0-01 e P0-02: não mescladas, sem deploy
-- P0-04 e seguintes: **não iniciadas**
-- CI: verificar a execução final da branch, separando o SHA de implementação do eventual commit exclusivamente documental
+- PR P0-03: [#47](https://github.com/nexoriatrader/Nexoria-Ia/pull/47), **aberta em rascunho**, baseada na branch P0-02 (PR #46), nunca em `main`.
+- P0-01 e P0-02: não mescladas, sem deploy.
+- P0-04 e seguintes: **não iniciadas**.
+- CI do commit de implementação e relatório `c8fd987c3d93cd969825c2bcc48bb36af81d85d2`: [GitHub Actions #44619667191](https://github.com/nexoriatrader/Nexoria-Ia/actions/runs/44619667191), **aprovado**. Suíte geral: **396 aprovados, 8 omitidos, 1 aviso**; teste de carga somente leitura: **1 aprovado**; PostgreSQL descartável: **8 aprovados**; job Chromium (P0-01) omitido porque nenhuma alteração visual foi realizada.
+- Esta atualização documental gera um commit posterior, com SHA próprio; verificar seu CI separadamente e não confundir os dois commits.
