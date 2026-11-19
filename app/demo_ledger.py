@@ -8,6 +8,7 @@ from sqlalchemy import select, func
 from sqlalchemy.exc import IntegrityError
 from . import db
 from .order_integrity import demo_replay_matches
+from .status_contract import contract_stage
 
 ACTIVE = {'PENDING', 'CONFIRMED', 'UNKNOWN'}
 
@@ -37,7 +38,8 @@ def official_broker_epoch(value):
         return None
 
 def public_order(o):
-    return {'id':o.id,'state':o.state,'contract_id':o.contract_id,
+    return {'id':o.id,'state':o.state,'contract_stage':contract_stage(o.state),
+            'contract_id':o.contract_id,
             'symbol':o.symbol,'direction':o.direction,'stake':o.stake,
             'buy_price':o.buy_price,'pnl':o.pnl,'broker_status':o.broker_status,
             'created_at':o.created_at.isoformat() if o.created_at else None,
