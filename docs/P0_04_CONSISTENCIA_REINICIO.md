@@ -44,7 +44,7 @@ Nenhuma alteração foi feita em `app/db.py` (schema existente), `app/real_broke
 
 1. A P0-04 não liquida nem cancela contratos REAL. A reconciliação de contratos com identificador e a quarentena conservadora de PENDING continuam responsabilidade dos fluxos existentes da P0-02. Nenhum resultado pode ser presumido pelo horário.
 2. A retomada DEMO mantém a semântica anterior de consentimento explícito e verificações. A mudança de inicialização é **fail-closed**, não um novo mecanismo de ativação.
-3. Cada processo do serviço aplica a política de não retomada REAL; inicialização simultânea de múltiplos workers pode revogar consentimento residual de um processo anterior. Esse comportamento é deliberadamente conservador e deve ser avaliado na homologação da topologia real do servidor.
+3. Cada processo aplica a política de não retomada REAL. A P0-04 passou a incluir sincronização periódica de consentimentos e bloqueio transacional PostgreSQL no último ponto antes do envio. Uma revogação **confirmada antes da checagem** impede o envio; uma revogação concorrente precisa esperar a liberação do bloqueio. Uma requisição já iniciada **antes da revogação ser confirmada** não pode ser desfeita por esse mecanismo. A topologia multiworker e a duração da transação aberta durante a chamada externa exigem revisão de operação antes de implantar.
 4. O diagnóstico visual/status integral da interface pertence à P0-05. A P0-04 não modifica a rota `/api/status`, apenas preserva suas evidências de interrupção.
 5. Os testes descartáveis não são evidência de conformidade para produção nem autorizam envio de ordens financeiras.
 
@@ -67,3 +67,32 @@ Nenhuma alteração foi feita em `app/db.py` (schema existente), `app/real_broke
 **PR de revisão:** [#48](https://github.com/nexoriatrader/Nexoria-Ia/pull/48), aberta em rascunho, baseada na branch da P0-03; `main` não alterada. As PRs #45–#47 permanecem abertas e não mescladas.
 
 **Conclusão de escopo:** proteger o ciclo de vida e a persistência durante reinicializações sem avançar para P0-05, sem tocar no Supabase de produção e sem efetuar operações financeiras.
+
+
+## Revisão independente da P0-04 — concorrência multiworker e último consentimento
+
+**Problema confirmado:** `prepare_service_restart()` revogava `RealRobotConsent` no PostgreSQL, mas o `running` de processos já ativos permanecia em memória. O scanner também verificava consentimento antes de criar uma reserva, porém, após a reserva, só repetia verificações locais de `running` e deadline. Outro processo poderia revogar o consentimento no intervalo.
+
+### Correções adicionais, sem liberar execução REAL
+
+1. **`app/restart_consistency.py::locked_real_consent_for_send`:** consulta o consentimento persistido em uma sessão nova e exige identidade de usuário, conta idêntica e `revoked_at IS NULL`, usando `SELECT ... FOR UPDATE` no PostgreSQL. A transação permanece aberta **até a chamada existente terminar**, serializando a leitura final com qualquer `UPDATE` de revogação. Se a revogação já foi confirmada, o retorno é falso. Em mecanismo sem bloqueio por linha (por exemplo, SQLite), retorna falso por segurança. O guard não cria, reativa ou altera consentimentos ou contratos.
+2. **`app/real_runtime.py::_user_scan`:** realiza essa última checagem **depois da reserva e imediatamente antes do adaptador financeiro já existente**. Também reavalia estado local, flags administrativas e expiração dentro da janela protegida. Se o consentimento estiver revogado, desarma localmente o worker **sem enviar** e mantém a reserva `PENDING` intacta, conservadoramente bloqueada para revisão.
+3. **`app/real_runtime.py::disarm_revoked_real_workers`:** o loop observa periodicamente o banco compartilhado, descarta `running` locais sem consentimento persistido válido e registra o motivo. O conjunto local não é mais considerado autorização suficiente. Isso não altera registros no banco e **não substitui** o bloqueio transacional imediatamente antes do envio.
+4. **Falha da validação:** erro da sessão de autorização antes de qualquer chamada externa causa interrupção conservadora e preserva a reserva. Se uma chamada já foi iniciada e seu resultado se torna incerto, o tratamento anterior de `UNKNOWN` é mantido.
+5. **Testes legados:** dois testes em SQLite que simulavam o envio usando `AsyncMock` receberam um substituto **estritamente de teste** para o guard, a fim de preservar a regressão de contrato fictício. O código de produção permanece fail-closed fora do PostgreSQL. Nenhuma flag administrativa do ambiente de execução foi ativada.
+
+### Evidências entre processos em PostgreSQL descartável
+
+- `test_revoked_between_reservation_and_send_blocks_scanner_in_another_process`: um processo executa o scanner verdadeiro com sinal e adaptador de compra substituídos por objetos sintéticos e pausa depois de persistir uma única reserva `PENDING`. Um segundo processo confirma a revogação pelo banco compartilhado. Ao prosseguir, o scanner verifica o consentimento revogado, **não chama o adaptador**, desarma o worker, preserva exatamente a reserva `PENDING` e não modifica os registros preexistentes `UNKNOWN` e `CONFIRMED`.
+- `test_postgresql_consent_lock_serializes_outbound_boundary_and_revocation`: um processo mantém o bloqueio de linha enquanto grava apenas um marcador de envio **fictício**, sem rede. O outro tenta revogar o consentimento em transação independente. Comprova-se que a revogação não confirma durante o bloqueio e que o marcador anterior precede a confirmação da revogação. Não há envio Deriv em nenhum teste.
+- Testes locais cobrem o desarme ao encontrar consentimento revogado ou ausente, a preservação do consentimento de outro usuário e o bloqueio em SQLite.
+
+**Garantia demonstrada:** a coordenação PostgreSQL impede uma *nova chamada* após revogação persistida/confirmada, desde que o ponto de envio e os processos revogadores utilizem o mesmo banco e o guard instalado. Uma solicitação transmitida antes da confirmação não pode ser retirada: esse risco prévio permanece sob reconciliação conservadora. Não há garantia de cancelamento retroativo ou de que a corretora não recebeu uma solicitação anterior.
+
+**Limitação operacional a revisar:** a transação do bloqueio PostgreSQL permanece aberta enquanto a chamada de envio ocorre; isso pode atrasar revogações concorrentes e deve ser avaliado na revisão da topologia Render antes de qualquer implantação. Em falha de conectividade com o banco antes da autorização, o caminho bloqueia novos envios.
+
+### Reexecução de regressão
+
+**SHA de código e testes:** `94d80edc2fa8380ed6b4fbd09664af2a597439b9` — [CI #44627464903](https://github.com/nexoriatrader/Nexoria-Ia/actions/runs/44627464903), aprovado: **410 testes gerais aprovados, 14 omitidos, 1 aviso; 1 teste de carga somente leitura aprovado; 14 testes PostgreSQL descartáveis aprovados**. O job Chromium foi omitido, pois a interface não foi alterada.
+
+**Atenção à proveniência:** o commit que inclui esta atualização documental tem SHA próprio. Confirmar o respectivo CI separadamente antes da aprovação da PR #48. Nenhuma implantação, merge, migração de produção, alteração de flags ou operação financeira foi realizada. A P0-05 não foi iniciada.
