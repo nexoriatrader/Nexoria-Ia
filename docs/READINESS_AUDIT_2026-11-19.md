@@ -212,6 +212,18 @@ O teste `tests/test_dashboard_visibility_polling.py` executa a implementação d
 
 **Benefício esperado:** menos solicitações GET redundantes em abas em segundo plano, sem prometer melhoria quantitativa antes de medições de produção. Teste de CI desta mudança deve ser concluído antes do merge.
 
+### Retomada sem consultas duplicadas
+
+Após a pausa dos timers em segundo plano, adicionamos uma sincronização de **leitura somente** ao retornar à aba/janela:
+
+- O evento de mudança de visibilidade e o retorno de foco compartilham um único manipulador, com limite de uma execução a cada quatro segundos.
+- Na tela Dashboard, a sincronização consulta novamente o estado do servidor e os resultados do dia; quando a consulta principal falha, mantém a leitura de histórico como fallback.
+- Na tela Resultados, consulta somente o histórico.
+- Quando a página continua oculta ou uma tela diferente está aberta, o manipulador não faz requisições.
+- Teste em `tests/test_dashboard_foreground_resync.py` executa o próprio JavaScript em Node com foco/visibilidade simulados e garante uma única leitura por retorno, sem POST.
+
+Isso altera exclusivamente a interface e suas consultas GET. Não ativa, interrompe ou reconfigura contratos. Ainda falta benchmark de latência com usuários reais em infraestrutura hospedada.
+
 ## Critério de conclusão
 
 Só classificar este trabalho como *homologação técnica concluída* após registrar evidências reproduzíveis para controle de acesso, CI, desempenho, falhas de rede/reinício, isolamento entre usuários, restauração, monitoramento e revisão de conformidade. Homologação técnica **não** equivale a autorização para ativar negociação automática com dinheiro real.
