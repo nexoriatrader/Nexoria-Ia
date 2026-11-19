@@ -96,11 +96,11 @@ def test_demo_legacy_migrates_on_write_without_losing_progression(context):
 def test_real_without_own_settings_does_not_inherit_demo(context):
     client, sessions, uid = context
     assert client.post("/api/onboarding/config", json=DEMO).status_code == 200
-    choose_real(sessions, uid, "CR_ONE")
+    choose_real(sessions, uid, "CRONE")
     response = client.get("/api/onboarding/config")
     assert response.status_code == 200
     body = response.json()
-    assert body["mode"] == "real" and body["account_id"] == "CR_ONE"
+    assert body["mode"] == "real" and body["account_id"] == "CRONE"
     assert body["configured"] is False
     assert body["stake"] is None and body["stop_win"] is None and body["stop_loss"] is None
     assert body["martingale"] is False and body["cycles"] == "0"
@@ -112,7 +112,7 @@ def test_real_save_keeps_demo_fields_plan_and_engine_unchanged(context, monkeypa
     client, sessions, uid = context
     assert client.post("/api/onboarding/config", json=DEMO).status_code == 200
     demo_before = client.get("/api/onboarding/config").json()
-    choose_real(sessions, uid, "CR_ONE")
+    choose_real(sessions, uid, "CRONE")
     broker_buy = AsyncMock(side_effect=AssertionError("No external purchases"))
     monkeypatch.setattr(real_runtime, "buy_real_contract", broker_buy)
     monkeypatch.setattr(main, "demo_buy", broker_buy)
@@ -129,7 +129,7 @@ def test_real_save_keeps_demo_fields_plan_and_engine_unchanged(context, monkeypa
         assert user.stop_win == demo_before["stop_win"]
         assert user.stop_loss == demo_before["stop_loss"]
         assert plan.requested_martingale and plan.gale_count == 2
-        assert s.get(db.AccountRiskSettings, (uid, "real", "CR_ONE")) is not None
+        assert s.get(db.AccountRiskSettings, (uid, "real", "CRONE")) is not None
     choose_demo(sessions, uid)
     demo_after = client.get("/api/onboarding/config").json()
     for name in ("stake", "stop_win", "stop_loss", "martingale", "gale_count", "multiplier", "cycles"):
@@ -139,9 +139,9 @@ def test_real_save_keeps_demo_fields_plan_and_engine_unchanged(context, monkeypa
 
 def test_multiple_real_accounts_never_copy_another_accounts_risk(context):
     client, sessions, uid = context
-    choose_real(sessions, uid, "CR_ONE")
+    choose_real(sessions, uid, "CRONE")
     assert client.post("/api/onboarding/config", json=REAL).status_code == 200
-    choose_real(sessions, uid, "CR_TWO")
+    choose_real(sessions, uid, "CRTWO")
     unconfigured = client.get("/api/onboarding/config").json()
     assert unconfigured["configured"] is False
     assert unconfigured["stake"] is None
@@ -149,19 +149,19 @@ def test_multiple_real_accounts_never_copy_another_accounts_risk(context):
                      cycles="2", cycle_multiplier="1.25")
     assert client.post("/api/onboarding/config", json=different).status_code == 200
     assert client.get("/api/onboarding/config").json()["cycles"] == "2"
-    choose_real(sessions, uid, "CR_ONE")
+    choose_real(sessions, uid, "CRONE")
     original = client.get("/api/onboarding/config").json()
     assert original["stake"] == "7.00"
     assert original["cycles"] == "0"
     assert original["revision"] == 1
-    choose_real(sessions, uid, "CR_TWO")
+    choose_real(sessions, uid, "CRTWO")
     assert client.get("/api/onboarding/config").json()["stake"] == "3.00"
 
 
 def test_real_progression_is_stored_only_as_inactive_preference(context):
     client, sessions, uid = context
     assert client.post("/api/onboarding/config", json=DEMO).status_code == 200
-    choose_real(sessions, uid, "CR_ONE")
+    choose_real(sessions, uid, "CRONE")
     different = dict(DEMO, stake="5.00", stop_win="10.00", stop_loss="8.00")
     assert client.post("/api/onboarding/config", json=different).status_code == 200
     got = client.get("/api/onboarding/config").json()
@@ -177,7 +177,7 @@ def test_real_progression_is_stored_only_as_inactive_preference(context):
 def test_legacy_config_endpoint_is_demo_only_even_if_profile_real(context):
     client, sessions, uid = context
     assert client.post("/api/onboarding/config", json=DEMO).status_code == 200
-    choose_real(sessions, uid, "CR_ONE")
+    choose_real(sessions, uid, "CRONE")
     assert client.post("/api/onboarding/config", json=REAL).status_code == 200
     legacy = client.post("/api/config", json={
         "stake": "4.00", "stop_win": "12.00", "stop_loss": "7.00",
@@ -186,13 +186,13 @@ def test_legacy_config_endpoint_is_demo_only_even_if_profile_real(context):
     assert client.get("/api/onboarding/config").json()["stake"] == "7.00"
     choose_demo(sessions, uid)
     assert client.get("/api/onboarding/config").json()["stake"] == "4.00"
-    choose_real(sessions, uid, "CR_ONE")
+    choose_real(sessions, uid, "CRONE")
     assert client.get("/api/onboarding/config").json()["stop_loss"] == "14.00"
 
 
 def test_account_preferences_persist_across_new_session_and_revision(context):
     client, sessions, uid = context
-    choose_real(sessions, uid, "CR_ONE")
+    choose_real(sessions, uid, "CRONE")
     for version in (1, 2):
         result = client.post("/api/onboarding/config", json=REAL)
         assert result.status_code == 200
@@ -200,7 +200,7 @@ def test_account_preferences_persist_across_new_session_and_revision(context):
         fresh_client.cookies.set("nexora_sid", "mode-sid")
         assert fresh_client.get("/api/onboarding/config").json()["revision"] == version
     with sessions() as fresh:
-        assert fresh.get(db.AccountRiskSettings, (uid, "real", "CR_ONE")).revision == 2
+        assert fresh.get(db.AccountRiskSettings, (uid, "real", "CRONE")).revision == 2
 
 
 def test_real_without_selected_account_fails_closed(context):
@@ -218,7 +218,7 @@ def test_real_without_selected_account_fails_closed(context):
 def test_real_start_cannot_use_demo_fallback_when_mode_config_missing(context, monkeypatch):
     client, sessions, uid = context
     assert client.post("/api/onboarding/config", json=DEMO).status_code == 200
-    choose_real(sessions, uid, "CR_ONE")
+    choose_real(sessions, uid, "CRONE")
     monkeypatch.setattr(real_runtime, "real_available", lambda: True)
     response = client.post("/api/autopilot/start", json={"confirm": "START_REAL_AUTOPILOT"})
     assert response.status_code == 409
@@ -229,7 +229,7 @@ def test_real_start_cannot_use_demo_fallback_when_mode_config_missing(context, m
 
 def test_user_id_is_part_of_account_scoped_preferences(context):
     client, sessions, uid = context
-    choose_real(sessions, uid, "CR_SHARED_SYNTHETIC")
+    choose_real(sessions, uid, "CRSHAREDSYNTHETIC")
     assert client.post("/api/onboarding/config", json=REAL).status_code == 200
     with sessions() as s:
         second = db.User(deriv_account_id="V_OTHER_DEMO", selected_mode="demo")
@@ -237,7 +237,7 @@ def test_user_id_is_part_of_account_scoped_preferences(context):
         s.flush()
         other = second.id
         s.add(db.AutomationProfile(user_id=other, account_mode="real",
-                                   real_account_id="CR_SHARED_SYNTHETIC"))
+                                   real_account_id="CRSHAREDSYNTHETIC"))
         s.add(db.Session(session_hash=hashsecret("other-sid"), user_id=other,
                          token_encrypted=encrypt("other-synthetic-token"),
                          expires_at=db.utcnow() + timedelta(hours=2)))
@@ -250,14 +250,14 @@ def test_user_id_is_part_of_account_scoped_preferences(context):
     assert second_client.get("/api/onboarding/config").json()["stake"] == "1.00"
     assert client.get("/api/onboarding/config").json()["stake"] == "7.00"
     with sessions() as s:
-        assert s.get(db.AccountRiskSettings,(uid,"real","CR_SHARED_SYNTHETIC")).stake == "7.00"
-        assert s.get(db.AccountRiskSettings,(other,"real","CR_SHARED_SYNTHETIC")).stake == "1.00"
+        assert s.get(db.AccountRiskSettings,(uid,"real","CRSHAREDSYNTHETIC")).stake == "7.00"
+        assert s.get(db.AccountRiskSettings,(other,"real","CRSHAREDSYNTHETIC")).stake == "1.00"
 
 
 def test_account_specific_preferences_dont_change_demo_legacy_endpoint(context):
     client, sessions, uid = context
     assert client.post("/api/onboarding/config", json=DEMO).status_code == 200
-    choose_real(sessions, uid, "CR_ONE")
+    choose_real(sessions, uid, "CRONE")
     assert client.post("/api/onboarding/config", json=REAL).status_code == 200
     old = client.get("/api/config/current").json()
     assert old["execution"] == "DERIV_DEMO_ONLY"
@@ -266,13 +266,13 @@ def test_account_specific_preferences_dont_change_demo_legacy_endpoint(context):
 
 def test_mode_config_schema_is_additive_and_repeatable(context):
     client, sessions, uid = context
-    choose_real(sessions, uid, "CR_ONE")
+    choose_real(sessions, uid, "CRONE")
     assert client.post("/api/onboarding/config", json=REAL).status_code == 200
     with sessions() as s:
         database_engine = s.bind
         db.Base.metadata.create_all(database_engine, checkfirst=True)
         db.Base.metadata.create_all(database_engine, checkfirst=True)
-        saved = s.get(db.AccountRiskSettings, (uid, "real", "CR_ONE"))
+        saved = s.get(db.AccountRiskSettings, (uid, "real", "CRONE"))
         assert saved.revision == 1
         assert saved.stake == "7.00"
 
