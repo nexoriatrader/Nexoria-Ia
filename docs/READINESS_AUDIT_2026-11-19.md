@@ -61,6 +61,34 @@ Critério: todos devem responder **HTTP 401**, com `Cache-Control: no-store`. A 
 
 **Importante:** a alteração é uma proposta em PR. A execução do CI após o PR é necessária para confirmar que o novo teste passa; os testes anteriores não cobrem automaticamente a modificação recém-criada.
 
+## Testes de isolamento acrescentados à PR
+
+Arquivo: `tests/test_readonly_tenant_isolation.py`.
+
+- Dois usuários e duas sessões sintéticas são criados em SQLite temporário.
+- A API de perfil e os históricos de contratos Demo/Real devem devolver apenas dados do usuário autenticado, inclusive quando é fornecido um parâmetro `user_id` estrangeiro.
+- Quatro endpoints privados devem negar acessos sem cookie.
+- Uma sessão revogada deve deixar de acessar os dados imediatamente.
+- Os testes usam apenas registros fictícios e métodos GET; **não enviam ordens nem estabelecem conexão com a corretora**.
+- O resultado dos testes depende da execução CI no commit atualizado; não assumir aprovação com base nas execuções da PR anterior.
+
+## Diagnóstico preliminar do banco (somente leitura)
+
+Consulta agregada ao Supabase em 19/11/2026, sem examinar dados de usuários:
+
+| Métrica | Valor observado |
+| --- | --- |
+| Conexões PostgreSQL no instante da consulta | 13 (11 idle, 1 active, 1 unknown) |
+| Deadlocks reportados por `pg_stat_database` | 0 |
+| `demo_orders`: linhas vivas estimadas | 1.096 |
+| `demo_orders`: varreduras sequenciais acumuladas | 354.648 |
+| `demo_orders`: buscas por índice acumuladas | 150.027 |
+| `demo_orders`: tamanho total com índices | 488 kB |
+
+**Interpretação:** os contadores de `pg_stat_*` são acumulados desde o último reset das estatísticas e não representam a taxa atual nem o tempo de uma requisição. O número de varreduras sequenciais merece investigação, mas não justifica apagar índices ou aplicar migração sem `EXPLAIN` e medição de latência. O volume de dados é relativamente pequeno, logo nenhum desses contadores, isoladamente, identifica a causa da lentidão da interface.
+
+**Limitação Render:** métricas privadas do serviço ainda não foram consultadas; a conexão requer seleção explícita do workspace pelo proprietário.
+
 ## Pendências para homologação
 
 ### Prioridade 1 — segurança / controle de acesso
