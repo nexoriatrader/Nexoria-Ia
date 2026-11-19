@@ -76,3 +76,23 @@ jobs:
         run: python -m pip install -r requirements.txt
       - name: Validate additive PostgreSQL migration and reversible backout
         run: python -m pytest -q -s tests/test_postgres_mode_isolation.py
+
+  browser-p0-visual:
+    if: github.ref == 'refs/heads/feature/p0-01-isolamento-config-demo-real'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      NEXORA_DEMO_BUY_ENABLED: "false"
+      NEXORA_REAL_AUTOPILOT_ENABLED: "false"
+      NEXORA_REAL_RELEASE_APPROVED: "false"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install isolated browser test dependency
+        run: python -m pip install playwright
+      - name: Install Chromium for offline visual review
+        run: python -m playwright install --with-deps chromium
+      - name: Inspect NEXORA configurator visually in Chromium (synthetic accounts only)
+        run: python tests/browser_visual_p001.py
