@@ -129,6 +129,30 @@ class RobotCycleParams(Base):
     multiplier = Column(String(20), nullable=False, default='2.00')
 
 
+
+class AccountRiskSettings(Base):
+    """Risk preferences per account. Saving preferences never authorizes an order.
+
+    Legacy User/RobotPlan/RobotCycleParams are DEMO-only compatibility mirrors.
+    REAL has no implicit migration or fallback to DEMO preferences.
+    """
+    __tablename__ = 'account_risk_settings'
+    user_id = Column(Integer, ForeignKey('users.id'), primary_key=True)
+    account_mode = Column(String(16), primary_key=True)
+    account_id = Column(String(100), primary_key=True)
+    stake = Column(String(20), nullable=False)
+    stop_win = Column(String(20), nullable=False)
+    stop_loss = Column(String(20), nullable=False)
+    martingale = Column(Boolean, nullable=False, default=False)
+    gale_count = Column(Integer, nullable=False, default=0)
+    gale_multiplier = Column(String(20), nullable=False, default='2.00')
+    cycles_limit = Column(Integer, nullable=False, default=0)
+    cycle_multiplier = Column(String(20), nullable=False, default='2.00')
+    revision = Column(Integer, nullable=False, default=1)
+    updated_at = Column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
+
+
+
 class RobotRun(Base):
     """One opt-in run boundary; sequence reconstructed from official settled orders."""
     __tablename__ = 'robot_runs'
