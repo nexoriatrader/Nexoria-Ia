@@ -163,6 +163,23 @@ O workflow de smoke passa a registrar `elapsed_ms` em cada requisição pública
 - [ ] Rodar teste de carga **somente de leitura e com dados sintéticos**, acompanhado de CPU, memória e tempos de resposta.
 - [ ] Confirmar backups, restauração e plano de monitoramento antes de concluir homologação.
 
+## Otimização conservadora de interface — 19/11/2026
+
+A auditoria do `app/index.html` identificou solicitações repetidas por telas:
+
+- Ao entrar no painel por `go('dashboard')`, a interface executava `refreshDashboard()` e `loadDemoOrders()` imediatamente. Em caso de sucesso, `refreshDashboard()` já chama `loadDemoOrders()`, criando duplicidade.
+- No fluxo de sessão autenticada de `init()`, a mesma duplicidade ocorria.
+- A página de Resultados possui um polling específico de histórico a cada **3 segundos**; adicionalmente, um timer genérico chamava `refreshDashboard()` a cada **30 segundos** mesmo quando o painel não estava visível. Isso criava chamadas extras a vários endpoints de saldo, acesso e status.
+
+**Alteração proposta na PR (não publicada):**
+
+1. Remover a segunda consulta de histórico nos dois caminhos de entrada **quando `refreshDashboard()` concluir normalmente**. Caso a atualização retorne `null`, manter o GET de histórico como fallback de exibição, sem comandos POST.
+2. Restringir o timer genérico de 30 segundos à página Dashboard, deixando a página Resultados sob seu polling dedicado de histórico.
+3. Preservar intervalos de 7s no Dashboard, 3s em Resultados, a atualização dos indicadores de resultado diário, a reconciliação oficial e os controles de ativação.
+4. Adicionar testes de regressão estáticos de interface em `tests/test_demo_ui_flow.py`.
+
+Impacto esperado: menos leituras redundantes e menos atualizações fora da página visível. **Não há ainda benchmark p50/p95 antes/depois**, portanto não afirmar uma melhora percentual, nem confundir redução de chamadas GET com melhor qualidade ou velocidade de execução de operações.
+
 ## Critério de conclusão
 
 Só classificar este trabalho como *homologação técnica concluída* após registrar evidências reproduzíveis para controle de acesso, CI, desempenho, falhas de rede/reinício, isolamento entre usuários, restauração, monitoramento e revisão de conformidade. Homologação técnica **não** equivale a autorização para ativar negociação automática com dinheiro real.
