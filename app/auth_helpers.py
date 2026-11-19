@@ -39,17 +39,29 @@ def real_accounts(accounts):
     return found
 
 
-def real_balance(accounts):
-    """Read a real balance only when directly supplied for a proven-real account.
+def real_balance(accounts, account_id=None):
+    """Read a proven-real account balance without guessing which account to use.
 
-    No inference from another account, and no synthetic zero. Missing data is null.
+    The selected account_id, if given, must exactly match the OAuth account list.
+    With multiple real accounts and no selection, return None instead of showing
+    the balance of an arbitrary account. Missing data is never synthetic zero.
     """
     from decimal import Decimal, InvalidOperation
+    verified=real_accounts(accounts)
+    ids={entry['account_id'] for entry in verified}
+    if account_id is not None:
+        if not isinstance(account_id,str) or account_id not in ids:
+            return None
+        chosen=account_id
+    elif len(ids)==1:
+        chosen=next(iter(ids))
+    else:
+        return None
     for account in accounts:
         if not isinstance(account,dict):
             continue
         identified=real_accounts([account])
-        if not identified:
+        if not identified or identified[0]['account_id']!=chosen:
             continue
         found=identified[0]
         raw=account.get('balance')
