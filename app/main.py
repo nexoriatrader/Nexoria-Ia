@@ -2419,12 +2419,23 @@ async def autopilot_start(request:Request,payload:AutoPilotSwitch,
 @app.post('/api/autopilot/stop')
 async def autopilot_stop(request:Request,nexora_sid:str|None=Cookie(default=None)):
     user=active_user(request,nexora_sid)
-    # Real execution is independently locked and cannot be confused with DEMO.
-    if user.id in real_runtime.running:
+    was_real_local=user.id in real_runtime.running
+    # F01: stop must revoke persisted REAL consent even when the request was
+    # routed to a different process from the REAL worker. Never rely on the
+    # process-local running set to decide whether consent exists.
+    try:
         async with real_runtime.user_lock(user.id):
-            real_runtime.disarm_real(user.id,'Desligado manualmente; contratos REAL continuam em reconciliação')
-        return {'running':False,'execution':'DERIV_REAL','real_orders_enabled':real_runtime.real_available()}
-    # Wait for any already dispatched broker request to finish before declaring OFF.
+            real_stop=real_runtime.revoke_real_consent_for_stop(user.id)
+            # Clear local state only AFTER durable revocation was confirmed or
+            # the database verified that no active consent exists.
+            real_runtime.running.discard(user.id)
+            real_runtime.reasons[user.id]='Desligado manualmente; contratos REAL continuam em reconciliação'
+    except Exception:
+        # An unconfirmed database write is NOT a successful stop. An in-flight
+        # broker request may still exist in another process; fail closed.
+        raise HTTPException(503,'Não foi possível confirmar revogação REAL no banco; estado dos workers desconhecido') from None
+    # Preserve DEMO stop behavior independently of which account's worker is
+    # running in this process. Nothing here changes any order/contract ledger.
     async with autopilot_lock:
         autopilot_enabled.discard(user.id)
         automation_scan_progress.pop(user.id,None)
@@ -2437,7 +2448,21 @@ async def autopilot_stop(request:Request,nexora_sid:str|None=Cookie(default=None
             if consent:sess.delete(consent)
             sess.commit()
         autopilot_reasons[user.id]='Desligado: novas entradas bloqueadas; contratos abertos permanecem na Deriv'
-    return {'running':False,'execution':'DERIV_DEMO_ONLY','real_orders_enabled':False}
+    was_real=was_real_local or real_stop['status']=='REVOKED_NOW'
+    # Legacy 'running' is process-local only. A successful persisted
+    # revocation does not prove immediate termination of remote workers.
+    return {
+        'running':False,
+        'execution':'DERIV_REAL' if was_real else 'DERIV_DEMO_ONLY',
+        'real_orders_enabled':real_runtime.real_available() if was_real else False,
+        'running_scope':'LOCAL_PROCESS_ONLY',
+        'running_now':None,
+        'worker_shutdown_confirmed':None,
+        'worker_shutdown_state':'UNKNOWN_REMOTE_WORKERS',
+        'real_revocation_status':real_stop['status'],
+        'real_revocation_persisted':real_stop['revocation_persisted'],
+        'real_authorization_absent':True
+    }
 
 
 @app.get('/api/status')
