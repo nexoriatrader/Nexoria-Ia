@@ -250,3 +250,97 @@ def test_invalid_recovery_parameters_are_rejected(repo):
         with pytest.raises(ValueError):
             promote_stale_pending_to_unknown(s,batch_size=101)
         assert s.query(db.RealOrder).count()==0
+
+
+def test_public_real_history_shows_user_scoped_recovery_without_demo_data(repo,monkeypatch):
+    """The existing read-only API must not leak another user's REAL history."""
+    from datetime import timedelta
+    from fastapi.testclient import TestClient
+    from app import main
+    from app.security import encrypt, hashsecret
+    with repo() as s:
+        own=seed(s,state="UNKNOWN",request="own-12345678")
+        foreign=seed(s,account="CR202",uid=2,request="foreign-12345678")
+        s.add(db.AutomationProfile(user_id=1,account_mode="real",
+                                   real_account_id="CR101"))
+        s.add(db.Session(session_hash=hashsecret("synthetic-p0-02"),
+                         user_id=1,token_encrypted=encrypt("synthetic-token"),
+                         expires_at=db.utcnow()+timedelta(hours=1)))
+        s.commit()
+    client=TestClient(main.app)
+    client.cookies.set("nexora_sid","synthetic-p0-02")
+    response=client.get("/api/real/orders")
+    assert response.status_code==200,response.text
+    body=response.json()
+    assert body["account_id"]=="CR101"
+    assert body["recovery"]["unknown_count"]==1
+    assert body["recovery"]["review_count"]==1
+    assert body["recovery"]["blocked"] is True
+    assert len(body["items"])==1
+    assert body["items"][0]["id"]==own
+    assert body["items"][0]["id"]!=foreign
+    assert body["items"][0]["recovery"]["status"]=="MANUAL_REVIEW_NO_CONTRACT"
+    assert client.get("/api/real/orders",cookies={"nexora_sid":"bogus"}).status_code in (401,403)
+
+
+def test_unauthenticated_real_recovery_endpoint_not_public(repo):
+    from fastapi.testclient import TestClient
+    from app import main
+    client=TestClient(main.app)
+    assert client.get("/api/real/orders").status_code in (401,403)
+
+
+def test_mocked_broker_unavailable_keeps_unknown_and_never_retries(repo,monkeypatch):
+    """A status query failure never converts uncertainty into a loss or win."""
+    from app.real_broker import RealExecutionError
+    with repo() as s:
+        oid=seed(s,contract="777888999")
+    official=AsyncMock(side_effect=RealExecutionError("synthetic network offline"))
+    buy=AsyncMock(side_effect=AssertionError("no purchase allowed"))
+    monkeypatch.setattr(real_runtime,"real_contract_status",official)
+    monkeypatch.setattr(real_runtime,"buy_real_contract",buy)
+    monkeypatch.setattr(real_runtime,"latest_token",lambda sess,uid:"synthetic")
+    asyncio.run(real_runtime.reconcile_real_once())
+    with repo() as s:
+        row=s.get(db.RealOrder,oid)
+        assert row.state=="UNKNOWN" and row.pnl is None
+        assert row.active_slot=="CR101"
+        with pytest.raises(RealOrderGuardError,match="contrato aberto"):
+            place(s,"reconnect-12345678")
+    official.assert_awaited_once()
+    buy.assert_not_awaited()
+
+
+def test_demo_ledger_is_unchanged_by_real_recovery(repo):
+    with repo() as s:
+        demo=db.DemoOrder(user_id=1,request_key="demo-12345678",
+            active_slot=1,state="PENDING",symbol="R_100",direction="CALL",
+            duration_minutes=5,stake="1",created_at=db.utcnow()-timedelta(days=2))
+        s.add(demo)
+        oid=seed(s,account="CR101",uid=1)
+        demo_id=demo.id
+        changed=promote_stale_pending_to_unknown(s)
+        assert changed==[oid]
+        s.expire_all()
+        same=s.get(db.DemoOrder,demo_id)
+        assert same.state=="PENDING" and same.active_slot==1
+        assert same.contract_id is None
+        assert s.get(db.RealOrder,oid).state=="UNKNOWN"
+
+
+def test_recovery_batch_limit_is_bounded_and_does_not_release_slots(repo):
+    # Each synthetic account uses its own slot; processing is bounded.
+    with repo() as s:
+        ids=[]
+        for n in range(3):
+            ids.append(seed(s,uid=1,account=f"CR10{n}",
+                request=f"batch-123456{n}"))
+        first=promote_stale_pending_to_unknown(s,batch_size=2)
+        assert len(first)==2
+        second=promote_stale_pending_to_unknown(s,batch_size=2)
+        assert len(second)==1
+        assert set(first+second)==set(ids)
+        for oid in ids:
+            row=s.get(db.RealOrder,oid)
+            assert row.state=="UNKNOWN"
+            assert row.active_slot==row.account_id
