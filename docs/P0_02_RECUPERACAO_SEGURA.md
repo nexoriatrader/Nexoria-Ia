@@ -79,8 +79,8 @@ Nenhuma dessas pendências é autorização para merge/deploy.
 - Referência de P0-01 aprovada: `3015ab0fc349ea0db1e957f96612e0b7ee4d4b9c`
 - PR P0-01 #45: permanece sem merge, não alterar.
 - PR P0-02: somente revisão em rascunho, contra branch P0-01, nunca `main`.
-- CI de integração sintética [GitHub Actions #44616358791](https://github.com/nexoriatrader/Nexoria-Ia/actions/runs/44616358791): **378 testes aprovados, 2 omitidos, 1 aviso**, mais **1 teste independente de carga somente leitura aprovado**, além de **2 testes PostgreSQL 16 descartável aprovados**. Os testes PostgreSQL são executados em job próprio; o job Chromium P0-01 é propositalmente omitido nesta branch sem alterações de interface.
-- Resultado de CI para o commit final: consultar a última execução da branch; logs anteriores não comprovam alterações posteriores.
+- **CI final da implementação P0-02:** commit `7daf998459e7136c3c8e2774f4f82debf126e33b`, [GitHub Actions #44616553146](https://github.com/nexoriatrader/Nexoria-Ia/actions/runs/44616553146), concluído com **sucesso**. Conforme os logs: **378 testes gerais aprovados, 2 omitidos, 1 aviso**, mais **1 teste independente de carga somente leitura aprovado** e **2 testes PostgreSQL 16 descartável aprovados**. Os testes PostgreSQL foram executados em job próprio; o job Chromium P0-01 foi omitido nesta branch, pois não houve alteração de interface.
+- Esta referência comprova o commit de implementação acima. O commit posterior que registra a presente correção de documentação tem seu próprio SHA e sua própria execução de CI; não deve ser confundido com o commit de implementação.
 
 ### Casos de apresentação segura reforçados após a primeira validação
 
