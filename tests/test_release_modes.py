@@ -124,11 +124,12 @@ def test_real_orders_never_start_with_only_one_release_flag(monkeypatch):
 
 
 
-def test_real_activation_uses_user_stake_without_hardcoded_one_dollar_cap():
-    # Do not limit a user's selected stake to an arbitrary pilot value.
+def test_real_activation_uses_account_scoped_stake_without_demo_fallback():
+    # Real preferences must not come from DEMO's legacy User fields.
     import inspect
     source=inspect.getsource(main.start_real_autopilot)
     assert 'server_max_stake' not in source
     assert 'real_pilot_limits' not in source
-    assert "stake=Decimal(str(user.stake))" in source
-    assert "stop=Decimal(str(user.stop_loss))" in source
+    assert "stake=Decimal(str(mode_settings.stake))" in source
+    assert "stop=Decimal(str(mode_settings.stop_loss))" in source
+    assert "sess.get(db.AccountRiskSettings" in source
