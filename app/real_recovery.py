@@ -99,7 +99,7 @@ def promote_stale_pending_to_unknown(session, *, now: datetime | None = None,
                 db.RealOrder.updated_at <= cutoff,
                 db.RealOrder.active_slot == db.RealOrder.account_id,
             ).values(state="UNKNOWN", error_summary=RECOVERY_NOTE,
-                     updated_at=current))
+                     updated_at=current).execution_options(synchronize_session=False))
             if result.rowcount == 1:
                 changed.append(order.id)
         session.commit()
