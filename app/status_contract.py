@@ -10,7 +10,7 @@ of local evidence is UNKNOWN, never an invented global "stopped" assertion.
 from __future__ import annotations
 
 from datetime import timezone
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from . import db
 
@@ -43,17 +43,21 @@ def contract_summary(session, user_id: int, *, account_mode: str,
     clauses = [table.user_id == user_id]
     if account_mode == "real":
         clauses.append(table.account_id == account_id)
-    # This summary is not the historical ledger; read states only.
-    rows = session.scalars(
-        select(table).where(*clauses).order_by(table.id.desc())
+    # Two narrow aggregate queries, never load all historical orders into
+    # each /api/status response. User/account predicates remain mandatory.
+    state_counts = session.execute(
+        select(table.state, func.count()).where(*clauses).group_by(table.state)
     ).all()
+    latest_state = session.scalars(
+        select(table.state).where(*clauses).order_by(table.id.desc()).limit(1)
+    ).first()
     counts = {state: 0 for state in LIFECYCLE}
     invalid_count = 0
-    for row in rows:
-        if row.state in counts:
-            counts[row.state] += 1
+    for state, quantity in state_counts:
+        if state in counts:
+            counts[state] = int(quantity)
         else:
-            invalid_count += 1
+            invalid_count += int(quantity)
     pending = sum(counts[state] for state in UNSETTLED)
     if invalid_count:
         overall = "UNKNOWN_UNVERIFIED"
@@ -73,7 +77,7 @@ def contract_summary(session, user_id: int, *, account_mode: str,
         "open_unsettled": pending if not invalid_count else None,
         "requires_reconciliation": bool(pending or invalid_count),
         "overall_stage": overall,
-        "latest_stage": contract_stage(rows[0].state) if rows else None,
+        "latest_stage": contract_stage(latest_state) if latest_state is not None else None,
         # A confirmed purchase must remain open until official settlement.
         "confirmed_open_count": counts["CONFIRMED"],
         "settled_count": counts["SETTLED"],
