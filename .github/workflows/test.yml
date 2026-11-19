@@ -7,6 +7,7 @@ on:
       - feature/p0-01-isolamento-config-demo-real
       - feature/p0-02-safe-unresolved-recovery
       - feature/p0-03-integridade-concorrencia
+      - feature/p0-04-consistencia-reinicio
   pull_request:
     branches:
       - main
@@ -43,7 +44,7 @@ jobs:
         run: python -m pytest -q -s tests/test_readonly_dashboard_load.py
 
   postgres-p0-isolation:
-    if: github.ref == 'refs/heads/feature/p0-01-isolamento-config-demo-real' || github.ref == 'refs/heads/feature/p0-02-safe-unresolved-recovery' || github.ref == 'refs/heads/feature/p0-03-integridade-concorrencia'
+    if: github.ref == 'refs/heads/feature/p0-01-isolamento-config-demo-real' || github.ref == 'refs/heads/feature/p0-02-safe-unresolved-recovery' || github.ref == 'refs/heads/feature/p0-03-integridade-concorrencia' || github.ref == 'refs/heads/feature/p0-04-consistencia-reinicio'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     services:
@@ -77,7 +78,7 @@ jobs:
       - name: Install isolated test dependencies
         run: python -m pip install -r requirements.txt
       - name: Validate additive PostgreSQL migration and reversible backout
-        run: python -m pytest -q -s tests/test_postgres_mode_isolation.py tests/test_postgres_p002_recovery.py tests/test_postgres_p003_integrity.py
+        run: python -m pytest -q -s tests/test_postgres_mode_isolation.py tests/test_postgres_p002_recovery.py tests/test_postgres_p003_integrity.py tests/test_postgres_p004_restart.py
 
   browser-p0-visual:
     if: github.ref == 'refs/heads/feature/p0-01-isolamento-config-demo-real'
