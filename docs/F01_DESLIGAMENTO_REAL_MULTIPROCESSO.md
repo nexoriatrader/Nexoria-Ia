@@ -56,8 +56,9 @@ O status de outros workers continuará desconhecido até existir mecanismo de ev
 
 ## Registro de execução e pendências
 
-- **CI do SHA final:** registrar links, SHA e contagens exatas após execução do GitHub Actions (não extrapolar números de um commit anterior).
-- **PR:** manter `DRAFT` em branch base P0-05; não alterar `main`.
+- **CI da implementação e testes:** commit `0edf783cfe501e7ef06d227b703246571d984041`, [GitHub Actions #44638957726](https://github.com/nexoriatrader/Nexoria-Ia/actions/runs/44638957726), **SUCCESS**: 441 testes gerais aprovados, 18 omitidos, 1 aviso; 1 teste adicional de carga somente leitura aprovado (10 usuários sintéticos / 90 requisições); 18 testes PostgreSQL 16 descartáveis aprovados, incluindo dois testes F01 multiprocesso. Chromium omitido: nenhuma alteração de interface.
+- **CI do primeiro relatório:** commit `a075e608a77439bbb2ffc36490c4b63de2adc5ec`, [GitHub Actions #44639159730](https://github.com/nexoriatrader/Nexoria-Ia/actions/runs/44639159730), **SUCCESS**, com as mesmas contagens de regressão. Este documento poderá receber um SHA posterior de revisão de evidências, que deve ter seu próprio CI confirmado separadamente.
+- **PR:** [#50](https://github.com/nexoriatrader/Nexoria-Ia/pull/50) em rascunho, base da P0-05; não alterar `main`.
 - **Riscos ainda abertos:** F02–F07 não abordados; flags REAL do Render não verificadas no workspace autorizado; clientes externos das APIs antigas ainda não inventariados; execução distribuída não comprova encerramento instantâneo dos workers; bloqueios DB durante requisições já iniciadas permanecem sujeitos a F04.
 
 **Decisão desta etapa:** implementação e testes da F01 sujeita à revisão independente. Não é autorização para merge, deploy, execução REAL ou avanço para F02.
