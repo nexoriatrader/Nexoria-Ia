@@ -81,6 +81,9 @@ jobs:
           cache: pip
       - name: Install isolated test dependencies
         run: python -m pip install -r requirements.txt
+      - name: Generate ephemeral F01-only authentication test key
+        if: github.ref == 'refs/heads/fix/f01-real-stop-cross-process'
+        run: echo "NEXORA_FERNET_KEY=$(python -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())')" >> "$GITHUB_ENV"
       - name: Validate additive PostgreSQL migration and reversible backout
         run: |
           cases=(tests/test_postgres_mode_isolation.py tests/test_postgres_p002_recovery.py tests/test_postgres_p003_integrity.py tests/test_postgres_p004_restart.py)
