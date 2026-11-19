@@ -54,12 +54,16 @@ Nenhuma alteração foi feita em `app/db.py` (schema existente), `app/real_broke
 - Serviço PostgreSQL 16 localhost `127.0.0.1:5432/nexora_p0_ci`, usuário fictício `p0_ci`. Os testes rejeitam DSNs que não correspondam ao ambiente descartável.
 - O CI utiliza `NEXORA_REAL_AUTOPILOT_ENABLED=false` e `NEXORA_REAL_RELEASE_APPROVED=false`; a P0-04 não altera estas variáveis no código ou no Render.
 - O teste de carga somente leitura é mantido.
-- **Referência exata da execução de CI:** adicionar após verificar o commit de implementação e a execução do commit documental; não extrapolar o resultado de um SHA para outro.
+- **CI da implementação:** commit `bfa846cee9b08a274d150ae9970e29a5e248a345`, execução [GitHub Actions #44624990655](https://github.com/nexoriatrader/Nexoria-Ia/actions/runs/44624990655), **aprovada**. Suíte geral: **406 aprovados, 12 omitidos e 1 aviso**; carga somente leitura: **1 aprovado**; PostgreSQL 16 descartável: **12 aprovados**; job visual Chromium da P0-01 omitido (a interface não foi modificada).
+- **Correção exclusivamente de fixture:** o primeiro CI PostgreSQL encontrou quatro consentimentos REAL não revogados preexistentes no banco efêmero compartilhado; um teste esperava somente um. A rotina estava correta e revogou todos. O teste passou a contar todos os registros pendentes antes do cold start, sem modificar a lógica do sistema.
+- Este relatório gera um commit documental posterior ao SHA de implementação. O resultado do CI desse SHA posterior deve ser verificado separadamente.
 
 ## Pendências anteriores preservadas
 
 - Conferir no Render autorizado as duas flags administrativas REAL efetivas antes de qualquer implantação.
 - Identificar consumidores externos das APIs legadas de configuração e avaliar migração para o endpoint atômico P0-01.
 - PRs #45, #46 e #47 permanecem sob revisão, não mescladas.
+
+**PR de revisão:** [#48](https://github.com/nexoriatrader/Nexoria-Ia/pull/48), aberta em rascunho, baseada na branch da P0-03; `main` não alterada. As PRs #45–#47 permanecem abertas e não mescladas.
 
 **Conclusão de escopo:** proteger o ciclo de vida e a persistência durante reinicializações sem avançar para P0-05, sem tocar no Supabase de produção e sem efetuar operações financeiras.
