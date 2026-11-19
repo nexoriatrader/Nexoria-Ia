@@ -27,6 +27,7 @@ from .real_ledger import (
     confirm_real_order, mark_real_unknown, public_real_order,
     reserve_real_order, settle_real_order, validated_real_stop_loss,
 )
+from .real_recovery import promote_stale_pending_to_unknown
 from .security import decrypt
 
 logger=logging.getLogger('nexora.real')
@@ -265,7 +266,11 @@ async def real_loop():
 
 
 async def reconcile_real_once():
+    # P0-02: local-only quarantine of stale PENDING records before existing
+    # read-only broker status reconciliation. Does not create, retry or release
+    # any contract. UNKNOWN with no contract ID stays blocked for review.
     with db.SessionLocal() as sess:
+        promote_stale_pending_to_unknown(sess)
         due=sess.scalars(select(db.RealOrder).where(
             db.RealOrder.state.in_(('CONFIRMED','UNKNOWN')),
             db.RealOrder.contract_id.is_not(None)).order_by(db.RealOrder.id.desc()).limit(100)).all()
