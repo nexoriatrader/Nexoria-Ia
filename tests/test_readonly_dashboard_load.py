@@ -88,7 +88,10 @@ def test_ten_simulated_users_read_independent_histories(tmp_path, monkeypatch):
         def read_user(index):
             expected_symbol = f"R_TEST_{index:02d}"
             timings = []
-            with TestClient(main.app) as client:
+            # Do not use TestClient as a context manager: that would trigger
+            # app lifespan workers and could contact a remote broker.
+            client = TestClient(main.app)
+            try:
                 client.cookies.set("nexora_sid", f"read-only-session-{index}")
                 for _ in range(PASSES):
                     for route in READ_ROUTES:
@@ -101,6 +104,8 @@ def test_ten_simulated_users_read_independent_histories(tmp_path, monkeypatch):
                             item["symbol"] for item in body["items"]
                         ]
                         assert symbols == [expected_symbol], (index, route, symbols)
+            finally:
+                client.close()
             return timings
 
         # All clients share one file-backed DB, but their sessions are distinct.
