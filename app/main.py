@@ -2448,7 +2448,7 @@ async def autopilot_stop(request:Request,nexora_sid:str|None=Cookie(default=None
             if consent:sess.delete(consent)
             sess.commit()
         autopilot_reasons[user.id]='Desligado: novas entradas bloqueadas; contratos abertos permanecem na Deriv'
-    was_real=was_real_local or real_stop['status']=='REVOKED_NOW'
+    was_real=was_real_local or real_stop['account_id'] is not None
     # Legacy 'running' is process-local only. A successful persisted
     # revocation does not prove immediate termination of remote workers.
     return {
