@@ -2242,6 +2242,13 @@ async def start_real_autopilot(request:Request,nexora_sid:str|None=None):
             if (not profile or profile.account_mode!='real'
                 or profile.real_account_id!=account_id):
                 raise HTTPException(409,'Configuração REAL alterada; inicie novamente')
+            # Re-read the account-specific settings after read-only account
+            # checks. A concurrent edit must not create stale consent.
+            latest_settings=sess.get(db.AccountRiskSettings,(user.id,'real',account_id))
+            if (latest_settings is None or
+                Decimal(str(latest_settings.stake))!=stake or
+                Decimal(str(latest_settings.stop_loss))!=stop):
+                raise HTTPException(409,'Limites REAL alterados; revise as preferências antes de autorizar')
             consent=sess.get(db.RealRobotConsent,user.id)
             if consent is None:
                 consent=db.RealRobotConsent(
