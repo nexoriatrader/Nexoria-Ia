@@ -28,6 +28,7 @@ from .real_ledger import (
     reserve_real_order, settle_real_order, validated_real_stop_loss,
 )
 from .real_recovery import promote_stale_pending_to_unknown
+from .restart_consistency import locked_real_consent_for_send
 from .security import decrypt
 
 logger=logging.getLogger('nexora.real')
@@ -91,6 +92,28 @@ def disarm_real(uid,why):
         if consent and consent.revoked_at is None:
             consent.revoked_at=db.utcnow()
             sess.commit()
+
+
+def disarm_revoked_real_workers():
+    """Observe revocations committed by another service process.
+
+    A local running set is never authoritative. Poll the shared database for
+    previously started workers and clear stale process flags without broker I/O.
+    The final send guard independently holds a PostgreSQL consent row lock.
+    """
+    users=tuple(running)
+    if not users:
+        return []
+    with db.SessionLocal() as sess:
+        consents={row.user_id:row for row in sess.scalars(
+            select(db.RealRobotConsent).where(
+                db.RealRobotConsent.user_id.in_(users))).all()}
+        invalid=[uid for uid in users
+                 if uid not in consents or consents[uid].revoked_at is not None]
+    for uid in invalid:
+        running.discard(uid)
+        reasons[uid]='Autorização REAL revogada em outro processo; execução desligada'
+    return invalid
 
 
 def _candidate_window(candidate):
@@ -218,14 +241,39 @@ async def _user_scan(uid):
                 order=sess.get(db.RealOrder,order_id)
                 cancel_unsubmitted_real_order(sess,order,'Desligado ou sinal expirado antes do envio')
             return
-        reasons[uid]='Solicitando contrato REAL à Deriv'
+        # P0-04: never trust the earlier consent snapshot after a reservation.
+        # PostgreSQL FOR UPDATE serializes this final authorization check with
+        # revocations by any other process. Keep the lock until the existing
+        # outbound request finishes, or no new send can be guaranteed.
+        broker_attempted=False
+        consent_revoked=False
+        skipped_before_send=False
         try:
-            receipt=await buy_real_contract(
-                token,account_id,symbol=candidate['symbol'],
-                contract_type=candidate['direction'],stake=stake,
-                duration=expiry,currency='USD',
-                min_payout_ratio=min_ratio,
-                latest_buy_send_epoch=deadline)
+            with locked_real_consent_for_send(uid,account_id) as authorized:
+                if not authorized:
+                    consent_revoked=True
+                elif uid not in running or not real_available() or time.time()>deadline:
+                    skipped_before_send=True
+                else:
+                    reasons[uid]='Solicitando contrato REAL à Deriv'
+                    broker_attempted=True
+                    receipt=await buy_real_contract(
+                        token,account_id,symbol=candidate['symbol'],
+                        contract_type=candidate['direction'],stake=stake,
+                        duration=expiry,currency='USD',
+                        min_payout_ratio=min_ratio,
+                        latest_buy_send_epoch=deadline)
+            if consent_revoked:
+                # The newly reserved PENDING row remains untouched and blocks
+                # reentry until conservative reconciliation or manual review.
+                running.discard(uid)
+                reasons[uid]='Autorização REAL revogada antes do envio; reserva preservada'
+                return
+            if skipped_before_send:
+                with db.SessionLocal() as sess:
+                    order=sess.get(db.RealOrder,order_id)
+                    cancel_unsubmitted_real_order(sess,order,'Desligado ou expirado antes do envio')
+                return
             with db.SessionLocal() as sess:
                 order=sess.get(db.RealOrder,order_id)
                 confirm_real_order(sess,order,receipt)
@@ -241,14 +289,23 @@ async def _user_scan(uid):
                 cancel_unsubmitted_real_order(sess,sess.get(db.RealOrder,order_id),str(exc))
             reasons[uid]='Proposta REAL rejeitada; nenhuma compra enviada'
         except Exception as exc:
-            # The broker might have received the buy. Never assume no trade.
-            with db.SessionLocal() as sess:
-                mark_real_unknown(sess,sess.get(db.RealOrder,order_id))
-            disarm_real(uid,'Erro REAL incerto; confira contratos na Deriv')
+            if broker_attempted:
+                # The broker might have received the buy. Never assume no trade.
+                with db.SessionLocal() as sess:
+                    mark_real_unknown(sess,sess.get(db.RealOrder,order_id))
+                disarm_real(uid,'Erro REAL incerto; confira contratos na Deriv')
+            else:
+                # The final database authorization itself failed. No request
+                # was sent; preserve the reservation for manual inspection.
+                running.discard(uid)
+                reasons[uid]='Não foi possível confirmar autorização REAL; envio bloqueado'
             logger.error('REAL execution uncertain: %s',type(exc).__name__)
 
 
 async def real_tick():
+    # A different Render worker can revoke our persisted consent; synchronize
+    # the local status before considering any new scan or dispatch.
+    disarm_revoked_real_workers()
     if not real_available() or not running:
         return
     sem=asyncio.Semaphore(_MAX_REAL_CONCURRENT_SCANS)
