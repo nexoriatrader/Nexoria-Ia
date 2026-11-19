@@ -53,6 +53,16 @@ def real_available():
     )
 
 
+def reset_volatile_runtime_on_start():
+    """Cold-start reset: persisted REAL opt-in never resumes a process worker."""
+    global _reconcile_lock
+    running.clear()
+    reasons.clear()
+    last_scan.clear()
+    _user_locks.clear()
+    _reconcile_lock=asyncio.Lock()
+
+
 def user_lock(uid):
     return _user_locks.setdefault(uid,asyncio.Lock())
 
