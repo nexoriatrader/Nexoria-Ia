@@ -198,6 +198,20 @@ Na última execução consultada (`45c1128e`), **311 testes gerais passaram**, o
 
 **Limites dos resultados:** são leituras locais em SQLite sob concorrência de threads e não medem latência entre cliente, Render (Oregon), Supabase e corretora, nem carga de 10 sessões reais. A meta de testar 10 usuários simultâneos em Demo hospedado, com p95 e recursos Render, **permanece pendente**.
 
+## Ajuste de carga em segundo plano — 19/11/2026
+
+Em `app/index.html`, timers de leitura continuavam atualizando o dashboard enquanto a aba estava invisível. A PR passa a ignorar execuções dos timers **somente de interface** quando `document.hidden` é `true`:
+
+- Histórico e monitor de leitura (3 segundos na página Resultados ou 7 segundos no Dashboard).
+- Atualização geral do Dashboard (30 segundos).
+- Exibição dos resultados diários (120 segundos).
+
+Os timers existentes continuam programados e voltam a consultar dados quando a página fica visível; não é criada uma segunda sequência de timers. As chamadas disparadas por ações explícitas da pessoa continuam intactas. **Essa verificação não pausa, inicia nem altera o robô ou seus controles financeiros do servidor**.
+
+O teste `tests/test_dashboard_visibility_polling.py` executa a implementação de `updateResultsPolling()` em Node com mocks dos timers e valida as duas situações: sem GET na aba oculta e retomada automática em aba visível. Um teste estático garante que o timer genérico e a leitura de resultados diários também ignoram abas ocultas.
+
+**Benefício esperado:** menos solicitações GET redundantes em abas em segundo plano, sem prometer melhoria quantitativa antes de medições de produção. Teste de CI desta mudança deve ser concluído antes do merge.
+
 ## Critério de conclusão
 
 Só classificar este trabalho como *homologação técnica concluída* após registrar evidências reproduzíveis para controle de acesso, CI, desempenho, falhas de rede/reinício, isolamento entre usuários, restauração, monitoramento e revisão de conformidade. Homologação técnica **não** equivale a autorização para ativar negociação automática com dinheiro real.
