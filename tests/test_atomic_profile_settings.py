@@ -142,3 +142,58 @@ def test_automation_ui_uses_single_atomic_wizard_save():
     assert "JSON.stringify({profile,risk})" in section
     assert "await req('/api/automation/profile'" not in section
     assert "await req('/api/onboarding/config'" not in section
+
+
+def test_bundle_real_preferences_are_isolated_and_never_authorize_trading(context,monkeypatch):
+    client,sessions,uid,demo_broker,real_broker=context
+    class AccountsResult:
+        def raise_for_status(self): pass
+        def json(self):
+            return {"data":{"accounts":[{"account_type":"real","account_id":"CRONE","currency":"USD"}]}}
+    class MockAccountClient:
+        def __init__(self,*args,**kwargs): pass
+        async def __aenter__(self): return self
+        async def __aexit__(self,*args): return None
+        async def get(self,url,headers=None):
+            assert url.endswith("/trading/v1/options/accounts")
+            return AccountsResult()
+    monkeypatch.setattr(main.httpx,"AsyncClient",MockAccountClient)
+    real_profile={**PROFILE,"account_mode":"real","real_account_id":"CRONE"}
+    real_risk={**RISK,"stake":"4.00","stop_win":"11.00","stop_loss":"8.00"}
+    response=client.post("/api/automation/configuration",
+                         json={"profile":real_profile,"risk":real_risk})
+    assert response.status_code==200,response.text
+    assert response.json()["ready_to_start"] is False
+    with sessions() as s:
+        demo=s.get(db.User,uid)
+        profile=s.get(db.AutomationProfile,uid)
+        real=s.get(db.AccountRiskSettings,(uid,"real","CRONE"))
+        assert demo.stake=="0.50" and demo.stop_loss=="0.00"
+        assert profile.account_mode=="real" and profile.real_account_id=="CRONE"
+        assert real.stake=="4.00" and real.stop_loss=="8.00"
+        assert s.get(db.RealRobotConsent,uid) is None
+        assert s.query(db.RealOrder).count()==0
+    assert real_runtime.real_available() is False
+    demo_broker.assert_not_awaited()
+    real_broker.assert_not_awaited()
+
+
+def test_bundle_invalid_real_account_never_stages_profile_or_risk(context,monkeypatch):
+    client,sessions,uid,_,_=context
+    class AccountsResult:
+        def raise_for_status(self): pass
+        def json(self):
+            return {"data":{"accounts":[{"account_type":"real","account_id":"CRONE"}]}}
+    class MockAccountClient:
+        def __init__(self,*args,**kwargs): pass
+        async def __aenter__(self): return self
+        async def __aexit__(self,*args): return None
+        async def get(self,url,headers=None): return AccountsResult()
+    monkeypatch.setattr(main.httpx,"AsyncClient",MockAccountClient)
+    response=client.post("/api/automation/configuration",
+        json={"profile":{**PROFILE,"account_mode":"real","real_account_id":"CRFOREIGN"},
+              "risk":RISK})
+    assert response.status_code==403,response.text
+    with sessions() as s:
+        assert s.get(db.AutomationProfile,uid) is None
+        assert s.query(db.AccountRiskSettings).count()==0
