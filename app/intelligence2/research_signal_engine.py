@@ -110,6 +110,90 @@ def _evidence(asset: dict) -> tuple[bool, str, list[str]]:
     return True, "INCONCLUSIVE", ["RECHECK_AFTER_NEW_CLOSED_CANDLE"]
 
 
+
+# Read-only research evaluations; these are NOT trading-side or entry models.
+def describe_public_context(asset: dict) -> dict:
+    """Describe the pre-existing I03 trend alignment, without CALL/PUT mapping."""
+    result = asset.get("context_timeframe")
+    if not isinstance(result, dict):
+        return {"observed_trend": "NEUTRAL", "consensus": "UNAVAILABLE"}
+    alignment = result.get("alignment")
+    contexts = result.get("contexts")
+    if not isinstance(alignment, dict) or not isinstance(contexts, dict):
+        return {"observed_trend": "NEUTRAL", "consensus": "UNAVAILABLE"}
+    trend = alignment.get("direction")
+    directions = [
+        contexts.get(role, {}).get("direction")
+        if isinstance(contexts.get(role), dict) else None
+        for role in _ROLES
+    ]
+    if (
+        alignment.get("state") == "ALIGNED_RESEARCH"
+        and trend in ("UP", "DOWN")
+        and all(value == trend for value in directions)
+    ):
+        return {"observed_trend": trend, "consensus": "THREE_TIMEFRAMES"}
+    if any(value in ("UP", "DOWN") for value in directions):
+        return {"observed_trend": "NEUTRAL", "consensus": "MIXED_OR_PENDING"}
+    return {"observed_trend": "NEUTRAL", "consensus": "NO_DIRECTION"}
+
+
+def review_public_freshness(asset: dict, *, observed_at: int, now: int) -> dict:
+    """Use I02's closed-candle provenance, not a prediction of entry timing."""
+    last = asset.get("last_closed_epoch")
+    if type(last) is not int or last <= 0:
+        return {"status": "UNVERIFIED", "reason_code": "I02_LAST_CLOSED_MISSING"}
+    if last > observed_at or last > now:
+        return {"status": "INVALID", "reason_code": "I02_LAST_CLOSED_IN_FUTURE"}
+    if now - last > 120:
+        return {"status": "STALE", "reason_code": "I02_LAST_CLOSED_STALE"}
+    return {"status": "CURRENT", "reason_code": "I02_CLOSED_CANDLE_CURRENT"}
+
+
+def research_lifecycle(
+    *, previous_record: dict | None, fingerprint: str,
+    source_current: bool, evidence_valid: bool,
+) -> dict:
+    """Lifecycle of a research record, not the lifecycle of a broker order."""
+    prev_fingerprint = (
+        previous_record.get("fingerprint") if isinstance(previous_record, dict)
+        else None
+    )
+    duplicate = prev_fingerprint == fingerprint and prev_fingerprint is not None
+    change = "UNCHANGED" if duplicate else ("UPDATED" if prev_fingerprint else "NEW")
+    if not source_current:
+        state, reason = "EXPIRED", "PUBLIC_SOURCE_OUTSIDE_TTL"
+    elif not evidence_valid:
+        state, reason = "CANCELLED", "PUBLIC_EVIDENCE_INVALID"
+    else:
+        state, reason = "ACTIVE_RESEARCH", "PUBLIC_OBSERVATION_TRACKED"
+    return {
+        "lifecycle": change,
+        "lifecycle_state": state,
+        "lifecycle_reason_code": reason,
+        "duplicate_of_previous": duplicate,
+    }
+
+
+def classify_evidence_strength(asset: dict, *, evidence_valid: bool,
+                               evidence_class: str) -> str:
+    """A qualitative label; never a calibrated probability or trade ranking."""
+    if not evidence_valid:
+        return "INVALID"
+    if evidence_class != "CONSISTENT":
+        return "INCONCLUSIVE"
+    contexts = asset.get("context_timeframe", {}).get("contexts", {})
+    if not isinstance(contexts, dict):
+        return "INCONCLUSIVE"
+    if all(
+        isinstance(contexts.get(role), dict)
+        and contexts[role].get("research_usable") is not False
+        for role in _ROLES
+    ):
+        return "CONSISTENT"
+    return "INCONCLUSIVE"
+
+
 def assess_research_report(
     i03_report: dict, *, previous: dict | None = None, now: int | None = None,
 ) -> dict:
@@ -164,26 +248,42 @@ def assess_research_report(
             seen.add(key)
             fingerprint = _fingerprint(i03_report, market, asset)
             previous_record = prior.get(key)
-            same = previous_record is not None and previous_record.get("fingerprint") == fingerprint
             evidence_valid, evidence_class, reason_codes = _evidence(asset)
+            freshness = review_public_freshness(
+                asset, observed_at=observed if type(observed) is int else 0,
+                now=now,
+            )
+            if freshness["status"] != "CURRENT":
+                evidence_valid = False
+                evidence_class = "INVALID"
+                reason_codes = reason_codes + [freshness["reason_code"]]
             if not source_valid:
                 reason_codes = ["I03_SOURCE_VERSION_OR_GUARD_INVALID"]
             elif not current:
                 reason_codes = ["PUBLIC_OBSERVATION_EXPIRED"]
-            if not current or not evidence_valid:
-                outcome = "DO NOT TRADE"
-            else:
-                outcome = "WAIT"
-            previous_version = previous_record.get("fingerprint") if previous_record else None
+            outcome = "WAIT" if current and evidence_valid else "DO NOT TRADE"
+            lifecycle = research_lifecycle(
+                previous_record=previous_record, fingerprint=fingerprint,
+                source_current=current, evidence_valid=evidence_valid,
+            )
             records.append({
                 "symbol": symbol,
                 "market": market,
                 "fingerprint": fingerprint,
                 "observed_at_epoch": observed if type(observed) is int else None,
                 "valid_until_epoch": valid_until,
-                "lifecycle": "UNCHANGED" if same else ("UPDATED" if previous_version else "NEW"),
-                "duplicate_of_previous": bool(same),
+                **lifecycle,
                 "decision": outcome,
+                "public_context": describe_public_context(asset),
+                "freshness": freshness,
+                "evidence_strength": classify_evidence_strength(
+                    asset, evidence_valid=evidence_valid,
+                    evidence_class=evidence_class,
+                ),
+                "knowledge_base": {"status": "NOT_CONNECTED", "used": False},
+                "strategy_intelligence": {
+                    "status": "I02_PUBLIC_STRATEGY_METADATA_ONLY", "used": False,
+                },
                 "evidence_class": evidence_class if current and source_valid else "INVALID",
                 "reason_codes": sorted(set(reason_codes + ["TRADE_ACTIONS_NOT_SUPPORTED"])),
                 "evidence_kind": HEURISTIC,
@@ -197,6 +297,7 @@ def assess_research_report(
     records.sort(key=lambda row: (row["market"], row["symbol"]))
     expired = [
         {"market": market, "symbol": symbol, "lifecycle": "RETIRED",
+         "lifecycle_state": "CONCLUDED",
          "reason_codes": ["NOT_PRESENT_IN_CURRENT_PUBLIC_SCAN"]}
         for (market, symbol) in sorted(prior)
         if (market, symbol) not in seen
