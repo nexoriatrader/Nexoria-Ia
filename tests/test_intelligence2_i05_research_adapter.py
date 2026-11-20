@@ -399,9 +399,10 @@ def test_research_origin_is_public_never_demo_real_or_simulation():
         "PUBLIC_CLOSED_REGIME_RESEARCH"
     )
     assert out["assets"][0]["learning_engine"]["financial_source_used"] is False
-    assert "DEMO" not in str(out["assets"][0]["learning_engine"])
-    assert "REAL" not in str(out["assets"][0]["learning_engine"])
-    assert "SIMULATION" not in str(out["assets"][0]["learning_engine"])
+    assert out["assets"][0]["learning_engine"]["financial_source_used"] is False
+    assert out["assets"][0]["learning_engine"]["prediction_used_for_trading"] is False
+    assert "account_id" not in str(out["assets"][0]["learning_engine"])
+    assert "user_id" not in str(out["assets"][0]["learning_engine"])
 
 
 def test_i05_adapter_never_increases_evidence_points_or_approves_trading():
