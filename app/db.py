@@ -524,7 +524,8 @@ class RealOrder(Base):
 class RealGlobalAuthorizationFence(Base):
     """Global epoch protecting cold-start revocation against older STARTs."""
     __tablename__ = 'real_global_authorization_fences'
-    id = Column(Integer, primary_key=True)
+    # Singleton id=1 is never a sequence/autoincrement key in the SQL contract.
+    id = Column(Integer, primary_key=True, autoincrement=False)
     generation = Column(Integer, nullable=False, default=0, server_default=text('0'))
     updated_at = Column(DateTime(timezone=True), default=utcnow,
                         onupdate=utcnow, nullable=False,
