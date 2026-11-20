@@ -253,7 +253,11 @@ async def scan_market_opportunities(*, previous: dict | None = None,
             grouped[asset["group"]].append(asset)
     samples, deferred = {}, {}
     for market_name, items in sorted(grouped.items()):
-        samples[market_name], deferred[market_name] = _pick_window(\n            items, observed_at,\n            focus=(_previous_symbols(previous, market_name, "selected")\n                   | _previous_symbols(previous, market_name, "reserves")),\n        )
+        samples[market_name], deferred[market_name] = _pick_window(
+            items, observed_at,
+            focus=(_previous_symbols(previous, market_name, "selected")
+                   | _previous_symbols(previous, market_name, "reserves")),
+        )
     sem = asyncio.Semaphore(MAX_PARALLEL_READS)
     jobs = [
         (market_name, asset) for market_name, rows in samples.items()
