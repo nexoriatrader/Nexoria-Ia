@@ -22,6 +22,7 @@ from app.research_persistence import HistoricalResearchReport
 from app.research_retention import cleanup_research_reports
 
 NOW=datetime(2026,11,20,12,0,tzinfo=timezone.utc)
+APPROVED_AT=NOW+timedelta(hours=6)
 TF=60
 SYMBOL="R_100"
 MARKET="derived"
@@ -256,17 +257,17 @@ def test_controlled_research_champion_fallback_and_release_cas(store,monkeypatch
         model_knowledge_id=first["knowledge_id"],
         model_digest=first["report"]["model_id_sha256"],
         expected_model_revision=validated["revision"],
-        expected_release_id=None,approval_reason="MANUAL_RESEARCH_APPROVAL",now=NOW)
+        expected_release_id=None,approval_reason="MANUAL_RESEARCH_APPROVAL",now=APPROVED_AT)
     assert promoted["champion_knowledge_id"]==first["knowledge_id"]
     assert promoted["fallback_knowledge_id"] is None
     assert promoted["execution_allowed"] is False
-    assert kb.get_knowledge(first["knowledge_id"],now=NOW)["state"]=="ACTIVE"
+    assert kb.get_knowledge(first["knowledge_id"],now=APPROVED_AT)["state"]=="ACTIVE"
     with pytest.raises(kb.KnowledgeConflict):
         reg.promote_research_champion(
             model_knowledge_id=first["knowledge_id"],
             model_digest=first["report"]["model_id_sha256"],
             expected_model_revision=validated["revision"],
-            expected_release_id=None,approval_reason="STALE_RELEASE",now=NOW)
+            expected_release_id=None,approval_reason="STALE_RELEASE",now=APPROVED_AT)
     second,second_validated=_staged_validated(
         market_source=source,sequence=(
             "RANGING","UPTREND","TRANSITION","DOWNTREND",
@@ -276,11 +277,11 @@ def test_controlled_research_champion_fallback_and_release_cas(store,monkeypatch
         model_knowledge_id=second["knowledge_id"],
         model_digest=second["report"]["model_id_sha256"],
         expected_model_revision=second_validated["revision"],
-        expected_release_id=promoted["id"],approval_reason="SECOND_PUBLIC_APPROVAL",now=NOW)
+        expected_release_id=promoted["id"],approval_reason="SECOND_PUBLIC_APPROVAL",now=APPROVED_AT)
     assert release["champion_knowledge_id"]==second["knowledge_id"]
     assert release["fallback_knowledge_id"]==first["knowledge_id"]
     current=reg.get_research_release(
-        market=MARKET,symbol=SYMBOL,timeframe_seconds=TF,now=NOW)
+        market=MARKET,symbol=SYMBOL,timeframe_seconds=TF,now=APPROVED_AT)
     assert current["champion_knowledge_id"]==second["knowledge_id"]
     assert current["fallback_knowledge_id"]==first["knowledge_id"]
     assert current["execution_allowed"] is False
@@ -304,7 +305,7 @@ def test_open_contract_global_safety_barrier_blocks_model_promotion(store,monkey
             model_knowledge_id=candidate["knowledge_id"],
             model_digest=candidate["report"]["model_id_sha256"],
             expected_model_revision=evaluated["revision"],
-            expected_release_id=None,approval_reason="MANUAL_RESEARCH_APPROVAL",now=NOW)
+            expected_release_id=None,approval_reason="MANUAL_RESEARCH_APPROVAL",now=APPROVED_AT)
     assert reg.get_research_release(
         market=MARKET,symbol=SYMBOL,timeframe_seconds=TF,now=NOW
     )["champion_knowledge_id"] is None
@@ -318,7 +319,7 @@ def test_auto_rollback_after_two_distinct_bad_public_windows(store,monkeypatch):
         model_knowledge_id=first["knowledge_id"],
         model_digest=first["report"]["model_id_sha256"],
         expected_model_revision=first_valid["revision"],
-        expected_release_id=None,approval_reason="MANUAL_FIRST_CHAMPION",now=NOW)
+        expected_release_id=None,approval_reason="MANUAL_FIRST_CHAMPION",now=APPROVED_AT)
     second,second_valid=_staged_validated(
         market_source=source,sequence=(
             "RANGING","UPTREND","TRANSITION","DOWNTREND"
@@ -327,8 +328,8 @@ def test_auto_rollback_after_two_distinct_bad_public_windows(store,monkeypatch):
         model_knowledge_id=second["knowledge_id"],
         model_digest=second["report"]["model_id_sha256"],
         expected_model_revision=second_valid["revision"],
-        expected_release_id=r1["id"],approval_reason="MANUAL_SECOND_CHAMPION",now=NOW)
-    next1=NOW+timedelta(hours=4)
+        expected_release_id=r1["id"],approval_reason="MANUAL_SECOND_CHAMPION",now=APPROVED_AT)
+    next1=APPROVED_AT+timedelta(hours=4)
     observation1=reg.monitor_and_rollback(
         market=MARKET,symbol=SYMBOL,timeframe_seconds=TF,
         history=_history(now=next1,sequence=("UPTREND",)),now=next1)
@@ -339,7 +340,7 @@ def test_auto_rollback_after_two_distinct_bad_public_windows(store,monkeypatch):
         market=MARKET,symbol=SYMBOL,timeframe_seconds=TF,
         history=_history(now=next1,sequence=("UPTREND",)),now=next1)
     assert replay["state"]=="AWAIT_NEW_PUBLIC_HOLDOUT"
-    next2=NOW+timedelta(hours=8)
+    next2=APPROVED_AT+timedelta(hours=8)
     rollback=reg.monitor_and_rollback(
         market=MARKET,symbol=SYMBOL,timeframe_seconds=TF,
         history=_history(now=next2,sequence=("UPTREND",)),now=next2)
