@@ -4,7 +4,7 @@
 
 **Branch:** `fix/f01-real-stop-cross-process` criada do SHA exato da P0-05, `81b52803b954ab9a7831be05c9b7e98501968e60` (PR #49).
 
-**Restrições:** nenhuma implantação, merge, migração ou alteração no Supabase de produção; sem mudanças nos gates administrativos `NEXORA_REAL_AUTOPILOT_ENABLED` / `NEXORA_REAL_RELEASE_APPROVED`; sem envio de ordens à Deriv; nenhuma alteração em `app/real_broker.py`, `app/restart_consistency.py` ou ledgers. Foi adicionada **somente na branch** a tabela de geração F01; sua migração de produção continua pendente e proibida nesta entrega. Todos os cenários financeiros são substituídos por dados sintéticos. F02–F07 **não iniciadas**.
+**Restrições:** nenhuma implantação, merge, migração ou alteração no Supabase de produção; sem mudanças nos gates administrativos `NEXORA_REAL_AUTOPILOT_ENABLED` / `NEXORA_REAL_RELEASE_APPROVED`; sem envio de ordens à Deriv; nenhuma alteração em `app/real_broker.py` ou ledgers. **`app/restart_consistency.py` foi alterado exclusivamente para integrar o fencing global ao reinício.** Foi adicionada **somente na branch** a tabela de geração F01; sua migração de produção continua pendente e proibida nesta entrega. Todos os cenários financeiros são substituídos por dados sintéticos. F02–F07 **não iniciadas**.
 
 ## Diagnóstico confirmado na base P0-05
 
@@ -39,7 +39,7 @@ O desligamento limpa o DEMO do mesmo usuário de forma independente, conservando
 
 O stop usa `SELECT FOR UPDATE` na **mesma linha de `RealRobotConsent`** utilizada pelo guard final `locked_real_consent_for_send` da P0-04. Se a revogação já foi confirmada, a validação posterior não pode permitir novo envio. Se um guard já estiver aberto antes do stop, a revogação espera sua liberação; não pode ser declarada concluída no meio da janela protegida.
 
-**Limitação imprescindível:** uma solicitação externa iniciada antes da revogação confirmada não pode ser desfeita. O bloqueio PostgreSQL durante uma chamada externa pode atrasar o stop; a avaliação dos limites de duração e coordenação mais ampla pertence ao achado F04. **F01 não modifica `restart_consistency.py`.**
+**Limitação imprescindível:** uma solicitação externa iniciada antes da revogação confirmada não pode ser desfeita. O bloqueio PostgreSQL durante uma chamada externa pode atrasar o stop; a avaliação dos limites de duração e coordenação mais ampla pertence ao achado F04. O reinício P0-04 agora incrementa a geração global no mesmo commit que revoga os consentimentos.
 
 O status de outros workers continuará desconhecido até existir mecanismo de evidência distribuída; não se deve interpretar `running:false` legado como verificação global. A F01 não cria heartbeat, canal de compra nem ferramentas de envio financeiro. O mecanismo de START existente permanece sujeito aos gates atuais e agora exige fencing persistido.
 
@@ -71,7 +71,7 @@ O status de outros workers continuará desconhecido até existir mecanismo de ev
 
 A tabela `real_authorization_fences` mantém uma geração inteira por `user_id`. START captura a geração antes de verificações externas; essa captura **não autoriza uma operação**. STOP adquire `SELECT FOR UPDATE` na linha do usuário (também serializa criação inicial da linha de fencing), depois na linha de geração e no consentimento, incrementa geração e revoga, tudo **no mesmo commit**. Isso ocorre mesmo com consentimento inexistente ou já revogado, pois um START antigo pode permanecer pendente nesses casos.
 
-Na etapa final de START, a verificação da geração esperada, o novo exame de configuração/limites e a escrita de `RealRobotConsent` ocorrem na **mesma transação**, sob os mesmos bloqueios em ordem `User → RealAuthorizationFence → RealRobotConsent`. Uma geração antiga resulta em `RealStartInvalidated` / HTTP **409**, sem reativar o consentimento. Não é suficiente checar a geração em uma transação e autorizar em outra; a implementação não faz isso.
+Na etapa final de START, a verificação **das duas gerações** esperadas, o novo exame de configuração/limites e a escrita de `RealRobotConsent` ocorrem na **mesma transação**, sob os bloqueios na ordem `RealGlobalAuthorizationFence (SHARE) → User → RealAuthorizationFence → RealRobotConsent`. Uma geração antiga resulta em `RealStartInvalidated` / HTTP **409**, sem reativar o consentimento. Não é suficiente checar a geração em uma transação e autorizar em outra; a implementação não faz isso.
 
 A ordenação é definida pelo **registro persistido da tentativa START**, não por timestamps arbitrários em processos de aplicação. Se a intenção START ainda não tiver capturado a geração no banco, não pode ser considerada autorização. A resolução de corridas de edit/configuração fora desse escopo permanece em F03.
 
@@ -104,7 +104,7 @@ Os campos legados continuam disponíveis em respostas bem-sucedidas; consumidore
 
 **Esquema lógico:** `real_authorization_fences(user_id INTEGER PRIMARY KEY REFERENCES users(id), generation INTEGER NOT NULL DEFAULT 0, updated_at TIMESTAMPTZ NOT NULL)`. O modelo foi adicionado em `app/db.py` **somente na branch F01**; os testes utilizam `db.Base.metadata.create_all` exclusivamente em SQLite e PostgreSQL 16 descartáveis.
 
-**Pendência impeditiva para implantação:** preparar e revisar uma migração aditiva e reversível da tabela para um ambiente **de homologação explicitamente autorizado**, verificar privilégios, índices, criação durante tráfego e backup. **Nenhuma migração foi executada no Supabase de produção.** Como `db.init_db()` no repositório atualmente utiliza `create_all`, uma futura revisão de deploy também deve impedir DDL implícito em produção antes da migração autorizada. Enquanto a tabela não existir, START/STOP que dependem do fencing **falham fechado**, não utilizam consentimento sem coordenação.
+**Pendência impeditiva para implantação:** preparar e revisar uma migração aditiva e reversível da tabela para um ambiente **de homologação explicitamente autorizado**, verificar privilégios, índices, criação durante tráfego e backup. **Nenhuma migração foi executada no Supabase de produção.** A nova versão de `db.init_db()` não executa `create_all()` nem `ALTER TABLE` no PostgreSQL: valida esquema e revisão apenas com consultas de leitura e recusa iniciar caso faltem estruturas da migração. Enquanto a tabela não existir, START/STOP que dependem do fencing **falham fechado**, não utilizam consentimento sem coordenação.
 
 O backout precisa ser definido separadamente: remover o código de fencing ou a tabela sem avaliar STARTs pendentes poderia reintroduzir a corrida. Não executar rollback ou migração real com esta PR isolada.
 
@@ -112,10 +112,57 @@ O backout precisa ser definido separadamente: remover o código de fencing ou a 
 
 - **Sem garantia de encerramento físico instantâneo dos workers remotos.** `worker_shutdown_confirmed=null` continua correto.
 - Uma requisição já enviada ao adaptador antes de um STOP confirmado não pode ser desfeita. O guard P0-04 continua indispensável.
-- Uma revogação que ocorra por outro fluxo que não avance geração (por exemplo, reinicialização pela P0-04) exige análise separada de coordenação. Esta F01 valida e protege START × STOP via rota prevista, sem alterar `app/restart_consistency.py`.
+- Reinicialização P0-04, logout, STOP, desligamento de segurança e suspensão administrativa agora invalidam o START antigo antes de confirmar o commit; essa integração exige nova revisão independente da sequência de bloqueios e implantação somente após migração formal.
 - F02–F07 continuam pendentes. CI verde não representa aprovação de implantação nem revisão externa independente.
 
 ## Evidências atualizadas de CI
 
 - [GitHub Actions #44645342766](https://github.com/nexoriatrader/Nexoria-Ia/actions/runs/44645342766), código e testes até `4f5a329b3e8adb14af9b4dd34c4734164a658562`: **447 gerais aprovados, 22 omitidos, 2 avisos; 22 PostgreSQL descartáveis aprovados; 1 teste adicional de carga somente leitura aprovado**. O aviso adicional da suíte geral era uma depreciação no teste de cookies, posteriormente corrigida em commit exclusivo de testes.
 - O commit documental final posterior e o seu CI devem ser verificados separadamente antes de encerrar a entrega.
+
+## Revisão adicional de segurança — fencing em TODOS os caminhos de revogação
+
+### Inventário auditado dos caminhos de escrita em REAL
+
+| Evento | Transação e invalidação de START antigo | Evidência necessária |
+| --- | --- | --- |
+| STOP manual `/api/autopilot/stop` | `revoke_real_consent_for_stop` usa a função comum, com global em `SHARE`, `User`, geração do usuário e consentimento, e um commit | Testes F01 STOP × START e STOP × envio fictício |
+| Reinicialização `prepare_service_restart()` | `revoke_stale_real_consent_after_restart` adquire global `FOR UPDATE`, **avança geração global mesmo sem consentimento** e executa `UPDATE` coletivo de revogação no **mesmo commit** | Testes multiprocesso com e sem consentimento, duas reinicializações, preservação de PENDING/UNKNOWN/CONFIRMED |
+| Desligamento de segurança `disarm_real(uid,reason)` | Delega **exclusivamente** a `revoke_real_consent_for_stop`, que avança a geração individual antes do commit; remove estado local em `finally`, inclusive em erro DB, sem declarar revogação persistida falsa | Teste `safety` em outro processo concorrendo com START antigo |
+| Logout `/api/logout` | `_f01_logout_user_session` revoga com `revoke_real_consent_in_session` **na mesma transação** que remove a sessão e os registros de retomada DEMO | Teste de logout HTTP concorrente; sessão não é apagada se revogação falhar |
+| Administração `/api/admin/access/adjust` | `suspend`, `refund_revoke` e `remove_hours` quando o acesso deixa de ser permitido invalidam a geração individual e revogam consentimento junto com a alteração de `RobotAccess` e o evento de auditoria, em um só commit | Teste de suspensão sintética via HTTP e concorrência com START |
+| `disarm_revoked_real_workers()` | **Somente observa** revogação já persistida e remove flags locais; não escreve `revoked_at` | Regressão P0-04 de leitura da revogação |
+| `/api/admin/logout` | Apenas invalida sessão do administrador, **não** é revogação de usuário ou autorização REAL | Não cria consentimentos nem altera gerações |
+
+**Varredura de código:** as únicas escritas de `RealRobotConsent.revoked_at` autorizadas são (a) confirmação de START validada sob geração global+individual na função `finalize_real_start_if_current`, (b) revogação comum em `real_runtime` e (c) `UPDATE` coletivo no reinício com geração global exclusiva. Não existe outro caminho ativo de revogação direta em `main.py`, `real_runtime.py` ou demais módulos de aplicação auditados.
+
+### Bloqueios, ordem e compatibilidade P0-04
+
+**Regra de ordem:** `global epoch → User → user fence → REAL consent`. Per-user START/STOP/logout/admin/safety usam `SELECT ... FOR SHARE` no global e `FOR UPDATE` em `User`/fence/consent. Duas ações de usuários diferentes podem compartilhar o bloqueio global; o reinício usa `SELECT ... FOR UPDATE` no global e bloqueia novos STARTs até que a varredura global seja confirmada.
+
+A varredura de reinício executa `UPDATE` coletivo somente após obter o bloqueio **exclusivo** global; como START/STOP precisam da guarda global antes de tocar qualquer consentimento, ela não precisa bloquear cada `User` durante o sweep para impedir reativação. O guard final da P0-04 permanece **inalterado**, adquirindo somente o consentimento `FOR UPDATE` durante a chamada existente; jamais solicita a guarda global depois de obter a linha, evitando inversão `consent → global`. Contratos e slots não são alterados. O PostgreSQL aplica `lock_timeout=1500ms` e `statement_timeout=4500ms` às transações de revogação da F01.
+
+Uma falha de persistência causa rollback e **não permite** anunciar revogação confirmada. A inicialização aborta se a revogação global falhar; nenhuma autorização REAL é restaurada automaticamente.
+
+### Inicialização PostgreSQL SEM DDL
+
+`app/db.py::init_db()` diferencia explicitamente mecanismos:
+
+- **PostgreSQL (aplicação):** `verify_postgresql_schema()` usa somente reflexão SQLAlchemy e `SELECT`, exige todas as tabelas obrigatórias, colunas das estruturas de fencing, a revisão `f01_global_fencing_v1` em `nexora_schema_revisions` e a linha `id=1` com geração global válida. Falta de qualquer elemento aborta a inicialização antes de criar workers. Não executa `Base.metadata.create_all`, `ALTER TABLE`, `INSERT` nem atualização de revisão.
+- **SQLite local:** fluxo de desenvolvimento legado de criação automática permanece para compatibilidade. PostgreSQL descartável é provisionado **explicitamente pelos testes**, não pelo `init_db()`.
+- **Proposta formal de migração (NÃO EXECUTADA):** [`migrations/F01_GLOBAL_FENCING_V1_POSTGRES.sql`](../migrations/F01_GLOBAL_FENCING_V1_POSTGRES.sql) documenta criação/validação das tabelas de gerações global/individual, linha singleton global e marcador de revisão. A execução exige DBA e autorização futura separados, homologação, janela de manutenção, backup e plano próprio de rollback. O arquivo não é chamado por CI, startup nem aplicação.
+
+O teste `tests/test_postgres_f01_schema_guard.py` inspeciona as instruções enviadas durante `db.init_db()` em PostgreSQL **descartável** isolado, exigindo **zero DDL** em esquema ausente/incompleto e em esquema válido. Também confirma a recusa de versão de migração ou linha global ausentes, sem criação implícita.
+
+**Aviso de compatibilidade:** o teste legado de migração da P0-01 foi adaptado para criar a tabela de risco somente por fixture explícita em PostgreSQL descartável; o produto não poderá voltar a executar DDL automático na inicialização. A nova versão exige migração formal e pode manter o serviço indisponível enquanto a migração não for aprovada.
+
+### Matriz adicional de testes
+
+- `test_f01_old_start_invalidated_by_every_persisted_revocation_path[restart,safety,logout,admin]`: START sintético em processo A captura geração, cada revogador age em outro processo B; A não pode finalizar com o token antigo; os contratos persistidos permanecem intactos.
+- `test_f01_restart_invalidates_old_start_without_any_consent_row`: sweep global inválida até a tentativa START que não possuía consentimento.
+- `test_f01_new_start_after_restart_captures_new_global_epoch`: novo START sintético após revogação global usa geração nova (somente operação SQL fictícia; nenhum broker).
+- `test_two_independent_postgres_restart_processes_revoke_once`: reinícios concorrentes serializados com count de revogação idempotente, sem deadlock e preservando ledger.
+- `test_postgresql_init_db_is_strictly_read_only_and_requires_formal_revision`: zero DDL e DML de startup PostgreSQL; esquema ausente, marca de migração ausente, marca válida e linha singleton ausente.
+- `test_postgresql_migration_version_missing_blocks_all_automatic_ddl`: nenhum objeto criado por duas tentativas de inicialização sem migração.
+
+**Esses cenários usam apenas processos de teste, dados sintéticos, PostgreSQL local descartável e broker não acessível.** A aprovação de CI não substitui uma nova revisão humana independente da PR.
