@@ -77,6 +77,8 @@ def _lineage_usable(item: dict, detail: dict, *, category: str,
         return "PRIVATE_KNOWLEDGE_REFUSED", None
     if not isinstance(item, dict) or not isinstance(detail, dict):
         return "I04_RECORD_MALFORMED", None
+    if any(k in item for k in ("user_id", "account_id", "balance", "token", "stake", "pnl")):
+        return "PRIVATE_KNOWLEDGE_REFUSED", None
     knowledge_id, revision = item.get("id"), item.get("revision")
     if (
         type(knowledge_id) is not int or knowledge_id <= 0
@@ -117,6 +119,10 @@ def _lineage_usable(item: dict, detail: dict, *, category: str,
     if not isinstance(digest, str) or not _SHA.fullmatch(digest):
         return "I04_DIGEST_UNVERIFIED", None
     payload = detail.get("payload")
+    if isinstance(payload, dict) and any(
+        k in payload for k in ("user_id", "account_id", "balance", "token", "stake", "pnl")
+    ):
+        return "PRIVATE_KNOWLEDGE_REFUSED", None
     evidence = detail.get("evidence")
     decisions = detail.get("decisions")
     if (
@@ -347,10 +353,15 @@ def enrich_research_with_i04(report: dict, *, now: int | None = None,
                 *updated.get("reason_codes", []),
                 "I04_ACTIVE_CONTEXT_CONFLICT" if conflict else "I04_READ_UNAVAILABLE",
             ]))
+        if used and not unavailable and not conflict:
+            updated["reason_codes"] = sorted(set([
+                *updated.get("reason_codes", []),
+                "I04_PUBLIC_KNOWLEDGE_CORROBORATED",
+            ]))
         updated["knowledge_base"] = _knowledge_view(
             "I04_UNAVAILABLE" if unavailable else
             "I04_CONFLICT_RECHECK" if conflict else
-            "I04_REVALIDATED_ACTIVE" if used else "I04_NO_REUSABLE_KNOWLEDGE",
+            "I04_CURRENT_ACTIVE_VERIFIED" if used else "I04_NO_REUSABLE_KNOWLEDGE",
             used=used, excluded=excluded, consulted=consulted,
         )
         assets.append(updated)
