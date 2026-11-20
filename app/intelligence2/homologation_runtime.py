@@ -157,9 +157,21 @@ def load_shared_public_snapshot(*, now_epoch: int | None = None) -> dict:
                     "snapshot_digest": None}
         output = []
         for candidate in data["items"]:
+            if not isinstance(candidate, dict):
+                return {"state": "SNAPSHOT_UNTRUSTED",
+                        "items": [], "snapshot_digest": None}
+            # Research without valid closed evidence is omitted from the
+            # public view. It is never upgraded to an eligible observation.
+            if (candidate.get("state") == "EXCLUDED"
+                and (candidate.get("fingerprint") is None
+                     or candidate.get("valid_until_epoch") is None)):
+                continue
+            if (type(candidate.get("valid_until_epoch")) is int
+                and candidate["valid_until_epoch"] <= now_epoch):
+                continue
             item = _safe_public_item(candidate, now_epoch=now_epoch)
             if item is None:
-                return {"state": "SNAPSHOT_EXPIRED_OR_UNTRUSTED",
+                return {"state": "SNAPSHOT_UNTRUSTED",
                         "items": [], "snapshot_digest": None}
             output.append(item)
         if len({(x["market"], x["symbol"]) for x in output}) != len(output):
@@ -173,7 +185,7 @@ def load_shared_public_snapshot(*, now_epoch: int | None = None) -> dict:
             return {"state": "SNAPSHOT_DIGEST_MISMATCH",
                     "items": [], "snapshot_digest": None}
         return {
-            "state": "CURRENT_PUBLIC_RESEARCH",
+            "state": "CURRENT_PUBLIC_RESEARCH" if output else "NO_CURRENT_PUBLIC_ITEMS",
             "items": output,
             "snapshot_digest": digest,
             "snapshot_created_at_epoch": created_epoch,
