@@ -203,6 +203,9 @@ def test_dynamic_hierarchy_varies_market_family_volatility_and_expiry():
     with pytest.raises(ValueError):
         tf.choose_hierarchy(forex | {"realized_volatility": float("nan")},
                             expiry_minutes=5)
+    with pytest.raises(ValueError):
+        tf.choose_hierarchy(forex | {"candle_quality": "STALE"},
+                            expiry_minutes=5)
 
 
 def test_alignment_and_moderate_conflict_never_approve_trading():
@@ -250,6 +253,19 @@ def test_reversal_requires_weak_higher_and_two_closed_confirmations():
     assert change["approved_for_trading"] is False
     contexts["intermediate"] = _ctx("DOWN", strength=.9, stability=.9, confirm=False)
     assert tf.align_timeframes(contexts, profile=profile)["alignment"]["state"] == "WAIT_REEVALUATE"
+
+
+def test_strong_higher_lower_opposition_with_neutral_middle_is_blocked():
+    profile = tf.choose_hierarchy(_candidate(), expiry_minutes=5)
+    contexts = {
+        "higher": _ctx("UP", strength=.90, stability=.90),
+        "intermediate": _ctx("NEUTRAL", strength=.1, state="RANGING"),
+        "lower": _ctx("DOWN", strength=.90, stability=.90),
+    }
+    answer = tf.align_timeframes(contexts, profile=profile)
+    assert answer["alignment"]["state"] == "BLOCKED_STRONG_CONFLICT"
+    assert answer["alignment"]["strategy_research_usable"] is False
+    assert answer["approved_for_trading"] is False
 
 
 def test_invalid_or_irregular_any_timeframe_is_indeterminate():
