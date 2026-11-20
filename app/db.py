@@ -229,7 +229,41 @@ class PaperTrade(Base):
     __table_args__ = (Index('ix_paper_user_time','user_id','settled_at'),)
 
 
+def verify_postgresql_schema_read_only(connection):
+    """Startup preflight ONLY: no PostgreSQL DDL or migration repair.
+
+    Matches the no-auto-DDL direction from F01 without copying or weakening
+    any financial authorization implementation. I04 / research coordination
+    tables are intentionally migration-owned and remain opt-in.
+    """
+    inspector = inspect(connection)
+    available = set(inspector.get_table_names())
+    required = set(Base.metadata.tables)
+    required.update({"nexora_schema_revisions",
+                     "real_global_authorization_fences",
+                     "real_authorization_fences"})
+    missing = sorted(required - available)
+    if missing:
+        raise RuntimeError(
+            "PostgreSQL schema incomplete: formal migration required: "
+            + ", ".join(missing[:20])
+        )
+    if connection.execute(text(
+        "SELECT revision FROM nexora_schema_revisions WHERE revision=:revision"
+    ), {"revision": "f01_global_fencing_v1"}).scalar_one_or_none() is None:
+        raise RuntimeError("F01 formal fencing migration missing")
+    generation = connection.execute(text(
+        "SELECT generation FROM real_global_authorization_fences WHERE id=1"
+    )).scalar_one_or_none()
+    if type(generation) is not int or generation < 0:
+        raise RuntimeError("F01 global fencing state not installed")
+
+
 def init_db():
+    if engine.dialect.name == "postgresql":
+        with engine.connect() as connection:
+            verify_postgresql_schema_read_only(connection)
+        return
     Base.metadata.create_all(engine)
     # Backwards-compatible additive migration. Never fabricate official times
     # for existing contracts or overwrite any pre-existing stored evidence.
