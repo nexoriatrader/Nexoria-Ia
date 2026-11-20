@@ -3094,6 +3094,29 @@ async def knowledge_lineage_route(
         raise HTTPException(503,'Persistência de conhecimento indisponível') from None
 
 
+@app.get('/api/research/learning-status')
+async def learning_research_status_route(
+    request:Request, market:str, symbol:str, timeframe_seconds:int=60,
+    nexora_sid:str|None=Cookie(default=None),
+):
+    """I05 public research release only; never a signal/order/purchase endpoint."""
+    active_user(request,nexora_sid)
+    from sqlalchemy.exc import SQLAlchemyError
+    from .intelligence2.learning_engine import learning_enabled, LearningError
+    from .intelligence2.learning_registry import get_research_release
+    from .intelligence2.knowledge_base import KnowledgeError, KnowledgeUnavailable
+    if not learning_enabled():
+        raise HTTPException(503,'Learning Engine de pesquisa indisponível')
+    try:
+        return await asyncio.to_thread(
+            get_research_release, market=market,symbol=symbol,
+            timeframe_seconds=timeframe_seconds)
+    except (KnowledgeUnavailable, SQLAlchemyError):
+        raise HTTPException(503,'Release de pesquisa inválido ou indisponível') from None
+    except (KnowledgeError,LearningError) as exc:
+        raise HTTPException(422,str(exc)) from None
+
+
 @app.get('/api/market/symbols')
 async def symbols(request:Request,nexora_sid:str|None=Cookie(default=None)):
     active_user(request,nexora_sid)
