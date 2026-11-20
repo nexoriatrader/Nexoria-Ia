@@ -130,3 +130,27 @@ async def scan_assets() -> dict:
             'auto_selection_enabled':False,
             'warning':'Hipóteses experimentais, não sinais validados. Sem execução, '
                       'sem estimativa de lucro, sem seleção automática de ativo.'}
+
+
+async def scan_intelligence_markets(*, previous=None, now=None) -> dict:
+    """I02 extension of the existing scanner; no separate trading scanner.
+
+    The I01 facade owns the closed-candle reads. This explicit entrypoint
+    preserves scan_assets() and every legacy consumer unchanged.
+    """
+    from .intelligence2.market_scanner import scan_market_opportunities
+    return await scan_market_opportunities(previous=previous, now=now)
+
+
+async def scan_intelligence_context(*, previous=None, expiry_minutes=5, now=None) -> dict:
+    """I03 composition of the existing I02 scanner and shared I01 context.
+
+    No duplicate scanner, no account input, no financial side effects.
+    """
+    import time
+    from .intelligence2.timeframe_engine import enrich_i02_report
+    source = await scan_intelligence_markets(previous=previous, now=now)
+    observed_at = int(time.time() if now is None else now)
+    return await enrich_i02_report(
+        source, expiry_minutes=expiry_minutes, now=observed_at,
+    )

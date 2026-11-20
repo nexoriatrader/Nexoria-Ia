@@ -4,6 +4,7 @@ on:
     branches:
       - main
       - feature/nexora-autopilot-research-v06
+      - release/intelligence20-i01-i03-readonly-main-isolated
   pull_request:
     branches:
       - main
@@ -18,10 +19,15 @@ jobs:
     timeout-minutes: 10
     env:
       NEXORA_DEMO_BUY_ENABLED: "false"
+      NEXORA_INTELLIGENCE_READONLY_ENABLED: "false"
+      NEXORA_REAL_AUTOPILOT_ENABLED: "false"
+      NEXORA_REAL_RELEASE_APPROVED: "false"
       NEXORA_PUBLIC_URL: "http://localhost:8000"
       DATABASE_URL: "sqlite:///./nexora_ci.db"
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
@@ -34,5 +40,35 @@ jobs:
         run: echo "NEXORA_FERNET_KEY=$(python -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())')" >> "$GITHUB_ENV"
       - name: Compile Python sources
         run: python -m compileall -q app tests
+      - name: Reject P0/F01, broker and schema changes in main-based candidate
+        run: |
+          python - <<'PY'
+          import subprocess
+          changed=set(subprocess.check_output(
+              ["git","diff","--name-only","origin/main...HEAD"],text=True).splitlines())
+          allow={
+            ".github/workflows/test.yml",
+            ".github/workflows/intelligence20-pg17-compat.yml",
+            "app/asset_scanner.py",
+            "app/automation_markets.py",
+            "app/main.py",
+            "app/intelligence2/__init__.py",
+            "app/intelligence2/market_data.py",
+            "app/intelligence2/market_scanner.py",
+            "app/intelligence2/context_engine.py",
+            "app/intelligence2/timeframe_engine.py",
+            "tests/test_intelligence2_market_data.py",
+            "tests/test_intelligence2_market_scanner.py",
+            "tests/test_intelligence2_context_timeframe.py",
+            "tests/test_intelligence2_main_isolated_release.py",
+            "tests/test_postgres17_main_research_release.py",
+            "docs/INTELLIGENCE_20_I01_I03_MAIN_ISOLATED.md",
+          }
+          assert changed, "Candidate unexpectedly identical to main"
+          assert changed<=allow, "Disallowed main changes: "+str(sorted(changed-allow))
+          print("Main-based diff allowlist validated:",len(changed),"research-only files")
+          PY
+      - name: Intelligence I01-I03 research tests, feature default OFF
+        run: python -m pytest -q tests/test_intelligence2_market_data.py tests/test_intelligence2_market_scanner.py tests/test_intelligence2_context_timeframe.py tests/test_intelligence2_main_isolated_release.py
       - name: Unit and integration-mock tests
         run: python -m pytest -q
