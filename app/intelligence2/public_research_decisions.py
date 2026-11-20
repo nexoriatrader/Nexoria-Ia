@@ -11,6 +11,7 @@ import asyncio
 import hashlib
 import json
 import math
+import os
 import re
 import time
 from datetime import datetime, timezone
@@ -204,6 +205,10 @@ def persist_public_research_snapshot(snapshot, *, now=None):
 
 async def run_one_public_research_task(*, worker_id, now=None):
     """Opt-in worker entry. Never starts itself and has no broker/order route."""
+    # No automatic activation by importing this file; production remains OFF.
+    if os.getenv("NEXORA_INTELLIGENCE_DISTRIBUTED_RESEARCH_ENABLED", "false").strip().lower() != "true":
+        return {"state": "DISTRIBUTED_PUBLIC_RESEARCH_DISABLED",
+                "execution_allowed": False}
     now = _clock(now)
     claim = await asyncio.to_thread(claim_public_task,
                                     worker_id=worker_id, now=now)
