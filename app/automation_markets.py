@@ -57,6 +57,33 @@ def _classify(asset):
     return None
 
 
+def _broker_market_group(asset):
+    """Preserve known groups and also cover new, broker-declared markets.
+
+    The source must be the public Deriv market field, not a guessed ticker
+    prefix or an invented tradeable category. Unknown/unlabelled assets stay
+    explicitly unclassified for the research scanner to reject safely.
+    """
+    known = _classify(asset)
+    if known is not None:
+        return known
+    raw = asset.get("market")
+    if isinstance(raw, str):
+        slug = re.sub(r"[^a-z0-9]+", "_", raw.lower()).strip("_")
+        if 1 <= len(slug) <= 32 and slug not in ("unknown", "none", "null"):
+            return "deriv_" + slug
+    return "unclassified"
+
+
+def _broker_boolean(value):
+    """Three-valued broker metadata: missing is not automatically open."""
+    if value in (True, 1, "1", "true", "True"):
+        return True
+    if value in (False, 0, "0", "false", "False"):
+        return False
+    return None
+
+
 async def market_instruments(force=False):
     now = time.monotonic()
     if not force and _catalog_cache["items"] and now - _catalog_cache["at"] < 300:
@@ -76,11 +103,15 @@ async def market_instruments(force=False):
             symbol = asset.get("symbol") or asset.get("underlying_symbol")
             if not isinstance(symbol, str) or not re.fullmatch(r"[A-Za-z0-9_]{2,30}", symbol):
                 continue
-            group = _classify(asset)
-            if group is None:
-                continue
+            group = _broker_market_group(asset)
             label = str(asset.get("underlying_symbol_name") or asset.get("display_name") or symbol).strip()
-            result[symbol] = {"symbol": symbol, "name": label[:100], "group": group}
+            result[symbol] = {
+                "symbol": symbol, "name": label[:100], "group": group,
+                # Public catalogue hints only. No account, price, funds or
+                # concrete contract eligibility can be inferred from them.
+                "catalogue_open": _broker_boolean(asset.get("exchange_is_open")),
+                "catalogue_suspended": _broker_boolean(asset.get("is_trading_suspended")),
+            }
         items = sorted(result.values(), key=lambda item: (item["group"], item["name"].casefold(), item["symbol"]))
         if not items:
             raise MarketError("Deriv não retornou instrumentos classificados")
