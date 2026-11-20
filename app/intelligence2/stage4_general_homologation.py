@@ -423,6 +423,12 @@ async def lifespan(_: FastAPI):
             research_detail = None
         research_list = await client.get("/api/homologation/research/runs",
                                          headers=headers)
+        prior_research_detail = (
+            await client.get(
+                "/api/homologation/research/runs/" + previous_latest["id"],
+                headers=headers,
+            ) if previous_latest is not None else None
+        )
     if not (
         unauthorized.status_code == 401
         and authorized.status_code == 200
@@ -447,6 +453,18 @@ async def lifespan(_: FastAPI):
         and research_detail.json().get("result_sha256") == new_research.json()["result_sha256"]
         and research_list.status_code == 200
         and research_list.json().get("total",0) > previous_research["total"]
+        and (
+            previous_latest is None or (
+                prior_research_detail is not None
+                and prior_research_detail.status_code == 200
+                and prior_research_detail.json()["result_sha256"] ==
+                    previous_latest["result_sha256"]
+                and prior_research_detail.json()["id"] == previous_latest["id"]
+                and len(prior_research_detail.json()["stages"]) ==
+                    len(research.STAGES)
+                and prior_research_detail.json()["report"] is not None
+            )
+        )
         and stages.json().get("summary",{}).get("stage_executions",0) >= len(pipeline.STAGES)
         and monitor.json().get("summary",{}).get("stored_records",0) >= len(STATIONS)
         and monitor.json().get("summary",{}).get("total_runs",0) >= 1
@@ -464,6 +482,13 @@ async def lifespan(_: FastAPI):
         "stage4_pipeline_smoke auth_missing=401 trace=200 stages=%s cycles=%s",
         stages.json()["summary"]["stage_executions"],
         stages.json()["summary"]["cycles_observed"],
+    )
+    log.warning(
+        "stage4_research_restore previous_run=%s verified_by_authenticated_get=%s "
+        "previous_digest=%s",
+        previous_latest["id"] if previous_latest else "NONE",
+        bool(prior_research_detail and prior_research_detail.status_code == 200),
+        previous_latest["result_sha256"] if previous_latest else "NONE",
     )
     log.warning(
         "stage4_research_smoke auth_missing=401 post=200 get=200 list=200 "
