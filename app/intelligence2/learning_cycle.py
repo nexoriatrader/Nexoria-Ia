@@ -21,7 +21,8 @@ from .learning_engine import (
     learning_enabled, evaluate_public_regimes,
 )
 from .learning_registry import (
-    stage_public_candidate, monitor_and_rollback, _reg_lock,
+    stage_public_candidate, append_independent_public_validation,
+    monitor_and_rollback, _reg_lock,
 )
 
 EVENT_PREFIX = "I05_EVT_"
@@ -185,6 +186,34 @@ async def run_scheduled_cycle(*, now: datetime | None = None) -> dict:
         monitored=monitor_and_rollback(
             market=market,symbol=symbol,timeframe_seconds=timeframe_seconds,
             history=history,now=now)
+        # Reuse this SAME public history to independently validate ONE
+        # previously staged challenger. Neither validation nor training
+        # changes a champion or automatically promotes an I04 MODEL.
+        independent_state="NOT_DUE"
+        with db.SessionLocal() as session:
+            older=session.scalar(select(db.IntelligenceKnowledge).where(
+                db.IntelligenceKnowledge.category=="MODEL",
+                db.IntelligenceKnowledge.market==market,
+                db.IntelligenceKnowledge.symbol==symbol,
+                db.IntelligenceKnowledge.timeframe_seconds==timeframe_seconds,
+                db.IntelligenceKnowledge.state=="UNDER_VALIDATION",
+                db.IntelligenceKnowledge.created_at<=now-timedelta(hours=6),
+            ).order_by(db.IntelligenceKnowledge.id.asc()).limit(1))
+            previous_model=(older.id,older.revision,
+                            json.loads(older.payload_json).get("model_id")) if older else None
+        if previous_model and previous_model[2]:
+            try:
+                checked=append_independent_public_validation(
+                    model_knowledge_id=previous_model[0],
+                    expected_revision=previous_model[1],
+                    model_digest=previous_model[2],
+                    history=history,now=now)
+                independent_state=(
+                    "SECOND_HOLDOUT_VERIFIED" if checked["verified"]
+                    else "SECOND_HOLDOUT_REJECTED"
+                )
+            except LearningError:
+                independent_state="AWAIT_INDEPENDENT_PUBLIC_DATA"
         candidate=stage_public_candidate(
             history,market_knowledge_id=knowledge_id,now=now)
         if candidate["state"]=="REJECTED_OOS":
@@ -196,7 +225,8 @@ async def run_scheduled_cycle(*, now: datetime | None = None) -> dict:
             timeframe_seconds=timeframe_seconds,
             status=status,now=now,
             candidate_sha=candidate["report"]["model_id_sha256"],
-        ) | {"monitoring_state":monitored["state"]}
+        ) | {"monitoring_state":monitored["state"],
+             "independent_validation_state":independent_state}
     except (LearningError,kb.KnowledgeError):
         return _audit(
             event_id=event_id,market=market,symbol=symbol,
