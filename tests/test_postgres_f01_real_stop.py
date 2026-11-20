@@ -628,3 +628,194 @@ def test_f01_start_transaction_finishes_before_concurrent_stop_then_stop_wins():
         start_reply.close()
         stop_reply.close()
         engine.dispose()
+
+
+def _f01_independent_revocation(dsn,kind,uid,cookie,replies):
+    """Second-process revocation: restart, safety, logout or owner suspend."""
+    from app import real_runtime, main
+    from app.restart_consistency import revoke_stale_real_consent_after_restart
+    from fastapi.testclient import TestClient
+    engine=create_engine(dsn,pool_pre_ping=True)
+    Session=sessionmaker(bind=engine,expire_on_commit=False)
+    old=db.SessionLocal
+    db.SessionLocal=Session
+    try:
+        if kind=='restart':
+            with Session() as sess:
+                changed=revoke_stale_real_consent_after_restart(sess)
+                replies.put(('ok','restart',changed))
+        elif kind=='safety':
+            result=real_runtime.disarm_real(uid,'F01 parada de segurança sintética')
+            replies.put(('ok','safety',result['status']))
+        elif kind=='logout':
+            client=TestClient(main.app)
+            client.cookies.set('nexora_sid',cookie)
+            response=client.post('/api/logout')
+            replies.put(('ok','logout',response.status_code,response.json()))
+        elif kind=='admin':
+            main.require_nexora_admin=lambda req:'synthetic-review-only'
+            client=TestClient(main.app)
+            response=client.post('/api/admin/access/adjust',json={
+                'user_id':uid,'action':'suspend','hours':0,
+                'note':'F01 synthetic test of owner suspension'})
+            replies.put(('ok','admin',response.status_code,response.json()))
+        else:
+            raise AssertionError('Unsupported F01 synthetic revocation')
+    except Exception as exc:
+        replies.put(('error',kind,type(exc).__name__+':'+str(exc)[:240]))
+    finally:
+        db.SessionLocal=old
+        engine.dispose()
+
+
+@pytest.mark.parametrize('revocation',['restart','safety','logout','admin'])
+def test_f01_old_start_invalidated_by_every_persisted_revocation_path(revocation):
+    """No old START may revive consent after any independently committed revoke."""
+    dsn=_dsn()
+    engine=create_engine(dsn,pool_pre_ping=True)
+    db.Base.metadata.create_all(engine)
+    Session=sessionmaker(bind=engine,expire_on_commit=False)
+    ctx=multiprocessing.get_context('spawn')
+    paused,continue_start=ctx.Event(),ctx.Event()
+    starts,revocations=ctx.Queue(),ctx.Queue()
+    starter=revoker=None
+    cookie='f01-revoke-'+revocation
+    account='CRF01_ALL_'+revocation.upper()
+    try:
+        with Session() as sess:
+            uid=_make_user_and_consent(sess,'VF01_ALL_'+revocation.upper(),
+                                      account,cookie=cookie)
+            other=_make_user_and_consent(sess,'VF01_OTHER_'+revocation.upper(),
+                                        'CRF01_OTHER_'+revocation.upper())
+            for key,state,contract,acct in [
+                ('f01-keep-pending','PENDING',None,'CRF01_HISTORY_P'),
+                ('f01-keep-unknown','UNKNOWN',None,'CRF01_HISTORY_U'),
+                ('f01-keep-confirmed','CONFIRMED','F01_HISTORY_C','CRF01_HISTORY_C')
+            ]:
+                sess.add(db.RealOrder(user_id=uid,account_id=acct,request_key=key,
+                    active_slot=acct,state=state,contract_id=contract,
+                    symbol='R_100',direction='CALL',duration_minutes=5,
+                    stake='1',currency='USD'))
+            sess.commit()
+            ledger_before=_real_rows(sess,uid)
+            epoch_before=sess.get(db.RealGlobalAuthorizationFence,1).generation
+        starter=ctx.Process(target=_f01_start_generation_process,
+            args=(dsn,uid,account,paused,continue_start,starts))
+        starter.start()
+        assert paused.wait(timeout=35)
+        revoker=ctx.Process(target=_f01_independent_revocation,
+            args=(dsn,revocation,uid,cookie,revocations))
+        revoker.start()
+        result=revocations.get(timeout=40)
+        assert result[0]=='ok',result
+        if revocation in ('logout','admin'):
+            assert result[2]==200,result
+        with Session() as sess:
+            own=sess.get(db.RealRobotConsent,uid)
+            assert own.revoked_at is not None
+            if revocation!='restart':
+                assert sess.get(db.RealRobotConsent,other).revoked_at is None
+            assert _real_rows(sess,uid)==ledger_before
+            current=sess.get(db.RealGlobalAuthorizationFence,1).generation
+            assert current==epoch_before+(1 if revocation=='restart' else 0)
+        continue_start.set()
+        started=starts.get(timeout=35)
+        starter.join(timeout=30)
+        revoker.join(timeout=30)
+        assert starter.exitcode==0 and revoker.exitcode==0
+        assert started[0]=='invalidated',started
+        with Session() as sess:
+            assert sess.get(db.RealRobotConsent,uid).revoked_at is not None
+            assert _real_rows(sess,uid)==ledger_before
+    finally:
+        continue_start.set()
+        for p in (starter,revoker):
+            if p:
+                p.join(timeout=3)
+                if p.is_alive():
+                    p.terminate()
+                    p.join(timeout=5)
+        starts.close()
+        revocations.close()
+        engine.dispose()
+
+
+def test_f01_restart_invalidates_old_start_without_any_consent_row():
+    """Global epoch invalidates STARTs not visible to a consent-only sweep."""
+    dsn=_dsn()
+    engine=create_engine(dsn,pool_pre_ping=True)
+    db.Base.metadata.create_all(engine)
+    Session=sessionmaker(bind=engine,expire_on_commit=False)
+    ctx=multiprocessing.get_context('spawn')
+    paused,resume=ctx.Event(),ctx.Event()
+    starts,restarts=ctx.Queue(),ctx.Queue()
+    starter=restarter=None
+    try:
+        account='CRF01_RESTART_NO_ROW'
+        with Session() as sess:
+            uid=_make_user_and_consent(sess,'VF01_RESTART_NO_ROW',account)
+            sess.delete(sess.get(db.RealRobotConsent,uid))
+            sess.commit()
+            old_global=sess.get(db.RealGlobalAuthorizationFence,1).generation
+        starter=ctx.Process(target=_f01_start_generation_process,
+            args=(dsn,uid,account,paused,resume,starts))
+        starter.start()
+        assert paused.wait(timeout=35)
+        restarter=ctx.Process(target=_f01_independent_revocation,
+            args=(dsn,'restart',uid,None,restarts))
+        restarter.start()
+        result=restarts.get(timeout=40)
+        assert result[0]=='ok',result
+        with Session() as sess:
+            assert sess.get(db.RealGlobalAuthorizationFence,1).generation==old_global+1
+            assert sess.get(db.RealRobotConsent,uid) is None
+        resume.set()
+        outcome=starts.get(timeout=35)
+        assert outcome[0]=='invalidated',outcome
+        starter.join(timeout=30)
+        restarter.join(timeout=30)
+        assert starter.exitcode==restarter.exitcode==0
+        with Session() as sess:
+            assert sess.get(db.RealRobotConsent,uid) is None
+    finally:
+        resume.set()
+        for p in (starter,restarter):
+            if p:
+                p.join(timeout=3)
+                if p.is_alive():
+                    p.terminate()
+                    p.join(timeout=5)
+        starts.close()
+        restarts.close()
+        engine.dispose()
+
+
+def test_f01_new_start_after_restart_captures_new_global_epoch():
+    """Post-restart synthetic START is a fresh request, not revival of stale one."""
+    from app import real_runtime
+    dsn=_dsn()
+    engine=create_engine(dsn,pool_pre_ping=True)
+    db.Base.metadata.create_all(engine)
+    Session=sessionmaker(bind=engine,expire_on_commit=False)
+    original=db.SessionLocal
+    db.SessionLocal=Session
+    try:
+        with Session() as sess:
+            uid=_make_user_and_consent(sess,'VF01_POST_RESTART','CRF01_POST_RESTART')
+            with Session() as other:
+                from app.restart_consistency import revoke_stale_real_consent_after_restart
+                revoked=revoke_stale_real_consent_after_restart(other)
+                assert revoked>=1
+        new_epoch=real_runtime.capture_real_start_generation(uid)
+        real_runtime.finalize_real_start_if_current(
+            uid,new_epoch,'CRF01_POST_RESTART','1','6')
+        with Session() as sess:
+            consent=sess.get(db.RealRobotConsent,uid)
+            assert consent.revoked_at is None
+            assert new_epoch[0]==sess.get(db.RealGlobalAuthorizationFence,1).generation
+        real_runtime.revoke_real_consent_for_stop(uid)
+        with Session() as sess:
+            assert sess.get(db.RealRobotConsent,uid).revoked_at is not None
+    finally:
+        db.SessionLocal=original
+        engine.dispose()
