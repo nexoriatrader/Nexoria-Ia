@@ -8,11 +8,13 @@ on:
       - feature/intelligence20-i06-research-evidence
       - feature/intelligence20-research-orchestrator-i01-i06
       - feature/intelligence20-i04-research-orchestrator-adapter
+      - feature/intelligence20-i05-research-orchestrator-adapter
   pull_request:
     branches:
       - main
       - feature/intelligence20-i06-research-evidence
       - feature/intelligence20-research-orchestrator-i01-i06
+      - feature/intelligence20-i04-research-orchestrator-adapter
   workflow_dispatch:
 
 permissions:
@@ -58,5 +60,7 @@ jobs:
         run: python -m pytest -q tests/test_intelligence2_research_orchestrator.py
       - name: I04 adapter public retrieval, lineage, regime and fail-closed regression
         run: python -m pytest -q tests/test_intelligence2_i04_research_adapter.py
+      - name: I05 read-only model release, public OOS validation, Champion Fallback and no promotion
+        run: python -m pytest -q tests/test_intelligence2_i05_research_adapter.py
       - name: Unit and integration-mock tests
         run: python -m pytest -q
