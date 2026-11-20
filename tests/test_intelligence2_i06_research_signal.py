@@ -350,3 +350,57 @@ def test_missing_knowledge_base_does_not_fabricate_i04_integration():
     assert record["trade_side"] is None
     assert record["contract_expiry_minutes"] is None
     assert record["approved_for_trading"] is False
+
+
+def test_aligned_context_with_opposite_lower_direction_is_rejected():
+    source = _source()
+    item = source["markets"]["forex"]["selected"][0]
+    item["context_timeframe"]["contexts"]["lower"]["direction"] = "DOWN"
+    result = i06.assess_research_report(source, now=NOW)
+    record = _item(result)
+    assert record["decision"] == "DO NOT TRADE"
+    assert record["pattern_detection"]["state"] == "INVALID_DATA"
+    assert "I03_DIRECTION_CONFLICT" in record["reason_codes"]
+    assert record["lifecycle_state"] == "CANCELLED"
+
+
+def test_observation_detector_produces_no_contract_entry():
+    source = _source()
+    record = _item(i06.assess_research_report(source, now=NOW))
+    assert record["pattern_detection"] == {
+        "state": "OBSERVED_PATTERN",
+        "reason_code": "I03_CLOSED_CANDLE_CONSENSUS",
+    }
+    assert record["recheck_policy"] == "AFTER_NEXT_CLOSED_CANDLE"
+    assert record["trade_side"] is None
+    assert record["entry_epoch"] is None
+    assert record["contract_expiry_minutes"] is None
+
+
+def test_empty_market_report_never_fabricates_opportunities():
+    source = _source()
+    source["markets"]["forex"]["selected"] = []
+    report = i06.assess_research_report(source, now=NOW)
+    assert report["research_records"] == []
+    assert report["orders_sent"] == 0
+    assert report["trade_signal_approval_supported"] is False
+
+
+def test_stale_source_requires_reload_not_entry_timing():
+    report = i06.assess_research_report(_source(), now=NOW + 60)
+    record = _item(report)
+    assert record["recheck_policy"] == "RELOAD_PUBLIC_SOURCE"
+    assert record["lifecycle_state"] == "EXPIRED"
+    assert record["decision"] == "DO NOT TRADE"
+
+
+def test_invalid_context_no_consensus_or_approval():
+    source = _source()
+    item = source["markets"]["forex"]["selected"][0]
+    item["context_timeframe"]["alignment"]["direction"] = "NEUTRAL"
+    item["context_timeframe"]["alignment"]["strategy_research_usable"] = False
+    record = _item(i06.assess_research_report(source, now=NOW))
+    assert record["decision"] == "DO NOT TRADE"
+    assert record["public_context"]["observed_trend"] == "NEUTRAL"
+    assert record["recheck_policy"] == "REVALIDATE_PUBLIC_DATA"
+    assert "I03_RESEARCH_ALIGNMENT_UNUSABLE" in record["reason_codes"]
