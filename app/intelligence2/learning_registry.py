@@ -22,7 +22,7 @@ from . import knowledge_base as kb
 from .learning_engine import (
     VERSION, SOURCE_VERSION, EMBARGO, MIN_HOLDOUT, REGIMES,
     LearningError, _sha, _canonical, _valid_history, _predict,
-    evaluate_public_regimes, learning_enabled, promotion_enabled,
+    _wilson_lower, evaluate_public_regimes, learning_enabled, promotion_enabled,
 )
 
 ARTIFACT_PREFIX = "I05_ART_"
@@ -199,17 +199,32 @@ def _no_open_contracts(session):
 
 def _verified_model_evidence(session,item,report):
     evidence=kb._evidence(session,item.id)
-    independent={e.origin_group for e in evidence
-                 if e.verified and e.source_type=="MODEL_ARTIFACT"}
-    if (not {"PUBLIC_TRAIN_WINDOW","PUBLIC_HOLDOUT_WINDOW"} <= independent
-        or len(evidence)<2
-        or not all(e.observation_count>=MIN_HOLDOUT for e in evidence)):
-        raise LearningError("Evidências temporais I04 insuficientes")
+    verified={e.origin_group:e for e in evidence
+              if e.verified and e.source_type=="MODEL_ARTIFACT"}
+    required={"PUBLIC_TRAIN_WINDOW","PUBLIC_HOLDOUT_WINDOW",
+              "PUBLIC_INDEPENDENT_VALIDATION"}
+    if (not required <= set(verified)
+        or any(verified[k].observation_count < MIN_HOLDOUT for k in required)):
+        raise LearningError("Duas validações temporais independentes exigidas")
+    independent=verified["PUBLIC_INDEPENDENT_VALIDATION"]
+    # A separate, later history with embargo cannot reuse the original
+    # training or initial OOS holdout, even across process restarts.
+    if kb._utc(independent.period_from).timestamp() <= (
+        report["period_to_epoch"] + EMBARGO*report["timeframe_seconds"]
+    ):
+        raise LearningError("Segunda validação sobrepõe o holdout original")
     if (not report["research_eligible"]
         or report["holdout_samples"]<MIN_HOLDOUT
         or report["holdout_accuracy"]<report["baseline_accuracy"]+.04
         or report["wilson95_lower"]<report["baseline_accuracy"]+.01):
         raise LearningError("Challenger reprovado fora da amostra")
+    summary=json.loads(independent.evidence_summary_json)
+    if (summary.get("model_id")!=report["model_id_sha256"]
+        or summary.get("source_version")!=SOURCE_VERSION
+        or summary.get("sample_size")!=independent.observation_count
+        or summary.get("success_rate",0)<summary.get("trend_efficiency",1)+.04
+        or summary.get("confidence_heuristic",0)<summary.get("trend_efficiency",1)+.01):
+        raise LearningError("Validação independente não demonstrou ganho robusto")
     return evidence
 
 
@@ -309,6 +324,89 @@ def stage_public_candidate(history: dict, *, market_knowledge_id: int,
             },now=now)
     return {"state":item["state"],"knowledge_id":item["id"],
             "artifact_id":artifact_id,"report":report,"execution_allowed":False}
+
+
+def append_independent_public_validation(*, model_knowledge_id: int,
+                                         model_digest: str,
+                                         expected_revision: int,
+                                         history: dict,
+                                         now: datetime | None = None) -> dict:
+    """Second, later verified public OOS window; strict embargo/no replays.
+
+    Never retrains on the validation window. Uses the frozen model from the
+    original I04 artifact and stores only minimized public evidence in KB.
+    """
+    now=kb._utc(now or db.utcnow())
+    states,epochs=_valid_history(history)
+    with db.SessionLocal() as session:
+        model=kb._locked(session,model_knowledge_id,expected_revision)
+        artifact=_artifact_row(session,model_digest)
+        report,_=_verify_artifact(artifact)
+        _model_match(model,report)
+        if model.state!="UNDER_VALIDATION":
+            raise LearningError("Modelo indisponível para validação posterior")
+        if (history["market"],history["symbol"],history["timeframe_seconds"])!=(
+            report["market"],report["symbol"],report["timeframe_seconds"]):
+            raise LearningError("Segunda amostra não corresponde ao modelo")
+        barrier=report["period_to_epoch"]+EMBARGO*report["timeframe_seconds"]
+        indices=[i for i in range(1,len(epochs)) if epochs[i]>barrier]
+        if len(indices)<MIN_HOLDOUT:
+            raise LearningError("Nova amostra independente insuficiente")
+        if int(now.timestamp())<epochs[-1]:
+            raise LearningError("Dados da validação ainda não encerrados")
+        matrix=report["artifact"]["transition_counts"]
+        correct=sum(_predict(matrix,states[i-1])==states[i] for i in indices)
+        baseline=sum(states[i-1]==states[i] for i in indices)
+        n=len(indices)
+        accuracy=correct/n
+        base=baseline/n
+        lower=_wilson_lower(correct,n)
+        midpoint=n//2
+        halves=(
+            indices[:midpoint],indices[midpoint:]
+        )
+        half_lifts=[
+            (sum(_predict(matrix,states[i-1])==states[i] for i in part)
+             -sum(states[i-1]==states[i] for i in part))/len(part)
+            for part in halves
+        ]
+        verified=bool(
+            accuracy>=base+.04 and lower>=base+.01
+            and all(lift>=.02 for lift in half_lifts)
+        )
+    # KB append opens an independent transaction with revision CAS; the
+    # candidate cannot be promoted until this evidence is committed.
+    result=kb.append_evidence(
+        knowledge_id=model_knowledge_id,expected_revision=expected_revision,
+        source_type="MODEL_ARTIFACT",
+        source_ref=_sha({"model":model_digest,"window_start":epochs[indices[0]],
+                         "window_end":epochs[indices[-1]],"kind":"INDEPENDENT"}),
+        source_digest=_sha({
+            "model":model_digest,
+            "observations":[(epochs[i],states[i]) for i in indices],
+            "kind":"PUBLIC_INDEPENDENT_VALIDATION",
+        }),
+        origin_group="PUBLIC_INDEPENDENT_VALIDATION",
+        observation_count=n,
+        period_from=datetime.fromtimestamp(epochs[indices[0]],tz=timezone.utc),
+        period_to=datetime.fromtimestamp(epochs[indices[-1]],tz=timezone.utc),
+        verified=verified,summary={
+            "model_id":model_digest,"source_version":SOURCE_VERSION,
+            "sample_size":n,"success_rate":round(accuracy,6),
+            "trend_efficiency":round(base,6),
+            "confidence_heuristic":round(lower,6),
+        },now=now)
+    return {
+        "model_knowledge_id":model_knowledge_id,
+        "revision":result["revision"],"verified":verified,
+        "holdout_samples":n,"holdout_accuracy":round(accuracy,6),
+        "baseline_accuracy":round(base,6),
+        "reason_code":(
+            "SECOND_PUBLIC_HOLDOUT_VERIFIED" if verified
+            else "SECOND_PUBLIC_HOLDOUT_REJECTED"
+        ),
+        "execution_allowed":False,
+    }
 
 
 def validate_research_challenger(*, model_knowledge_id: int,
