@@ -9,6 +9,7 @@ from __future__ import annotations
 import asyncio
 import copy
 import json
+import os
 from datetime import datetime, timedelta, timezone
 from unittest.mock import AsyncMock
 
@@ -35,7 +36,8 @@ MARKET="derived"
 
 @pytest.fixture
 def store(tmp_path,monkeypatch):
-    engine=create_engine(f"sqlite:///{tmp_path}/i05.sqlite")
+    url=os.getenv("NEXORA_CONSOLIDATION_TEST_DATABASE_URL") or f"sqlite:///{tmp_path}/i05.sqlite"
+    engine=create_engine(url)
     db.Base.metadata.create_all(engine)
     db.KnowledgeMetadata.metadata.create_all(engine)
     factory=sessionmaker(bind=engine,expire_on_commit=False)
@@ -43,8 +45,13 @@ def store(tmp_path,monkeypatch):
     monkeypatch.setenv("NEXORA_INTELLIGENCE_KNOWLEDGE_ENABLED","true")
     monkeypatch.setenv("NEXORA_INTELLIGENCE_LEARNING_ENABLED","true")
     monkeypatch.setenv("NEXORA_INTELLIGENCE_LEARNING_PROMOTION_ENABLED","false")
-    yield factory
-    engine.dispose()
+    try:
+        yield factory
+    finally:
+        if engine.dialect.name == "postgresql":
+            db.KnowledgeMetadata.metadata.drop_all(engine)
+            db.Base.metadata.drop_all(engine)
+        engine.dispose()
 
 
 def _history(*,now=NOW,sequence=None, extra=None):
