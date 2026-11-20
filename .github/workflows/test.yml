@@ -7,10 +7,12 @@ on:
       - release/intelligence20-i01-i03-readonly-main-isolated
       - feature/intelligence20-i06-research-evidence
       - feature/intelligence20-research-orchestrator-i01-i06
+      - feature/intelligence20-i04-research-orchestrator-adapter
   pull_request:
     branches:
       - main
       - feature/intelligence20-i06-research-evidence
+      - feature/intelligence20-research-orchestrator-i01-i06
   workflow_dispatch:
 
 permissions:
@@ -54,5 +56,7 @@ jobs:
         run: python -m pytest -q tests/test_intelligence2_i06_research_signal.py
       - name: Research orchestrator I01-I03-I06 quality, provenance and isolation
         run: python -m pytest -q tests/test_intelligence2_research_orchestrator.py
+      - name: I04 adapter public retrieval, lineage, regime and fail-closed regression
+        run: python -m pytest -q tests/test_intelligence2_i04_research_adapter.py
       - name: Unit and integration-mock tests
         run: python -m pytest -q
