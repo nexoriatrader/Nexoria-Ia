@@ -692,8 +692,14 @@ def test_f01_old_start_invalidated_by_every_persisted_revocation_path(revocation
                 ('f01-keep-unknown','UNKNOWN',None,'CRF01_HISTORY_U'),
                 ('f01-keep-confirmed','CONFIRMED','F01_HISTORY_C','CRF01_HISTORY_C')
             ]:
-                sess.add(db.RealOrder(user_id=uid,account_id=acct,request_key=key,
-                    active_slot=acct,state=state,contract_id=contract,
+                # Ledger uniqueness is global per account, not per user:
+                # each parametrized scenario needs its own synthetic account.
+                isolated_account=acct+'_'+revocation.upper()
+                isolated_contract=(contract+'_'+revocation.upper()
+                                   if contract is not None else None)
+                sess.add(db.RealOrder(user_id=uid,account_id=isolated_account,
+                    request_key=key,active_slot=isolated_account,
+                    state=state,contract_id=isolated_contract,
                     symbol='R_100',direction='CALL',duration_minutes=5,
                     stake='1',currency='USD'))
             sess.commit()
