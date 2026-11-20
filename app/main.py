@@ -3040,6 +3040,60 @@ async def asset_scanner_route(request:Request,nexora_sid:str|None=Cookie(default
             'contract_continuity':'READ_ONLY_INDEPENDENT_OF_SELECTION'}
 
 
+@app.get('/api/research/knowledge')
+async def knowledge_retrieval_route(
+    request:Request, category:str, market:str, symbol:str='',
+    observed_regime:str|None=None, nexora_sid:str|None=Cookie(default=None),
+):
+    """Authenticated public-only Knowledge Retrieval Engine (I04).
+
+    No public writes/promotions. Missing migration/disabled feature => 503,
+    never silently fallback to research snapshots or an in-memory cache.
+    """
+    active_user(request,nexora_sid)
+    from sqlalchemy.exc import SQLAlchemyError
+    from .intelligence2.knowledge_base import (
+        enabled, retrieve_active, KnowledgeError, KnowledgeUnavailable,
+    )
+    if not enabled():
+        raise HTTPException(503,'Knowledge Base I04 indisponível até migração formal')
+    try:
+        return await asyncio.to_thread(
+            retrieve_active, category=category, market=market, symbol=symbol,
+            observed_regime=observed_regime)
+    except KnowledgeUnavailable:
+        raise HTTPException(503,'Integridade do conhecimento indisponível') from None
+    except KnowledgeError as exc:
+        raise HTTPException(422,str(exc)) from None
+    except SQLAlchemyError:
+        raise HTTPException(503,'Persistência de conhecimento indisponível') from None
+
+
+@app.get('/api/research/knowledge/{knowledge_id}')
+async def knowledge_lineage_route(
+    request:Request, knowledge_id:int,
+    observed_regime:str|None=None, nexora_sid:str|None=Cookie(default=None),
+):
+    """Read-only sanitized public evidence/decision history, shared by modes."""
+    active_user(request,nexora_sid)
+    from sqlalchemy.exc import SQLAlchemyError
+    from .intelligence2.knowledge_base import (
+        enabled, get_knowledge, KnowledgeError, KnowledgeUnavailable,
+    )
+    if not enabled():
+        raise HTTPException(503,'Knowledge Base I04 indisponível até migração formal')
+    try:
+        return await asyncio.to_thread(
+            get_knowledge, knowledge_id,
+            observed_regime=observed_regime, include_lineage=True)
+    except KnowledgeUnavailable:
+        raise HTTPException(503,'Conhecimento ausente ou integridade inválida') from None
+    except KnowledgeError as exc:
+        raise HTTPException(422,str(exc)) from None
+    except SQLAlchemyError:
+        raise HTTPException(503,'Persistência de conhecimento indisponível') from None
+
+
 @app.get('/api/market/symbols')
 async def symbols(request:Request,nexora_sid:str|None=Cookie(default=None)):
     active_user(request,nexora_sid)
