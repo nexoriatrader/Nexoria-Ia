@@ -2649,6 +2649,15 @@ async def asset_scanner_route(request:Request,nexora_sid:str|None=Cookie(default
                         expiry_minutes=expiry_minutes)
             except MarketError as exc:
                 raise HTTPException(502,str(exc)) from None
+            if version==4 and (
+                not isinstance(report,dict)
+                or report.get('version')!='intelligence2_i06_evidence_research_v1'
+                or report.get('execution_allowed') is not False
+                or report.get('approved_for_trading') is not False
+                or report.get('trade_signal_approval_supported') is not False
+                or report.get('orders_sent')!=0
+            ):
+                raise HTTPException(502,'I06: relatório de pesquisa inválido')
             _asset_scanner_research_cache[key]=(
                 asyncio.get_running_loop().time(),bucket,report)
             if version in (2,3):
