@@ -48,10 +48,13 @@ def test_real_postgresql_legacy_migration_backout_and_restore(monkeypatch):
                 user_id=uid,account_id="CR_EPH_PG",max_stake="4.00",stop_loss="7.00"))
             session.commit()
 
-        # Same migration path as application startup (no external DB).
+        # F01 safety contract: runtime must NEVER silently migrate PostgreSQL.
+        # The legacy table is provisioned ONLY by this disposable test.
         monkeypatch.setattr(db, "engine", engine)
-        db.init_db()
-        db.init_db()
+        with pytest.raises(RuntimeError,match="migração formal obrigatória"):
+            db.init_db()
+        assert "account_risk_settings" not in inspect(engine).get_table_names()
+        db.AccountRiskSettings.__table__.create(engine,checkfirst=True)
         assert "account_risk_settings" in inspect(engine).get_table_names()
         columns = {c["name"] for c in inspect(engine).get_columns("account_risk_settings")}
         assert {"user_id", "account_mode", "account_id", "stake",
@@ -83,8 +86,10 @@ def test_real_postgresql_legacy_migration_backout_and_restore(monkeypatch):
             assert session.get(db.RobotPlan, uid).gale_count == 2
             assert session.get(db.RealRobotConsent, uid).stop_loss == "7.00"
 
-        # Forward restore: rebuild the additive table and restore copied values.
-        db.init_db()
+        # Explicit disposable-schema restore, NEVER an application startup DDL.
+        with pytest.raises(RuntimeError,match="migração formal obrigatória"):
+            db.init_db()
+        db.AccountRiskSettings.__table__.create(engine,checkfirst=True)
         with factory() as session:
             for entry in backup:
                 session.add(db.AccountRiskSettings(**entry))
