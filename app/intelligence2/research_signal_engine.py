@@ -95,6 +95,16 @@ def _evidence(asset: dict) -> tuple[bool, str, list[str]]:
     state = alignment.get("state") if isinstance(alignment, dict) else ctx.get("state")
     if state not in (_RESEARCH_ALIGNMENTS | _RECHECK_ALIGNMENTS):
         problems.append("I03_CONTEXT_NOT_STABLE")
+    if state == "ALIGNED_RESEARCH" and isinstance(contexts, dict):
+        expected = alignment.get("direction") if isinstance(alignment, dict) else None
+        if expected not in ("UP", "DOWN") or any(
+            not isinstance(contexts.get(role), dict)
+            or contexts[role].get("direction") != expected
+            for role in _ROLES
+        ):
+            problems.append("I03_DIRECTION_CONFLICT")
+        if alignment.get("strategy_research_usable") is not True:
+            problems.append("I03_RESEARCH_ALIGNMENT_UNUSABLE")
     if not isinstance(asset.get("strategy_family"), str) or not asset["strategy_family"].strip():
         problems.append("I02_STRATEGY_UNVERIFIED")
     if not isinstance(asset.get("research_state"), str) or not asset["research_state"].strip():
@@ -148,6 +158,29 @@ def review_public_freshness(asset: dict, *, observed_at: int, now: int) -> dict:
     if now - last > 120:
         return {"status": "STALE", "reason_code": "I02_LAST_CLOSED_STALE"}
     return {"status": "CURRENT", "reason_code": "I02_CLOSED_CANDLE_CURRENT"}
+
+
+def detect_public_research_pattern(asset: dict, *,
+                                   evidence_valid: bool,
+                                   evidence_class: str) -> dict:
+    """Identify only a documented observational pattern, never an entry."""
+    context = describe_public_context(asset)
+    if not evidence_valid:
+        return {"state": "INVALID_DATA", "reason_code": "SOURCE_VALIDATION_FAILED"}
+    if context["consensus"] != "THREE_TIMEFRAMES":
+        return {"state": "NO_CONSENSUS", "reason_code": "NO_VERIFIED_PUBLIC_PATTERN"}
+    if evidence_class != "CONSISTENT":
+        return {"state": "RECHECK", "reason_code": "PUBLIC_EVIDENCE_INCONCLUSIVE"}
+    return {"state": "OBSERVED_PATTERN", "reason_code": "I03_CLOSED_CANDLE_CONSENSUS"}
+
+
+def research_recheck_policy(*, source_current: bool, evidence_valid: bool) -> str:
+    """An evaluation policy, not a moment for opening a contract."""
+    if not source_current:
+        return "RELOAD_PUBLIC_SOURCE"
+    if not evidence_valid:
+        return "REVALIDATE_PUBLIC_DATA"
+    return "AFTER_NEXT_CLOSED_CANDLE"
 
 
 def research_lifecycle(
@@ -279,6 +312,13 @@ def assess_research_report(
                 "evidence_strength": classify_evidence_strength(
                     asset, evidence_valid=evidence_valid,
                     evidence_class=evidence_class,
+                ),
+                "pattern_detection": detect_public_research_pattern(
+                    asset, evidence_valid=evidence_valid,
+                    evidence_class=evidence_class,
+                ),
+                "recheck_policy": research_recheck_policy(
+                    source_current=current, evidence_valid=evidence_valid,
                 ),
                 "knowledge_base": {"status": "NOT_CONNECTED", "used": False},
                 "strategy_intelligence": {
