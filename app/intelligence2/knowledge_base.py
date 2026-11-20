@@ -387,6 +387,56 @@ def append_evidence(*, knowledge_id: int, expected_revision: int,
         return _public_record(item, now=now)
 
 
+def append_research_report_evidence(*, knowledge_id: int,
+                                    expected_revision: int,
+                                    report_id: int,
+                                    now: datetime | None = None) -> dict:
+    """Reuse an existing persisted public research report as factual lineage.
+
+    The immutable, minimized summary survives normal old-report retention;
+    no trade/order/account data is copied into I04.
+    """
+    from ..research_persistence import HistoricalResearchReport
+    now = _utc(now or db.utcnow())
+    if type(report_id) is not int or report_id <= 0:
+        raise KnowledgeError("Identificador do estudo inválido")
+    with db.SessionLocal() as session:
+        report = session.get(HistoricalResearchReport, report_id)
+        if report is None:
+            raise KnowledgeUnavailable("Relatório histórico não encontrado")
+        try:
+            data = json.loads(report.payload_json)
+            research_key = _token(report.research_key, field="research_key")
+            candidates = [
+                entry["holdout"].get("signals")
+                for entry in data.get("results", [])
+                if isinstance(entry, dict) and isinstance(entry.get("holdout"), dict)
+            ]
+            if isinstance(data.get("training_selected"), dict):
+                candidates.append(data["training_selected"].get("holdout", {}).get("signals"))
+            samples = max((x for x in candidates if type(x) is int and x >= 0),
+                          default=0)
+        except (ValueError, TypeError, KeyError, AttributeError) as exc:
+            raise KnowledgeError("Relatório de pesquisa não verificável") from exc
+        if samples < MIN_HOLDOUT_OBSERVATIONS:
+            raise KnowledgeError("Holdout histórico insuficiente")
+        source_digest = hashlib.sha256(report.payload_json.encode()).hexdigest()
+        source_ref = hashlib.sha256(
+            f"historical_research_reports:{report.id}".encode()
+        ).hexdigest()
+        period_from, period_to = _utc(report.period_from), _utc(report.period_to)
+    return append_evidence(
+        knowledge_id=knowledge_id, expected_revision=expected_revision,
+        source_type="RESEARCH_REPORT", source_ref=source_ref,
+        source_digest=source_digest, origin_group="RESEARCH_REPORT",
+        observation_count=samples, period_from=period_from,
+        period_to=period_to, verified=True,
+        summary={"holdout_samples":samples, "sample_size":samples,
+                 "source_version":research_key},
+        now=now,
+    )
+
+
 def _enough_evidence(item, rows, *, now: datetime, after: datetime | None = None) -> bool:
     eligible = [
         row for row in rows
