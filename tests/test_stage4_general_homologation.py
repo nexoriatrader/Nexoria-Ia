@@ -16,6 +16,8 @@ def setup_test(monkeypatch, tmp_path):
             revision=demo.SCHEMA_REVISION, applied_at=datetime.now(timezone.utc)))
         conn.execute(demo.insert(demo.revisions).values(
             revision=demo.observer.REVISION, applied_at=datetime.now(timezone.utc)))
+        conn.execute(demo.insert(demo.revisions).values(
+            revision=demo.pipeline.REVISION, applied_at=datetime.now(timezone.utc)))
     monkeypatch.setattr(demo, "_engine", lambda: engine)
     monkeypatch.setenv("NEXORA_STAGE4_ACCESS_TOKEN", "test-only-strong-secret-32-characters-long")
     return engine
@@ -125,3 +127,40 @@ def test_monitoring_duplicate_audit_restart_and_invalid_counts(monkeypatch, tmp_
     assert demo.observer.get_overview()["summary"]["total_runs"] == 2
     assert demo.observer.get_overview()["summary"]["stored_records"] == 3
     restarted.dispose()
+
+
+def test_pipeline_runs_actual_evidence_lifecycle_helper_and_is_persisted(monkeypatch,tmp_path):
+    engine=setup_test(monkeypatch,tmp_path)
+    first=demo.ingest_batch(now_epoch=1795194000,interval=90)
+    again=demo.ingest_batch(now_epoch=1795194000,interval=90)
+    assert first["inserted"]==3 and again["inserted"]==0
+    trace=demo.pipeline.recent(limit=20)
+    assert len(trace)==10
+    assert set(item["stage"] for item in trace)==set(demo.pipeline.STAGES)
+    lifecycle=[x for x in trace if x["stage"]=="I06_EVIDENCE_LIFECYCLE_UTILITY"]
+    assert len(lifecycle)==2
+    assert lifecycle[0]["output"]["outcome"]["lifecycle"]=="UNCHANGED"
+    assert lifecycle[1]["output"]["outcome"]["lifecycle"]=="NEW"
+    summary=demo.pipeline.summary()
+    assert summary["stage_executions"]==10
+    assert summary["cycles_observed"]==1
+    with TestClient(demo.app) as client:
+        pass
+    engine.dispose()
+
+
+def test_pipeline_api_auth_and_nonfinancial_module_status(monkeypatch,tmp_path):
+    engine=setup_test(monkeypatch,tmp_path)
+    demo.ingest_batch(now_epoch=1795194000, interval=90)
+    client=TestClient(demo.app)
+    assert client.get("/api/homologation/monitor/pipeline").status_code==401
+    headers={"X-NEXORA-STAGE4-KEY":"test-only-strong-secret-32-characters-long"}
+    r=client.get("/api/homologation/monitor/pipeline?limit=10",headers=headers)
+    assert r.status_code==200
+    assert r.json()["summary"]["stage_executions"]==5
+    assert r.json()["full_I01_to_I06_integrated"] is False
+    assert client.get("/api/homologation/monitor/pipeline?limit=101",headers=headers).status_code==422
+    status=client.get("/api/homologation/monitor/modules",headers=headers).json()
+    assert all(x["running_in_service"] is False for x in status["modules"]
+               if x["id"] in ("I01","I02","I03","I04","I05","I06","ORCH"))
+    engine.dispose()

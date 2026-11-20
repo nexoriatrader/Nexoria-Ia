@@ -78,7 +78,7 @@ td{color:#d8e9f0}tr:last-child td{border:0}
 <a class="nav active" href="#overview">◈ Visão geral</a>
 <a class="nav" href="#modules">▦ Módulos I01–I06</a>
 <a class="nav" href="#processing">◷ Processamento</a>
-<a class="nav" href="#records">≡ Histórico de dados</a>
+<a class="nav" href="#pipeline">⇢ Pipeline</a><a class="nav" href="#records">≡ Histórico de dados</a>
 <a class="nav" href="#diagnostics">◇ Diagnósticos</a>
 </nav>
 <div class="nav-tag">● AMBIENTE DE HOMOLOGAÇÃO<br><b>DADOS SINTÉTICOS</b><br>Sem corretoras ou negociação.</div>
@@ -111,6 +111,8 @@ td{color:#d8e9f0}tr:last-child td{border:0}
 </div>
 <div class="section"><div><h2>Execuções recentes</h2><p>Histórico persistido, quantidade processada, duplicações e duração.</p></div></div>
 <section class="surface table-scroll"><table><thead><tr><th>Finalizada</th><th>Estado</th><th>Processadas</th><th>Inseridas</th><th>Repetidas</th><th>Tempo</th><th>Motivo</th></tr></thead><tbody id="runs-body"><tr><td colspan="7">Aguardando consulta</td></tr></tbody></table></section>
+<div class="section section-anchor" id="pipeline"><div><h2>Rastreamento do pipeline demonstrativo</h2><p>Entrada, validação, classificação, persistência e a função utilitária de ciclo de evidência do I06. Não equivale ao fluxo I01–I06 completo.</p></div><span class="badge neutral" id="pipeline-total">Sem consulta</span></div>
+<section class="surface table-scroll"><table><thead><tr><th>Execução</th><th>Etapa</th><th>Estado</th><th>Entradas</th><th>Saídas</th><th>Duração</th><th>Motivo</th><th>Resumo produzido</th></tr></thead><tbody id="pipeline-body"><tr><td colspan="8">Aguardando consulta</td></tr></tbody></table></section>
 <div class="section section-anchor" id="records"><div><h2>Leituras armazenadas</h2><p>Registros históricos obtidos diretamente da tabela PostgreSQL.</p></div><span class="badge neutral">Fonte: SYNTHETIC_SENSOR_DEMO</span></div>
 <section class="surface table-scroll"><table><thead><tr><th>Observada</th><th>Estação</th><th>Métrica</th><th>Valor</th><th>Classificação</th><th>Registrada</th></tr></thead><tbody id="records-body"><tr><td colspan="6">Aguardando consulta</td></tr></tbody></table></section>
 <div class="section section-anchor" id="diagnostics"><div><h2>Diagnósticos e pendências</h2><p>Ocorrências verificadas, limites de observabilidade e integração pendente.</p></div></div>
@@ -137,8 +139,14 @@ function chart(data){const root=$('class-chart');root.replaceChildren();const cl
 function health(data){const grid=$('health-grid');grid.replaceChildren();const h=data.health;const s=data.summary;const points=[['PostgreSQL',h.database],['Atualização',h.dataset_freshness==='CURRENT'?'Em dia':'Atrasada'],['Última leitura',stamp(s.latest_observed_at)],['Tempo médio',(s.mean_processing_ms===null?'—':s.mean_processing_ms+' ms')],['Integridade amostral',h.integrity_sample.status+' · '+h.integrity_sample.checked_rows+' linhas'],['Registros incompletos',nf.format(s.incomplete_observations)],['Registros inválidos',nf.format(s.invalid_observations)],['Tempo ativo',Math.round(h.uptime_seconds/60)+' min']];for(const item of points){const card=element('div');card.appendChild(element('small','',item[0]));card.appendChild(element('strong','',item[1]));grid.appendChild(card)}}
 function makeRows(id,entries,fields){const root=$(id);root.replaceChildren();if(!entries.length){const tr=element('tr');td(tr,'Nenhum registro disponível');root.appendChild(tr);return}for(const item of entries){const tr=element('tr');for(const field of fields){let val=item[field];if(field.endsWith('_at'))val=stamp(val);if(field==='duration_ms')val=val+' ms';if(field==='status')val=val==='OK'?'Concluída':val;if(field==='value')val=String(val)+' '+item.unit;td(tr,val==null?'—':val,field==='status'&&item.status==='ERROR'?'bad':'')}root.appendChild(tr)}}
 function diagnosis(data){const root=$('diagnostics-list');root.replaceChildren();if(!data.diagnostics.length){root.appendChild(element('p','good','Sem avisos ou erros nas execuções consultadas.'));return}for(const d of data.diagnostics){const line=element('div','diagnostic');line.appendChild(element('span',d.level==='ERROR'?'badge error':'badge neutral',d.level==='ERROR'?'Erro':'Informação'));const wrap=element('div');wrap.appendChild(element('b','',d.code));wrap.appendChild(element('div','message muted',d.details+' · '+stamp(d.at)));line.appendChild(wrap);root.appendChild(line)}}
-async function refresh(){if(!connected||busy)return;busy=true;try{const data=await api('/api/homologation/monitor/overview?runs_limit=30&records_limit=30');
+async function refresh(){if(!connected||busy)return;busy=true;try{const [data,trace]=await Promise.all([api('/api/homologation/monitor/overview?runs_limit=30&records_limit=30'),api('/api/homologation/monitor/pipeline?limit=35')]);
 setText('k-records',nf.format(data.summary.stored_records));setText('k-runs',nf.format(data.summary.total_runs));setText('k-duplicates',nf.format(data.summary.duplicate_observations));setText('k-errors',nf.format(data.summary.failed_runs));modules(data);chart(data);health(data);makeRows('runs-body',data.runs,['finished_at','status','processed','inserted','duplicates','duration_ms','reason']);makeRows('records-body',data.records,['observed_at','station','metric','value','classification','recorded_at']);diagnosis(data);
+setText('pipeline-total',nf.format(trace.summary.cycles_observed)+' ciclo(s) · '+nf.format(trace.summary.stage_executions)+' etapas');
+const stageTable=$('pipeline-body');stageTable.replaceChildren();
+for(const stage of trace.stages){const tr=element('tr');
+for(const value of [stamp(stage.finished_at),stage.stage,stage.state,stage.inputs,stage.outputs,stage.duration_ms+' ms',stage.reason,JSON.stringify(stage.output.outcome).slice(0,140)]){td(tr,value)}
+stageTable.appendChild(tr)}
+if(!trace.stages.length){const tr=element('tr');td(tr,'Nenhuma etapa registrada');stageTable.appendChild(tr)}
 const limits=$('limitations');limits.replaceChildren();for(const limitation of data.limitations){limits.appendChild(element('p','',limitation))}
 setText('last-sync','Atualizado: '+stamp(data.generated_at));const fresh=data.health.dataset_freshness==='CURRENT';$('notice').className='alert'+(fresh?'':' warning');setText('notice',fresh?'● Monitoramento disponível. Origem exclusivamente sintética; os módulos I01–I06 estão sem integração ativa.':'● Banco acessível, mas a última ingestão não está recente. Consulte os diagnósticos.');
 }catch(e){$('notice').className='alert warning';setText('notice','Não foi possível consultar a API autenticada ('+e.message+'). Verifique a chave ou a disponibilidade do serviço.');if(e.message==='HTTP 401')connected=false;}finally{busy=false}}

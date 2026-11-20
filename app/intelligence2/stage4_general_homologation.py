@@ -121,6 +121,11 @@ def bootstrap_schema() -> None:
         if monitor_found is None:
             conn.execute(insert(revisions).values(
                 revision=observer.REVISION, applied_at=now))
+        trace_found = conn.execute(select(revisions.c.revision).where(
+            revisions.c.revision == pipeline.REVISION)).scalar_one_or_none()
+        if trace_found is None:
+            conn.execute(insert(revisions).values(
+                revision=pipeline.REVISION, applied_at=now))
     log.warning("stage4_general_schema_verified revision=%s", SCHEMA_REVISION)
 
 
@@ -136,6 +141,10 @@ def verify_schema() -> None:
             revisions.c.revision == observer.REVISION)).scalar_one_or_none()
         if active_monitor != observer.REVISION:
             raise RuntimeError("Stage4 monitoring migration not installed")
+        active_trace = conn.execute(select(revisions.c.revision).where(
+            revisions.c.revision == pipeline.REVISION)).scalar_one_or_none()
+        if active_trace != pipeline.REVISION:
+            raise RuntimeError("Stage4 synthetic pipeline trace migration not installed")
 
 
 def _value(bucket: int, station: str, metric: str) -> float:
@@ -175,13 +184,48 @@ def ingest_batch(*, now_epoch: int | None = None,
     written = datetime.now(timezone.utc)
     new_rows = 0
     started_perf = time.perf_counter()
+    recorder = pipeline.Recorder(cycle_key="SYNTHETIC_" + str(bucket))
+    observed_inputs = [
+        {"station": station, "metric": metric, "unit": unit,
+         "value": _value(bucket, station, metric)}
+        for station, metric, unit in STATIONS
+    ]
+    recorder.step(stage="SYNTHETIC_SOURCE",
+                  output={"stations": len(observed_inputs), "source": SOURCE,
+                          "observed_at": observed.isoformat()},
+                  inputs=0, outputs=len(observed_inputs),
+                  reason="DETERMINISTIC_SYNTHETIC_READINGS")
+    valid = all(
+        isinstance(row["value"], float) and math.isfinite(row["value"])
+        and bool(row["station"]) and row["metric"] in VALUES and bool(row["unit"])
+        for row in observed_inputs
+    )
+    recorder.step(stage="VALIDATE",
+                  output={"validated": valid, "count": len(observed_inputs)},
+                  inputs=len(observed_inputs),
+                  outputs=len(observed_inputs) if valid else 0,
+                  reason="FINITE_COMPLETE_SENSOR_VALUES" if valid else "INVALID_INPUT")
+    if not valid:
+        raise ValueError("Invalid synthetic sensor measurements")
+    classified_inputs = [
+        {**row, "classification": _classify(row["metric"], row["value"])}
+        for row in observed_inputs
+    ]
+    recorder.step(stage="CLASSIFY",
+                  output={"classifications": {
+                    state: sum(item["classification"] == state for item in classified_inputs)
+                    for state in ("NORMAL", "REVIEW", "OUTSIDE_RANGE")
+                  }},
+                  inputs=len(observed_inputs), outputs=len(classified_inputs),
+                  reason="DETERMINISTIC_SENSOR_CLASSIFICATION")
     with _engine().begin() as conn:
-        for station, metric, unit in STATIONS:
-            value = _value(bucket, station, metric)
+        for item in classified_inputs:
+            station, metric, unit = item["station"], item["metric"], item["unit"]
+            value = item["value"]
             row = dict(
                 event_key=f"SYNTH_{bucket}_{station}_{metric}",
                 station=station, metric=metric, value=value, unit=unit,
-                classification=_classify(metric, value),
+                classification=item["classification"],
                 source=SOURCE, observed_at=observed, recorded_at=written,
             )
             if conn.dialect.name == "postgresql":
@@ -199,6 +243,20 @@ def ingest_batch(*, now_epoch: int | None = None,
             ).scalar_one_or_none()
             if inserted_id is not None:
                 new_rows += 1
+        recorder.step(stage="PERSIST",
+                      output={"inserted": new_rows,
+                              "duplicates": len(STATIONS) - new_rows,
+                              "storage": "POSTGRESQL_HOMOLOGATION"},
+                      inputs=len(STATIONS), outputs=new_rows,
+                      reason="ON_CONFLICT_DO_NOTHING")
+        utility = pipeline.lifecycle(
+            cycle_key=recorder.cycle_key, duplicate=(new_rows == 0),
+            validated=True,
+        )
+        recorder.step(stage="I06_EVIDENCE_LIFECYCLE_UTILITY",
+                      output=utility, inputs=1, outputs=1,
+                      reason="UTILITY_ONLY_NOT_FULL_I06_ENGINE")
+        recorder.commit(conn)
         observer.record_success(
             conn, cycle_key="SYNTHETIC_" + str(bucket),
             started=written, finished=datetime.now(timezone.utc),
@@ -283,7 +341,10 @@ async def lifespan(_: FastAPI):
     """Verify DB persistence and real HTTP routes on every isolated restart."""
     verify_schema()
     old_runs = await asyncio.to_thread(observer.run_count)
+    old_traces = await asyncio.to_thread(pipeline.summary)
     log.warning("stage4_monitor_restart existing_persisted_runs=%s", old_runs)
+    log.warning("stage4_pipeline_restart prior_stage_rows=%s prior_cycles=%s",
+                old_traces["stage_executions"], old_traces["cycles_observed"])
     before = await asyncio.to_thread(read_status)
     log.warning("stage4_restart_check records_before_first_batch=%s previous_observation=%s",
                 before["records"], before["latest_observed_at"])
@@ -311,6 +372,8 @@ async def lifespan(_: FastAPI):
         monitor_missing = await client.get("/api/homologation/monitor/overview")
         monitor = await client.get("/api/homologation/monitor/overview", headers=headers)
         runlog = await client.get("/api/homologation/monitor/runs", headers=headers)
+        stages = await client.get("/api/homologation/monitor/pipeline?limit=20", headers=headers)
+        missing_stage_key = await client.get("/api/homologation/monitor/pipeline")
     if not (
         unauthorized.status_code == 401
         and authorized.status_code == 200
@@ -320,6 +383,9 @@ async def lifespan(_: FastAPI):
         and monitor_missing.status_code == 401
         and monitor.status_code == 200
         and runlog.status_code == 200
+        and stages.status_code == 200
+        and missing_stage_key.status_code == 401
+        and stages.json().get("summary",{}).get("stage_executions",0) >= len(pipeline.STAGES)
         and monitor.json().get("summary",{}).get("stored_records",0) >= len(STATIONS)
         and monitor.json().get("summary",{}).get("total_runs",0) >= 1
         and authorized.json().get("records", 0) >= len(STATIONS)
@@ -331,6 +397,11 @@ async def lifespan(_: FastAPI):
         "stage4_http_pg_smoke auth_missing=401 auth_valid=200 history=200 "
         "panel=200 health=200 total_records=%s dataset=%s",
         authorized.json()["records"], SOURCE,
+    )
+    log.warning(
+        "stage4_pipeline_smoke auth_missing=401 trace=200 stages=%s cycles=%s",
+        stages.json()["summary"]["stage_executions"],
+        stages.json()["summary"]["cycles_observed"],
     )
     log.warning(
         "stage4_monitor_smoke auth_missing=401 overview=200 runs=200 "
@@ -500,6 +571,23 @@ async def monitoring_runs(
         raise HTTPException(503, "Processing history unavailable") from None
 
 
+@app.get("/api/homologation/monitor/pipeline")
+async def pipeline_trace(
+    limit: int = Query(default=50, ge=1, le=100),
+    x_nexora_stage4_key: str | None = Header(default=None),
+):
+    _auth(x_nexora_stage4_key)
+    try:
+        recent = await asyncio.to_thread(pipeline.recent, limit=limit)
+        summary = await asyncio.to_thread(pipeline.summary)
+        return {"source": SOURCE, "synthetic": True,
+                "stages": recent, "summary": summary,
+                "full_I01_to_I06_integrated": False}
+    except Exception:
+        log.exception("stage4_pipeline_trace_unavailable")
+        raise HTTPException(503, "Synthetic pipeline trace unavailable") from None
+
+
 @app.get("/api/homologation/monitor/modules")
 async def monitoring_modules(x_nexora_stage4_key: str | None = Header(default=None)):
     _auth(x_nexora_stage4_key)
@@ -534,4 +622,5 @@ async def index():
 # Import only isolated general observability metadata after the core tables
 # exist; this registers the additive monitoring table for offline bootstrap.
 from . import stage4_observability as observer
+from . import stage4_general_pipeline as pipeline
 

@@ -49,6 +49,16 @@ MODULES = (
     ("I06", "Research Evidence Engine", ("research_signal_engine",)),
     ("ORCH", "Research Orchestrator", ("research_orchestrator",)),
 )
+MODULE_BLOCKERS = {
+    "I01": "A entrada read_closed_window depende do cliente externo de candles; sem fonte independente neste serviço.",
+    "I02": "O scanner exige catálogo de corretora e tipos CALL/PUT; não é executado em homologação sintética.",
+    "I03": "Os motores exigem janelas OHLC fechadas verificadas pelo I01 e seleção I02; sensores gerais não são candles.",
+    "I04": "O Knowledge Base requer entidades e revisões próprias do banco da aplicação; não há instância I04 registrada nesta demo.",
+    "I05": "O Learning Engine depende de histórico OHLC amplo, conhecimento I04 validado e avaliação temporal; sem esses insumos.",
+    "I06": "Somente a função pura research_lifecycle é reutilizada para evidência sintética; o motor completo exige relatório I03.",
+    "ORCH": "O orquestrador aciona o scanner vinculado à corretora; o fluxo completo permanece desativado.",
+}
+
 SCOPES = ("GENERAL_SYNTHETIC_DEMO",)
 _MAX_SCAN = 150
 
@@ -131,9 +141,9 @@ def _module_catalog(*, latest_synthetic_at: str | None,
             "last_update": None,
             "integration": "NO_RUNTIME_TELEMETRY",
             "source": "REPOSITORY_ONLY" if has_code else "NOT_PRESENT",
-            "details": ("O módulo existe no repositório, mas não executa neste "
-                        "serviço demonstrativo. Sem dados de operação comprovados."
+            "details": (MODULE_BLOCKERS.get(name, "Sem runtime demonstrado")
                         if has_code else "Módulo indisponível no código instalado."),
+            "partial_utility_only": name == "I06",
         })
     modules.extend((
         {"id": "DEMO", "name": "Ingestão e classificação sintética",
