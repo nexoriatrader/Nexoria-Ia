@@ -42,7 +42,7 @@ Todas as conexões financeiras e estratégias de compra REAL permanecem fora des
 | Prioridade | Integração / entrega | Dependência | Aceite verificável |
 | --- | --- | --- | --- |
 | **I01 — AGORA** | Market Data Infrastructure: facade interna de candles fechados e qualidade, sem cache próprio | `market.shared_candle_request` + `strict_closed_bars` | Testes mocks de source, fechamento, OHLC, tempo, duplicidade, gaps, sem compra; CI geral + PG da base |
-| **I02** | Market Scanner read-only: adaptar `asset_scanner` ao contrato I01 preservando API e payload legados | I01 | Testes scanner/contagens + falha parcial, somente dados sintéticos, sem chamadas financeiras |
+| **I02 — IMPLEMENTADA** | Market Scanner: catálogo público dinâmico, ranking rastreável por mercado, 3 principais + 2 reservas | I01 | Testes de seleção, dados ruins, rotação, sessão, concorrência, continuidade de contratos e CI acumulado |
 | **I03** | Context + Timeframe: composição de símbolos e agregados reutilizando `automation_markets` e `multi_timeframe_study` | I01/I02 | Testes alinhamento M1/M5/M15/H1, sem look-ahead, rejeição de gaps |
 | **I04** | Knowledge Base + Learning: consulta versionada de pesquisa persistida | I03 | Testes de integridade/proveniência, ausência de overwrite financeiro, sem nova migração |
 | **I05** | Strategy Intelligence + Priority + Distribution somente informativa | I04 | Comparações históricas com holdout e rótulos de hipótese; nenhum gatilho de ordem |
@@ -76,6 +76,54 @@ O GitHub Actions executa a suíte específica e a regressão da base.
   exigem inventário de compatibilidade, não alteração da execução agora.
 - Sem heartbeat global não se declara shutdown físico de todos os workers.
 
-**Decisão:** I01 é o único item implementado nesta branch; I02–I07 são etapas
-sequenciais propostas, não executadas. Cada etapa exige testes próprios,
-manutenção dos gates financeiros desativados e autorização de continuidade.
+## I02 — scanner integrado: implementação desta branch
+
+- **Ponto de entrada preservado:** `GET /api/research/asset-scanner` sem
+  parâmetros mantém a resposta legada. `?version=2` ativa a I02 de modo
+  explícito, na mesma rota autenticada e sob o mesmo lock/cache de resultado.
+- **Reuso:** `asset_scanner.scan_intelligence_markets` delega à composição
+  `intelligence2.market_scanner.scan_market_opportunities`. O scanner usa
+  `automation_markets.market_instruments` (catálogo e cache existentes),
+  `market.discover_contracts` (consulta pública existente),
+  `intelligence2.market_data.read_closed_window` (I01 com
+  `market.shared_candle_request` e `strict_closed_bars`),
+  `asset_scanner.scanner_family` e `autopilot.analyze`. Nenhum
+  websocket, scheduler, cache público adicional ou broker de compras.
+- **Cobertura:** percorre TODOS os grupos informados no catálogo público,
+  incluindo grupos novos identificados pelo campo `market` da Deriv.
+  A quantidade de ativos por ciclo é **limitada a 8 por mercado** por
+  controle de capacidade, com amostras rotativas a cada 5 minutos.
+  O resultado declara `scan_coverage_complete=false` e
+  `selection_scope=EVALUATED_SAMPLE_NOT_GLOBAL_MARKET_RANKING`
+  quando há ativos adiados. Isso NÃO reivindica os três melhores absolutos
+  do mercado sem avaliar todos os ativos.
+- **Seleção:** até 3 `selected` e 2 `reserves` por mercado,
+  ordenados por pontuação técnica reproduzível, com justificativas e partes
+  da pontuação: candles completos, atualidade, volatilidade, estrutura
+  direcional, compatibilidade exploratória e condições públicas CALL/PUT.
+  Os ativos selecionados e as duas reservas anteriores são rechecados em
+  cada nova leitura solicitada, enquanto as demais posições do catálogo
+  rotacionam. **Monitoramento leve não é um loop nem execução autônoma.**
+- **Recusas:** mercado não classificado, sessão explicitamente fechada,
+  ativo suspenso, I01 indicando `INSUFFICIENT`/`GAPPED`/`STALE`,
+  histórico insuficiente, variação ausente ou excessiva, tipo de contrato
+  ausente, dados/consulta indisponíveis; sem nenhuma inclusão forçada.
+- **Interpretação:** `RESEARCH_ONLY` e `NO_OPPORTUNITIES` falam da
+  **amostra examinada**, não de toda a Deriv. O score é heurística de
+  observação e **não valida retorno, payout, duração contratual, saldo,
+  elegibilidade da conta nem possibilidade de execução**. Nenhum campo é
+  autorização para enviar sinal à execução financeira.
+- **Contratos:** após recuperar o resultado público em cache,
+  `open_contracts_for_user` lê as ordens DEMO/REAL abertas ou com slot
+  ainda retido, SEM escrever. O filtro por `user_id` evita cruzamento entre
+  usuários e a leitura acontece FORA do cache público compartilhado.
+  Trocar ativos observados não altera contratos, slots ou conciliação.
+- **Pronto para I03:** cada ativo elegível apresenta `context_inputs`,
+  `timeframe_inputs` e `strategy_inputs` somente descritivos.
+  Context, Timeframe e Strategy Intelligence não foram implementados.
+- **Testes:** `tests/test_intelligence2_market_scanner.py`,
+  incluídos em job dedicado do CI, além do acervo completo I01, P0 e F01
+  (com PostgreSQL 16 exclusivamente descartável).
+
+**Próxima fase planejada:** I03 — Context Engine + Timeframe Engine, ainda
+não iniciada. Sem merge, deploy, migração, flags REAL ou ordens.
