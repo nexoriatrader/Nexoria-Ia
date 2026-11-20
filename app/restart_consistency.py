@@ -27,12 +27,24 @@ def revoke_stale_real_consent_after_restart(session, *, now: datetime | None = N
     """
     instant = db.utcnow() if now is None else now
     try:
+        # Import locally: real_runtime itself imports the final send guard
+        # below. Every START/STOP takes the global lock first, in shared mode;
+        # restart takes it exclusively and cannot race their final commits.
+        from .real_runtime import _f01_transaction_limits, _f01_locked_global
+        _f01_transaction_limits(session)
+        global_epoch = _f01_locked_global(session, exclusive=True)
+        # Increment regardless of consent count. A START that already captured
+        # the old epoch is invalid even if it had NO consent row yet.
+        global_epoch.generation += 1
         result = session.execute(
             update(db.RealRobotConsent)
             .where(db.RealRobotConsent.revoked_at.is_(None))
             .values(revoked_at=instant)
             .execution_options(synchronize_session=False)
         )
+        # Epoch and all revocations commit atomically. The final send guard
+        # holds only the consent row; it does NOT acquire the global lock, so
+        # there is no consent->global lock-order inversion or broker change.
         session.commit()
     except Exception:
         session.rollback()
