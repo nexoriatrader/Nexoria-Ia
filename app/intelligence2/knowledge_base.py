@@ -495,6 +495,7 @@ def change_state(*, knowledge_id: int, expected_revision: int,
             if target_state == "REVALIDATED":
                 prior = session.scalars(select(db.IntelligenceKnowledgeDecision).where(
                     db.IntelligenceKnowledgeDecision.knowledge_id == item.id,
+                    db.IntelligenceKnowledgeDecision.decision == "STATE_TRANSITION",
                     db.IntelligenceKnowledgeDecision.to_state.in_((
                         "INVALIDATED", "REVIEW_REQUIRED",
                     )),
