@@ -253,12 +253,12 @@ def test_missing_real_consent_stop_invalidates_old_start_generation(stop_env):
         s.delete(s.get(db.RealRobotConsent,1))
         s.commit()
     epoch=real_runtime.capture_real_start_generation(1)
-    assert epoch==0
+    assert epoch==(0,0)
     result=client.post("/api/autopilot/stop")
     assert result.status_code==200,result.text
     assert result.json()["real_revocation_status"]=="NO_CONSENT"
     with Session() as s:
-        assert s.get(db.RealAuthorizationFence,1).generation==epoch+1
+        assert s.get(db.RealAuthorizationFence,1).generation==epoch[1]+1
         assert s.get(db.RealRobotConsent,1) is None
     broker.assert_not_awaited()
 
