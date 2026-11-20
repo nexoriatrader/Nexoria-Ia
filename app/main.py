@@ -1510,28 +1510,49 @@ async def real_results_today(request:Request,nexora_sid:str|None=Cookie(default=
         return {**unavailable,'reason':'Não foi possível verificar a conta real na Deriv'}
 
 
+def _f01_logout_user_session(sid_hash):
+    """Delete session + revoke REAL authorization in ONE fenced transaction."""
+    with db.SessionLocal() as sess:
+        try:
+            auth=sess.get(db.Session,sid_hash)
+            if auth is None:
+                return None
+            uid=auth.user_id
+            # All real consent writers use global -> User -> fence -> consent.
+            real_runtime.revoke_real_consent_in_session(sess,uid)
+            old_consent=sess.get(db.AutoPilotResumeConsent,uid)
+            if old_consent:sess.delete(old_consent)
+            old_run=sess.get(db.RobotRun,uid)
+            if old_run:sess.delete(old_run)
+            sess.delete(auth)
+            sess.commit()
+            return uid
+        except Exception:
+            sess.rollback()
+            raise
+
+
 @app.post('/api/logout')
 async def logout(request:Request,nexora_sid:str|None=Cookie(default=None)):
     if nexora_sid:
-        with db.SessionLocal() as s:
-            session=s.get(db.Session,hashsecret(nexora_sid))
-            if session:
-                # Logout revokes REAL consent too; never leave a live-money
-                # worker running under an authentication session being deleted.
-                async with real_runtime.user_lock(session.user_id):
-                    real_runtime.disarm_real(session.user_id,
-                        'Sessão encerrada; execução REAL desligada')
-                autopilot_enabled.discard(session.user_id)
-                old_consent=s.get(db.AutoPilotResumeConsent,session.user_id)
-                if old_consent:s.delete(old_consent)
-                autopilot_reasons[session.user_id]='Sessão encerrada; AutoPilot desligado'
-                async with lock:
-                    engine=runtimes.get(session.user_id)
-                    if engine:engine.running=False
-                old_run=s.get(db.RobotRun,session.user_id)
-                if old_run:s.delete(old_run)
-                s.delete(session);s.commit()
-    response=JSONResponse({'ok':True});response.delete_cookie('nexora_sid',path='/');return response
+        try:
+            uid=await asyncio.to_thread(
+                _f01_logout_user_session,hashsecret(nexora_sid))
+        except Exception:
+            # The session must not be removed when revocation is unconfirmed.
+            raise HTTPException(503,'Logout não confirmado; autorização REAL não pôde ser revogada') from None
+        if uid is not None:
+            real_runtime.running.discard(uid)
+            real_runtime.reasons[uid]='Sessão encerrada; execução REAL desligada'
+            autopilot_enabled.discard(uid)
+            autopilot_reasons[uid]='Sessão encerrada; AutoPilot desligado'
+            async with lock:
+                engine=runtimes.get(uid)
+                if engine:engine.running=False
+    response=JSONResponse({'ok':True})
+    response.delete_cookie('nexora_sid',path='/')
+    return response
+
 
 class Config(BaseModel):
     stake:str='2.00';martingale:bool=False;multiplier:str='2.00';stop_win:str='0.00';stop_loss:str='0.00'
@@ -2154,6 +2175,57 @@ async def admin_access_users(request:Request,q:str=''):
         return {'items':result}
 
 
+def _f01_admin_access_adjust_transaction(payload, action):
+    """Access mutation and applicable REAL revocation share one transaction.
+
+    Take global shared, then User FOR UPDATE BEFORE changing RobotAccess. A
+    suspended/refunded user cannot have an older START finalize afterward.
+    """
+    with db.SessionLocal() as sess:
+        try:
+            real_runtime._f01_transaction_limits(sess)
+            real_runtime._f01_locked_global(sess)
+            subject=sess.scalar(select(db.User).where(
+                db.User.id==payload.user_id).with_for_update())
+            if not subject:
+                raise HTTPException(404,'Usuário não encontrado')
+            now=db.utcnow()
+            grant=sess.get(db.RobotAccess,subject.id)
+            if grant is None:
+                grant=db.RobotAccess(user_id=subject.id,access_kind='admin_exception',
+                                     starts_at=now,expires_at=now)
+                sess.add(grant)
+                sess.flush()
+            if action=='add_hours':
+                grant.expires_at=max(now,utc(grant.expires_at))+timedelta(hours=payload.hours)
+            elif action=='remove_hours':
+                grant.expires_at=max(now,utc(grant.expires_at)-timedelta(hours=payload.hours))
+            elif action=='suspend':
+                grant.suspended=True
+            elif action=='resume':
+                grant.suspended=False
+            elif action=='refund_revoke':
+                grant.suspended=True
+                grant.expires_at=now
+            sess.add(db.OwnerAdminEvent(subject_user_id=subject.id,action=action,
+                       delta_hours=(payload.hours if action=='add_hours' else
+                                    -payload.hours if action=='remove_hours' else None),
+                       note=payload.note.strip()))
+            sess.flush()
+            eligibility=access_status(sess,subject.id)
+            revokes=(action in ('suspend','refund_revoke') or
+                     (action=='remove_hours' and not eligibility['allowed']))
+            if revokes:
+                # Global and User already locked in correct order.
+                real_runtime.revoke_real_consent_in_session(
+                    sess,subject.id,global_locked=True,user_locked=True)
+            sess.commit()
+            return subject.id,access_status(sess,subject.id),revokes
+        except Exception:
+            sess.rollback()
+            raise
+
+
 @app.post('/api/admin/access/adjust')
 async def admin_access_adjust(request:Request,payload:AdminAccessAdjustment):
     require_nexora_admin(request)
@@ -2166,39 +2238,21 @@ async def admin_access_adjust(request:Request,payload:AdminAccessAdjustment):
         raise HTTPException(422,'Informe horas entre 1 e 2160')
     if action not in ('add_hours','remove_hours') and payload.hours!=0:
         raise HTTPException(422,'Esta ação não recebe horas')
-    with db.SessionLocal() as sess:
-        subject=sess.get(db.User,payload.user_id)
-        if not subject:
-            raise HTTPException(404,'Usuário não encontrado')
-        now=db.utcnow()
-        grant=sess.get(db.RobotAccess,subject.id)
-        if grant is None:
-            grant=db.RobotAccess(user_id=subject.id,access_kind='admin_exception',
-                                 starts_at=now,expires_at=now)
-            sess.add(grant)
-            sess.flush()
-        if action=='add_hours':
-            grant.expires_at=max(now,utc(grant.expires_at))+timedelta(hours=payload.hours)
-        elif action=='remove_hours':
-            grant.expires_at=max(now,utc(grant.expires_at)-timedelta(hours=payload.hours))
-        elif action=='suspend':
-            grant.suspended=True
-        elif action=='resume':
-            grant.suspended=False
-        elif action=='refund_revoke':
-            grant.suspended=True
-            grant.expires_at=now
-        sess.add(db.OwnerAdminEvent(subject_user_id=subject.id,action=action,
-                   delta_hours=(payload.hours if action=='add_hours' else
-                                -payload.hours if action=='remove_hours' else None),
-                   note=payload.note.strip()))
-        sess.commit()
-        updated=access_status(sess,subject.id)
+    try:
+        uid,updated,real_revoked=await asyncio.to_thread(
+            _f01_admin_access_adjust_transaction,payload,action)
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(503,'Alteração administrativa não confirmada no banco') from None
+    if real_revoked:
+        real_runtime.running.discard(uid)
+        real_runtime.reasons[uid]='Autorização REAL revogada por acesso administrativo'
     if action in ('suspend','refund_revoke','remove_hours'):
-        if not updated['allowed'] and subject.id in autopilot_enabled:
-            disarm_autopilot(subject.id,
+        if not updated['allowed'] and uid in autopilot_enabled:
+            disarm_autopilot(uid,
                 'Acesso administrativo suspenso ou expirado; contratos existentes mantidos')
-    return {'user_id':subject.id,'access':updated,'action':action}
+    return {'user_id':uid,'access':updated,'action':action}
 
 
 @app.get('/api/admin/access/audit')
