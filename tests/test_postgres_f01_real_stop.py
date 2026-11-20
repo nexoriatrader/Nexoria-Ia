@@ -546,8 +546,8 @@ def _f01_finalize_holding_fence(dsn,uid,account,generation,entered,release,out):
     old=db.SessionLocal
     old_lock=real_runtime._f01_locked_fence
     db.SessionLocal=Session
-    def hold_after_lock(sess,user_id):
-        fence=old_lock(sess,user_id)
+    def hold_after_lock(sess,user_id,**kwargs):
+        fence=old_lock(sess,user_id,**kwargs)
         entered.set()
         if not release.wait(timeout=30):
             raise RuntimeError("F01 synthetic fencing wait expired")
