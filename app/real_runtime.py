@@ -100,16 +100,35 @@ def _f01_transaction_limits(sess):
         sess.execute(text("SET LOCAL statement_timeout = '4500ms'"))
 
 
-def _f01_locked_fence(sess, uid):
-    """Serialize creation and updates by locking the durable user row first.
+def _f01_locked_global(sess, *, exclusive=False):
+    """Global first: shared for per-user operations, exclusive for restart.
 
-    The user lock also prevents a race when the fence row does not yet exist.
-    Callers must commit or roll back before releasing the lock. START and STOP
-    obtain locks in the same order: user -> fence -> optional REAL consent.
+    PostgreSQL FOR SHARE permits independent users to proceed concurrently;
+    restart FOR UPDATE waits for earlier START/STOP and prevents newer ones
+    until the global invalidation and consent sweep commit atomically.
     """
-    found=sess.scalar(select(db.User.id).where(db.User.id==uid).with_for_update())
-    if found is None:
-        raise RuntimeError('Usuário não encontrado para coordenação REAL')
+    query=select(db.RealGlobalAuthorizationFence).where(
+        db.RealGlobalAuthorizationFence.id==1)
+    if sess.get_bind().dialect.name=='postgresql':
+        query=query.with_for_update(read=not exclusive)
+    epoch=sess.scalar(query)
+    if epoch is None or epoch.generation is None or epoch.generation<0:
+        raise RuntimeError('Migração de geração global REAL ausente; autorização bloqueada')
+    return epoch
+
+
+def _f01_locked_fence(sess, uid, *, global_locked=False, user_locked=False):
+    """Strict lock order: global -> User -> user fence -> REAL consent.
+
+    Callers that already hold global/User locks can opt out of taking them
+    again. No method must acquire the global lock *after* consent.
+    """
+    if not global_locked:
+        _f01_locked_global(sess)
+    if not user_locked:
+        found=sess.scalar(select(db.User.id).where(db.User.id==uid).with_for_update())
+        if found is None:
+            raise RuntimeError('Usuário não encontrado para coordenação REAL')
     fence=sess.scalar(select(db.RealAuthorizationFence).where(
         db.RealAuthorizationFence.user_id==uid).with_for_update())
     if fence is None:
@@ -120,36 +139,34 @@ def _f01_locked_fence(sess, uid):
 
 
 def capture_real_start_generation(uid):
-    """Record a durable START attempt before any potentially slow checks.
-
-    Capturing a generation is NOT authorization; only the final transaction
-    with the same generation may update consent. Missing schema fails closed.
-    """
+    """Capture BOTH epochs before external checks; this grants no consent."""
     with db.SessionLocal() as sess:
         try:
             _f01_transaction_limits(sess)
-            fence=_f01_locked_fence(sess,uid)
-            generation=fence.generation
+            global_epoch=_f01_locked_global(sess)
+            fence=_f01_locked_fence(sess,uid,global_locked=True)
+            epochs=(global_epoch.generation,fence.generation)
             sess.commit()
-            return generation
+            return epochs
         except Exception:
             sess.rollback()
             raise
 
 
 def finalize_real_start_if_current(uid, expected_generation, account_id, stake, stop):
-    """Recheck generation, profile and risk under ONE shared transaction.
+    """Fence check + consent write in ONE transaction protected by both epochs.
 
-    Uses the same per-user lock as STOP. An old START cannot overwrite a
-    committed revocation; a newer request must capture a newer generation.
-    No broker imports, tokens, orders or outside network calls here.
+    The global shared lock bars restart while the per-user row lock serializes
+    STOP, logout, admin revocation and security disarm. All paths fail closed
+    when the required schema/epoch rows are missing.
     """
     with db.SessionLocal() as sess:
         try:
             _f01_transaction_limits(sess)
-            fence=_f01_locked_fence(sess,uid)
-            if fence.generation!=expected_generation:
-                raise RealStartInvalidated('START antigo invalidado por STOP confirmado')
+            global_epoch=_f01_locked_global(sess)
+            fence=_f01_locked_fence(sess,uid,global_locked=True)
+            if (global_epoch.generation,fence.generation)!=expected_generation:
+                raise RealStartInvalidated('START antigo invalidado por revogação confirmada')
             profile=sess.get(db.AutomationProfile,uid)
             if (not profile or profile.account_mode!='real'
                 or profile.real_account_id!=account_id):
@@ -170,64 +187,67 @@ def finalize_real_start_if_current(uid, expected_generation, account_id, stake, 
                 consent.max_stake=str(stake)
                 consent.stop_loss=str(stop)
                 consent.revoked_at=None
-            # No intervening STOP can commit after our fence check and before
-            # this consent write because both need the locked user row.
             sess.commit()
         except Exception:
             sess.rollback()
             raise
 
 
-def revoke_real_consent_for_stop(uid):
-    """F01: invalidate all older START attempts and revoke this user's consent.
+def revoke_real_consent_in_session(sess, uid, *, global_locked=False,
+                                   user_locked=False):
+    """Common revocation primitive; caller owns commit and rollback.
 
-    Even NO_CONSENT or ALREADY_REVOKED increments the generation. A pending
-    START must never create authorization after a STOP reported success.
-    The return value distinguishes persisted revocation from remote liveness.
+    The fence advances even on NO_CONSENT or ALREADY_REVOKED. The consent is
+    only changed for the locked user and its currently stored REAL account.
     """
+    _f01_transaction_limits(sess)
+    if not global_locked:
+        _f01_locked_global(sess)
+    fence=_f01_locked_fence(sess,uid,global_locked=True,
+                            user_locked=user_locked)
+    consent=sess.scalar(select(db.RealRobotConsent).where(
+        db.RealRobotConsent.user_id==uid).with_for_update())
+    if consent is None:
+        status,account_id,persisted='NO_CONSENT',None,None
+    elif consent.revoked_at is not None:
+        status,account_id,persisted='ALREADY_REVOKED',consent.account_id,True
+    else:
+        account_id=consent.account_id
+        changed=sess.execute(update(db.RealRobotConsent).where(
+            db.RealRobotConsent.user_id==uid,
+            db.RealRobotConsent.account_id==account_id,
+            db.RealRobotConsent.revoked_at.is_(None)
+        ).values(revoked_at=db.utcnow()).execution_options(
+            synchronize_session=False))
+        if changed.rowcount!=1:
+            raise RuntimeError('Revogação REAL não confirmada no banco')
+        status,persisted='REVOKED_NOW',True
+    fence.generation+=1
+    return {'status':status,'account_id':account_id,
+            'revocation_persisted':persisted}
+
+
+def revoke_real_consent_for_stop(uid):
+    """STOP/security: common transactional revocation, never just local state."""
     with db.SessionLocal() as sess:
         try:
-            _f01_transaction_limits(sess)
-            fence=_f01_locked_fence(sess,uid)
-            consent=sess.scalar(select(db.RealRobotConsent).where(
-                db.RealRobotConsent.user_id==uid).with_for_update())
-            if consent is None:
-                status='NO_CONSENT'
-                account_id=None
-                persisted=None
-            elif consent.revoked_at is not None:
-                status='ALREADY_REVOKED'
-                account_id=consent.account_id
-                persisted=True
-            else:
-                account_id=consent.account_id
-                changed=sess.execute(update(db.RealRobotConsent).where(
-                    db.RealRobotConsent.user_id==uid,
-                    db.RealRobotConsent.account_id==account_id,
-                    db.RealRobotConsent.revoked_at.is_(None)
-                ).values(revoked_at=db.utcnow()).execution_options(
-                    synchronize_session=False))
-                if changed.rowcount!=1:
-                    raise RuntimeError('Revogação REAL não confirmada no banco')
-                status='REVOKED_NOW'
-                persisted=True
-            fence.generation+=1
+            result=revoke_real_consent_in_session(sess,uid)
             sess.commit()
-            return {'status':status,'account_id':account_id,
-                    'revocation_persisted':persisted}
+            return result
         except Exception:
             sess.rollback()
             raise
 
 
 def disarm_real(uid,why):
-    running.discard(uid)
-    reasons[uid]=why
-    with db.SessionLocal() as sess:
-        consent=sess.get(db.RealRobotConsent,uid)
-        if consent and consent.revoked_at is None:
-            consent.revoked_at=db.utcnow()
-            sess.commit()
+    """Security disarm invalidates all older STARTs before local flag cleanup."""
+    try:
+        return revoke_real_consent_for_stop(uid)
+    finally:
+        # Local stop is still fail-closed if DB cannot be reached, but no
+        # successful durable revocation is falsely reported.
+        running.discard(uid)
+        reasons[uid]=why
 
 
 def disarm_revoked_real_workers():
