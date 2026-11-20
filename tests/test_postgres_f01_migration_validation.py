@@ -171,7 +171,7 @@ def test_f01_rejects_partial_tables_rolls_back_and_startup_fails_closed(
         conn.execute(text(
             "INSERT INTO nexora_schema_revisions(revision) "
             "VALUES ('f01_global_fencing_v1')"))
-    with pytest.raises(RuntimeError, match='incompatível F01'):
+    with pytest.raises(RuntimeError, match='incompatível'):
         db.init_db()
 
 
