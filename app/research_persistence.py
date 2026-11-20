@@ -6,6 +6,7 @@ The background task never blocks application startup or changes AutoPilot.
 import asyncio
 import json
 import logging
+import os
 from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import Column, DateTime, Integer, String, Text, select
@@ -180,6 +181,28 @@ async def research_loop():
                     raise
                 except Exception as exc:
                     logger.warning("I05 public cycle unavailable: %s", type(exc).__name__)
+            # Reuse the single existing public research worker. No new
+            # process, scanner or scheduler; OFF in all current environments.
+            if os.getenv(
+                "NEXORA_INTELLIGENCE_DISTRIBUTED_RESEARCH_ENABLED", "false"
+            ).strip().lower() == "true":
+                try:
+                    from .intelligence2.public_research_decisions import (
+                        run_one_public_research_task,
+                    )
+                    worker = "public_%d" % os.getpid()
+                    ran = await asyncio.wait_for(
+                        run_one_public_research_task(worker_id=worker),
+                        timeout=240,
+                    )
+                    logger.info("Public distributed research job: %s", ran["state"])
+                except asyncio.CancelledError:
+                    raise
+                except Exception as exc:
+                    logger.warning(
+                        "Public distributed research disabled or unavailable: %s",
+                        type(exc).__name__,
+                    )
             existing = await asyncio.to_thread(latest_study)
             last = datetime.fromisoformat(existing["generated_at"]) if existing and existing.get("generated_at") else None
             stale = not last or datetime.now(timezone.utc) - last > timedelta(hours=24)
