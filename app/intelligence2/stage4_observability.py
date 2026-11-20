@@ -59,6 +59,67 @@ MODULE_BLOCKERS = {
     "ORCH": "O orquestrador aciona o scanner vinculado à corretora; o fluxo completo permanece desativado.",
 }
 
+# Static, source-grounded contract capabilities, not runtime health. The
+# production broker/data chain is intentionally NEVER invoked by this service.
+# In particular, an offline-testable function does not make its module ACTIVE.
+OFFLINE_CONTRACT_CAPABILITIES = {
+    "I01": {
+        "offline_functions": [],
+        "full_entrypoint": "read_closed_window",
+        "broker_or_market_transport_bound": True,
+        "data_provider_injected": False,
+        "missing_dependencies": ["EXTERNAL_CANDLE_CLIENT", "CLOSED_OHLC_PAYLOAD"],
+    },
+    "I02": {
+        "offline_functions": ["_pick_window", "_research_metrics"],
+        "full_entrypoint": "scan_market_opportunities",
+        "broker_or_market_transport_bound": True,
+        "data_provider_injected": False,
+        "missing_dependencies": ["BROKER_CATALOGUE", "BROKER_CONTRACT_TYPES", "I01"],
+    },
+    "I03": {
+        "offline_functions": ["analyze_context", "align_timeframes"],
+        "full_entrypoint": "enrich_i02_report",
+        "broker_or_market_transport_bound": True,
+        "data_provider_injected": False,
+        "missing_dependencies": ["I01_CLOSED_OHLC", "I02_SELECTION"],
+    },
+    "I04": {
+        "offline_functions": ["discover", "retrieve_active", "get_knowledge",
+                              "enrich_research_with_i04"],
+        "full_entrypoint": "enrich_research_with_i04",
+        "broker_or_market_transport_bound": False,
+        "data_provider_injected": False,
+        "read_only_knowledge_provider_injected": True,
+        "missing_dependencies": ["I04_SCHEMA_AND_MODELS", "ISOLATED_APP_DB_SESSION",
+                                 "FORMAL_KNOWLEDGE_LINEAGE"],
+    },
+    "I05": {
+        "offline_functions": ["_valid_history", "evaluate_public_regimes",
+                              "enrich_research_with_i05"],
+        "full_entrypoint": "research_candidate",
+        "broker_or_market_transport_bound": True,
+        "data_provider_injected": False,
+        "read_only_registry_provider_injected": True,
+        "missing_dependencies": ["I01_CLOSED_HISTORY", "I04_ACTIVE_KNOWLEDGE",
+                                 "I05_MODEL_REGISTRY_AND_RELEASE_STORAGE"],
+    },
+    "I06": {
+        "offline_functions": ["research_lifecycle", "assess_research_report"],
+        "full_entrypoint": "assess_research_report",
+        "broker_or_market_transport_bound": False,
+        "data_provider_injected": False,
+        "missing_dependencies": ["VALID_VERSIONED_I03_REPORT", "FRESH_EVIDENCE"],
+    },
+    "ORCH": {
+        "offline_functions": ["consolidate_research_report"],
+        "full_entrypoint": "orchestrate_public_research",
+        "broker_or_market_transport_bound": True,
+        "data_provider_injected": False,
+        "missing_dependencies": ["I02_BROKER_BOUND_SCANNER", "I03_REPORT", "I06_REPORT"],
+    },
+}
+
 SCOPES = ("GENERAL_SYNTHETIC_DEMO",)
 _MAX_SCAN = 150
 
@@ -144,6 +205,8 @@ def _module_catalog(*, latest_synthetic_at: str | None,
             "details": (MODULE_BLOCKERS.get(name, "Sem runtime demonstrado")
                         if has_code else "Módulo indisponível no código instalado."),
             "partial_utility_only": name == "I06",
+            "contract_capabilities": dict(OFFLINE_CONTRACT_CAPABILITIES[name]),
+            "offline_functions_not_executed_here": True,
         })
     modules.extend((
         {"id": "DEMO", "name": "Ingestão e classificação sintética",
