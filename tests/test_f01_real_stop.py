@@ -89,7 +89,9 @@ def test_real_stop_revokes_persistently_without_local_running_and_preserves_ever
     assert data["running_now"] is None
     assert data["worker_shutdown_confirmed"] is None
     assert data["worker_shutdown_state"]=="UNKNOWN_REMOTE_WORKERS"
-    assert data["execution"]=="DERIV_REAL"
+    # The DEMO-only profile has no active REAL worker; consent is revoked
+    # defensively but must not relabel this DEMO shutdown as REAL.
+    assert data["execution"]=="DERIV_DEMO_ONLY"
     assert data["real_revocation_status"]=="REVOKED_NOW"
     assert data["real_revocation_persisted"] is True
     assert data["real_authorization_absent"] is True
@@ -116,7 +118,7 @@ def test_stop_is_idempotent_when_consent_already_revoked(stop_env):
     result=second.json()
     assert result["real_revocation_status"]=="ALREADY_REVOKED"
     assert result["real_revocation_persisted"] is True
-    assert result["execution"]=="DERIV_REAL"
+    assert result["execution"]=="DERIV_DEMO_ONLY"
     assert result["worker_shutdown_confirmed"] is None
     with Session() as s:
         assert s.get(db.RealRobotConsent,1).revoked_at==revoked_at
@@ -190,3 +192,84 @@ def test_database_failure_never_returns_success_or_reports_workers_stopped(stop_
         assert s.get(db.RealRobotConsent,1).revoked_at is None
         assert s.get(db.AutoPilotResumeConsent,1) is not None
     broker.assert_not_awaited()
+
+
+def test_historical_revoked_real_consent_cannot_relabel_demo_stop(stop_env):
+    client,Session,broker,_=stop_env
+    with Session() as s:
+        row=s.get(db.RealRobotConsent,1)
+        row.revoked_at=db.utcnow()
+        s.add(db.AutomationProfile(user_id=1,account_mode='demo'))
+        s.commit()
+    response=client.post("/api/autopilot/stop")
+    assert response.status_code==200,response.text
+    result=response.json()
+    assert result["execution"]=="DERIV_DEMO_ONLY"
+    assert result["real_revocation_status"]=="ALREADY_REVOKED"
+    assert result["demo_cleanup_status"]=="COMPLETED"
+    assert result["partial_failure"] is False
+    with Session() as s:
+        assert s.get(db.RealRobotConsent,1).revoked_at is not None
+        assert s.get(db.AutoPilotResumeConsent,1) is None
+    broker.assert_not_awaited()
+
+
+def test_explicit_real_profile_is_classified_as_real(stop_env):
+    client,Session,broker,_=stop_env
+    with Session() as s:
+        s.add(db.AutomationProfile(
+            user_id=1,account_mode='real',real_account_id='CRF01OWN'))
+        s.commit()
+    result=client.post("/api/autopilot/stop")
+    assert result.status_code==200,result.text
+    assert result.json()["execution"]=="DERIV_REAL"
+    broker.assert_not_awaited()
+
+
+def test_real_revocation_commit_survives_demo_cleanup_failure(stop_env):
+    client,Session,broker,monkeypatch=stop_env
+    def fail_cleanup(uid):
+        raise RuntimeError("synthetic DEMO database failure")
+    monkeypatch.setattr(main,"_f01_clear_demo_stop_records",fail_cleanup)
+    response=client.post("/api/autopilot/stop")
+    assert response.status_code==207,response.text
+    data=response.json()
+    assert data["real_revocation_status"]=="REVOKED_NOW"
+    assert data["real_revocation_persisted"] is True
+    assert data["real_authorization_absent"] is True
+    assert data["demo_cleanup_status"]=="FAILED"
+    assert data["partial_failure"] is True
+    assert data["running"] is None
+    assert data["worker_shutdown_confirmed"] is None
+    with Session() as s:
+        assert s.get(db.RealRobotConsent,1).revoked_at is not None
+        assert s.get(db.AutoPilotResumeConsent,1) is not None
+    broker.assert_not_awaited()
+
+
+def test_missing_real_consent_stop_invalidates_old_start_generation(stop_env):
+    client,Session,broker,_=stop_env
+    with Session() as s:
+        s.delete(s.get(db.RealRobotConsent,1))
+        s.commit()
+    epoch=real_runtime.capture_real_start_generation(1)
+    assert epoch==0
+    result=client.post("/api/autopilot/stop")
+    assert result.status_code==200,result.text
+    assert result.json()["real_revocation_status"]=="NO_CONSENT"
+    with Session() as s:
+        assert s.get(db.RealAuthorizationFence,1).generation==epoch+1
+        assert s.get(db.RealRobotConsent,1) is None
+    broker.assert_not_awaited()
+
+
+def test_repeated_stop_advances_fence_without_rewriting_revocation(stop_env):
+    client,Session,_,_=stop_env
+    assert client.post("/api/autopilot/stop").status_code==200
+    with Session() as s:
+        initial=s.get(db.RealAuthorizationFence,1).generation
+        revoked=s.get(db.RealRobotConsent,1).revoked_at
+    assert client.post("/api/autopilot/stop").status_code==200
+    with Session() as s:
+        assert s.get(db.RealAuthorizationFence,1).generation==initial+1
+        assert s.get(db.RealRobotConsent,1).revoked_at==revoked
