@@ -328,7 +328,6 @@ def test_existing_authenticated_route_preserves_open_orders_and_tenant_isolation
     monkeypatch.setattr(main, "_asset_scanner_research_cache", {})
     monkeypatch.setattr(main, "_asset_scanner_cache", None)
     monkeypatch.setattr(main, "_asset_scanner_cache_time", 0.0)
-    monkeypatch.setattr(main, "_asset_scanner_cache_version", 1)
     monkeypatch.setattr(main, "_asset_scanner_last_v2", None)
     client = TestClient(main.app)
     try:
