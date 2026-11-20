@@ -253,6 +253,28 @@ def claim_public_task(*, worker_id, now=None):
         return result
 
 
+
+def renew_public_lease(*, task_id, worker_id, fence, now=None):
+    """Keep a long-running public research job fenced across worker restarts."""
+    now = _clock(now)
+    if (type(task_id) is not int or task_id < 1
+        or type(fence) is not int or fence < 1
+        or not isinstance(worker_id, str) or not SAFE_WORKER.fullmatch(worker_id)):
+        raise ValueError("Invalid public lease identity")
+    with db.SessionLocal() as session:
+        _pg_session(session)
+        _row_lock(session)
+        task = session.get(ResearchTask, task_id, with_for_update=True)
+        if (task is None or task.status != "RUNNING"
+            or task.worker_id != worker_id or task.fencing_token != fence
+            or task.lease_until is None or now >= _utc(task.lease_until)):
+            return False
+        task.lease_until = now + timedelta(seconds=LEASE_SECONDS)
+        task.updated_at = now
+        session.commit()
+        return True
+
+
 def finish_public_task(*, task_id, worker_id, fence, result_digest=None,
                        duration_ms=None, error_code=None, now=None):
     """Reject stale/late completion using transaction-scoped row fence."""
