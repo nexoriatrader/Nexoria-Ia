@@ -325,20 +325,28 @@ def public_worker_metrics(*, now=None):
     now = _clock(now)
     with db.SessionLocal() as session:
         _pg_session(session)
-        capacity = _row_lock(session)
-        rows = session.scalars(select(ResearchTask)).all()
-        active = sum(
-            r.status == "RUNNING" and r.lease_until is not None
-            and _utc(r.lease_until) > now for r in rows
-        )
-        durations = sorted(
-            r.duration_ms for r in rows[-1000:]
-            if type(r.duration_ms) is int
-        )
+        capacity = session.get(ResearchCapacity, 1)
+        if capacity is None or not 1 <= capacity.dynamic_limit <= HARD_CAP:
+            raise RuntimeError("Public coordination schema not initialized")
+        active = session.scalar(select(func.count(ResearchTask.id)).where(
+            ResearchTask.status == "RUNNING",
+            ResearchTask.lease_until > now,
+        ))
+        counted = dict(session.execute(select(
+            ResearchTask.status, func.count(ResearchTask.id),
+        ).group_by(ResearchTask.status)).all())
+        durations = sorted(session.scalars(select(
+            ResearchTask.duration_ms,
+        ).where(ResearchTask.duration_ms.is_not(None)).order_by(
+            ResearchTask.updated_at.desc(),
+        ).limit(1000)).all())
         p95 = durations[max(0, math.ceil(.95 * len(durations)) - 1)] if durations else None
-        status = {state: sum(r.status == state for r in rows) for state in (
+        status = {state: counted.get(state, 0) for state in (
             "PENDING", "RUNNING", "DONE", "FAILED",
         )}
+        errors = session.scalar(select(func.count(ResearchTask.id)).where(
+            ResearchTask.error_code.is_not(None),
+        ))
         return {
             "version": VERSION, "as_of": now.isoformat(),
             "hard_cap": HARD_CAP, "dynamic_limit": capacity.dynamic_limit,
@@ -347,6 +355,6 @@ def public_worker_metrics(*, now=None):
             "requests_used_current_window": capacity.budget_used,
             "max_public_requests_per_minute": MAX_REQUESTS_PER_MINUTE,
             "p95_worker_ms_last_1000": p95,
-            "error_tasks": sum(r.error_code is not None for r in rows),
+            "error_tasks": errors,
             "execution_allowed": False,
         }
