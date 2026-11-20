@@ -151,6 +151,7 @@ def _snapshot_digest(rows: list[db.IntelligenceKnowledgeEvidence]) -> str:
         "source_type": x.source_type, "source_ref": x.source_ref,
         "source_digest": x.source_digest,
         "evidence_summary_json": x.evidence_summary_json,
+        "recorded_revision": x.recorded_revision,
         "origin_group": x.origin_group,
         "verified": x.verified, "observation_count": x.observation_count,
         "group_size": x.group_size,
@@ -199,6 +200,10 @@ def _read_integrity(session, item) -> list:
         or log[0].to_state != "DISCOVERED"
         or any(log[i].from_state != log[i-1].to_state
                for i in range(1, len(log)))
+        or any(e.recorded_revision > item.revision
+               or e.recorded_revision < 2
+               or log[e.recorded_revision-1].decision != "EVIDENCE_APPENDED"
+               for e in rows)
         or log[-1].evidence_digest != _snapshot_digest(rows)):
         raise KnowledgeUnavailable("Cadeia de decisões ou evidências incompatível")
     return rows
@@ -376,6 +381,7 @@ def append_evidence(*, knowledge_id: int, expected_revision: int,
             knowledge_id=knowledge_id, source_type=source_type,
             source_ref=source_ref, source_digest=source_digest,
             evidence_summary_json=summary_json,
+            recorded_revision=expected_revision+1,
             origin_group=origin_group, observation_count=observation_count,
             group_size=group_size, period_from=start, period_to=end,
             verified=verified, recorded_at=now,
@@ -441,13 +447,13 @@ def append_research_report_evidence(*, knowledge_id: int,
     )
 
 
-def _enough_evidence(item, rows, *, now: datetime, after: datetime | None = None) -> bool:
+def _enough_evidence(item, rows, *, now: datetime, after_revision: int | None = None) -> bool:
     eligible = [
         row for row in rows
         if row.verified is True and row.observation_count >= MIN_RESEARCH_OBSERVATIONS
         and _utc(row.period_to) <= now
         and _utc(row.period_to) >= _utc(item.valid_from) - timedelta(days=30)
-        and (after is None or _utc(row.recorded_at) > after)
+        and (after_revision is None or row.recorded_revision > after_revision)
     ]
     if len(eligible) < 2 or len({r.origin_group for r in eligible}) < 2:
         return False
@@ -485,7 +491,7 @@ def change_state(*, knowledge_id: int, expected_revision: int,
             if not (_utc(item.valid_from) <= now < _utc(item.valid_until)
                     and now < _utc(item.next_review_at)):
                 raise KnowledgeError("Conhecimento vencido não pode ser promovido")
-            after = None
+            after_revision = None
             if target_state == "REVALIDATED":
                 prior = session.scalars(select(db.IntelligenceKnowledgeDecision).where(
                     db.IntelligenceKnowledgeDecision.knowledge_id == item.id,
@@ -493,8 +499,8 @@ def change_state(*, knowledge_id: int, expected_revision: int,
                         "INVALIDATED", "REVIEW_REQUIRED",
                     )),
                 ).order_by(db.IntelligenceKnowledgeDecision.revision.desc())).first()
-                after = _utc(prior.recorded_at) if prior else now
-            if not _enough_evidence(item, rows, now=now, after=after):
+                after_revision = prior.revision if prior else item.revision
+            if not _enough_evidence(item, rows, now=now, after_revision=after_revision):
                 raise KnowledgeError("Evidências independentes e verificadas insuficientes")
         digest = _snapshot_digest(rows)
         _cas(session, item, expected_revision, state=target_state,
@@ -521,6 +527,7 @@ def get_knowledge(knowledge_id: int, *, now: datetime | None = None,
             public["evidence"] = [{
                 "source_type": r.source_type, "source_ref_sha256": r.source_ref,
                 "source_sha256": r.source_digest,
+                "recorded_revision": r.recorded_revision,
                 "public_evidence_summary": json.loads(r.evidence_summary_json),
                 "origin_group": r.origin_group,
                 "observations": r.observation_count,
