@@ -1,7 +1,7 @@
 """Durable database. SQLite allowed only for LOCAL development; production requires Postgres."""
 import os
 from datetime import datetime, timezone
-from sqlalchemy import create_engine, Column, Integer, String, Boolean, DateTime, ForeignKey, Text, UniqueConstraint, Index, inspect, text
+from sqlalchemy import create_engine, Column, Integer, String, Boolean, DateTime, ForeignKey, Text, UniqueConstraint, Index, inspect, text, DDL, event
 from sqlalchemy.orm import declarative_base, sessionmaker
 
 DB_URL = os.getenv('DATABASE_URL', 'sqlite:///./nexora_local.db')
@@ -253,7 +253,50 @@ class PaperTrade(Base):
     __table_args__ = (Index('ix_paper_user_time','user_id','settled_at'),)
 
 
+F01_REQUIRED_REVISION = 'f01_global_fencing_v1'
+
+
+def verify_postgresql_schema(connection):
+    """Read-only startup gate: PostgreSQL application processes NEVER run DDL.
+
+    A migration administrator, separately authorized, must install the schema
+    and stamp the required revision before the service may start.
+    """
+    inspector=inspect(connection)
+    all_tables=set(inspector.get_table_names())
+    required=set(Base.metadata.tables)
+    required.add('nexora_schema_revisions')
+    missing=sorted(required-all_tables)
+    if missing:
+        raise RuntimeError('Esquema PostgreSQL incompleto; migração formal obrigatória: '+', '.join(missing))
+    for name, fields in {
+        'real_authorization_fences':('user_id','generation','updated_at'),
+        'real_global_authorization_fences':('id','generation','updated_at'),
+        'real_robot_consents':('user_id','account_id','revoked_at'),
+        'nexora_schema_revisions':('revision','applied_at'),
+    }.items():
+        found={c['name'] for c in inspector.get_columns(name)}
+        if not set(fields).issubset(found):
+            raise RuntimeError('Esquema PostgreSQL incompatível: '+name)
+    revision=connection.execute(text(
+        'SELECT revision FROM nexora_schema_revisions WHERE revision=:revision'
+    ),{'revision':F01_REQUIRED_REVISION}).scalar_one_or_none()
+    if revision!=F01_REQUIRED_REVISION:
+        raise RuntimeError('Migração F01 não aplicada ou não autorizada')
+    row=connection.execute(text(
+        'SELECT generation FROM real_global_authorization_fences WHERE id=1'
+    )).scalar_one_or_none()
+    if row is None or row<0:
+        raise RuntimeError('Geração global F01 ausente ou inválida; iniciar bloqueado')
+
+
 def init_db():
+    if engine.dialect.name == 'postgresql':
+        # NO create_all, ALTER, migration stamping or other DDL in application
+        # startup. Even a missing fencing table must fail closed.
+        with engine.connect() as connection:
+            verify_postgresql_schema(connection)
+        return
     Base.metadata.create_all(engine)
     # Backwards-compatible additive migration. Never fabricate official times
     # for existing contracts or overwrite any pre-existing stored evidence.
@@ -342,6 +385,22 @@ class RealOrder(Base):
         UniqueConstraint('account_id', 'request_key', name='uq_real_order_request'),
         Index('ix_real_order_account_state', 'account_id', 'state'),
     )
+
+
+class RealGlobalAuthorizationFence(Base):
+    """Global epoch protecting cold-start revocation against older STARTs."""
+    __tablename__ = 'real_global_authorization_fences'
+    id = Column(Integer, primary_key=True)
+    generation = Column(Integer, nullable=False, default=0)
+    updated_at = Column(DateTime(timezone=True), default=utcnow,
+                        onupdate=utcnow, nullable=False)
+
+
+# Explicit metadata.create_all is permitted ONLY in disposable/local test
+# setup; production init_db() never creates this table or seeds this row.
+event.listen(RealGlobalAuthorizationFence.__table__, 'after_create',
+             DDL("INSERT INTO real_global_authorization_fences (id, generation, updated_at) "
+                 "VALUES (1, 0, CURRENT_TIMESTAMP)"))
 
 
 class RealAuthorizationFence(Base):
