@@ -344,3 +344,141 @@ def test_no_financial_runtime_registration_or_trigger(pg):
         "state": "DISTRIBUTED_PUBLIC_RESEARCH_DISABLED",
         "execution_allowed": False,
     }
+
+
+def test_homologation_full_public_chain_to_persisted_robot_view(pg, monkeypatch):
+    """Real I01/I02/I03/I06 + real I04/I05 reads -> PG queue -> HTTP robot.
+
+    The ONLY test doubles are the external PUBLIC feed and public catalogue.
+    No mock Knowledge Base, Learning Engine, registry, scanner or executor.
+    """
+    import asyncio
+    from unittest.mock import AsyncMock
+    from fastapi.testclient import TestClient
+    from app import automation_markets, market, main
+    from app.intelligence2 import market_scanner
+    from app.intelligence2 import homologation_runtime as homo
+
+    monkeypatch.setenv("NEXORA_DEPLOYMENT_STAGE", "homologation")
+    monkeypatch.setenv("NEXORA_INTELLIGENCE_HOMOLOGATION_READONLY_ENABLED", "true")
+    monkeypatch.setenv("NEXORA_INTELLIGENCE_DISTRIBUTED_RESEARCH_ENABLED", "true")
+    monkeypatch.setenv("NEXORA_INTELLIGENCE_KNOWLEDGE_ENABLED", "true")
+    monkeypatch.setenv("NEXORA_INTELLIGENCE_LEARNING_ENABLED", "true")
+    monkeypatch.setenv("NEXORA_INTELLIGENCE_LEARNING_PROMOTION_ENABLED", "false")
+    monkeypatch.setenv("NEXORA_REAL_AUTOPILOT_ENABLED", "false")
+    monkeypatch.setenv("NEXORA_REAL_RELEASE_APPROVED", "false")
+
+    # The existing disposable PG fixture is shared within this file.
+    # Reset ONLY test-owned public queue/snapshot data for a deterministic E2E.
+    at = datetime.now(timezone.utc)
+    observed = int(at.timestamp())
+    with pg.begin() as con:
+        con.exec_driver_sql("DELETE FROM public_research_tasks")
+        con.execute(text(
+            "UPDATE public_research_capacity "
+            "SET dynamic_limit=2, budget_window=:now, budget_used=0,"
+            "updated_at=:now WHERE id=1"
+        ), {"now": at})
+        con.exec_driver_sql(
+            "DELETE FROM historical_research_reports "
+            "WHERE research_key LIKE 'I20_PUBLIC_RESEARCH_%'"
+        )
+
+    asset = {
+        "symbol": "FRXEURUSD", "group": "forex",
+        "name": "EUR/USD", "catalogue_open": True,
+        "catalogue_suspended": False,
+    }
+    catalogue = AsyncMock(return_value=[asset])
+    monkeypatch.setattr(automation_markets, "market_instruments", catalogue)
+    request_counts = []
+    async def candles(symbol, granularity_seconds, count, *, timeout):
+        assert symbol == "FRXEURUSD"
+        assert granularity_seconds in (60, 300, 900, 3600)
+        request_counts.append((granularity_seconds, count))
+        last = (observed // granularity_seconds - 1) * granularity_seconds
+        bars = []
+        for i in range(count):
+            close = 100.0 + i*.18 + (i%3)*.02
+            opening = close - .06 if i%2 else close + .06
+            bars.append({
+                "epoch": last-(count-i-1)*granularity_seconds,
+                "open": opening, "close": close,
+                "high": max(opening, close)+.12,
+                "low": min(opening, close)-.12,
+            })
+        return {"candles": bars}
+    public_candles = AsyncMock(side_effect=candles)
+    monkeypatch.setattr(market, "shared_candle_request", public_candles)
+    public_catalogue_contracts = AsyncMock(return_value=["CALL", "PUT"])
+    monkeypatch.setattr(market_scanner, "discover_contracts",
+                        public_catalogue_contracts)
+
+    outcome = asyncio.run(homo.run_homologation_cycle(
+        task_key="research_homologation_e2e_v1", market="forex",
+        symbol="FRXEURUSD",
+        source={
+            "source_version": "i03_public_v1",
+            "closed_epoch": (observed//60-1)*60,
+            "timeframe_seconds": 60,
+        },
+        worker_id="homo_worker_1", now=at,
+    ))
+    assert outcome["enqueue"]["created"] is True
+    assert outcome["worker_state"] == "RESEARCH_SAVED"
+    assert catalogue.await_count == 1
+    assert public_catalogue_contracts.await_count == 1
+    assert len(request_counts) >= 3
+    assert all(n == 96 for _,n in request_counts)
+
+    # A fresh SQLAlchemy connection sees the same persisted snapshot.
+    pg.dispose()
+    row = homo.load_shared_public_snapshot(
+        now_epoch=int(datetime.now(timezone.utc).timestamp())
+    )
+    assert row["state"] in ("CURRENT_PUBLIC_RESEARCH", "NO_CURRENT_PUBLIC_ITEMS")
+    assert len(row["snapshot_digest"]) == 64
+    assert all(item["metric_kind"] == "DATA_COMPLETENESS_NOT_PROBABILITY"
+               for item in row["items"])
+    assert all(item["valid_until_epoch"] > observed for item in row["items"])
+    assert all("trade_side" not in item and "stake" not in item
+               for item in row["items"])
+    assert not any("account_id" in str(item) for item in row["items"])
+
+    # The actual robot-facing GET consumes that snapshot without another
+    # scan, knowledge query, model evaluation or financial operation.
+    from types import SimpleNamespace
+    monkeypatch.setattr(main, "active_user", lambda *args: SimpleNamespace(id=99))
+    before = public_candles.await_count
+    client = TestClient(main.app)
+    try:
+        status = client.get("/api/homologation/robot/research?view=autonomous")
+        signals = client.get("/api/homologation/robot/research?view=signals")
+        advanced = client.get("/api/homologation/robot/research?view=advanced")
+    finally:
+        client.close()
+    assert all(r.status_code == 200 for r in (status,signals,advanced))
+    assert status.json()["items"] == signals.json()["items"] == advanced.json()["items"]
+    assert status.json()["snapshot_digest"] == advanced.json()["snapshot_digest"]
+    assert status.json()["execution_allowed"] is False
+    assert status.json()["orders_sent"] == 0
+    assert status.json()["modifies_robot_settings"] is False
+    assert public_candles.await_count == before
+
+    repeat = asyncio.run(homo.run_homologation_cycle(
+        task_key="research_homologation_e2e_v1", market="forex",
+        symbol="FRXEURUSD",
+        source={
+            "source_version": "i03_public_v1",
+            "closed_epoch": (observed//60-1)*60,
+            "timeframe_seconds": 60,
+        },
+        worker_id="homo_worker_1", now=at,
+    ))
+    assert repeat["enqueue"]["created"] is False
+    assert repeat["worker_state"] == "NO_PUBLIC_WORK"
+    with db.SessionLocal() as session:
+        stored = session.query(HistoricalResearchReport).filter(
+            HistoricalResearchReport.research_key.like("I20_PUBLIC_RESEARCH_%")
+        ).all()
+        assert len(stored) == 1
