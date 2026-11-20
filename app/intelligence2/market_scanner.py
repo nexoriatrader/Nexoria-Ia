@@ -36,17 +36,28 @@ _ACTIVE = frozenset(("PENDING", "UNKNOWN", "CONFIRMED"))
 _SYMBOL = re.compile(r"[A-Za-z0-9_]{2,30}\Z")
 
 
-def _pick_window(rows: list[dict], observed_at: int) -> tuple[list[dict], list[dict]]:
-    """Take a rotating, bounded sample; never silently drop deferred assets."""
+def _pick_window(rows: list[dict], observed_at: int, *,
+                 focus: set[str] | None = None) -> tuple[list[dict], list[dict]]:
+    """Recheck last primary/reserve assets, rotate the remaining catalogue.
+
+    A reserve is monitored lightly on each requested scan (no worker/loop),
+    while spare bounded capacity rotates through other listed assets.
+    """
     ordered = sorted(rows, key=lambda x: x["symbol"])
-    if len(ordered) <= SAMPLE_PER_MARKET:
-        return ordered, []
-    pages = math.ceil(len(ordered) / SAMPLE_PER_MARKET)
-    page = (observed_at // 300) % pages
-    start = page * SAMPLE_PER_MARKET
-    return ordered[start:start + SAMPLE_PER_MARKET], (
-        ordered[:start] + ordered[start + SAMPLE_PER_MARKET:]
-    )
+    focus = focus or set()
+    incumbents = [row for row in ordered if row["symbol"] in focus][:SAMPLE_PER_MARKET]
+    remaining = [row for row in ordered if row["symbol"] not in {
+        item["symbol"] for item in incumbents
+    }]
+    slots = SAMPLE_PER_MARKET - len(incumbents)
+    if slots == 0:
+        return incumbents, remaining
+    if len(remaining) <= slots:
+        return incumbents + remaining, []
+    pages = math.ceil(len(remaining) / slots)
+    start = ((observed_at // 300) % pages) * slots
+    sampled = remaining[start:start + slots]
+    return incumbents + sampled, remaining[:start] + remaining[start + slots:]
 
 
 def _excluded(asset: dict, code: str, explanation: str, *, detail=None) -> dict:
@@ -84,7 +95,7 @@ def _research_metrics(bars: list[dict], family: str, public_open: bool | None) -
         "freshness": 15.0,
         "relative_volatility": round(max(
             0.0, 20.0 - abs(math.log10(volatility / 0.001)) * 6.0
-        ), 2),
+        ), 2) if volatility > 1e-8 else 0.0,
         "trend_structure": round(5.0 + 10.0 * efficiency, 2),
         "existing_strategy_family": 14.0 if family != "generic" else 9.0,
         "public_contract_conditions": 10.0 if public_open is True else 6.0,
@@ -199,7 +210,7 @@ async def _inspect(asset: dict, *, observed_at: int, semaphore: asyncio.Semaphor
             )
 
 
-def _previous_selected(previous: dict | None, market: str) -> set[str]:
+def _previous_symbols(previous: dict | None, market: str, role: str) -> set[str]:
     if not isinstance(previous, dict):
         return set()
     groups = previous.get("markets")
@@ -208,7 +219,7 @@ def _previous_selected(previous: dict | None, market: str) -> set[str]:
     section = groups.get(market)
     if not isinstance(section, dict):
         return set()
-    rows = section.get("selected", [])
+    rows = section.get(role, [])
     if not isinstance(rows, list):
         return set()
     return {
@@ -242,7 +253,7 @@ async def scan_market_opportunities(*, previous: dict | None = None,
             grouped[asset["group"]].append(asset)
     samples, deferred = {}, {}
     for market_name, items in sorted(grouped.items()):
-        samples[market_name], deferred[market_name] = _pick_window(items, observed_at)
+        samples[market_name], deferred[market_name] = _pick_window(\n            items, observed_at,\n            focus=(_previous_symbols(previous, market_name, "selected")\n                   | _previous_symbols(previous, market_name, "reserves")),\n        )
     sem = asyncio.Semaphore(MAX_PARALLEL_READS)
     jobs = [
         (market_name, asset) for market_name, rows in samples.items()
@@ -277,7 +288,7 @@ async def scan_market_opportunities(*, previous: dict | None = None,
                 item, "DEFERRED_CAPACITY",
                 "Aguardando próximo lote rotativo; não avaliado neste ciclo",
             ))
-        previous_set = _previous_selected(previous, market_name)
+        previous_set = _previous_symbols(previous, market_name, "selected")
         selected_set = {item["symbol"] for item in selected}
         movements = {
             "added": sorted(selected_set - previous_set),
