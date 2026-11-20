@@ -379,10 +379,10 @@ def test_homologation_full_public_chain_to_persisted_robot_view(pg, monkeypatch)
             "SET dynamic_limit=2, budget_window=:now, budget_used=0,"
             "updated_at=:now WHERE id=1"
         ), {"now": at})
-        con.exec_driver_sql(
+        con.execute(text(
             "DELETE FROM historical_research_reports "
-            "WHERE research_key LIKE 'I20_PUBLIC_RESEARCH_%'"
-        )
+            "WHERE research_key LIKE :public_prefix"
+        ), {"public_prefix": "I20_PUBLIC_RESEARCH_%"})
 
     asset = {
         "symbol": "FRXEURUSD", "group": "forex",
