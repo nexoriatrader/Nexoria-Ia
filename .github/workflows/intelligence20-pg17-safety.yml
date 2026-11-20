@@ -1,0 +1,100 @@
+name: NEXORA PostgreSQL 17.11 F01 and I04 disposable safety
+on:
+  push:
+    branches:
+      - feature/intelligence20-i05-learning-research
+  pull_request:
+    branches:
+      - feature/intelligence20-i04-knowledge-base
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  postgres17-11-safety:
+    if: github.ref == 'refs/heads/feature/intelligence20-i05-learning-research' || github.head_ref == 'feature/intelligence20-i05-learning-research'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:17.11-alpine
+        env:
+          POSTGRES_USER: p0_ci
+          POSTGRES_PASSWORD: test_only_disposable
+          POSTGRES_DB: nexora_p0_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U p0_ci -d nexora_p0_ci"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 12
+    env:
+      NEXORA_P0_EPHEMERAL_PG: "yes"
+      NEXORA_P0_TEST_DATABASE_URL: "postgresql+psycopg://p0_ci:test_only_disposable@127.0.0.1:5432/nexora_p0_ci"
+      DATABASE_URL: "postgresql+psycopg://p0_ci:test_only_disposable@127.0.0.1:5432/nexora_p0_ci"
+      NEXORA_DEMO_BUY_ENABLED: "false"
+      NEXORA_AUTOPILOT_DEMO_ENABLED: "false"
+      NEXORA_REAL_AUTOPILOT_ENABLED: "false"
+      NEXORA_REAL_RELEASE_APPROVED: "false"
+      NEXORA_INTELLIGENCE_KNOWLEDGE_ENABLED: "false"
+      NEXORA_INTELLIGENCE_LEARNING_ENABLED: "false"
+      NEXORA_INTELLIGENCE_LEARNING_PROMOTION_ENABLED: "false"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install isolated requirements
+        run: python -m pip install -r requirements.txt
+      - name: Generate ephemeral authentication test key
+        run: echo "NEXORA_FERNET_KEY=$(python -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())')" >> "$GITHUB_ENV"
+      - name: Confirm exact server version and disposable local endpoint
+        run: |
+          python - <<'PY'
+          import os,psycopg
+          from sqlalchemy.engine import make_url
+          uri=make_url(os.environ["NEXORA_P0_TEST_DATABASE_URL"])
+          assert os.getenv("NEXORA_P0_EPHEMERAL_PG")=="yes"
+          assert uri.host in ("localhost","127.0.0.1")
+          assert uri.database=="nexora_p0_ci" and uri.username=="p0_ci"
+          with psycopg.connect(os.environ["NEXORA_P0_TEST_DATABASE_URL"].replace("postgresql+psycopg://","postgresql://")) as c:
+              version=c.execute("SHOW server_version").fetchone()[0]
+              assert version.startswith("17.11"),version
+              print("Disposable PostgreSQL",version,"verified")
+          PY
+      - name: F01/P0/I04 schema, startup DDL, and concurrent release regression
+        run: |
+          python -m pytest -q -s \
+            tests/test_postgres_mode_isolation.py \
+            tests/test_postgres_p002_recovery.py \
+            tests/test_postgres_p003_integrity.py \
+            tests/test_postgres_p004_restart.py \
+            tests/test_postgres_p005_status.py \
+            tests/test_postgres_f01_real_stop.py \
+            tests/test_postgres_f01_schema_guard.py \
+            tests/test_postgres_f01_migration_validation.py \
+            tests/test_postgres_i04_knowledge.py \
+            tests/test_postgres_i05_learning.py
+      - name: Synthetic-only PostgreSQL 17.11 custom backup and restore rehearsal
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PG_IMAGE="postgres:17.11-alpine"
+          export PG_PASS="test_only_disposable"
+          pg_client() {
+            docker run --rm --network host -e PGPASSWORD="$PG_PASS" "$PG_IMAGE" "$@"
+          }
+          pg_client psql -h 127.0.0.1 -U p0_ci -d nexora_p0_ci -v ON_ERROR_STOP=1 -c \
+            "CREATE TABLE public.ci_backup_probe (check_number INTEGER PRIMARY KEY); INSERT INTO public.ci_backup_probe VALUES (42);"
+          DUMP="$RUNNER_TEMP/nexora-pg17-test-only.dump"
+          trap 'rm -f "$DUMP"' EXIT
+          pg_client pg_dump -h 127.0.0.1 -U p0_ci -d nexora_p0_ci -Fc > "$DUMP"
+          test -s "$DUMP"
+          pg_client createdb -h 127.0.0.1 -U p0_ci nexora_p0_restored
+          pg_client pg_restore -h 127.0.0.1 -U p0_ci -d nexora_p0_restored --no-owner --no-privileges < "$DUMP"
+          actual=$(pg_client psql -h 127.0.0.1 -U p0_ci -d nexora_p0_restored -At -c 'SELECT check_number FROM public.ci_backup_probe')
+          test "$actual" = 42
+          echo "Synthetic custom-format backup and independent-db restore: verified"
