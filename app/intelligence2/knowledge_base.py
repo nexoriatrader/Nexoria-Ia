@@ -218,15 +218,20 @@ def _public_record(item, *, now: datetime, observed_regime: str | None = None) -
     regime_mismatch = observed_regime is not None and (
         item.regime not in ("UNKNOWN", observed_regime)
     )
+    # A restored snapshot with a future decision timestamp cannot become
+    # research-usable before the decision actually occurred.
+    future_decision = now < _utc(item.updated_at)
     allowed = item.state == "ACTIVE" and not (
-        expired or overdue or regime_missing or regime_mismatch
+        expired or overdue or regime_missing or regime_mismatch or future_decision
     )
     reason = (
         "INACTIVE_STATE" if item.state != "ACTIVE" else
         "VALIDITY_EXPIRED" if expired else
         "PERIODIC_REVIEW_DUE" if overdue else
         "REGIME_CONTEXT_REQUIRED" if regime_missing else
-        "REGIME_CHANGED" if regime_mismatch else "CURRENT_VERIFIED_ACTIVE"
+        "REGIME_CHANGED" if regime_mismatch else
+        "FUTURE_DECISION_TIMESTAMP" if future_decision else
+        "CURRENT_VERIFIED_ACTIVE"
     )
     return {
         "id": item.id, "version": VERSION, "category": item.category,
@@ -313,6 +318,14 @@ def _locked(session, knowledge_id: int, expected_revision: int):
 
 def _cas(session, item, expected_revision: int, *, state: str, reason: str,
          decision: str, now: datetime, digest: str):
+    # Reject retroactive writes to an append-only shared intelligence log.
+    # The comparison is strict UTC and accepts equal timestamps within a
+    # transaction, but never a decision before the previous record.
+    latest=session.scalar(select(db.IntelligenceKnowledgeDecision).where(
+        db.IntelligenceKnowledgeDecision.knowledge_id==item.id,
+    ).order_by(db.IntelligenceKnowledgeDecision.revision.desc()).limit(1))
+    if latest is None or _utc(latest.recorded_at)>_utc(now):
+        raise KnowledgeError("Horário de decisão retroativo/incompatível")
     # SQLAlchemy's ORM synchronize_session may rewrite item.state during
     # UPDATE. Snapshot the *previous* state before the mutation to preserve
     # an accurate, contiguous decision chain across dialects/workers.
