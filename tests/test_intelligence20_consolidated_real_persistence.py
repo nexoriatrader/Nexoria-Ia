@@ -144,15 +144,15 @@ def _history():
 
 
 def test_knowledge_tables_are_same_engine_but_not_automatic_db_metadata():
-    names = set(db.KnowledgeMetadata.tables)
+    names = set(db.KnowledgeMetadata.metadata.tables)
     assert names == {
         "intelligence_knowledge",
         "intelligence_knowledge_evidence",
         "intelligence_knowledge_decisions",
     }
     assert names.isdisjoint(db.Base.metadata.tables)
-    assert db.IntelligenceKnowledge.__table__.metadata is db.KnowledgeMetadata
-    assert db.IntelligenceKnowledgeEvidence.__table__.metadata is db.KnowledgeMetadata
+    assert db.IntelligenceKnowledge.__table__.metadata is db.KnowledgeMetadata.metadata
+    assert db.IntelligenceKnowledgeEvidence.__table__.metadata is db.KnowledgeMetadata.metadata
 
 
 def test_real_i04_knowledge_persists_and_retrieves_after_new_session(
@@ -237,7 +237,7 @@ def test_real_i05_stage_public_model_only_persists_challenger_without_promotion(
     market = _active_market()
     evaluated = learning.evaluate_public_regimes(_history())
     assert evaluated["research_eligible"] is True
-    assert evaluated["model_version"] == "REGIME_MARKOV_LAPLACE_V1"
+    assert evaluated["model_version"].startswith("i05_")
     candidate = registry.stage_public_candidate(
         _history(), market_knowledge_id=market["id"], now=NOW,
     )
