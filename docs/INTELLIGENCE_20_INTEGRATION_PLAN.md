@@ -43,7 +43,7 @@ Todas as conexões financeiras e estratégias de compra REAL permanecem fora des
 | --- | --- | --- | --- |
 | **I01 — AGORA** | Market Data Infrastructure: facade interna de candles fechados e qualidade, sem cache próprio | `market.shared_candle_request` + `strict_closed_bars` | Testes mocks de source, fechamento, OHLC, tempo, duplicidade, gaps, sem compra; CI geral + PG da base |
 | **I02 — IMPLEMENTADA** | Market Scanner: catálogo público dinâmico, ranking rastreável por mercado, 3 principais + 2 reservas | I01 | Testes de seleção, dados ruins, rotação, sessão, concorrência, continuidade de contratos e CI acumulado |
-| **I03** | Context + Timeframe: composição de símbolos e agregados reutilizando `automation_markets` e `multi_timeframe_study` | I01/I02 | Testes alinhamento M1/M5/M15/H1, sem look-ahead, rejeição de gaps |
+| **I03 — IMPLEMENTADA** | Context + Timeframe: reutilização de EMA/RSI, padrões de swings e candles fechados I01; enriquecimento da seleção I02 | I01/I02 | Testes de tendência, volatilidade, transição, conflito/reversão, fechamento, isolamento, não-execução e CI |
 | **I04** | Knowledge Base + Learning: consulta versionada de pesquisa persistida | I03 | Testes de integridade/proveniência, ausência de overwrite financeiro, sem nova migração |
 | **I05** | Strategy Intelligence + Priority + Distribution somente informativa | I04 | Comparações históricas com holdout e rótulos de hipótese; nenhum gatilho de ordem |
 | **I06** | Orchestrator: compor na rotina de pesquisa existente, sem novos loops nem filas | I05 | Testes de cancelamento, limite de concorrência, degradação e inatividade segura |
@@ -125,5 +125,84 @@ O GitHub Actions executa a suíte específica e a regressão da base.
   incluídos em job dedicado do CI, além do acervo completo I01, P0 e F01
   (com PostgreSQL 16 exclusivamente descartável).
 
-**Próxima fase planejada:** I03 — Context Engine + Timeframe Engine, ainda
-não iniciada. Sem merge, deploy, migração, flags REAL ou ordens.
+## I03 — Context Engine + Timeframe Engine: implementação desta branch
+
+**Branch exclusiva:** `feature/intelligence20-i03-context-timeframe`, criada
+no SHA final da I02 (`55f78f1d8564cfcde4d3609b4dc4708298058af6`).
+PR #52, #51 e os seis P0/F01 são imutáveis nesta entrega.
+
+### Reuso e integração sem arquitetura paralela
+
+- `app/intelligence2/context_engine.py::analyze_context` é **puro**, toma
+  exclusivamente o retorno de `intelligence2.market_data.read_closed_window`
+  (I01) e reutiliza `automation_signals._ema`, `_rsi` e
+  `trade_selector_v2.swing_structure` para evidências de EMA20/EMA50,
+  RSI14, estrutura de swings, eficiência de tendência, dispersão estatística,
+  tendência dos últimos fechamentos e anomalias de amplitude.
+- `app/intelligence2/timeframe_engine.py::choose_hierarchy` define apenas
+  perfis suportados por I01: `M15/M5/M1`, `H1/M5/M1` ou `H1/M15/M5`.
+  A escolha depende da expiração de pesquisa (1, 3, 5, 15 minutos),
+  volatilidade observada, regime, família da estratégia e mercado. Nenhuma
+  duração contratual ou elegibilidade financeira é presumida.
+- `align_timeframes` reúne os três contextos fechados e retorna
+  `ALIGNED_RESEARCH`, `WAIT_REEVALUATE`,
+  `BLOCKED_STRONG_CONFLICT`, `REVERSAL_CONFIRMED_RESEARCH`
+  ou `INDETERMINATE`. Conflitos moderados aguardam; conflitos fortes
+  bloqueiam o avanço exploratório. Reversão requer evidência maior
+  explicitamente fraca, os dois timeframes menores concordantes,
+  força/estabilidade/confiabilidade mínimas e duas velas **já fechadas**
+  confirmando a mesma direção em CADA timeframe menor.
+- A falha de uma leitura I01, OHLC inconsistente, lacunas, barra aberta,
+  timestamps desencontrados, histórico insuficiente ou contexto irregular
+  produz `INDETERMINATE`. **Nunca** compensa dados ruins com score.
+- `asset_scanner.scan_intelligence_context` chama o scanner I02 já
+  existente e depois `enrich_i02_report`. A única rota permanece
+  `GET /api/research/asset-scanner?version=3&expiry_minutes=5`.
+  A chamada tradicional (`version=1`) e I02 (`version=2`) não mudam.
+- A própria rota autenticada conserva seu **único cache**/lock público.
+  O novo perfil de expiração e o bucket do candle M1 fazem parte da chave
+  efetiva da versão 3, evitando reaproveitar a mesma resposta em perfis
+  diferentes ou depois de um novo minuto. Nenhum novo cache ou scheduler.
+- Até oito ativos principais do ranking I02 por ciclo recebem contexto I03,
+  em ordem intercalada entre mercados, máximo de duas avaliações
+  concorrentes. Os demais retornam `NOT_EVALUATED_CAPACITY`. Essa
+  limitação é documentada no payload; não é avaliação parcial disfarçada.
+  As reservas seguem em monitoramento leve da I02, sem novos workers.
+- Contratos `PENDING`/`UNKNOWN`/`CONFIRMED` DEMO/REAL e slots
+  retidos continuam apenas visíveis em overlay separado **por usuário**,
+  montado fora do relatório/cache público. I03 não altera nem concilia ordens.
+
+### Contrato de saída e limitações de ML
+
+Cada ativo avaliado contém `context_timeframe`, com `profile`,
+`contexts.higher/intermediate/lower`, `alignment`, evidências, motivos,
+força, estabilidade, confiança heurística não probabilística, versões,
+timestamp, SHA-256 de proveniência **somente de dados públicos** e
+`execution_allowed=false`, `approved_for_trading=false`.
+
+A I03 não possui um modelo ML já validado e versionado a partir da base.
+O campo `ml.status=NO_VALIDATED_MODEL_AVAILABLE`/`used=false` declara isso:
+**não** há ajuste, inferência de ML, predição de vitória ou treinamento
+oculto. Uma futura integração de modelos deverá requerer artefatos de
+validação fora da amostra e autorização de escopo específica, sem
+sinais/ordens financeiros.
+
+**I04 ainda não foi iniciada**. A I03 foi limitada a classificação de
+contexto e hierarquia temporal. A confiança é somente uma medida
+determinística de consistência dos indicadores, nunca probabilidade
+calibrada de lucro.
+
+### Critérios de aceite e CI
+
+`tests/test_intelligence2_context_timeframe.py` cobre tendências de alta
+e baixa, lateralização, baixa/alta volatilidade, transição, irregularidade,
+falhas e gaps, exclusão de candles abertos, perfis por mercado/volatilidade/
+expiração, conflito forte/moderado, reversão com/sem confirmação, limites
+de concorrência, cobertura parcial explícita, integração I01/I02,
+respostas idênticas de contexto público em DEMO e REAL, contas isoladas
+no overlay e ausência de compra. CI continua as suítes completas I01/I02,
+P0-01…P0-05, F01 e PostgreSQL 16 descartável.
+
+**Regra de preservação:** não há merge, deploy, migração em produção,
+ativação de flags REAL, compra, novo executor, novo ledger, novo modelo
+não validado ou início de I04.
