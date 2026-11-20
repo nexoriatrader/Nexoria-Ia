@@ -181,7 +181,13 @@ def ingest_batch(*, now_epoch: int | None = None,
                     index_elements=["event_key"])
             else:
                 raise RuntimeError("Unsupported demo database engine")
-            new_rows += conn.execute(stmt).rowcount
+            # psycopg may report rowcount=-1 for INSERT .. ON CONFLICT.
+            # RETURNING distinguishes an actual insert from an idempotent skip.
+            inserted_id = conn.execute(
+                stmt.returning(measurements.c.id)
+            ).scalar_one_or_none()
+            if inserted_id is not None:
+                new_rows += 1
     return {
         "state": "SYNTHETIC_BATCH_PERSISTED", "source": SOURCE,
         "observed_at": observed.isoformat(), "inserted": new_rows,
