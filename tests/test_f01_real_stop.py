@@ -298,9 +298,8 @@ def test_slow_revocation_does_not_block_async_health_endpoint(stop_env):
         transport=httpx.ASGITransport(app=main.app)
         async with httpx.AsyncClient(transport=transport,
                                     base_url="http://f01.test") as client:
-            task=asyncio.create_task(client.post(
-                "/api/autopilot/stop",
-                cookies={"nexora_sid":"f01-auth-1"}))
+            client.cookies.set("nexora_sid","f01-auth-1")
+            task=asyncio.create_task(client.post("/api/autopilot/stop"))
             assert await asyncio.to_thread(started.wait,2.0)
             t0=time.monotonic()
             health=await asyncio.wait_for(client.get("/healthz"),timeout=0.5)
