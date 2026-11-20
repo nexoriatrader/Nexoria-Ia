@@ -3223,3 +3223,32 @@ async def demo_contract_route(request:Request, contract_id:str,
         return await demo_contract_status(token,user.deriv_account_id,contract_id)
     except DemoTradingError as e:
         raise HTTPException(502,str(e)) from None
+
+
+@app.get('/api/homologation/robot/research')
+async def robot_homologation_research(
+    request:Request,
+    view:str='autonomous',
+    nexora_sid:str|None=Cookie(default=None),
+):
+    """Authenticated READ-ONLY public context for robot display in homologation.
+
+    Never changes any existing mode, account, permission, stake, cycle,
+    strategy, side, contract, or order. All users see the same research.
+    """
+    active_user(request,nexora_sid)
+    from .intelligence2.homologation_runtime import (
+        homologation_enabled, robot_research_view,
+    )
+    if not homologation_enabled():
+        raise HTTPException(503,'Pesquisa de homologação não habilitada')
+    try:
+        return await asyncio.to_thread(robot_research_view,view=view)
+    except ValueError:
+        raise HTTPException(422,'Visão de pesquisa inválida') from None
+    except PermissionError:
+        raise HTTPException(503,'Pesquisa de homologação não habilitada') from None
+    except Exception:
+        # Never reveal database/schema details or financial state to the client.
+        log.exception('Public homologation snapshot unavailable')
+        raise HTTPException(503,'Pesquisa compartilhada indisponível') from None
