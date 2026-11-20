@@ -17,7 +17,9 @@ from sqlalchemy import create_engine, event, inspect, select, text
 from sqlalchemy.orm import sessionmaker
 
 from app import db
+from app.research_persistence import HistoricalResearchReport
 from app.intelligence2 import public_research_coordinator as coord
+from app.intelligence2 import public_research_decisions as decisions
 from app.intelligence2.public_research_coordinator import (
     ResearchCapacity, ResearchTask, CoordinationMetadata,
 )
@@ -263,3 +265,82 @@ def test_request_budget_caps_shared_research_claims(pg):
         )
     assert successful <= coord.MAX_REQUESTS_PER_MINUTE
     assert coord.public_worker_metrics(now=t)["requests_used_current_window"] <= 60
+
+
+def test_atomic_snapshot_delivery_rejects_stale_worker_and_is_idempotent(pg):
+    from app.intelligence2 import research_orchestrator
+    now = CLOCK + timedelta(days=2)
+    coord.set_public_dynamic_limit(new_limit=1, now=now)
+    request = coord.enqueue_public_task(
+        task_key="research_batch_fenced_snapshot",
+        market="public", symbol="SHARED",
+        source={
+            "source_version": "public_i03_v1",
+            "closed_epoch": 50_000,
+            "timeframe_seconds": 60,
+        }, now=now,
+    )
+    claim = coord.claim_public_task(worker_id="fenced_worker", now=now)
+    assert claim is not None
+    source = {
+        "version": research_orchestrator.VERSION,
+        "assets": [{
+            "market": "forex", "symbol": "FRXEURUSD",
+            "state": "RESEARCH_READY",
+            "observed_trend": "UP", "context_consensus": "THREE_TIMEFRAMES",
+            "evidence_strength": "CONSISTENT",
+            "evidence_completeness_points": 100,
+            "fingerprint": "a"*64,
+            "valid_until_epoch": int(now.timestamp()) + 60*10,
+            "reason_codes": ["PUBLIC_DATA_READY_FOR_STUDY"],
+            "execution_allowed": False,
+            "approved_for_trading": False,
+        }],
+        "distribution": {"publish_allowed": False},
+        "orders_sent": 0, "execution_allowed": False,
+        "approved_for_trading": False,
+    }
+    view = decisions.prioritize_public_research(
+        source, now=int(now.timestamp()),
+    )
+    after = now + timedelta(seconds=coord.LEASE_SECONDS+2)
+    outdated = decisions.persist_public_research_snapshot(
+        view, now=after, claim=claim, duration_ms=42,
+    )
+    assert outdated["stale"] is True
+    with db.SessionLocal() as session:
+        assert session.query(HistoricalResearchReport).filter(
+            HistoricalResearchReport.research_key.like("I20_PUBLIC_RESEARCH_%")
+        ).count() == 0
+    replacement = coord.claim_public_task(worker_id="second_worker", now=after)
+    assert replacement is not None
+    saved = decisions.persist_public_research_snapshot(
+        view, now=after+timedelta(seconds=1),
+        claim=replacement, duration_ms=47,
+    )
+    assert saved["stale"] is False and saved["created"] is True
+    again = decisions.persist_public_research_snapshot(
+        view, now=after+timedelta(seconds=2),
+    )
+    assert again["created"] is False and again["id"] == saved["id"]
+    with db.SessionLocal() as session:
+        task = session.get(ResearchTask, replacement["id"])
+        assert task.status == "DONE"
+        assert task.worker_id is None and task.lease_until is None
+        assert task.research_digest == saved["digest"]
+    assert coord.finish_public_task(
+        task_id=replacement["id"], worker_id=replacement["worker_id"],
+        fence=replacement["fence"], duration_ms=12,
+        result_digest="f"*64, now=after+timedelta(seconds=4),
+    ) is False
+
+
+def test_no_financial_runtime_registration_or_trigger(pg):
+    from app.intelligence2 import public_research_decisions as public
+    import asyncio
+    assert asyncio.run(public.run_one_public_research_task(
+        worker_id="disabled_worker",
+    )) == {
+        "state": "DISTRIBUTED_PUBLIC_RESEARCH_DISABLED",
+        "execution_allowed": False,
+    }
