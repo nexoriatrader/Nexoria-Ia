@@ -26,7 +26,7 @@ def _bars(seconds=60, *, mode="up", count=96):
     last = (NOW // seconds - 1) * seconds
     rows = []
     for i in range(count):
-        if mode == "up":
+        if mode in ("up", "irregular"):
             close = 100 + i * .18
         elif mode == "down":
             close = 130 - i * .18
