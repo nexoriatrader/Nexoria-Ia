@@ -201,6 +201,22 @@ def _safe_record(record: dict, *, observed: int, now: int,
             reason.append("CONTEXT_CONSENSUS_INSUFFICIENT")
     if state != "RESEARCH_READY":
         points = points if guard_ok and current else 0
+    # Metadata from existing I02/I03 evidence only. No strategy inference,
+    # financial fields, or new timeframe calculation.
+    strategy_source = record.get("strategy_provenance")
+    family = strategy_source.get("family") if isinstance(strategy_source, dict) else None
+    if not isinstance(family, str) or not re.fullmatch(r"[A-Za-z0-9_]{2,60}", family):
+        family = None
+    prereq_source = record.get("research_prerequisites")
+    profile = (prereq_source.get("timeframe_profile_seconds")
+               if isinstance(prereq_source, dict) else None)
+    verified_profile = (
+        isinstance(profile, dict)
+        and set(profile) == {"higher", "intermediate", "lower"}
+        and all(type(profile[role]) is int and profile[role] > 0
+                for role in ("higher", "intermediate", "lower"))
+        and profile["higher"] > profile["intermediate"] > profile["lower"]
+    )
     return {
         "market": market,
         "symbol": symbol,
@@ -208,6 +224,8 @@ def _safe_record(record: dict, *, observed: int, now: int,
         "observed_trend": trend if guard_ok else "NEUTRAL",
         "context_consensus": consensus if guard_ok else "UNAVAILABLE",
         "evidence_strength": record.get("evidence_strength") if guard_ok else "INVALID",
+        "strategy_family": family if guard_ok else None,
+        "research_timeframes_seconds": dict(profile) if guard_ok and verified_profile else None,
         "evidence_completeness_points": points,
         "confidence_kind": "DATA_COMPLETENESS_NOT_PROBABILITY",
         "fingerprint": fingerprint if identity_ok and not private else None,
