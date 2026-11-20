@@ -94,7 +94,8 @@ jobs:
           pg_client pg_dump -h 127.0.0.1 -U p0_ci -d nexora_p0_ci -Fc > "$DUMP"
           test -s "$DUMP"
           pg_client createdb -h 127.0.0.1 -U p0_ci nexora_p0_restored
-          pg_client pg_restore -h 127.0.0.1 -U p0_ci -d nexora_p0_restored --no-owner --no-privileges < "$DUMP"
+          # Container STDIN must remain attached for custom-format binary archive.
+          docker run --rm -i --network host -e PGPASSWORD="$PG_PASS" "$PG_IMAGE" pg_restore -h 127.0.0.1 -U p0_ci -d nexora_p0_restored --no-owner --no-privileges < "$DUMP"
           actual=$(pg_client psql -h 127.0.0.1 -U p0_ci -d nexora_p0_restored -At -c 'SELECT check_number FROM public.ci_backup_probe')
           test "$actual" = 42
           echo "Synthetic custom-format backup and independent-db restore: verified"
