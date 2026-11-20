@@ -166,3 +166,46 @@ O teste `tests/test_postgres_f01_schema_guard.py` inspeciona as instruções env
 - `test_postgresql_migration_version_missing_blocks_all_automatic_ddl`: nenhum objeto criado por duas tentativas de inicialização sem migração.
 
 **Esses cenários usam apenas processos de teste, dados sintéticos, PostgreSQL local descartável e broker não acessível.** A aprovação de CI não substitui uma nova revisão humana independente da PR.
+
+
+## F01 — Fechamento da validação estrutural da migração (sem implantação)
+
+Correção restrita ao risco de `CREATE TABLE IF NOT EXISTS` sobre tabela preexistente
+incompatível: `migrations/F01_GLOBAL_FENCING_V1_POSTGRES.sql` mantém um único
+`BEGIN/COMMIT`, bloqueia as tabelas F01 durante a validação, examina objetos
+no `current_schema()` e **somente depois** insere a linha singleton e a revisão
+`f01_global_fencing_v1`. Em caso de incompatibilidade, `RAISE EXCEPTION`
+aborta a transação; nenhum objeto recém-criado nem carimbo novo sobrevivem.
+A execução repetida valida novamente e preserva as gerações já avançadas.
+O pré-requisito `users(id INTEGER PRIMARY KEY)` é inspecionado.
+
+Contrato exigido para cada uma das três tabelas F01: tabela comum, conjunto
+exato de colunas, tipos PostgreSQL, `NOT NULL`, defaults, chave primária e
+seu índice íntegro, CHECKs validados e obrigatórios (geração não negativa,
+ID global igual a 1), FK de usuário referenciando `users(id)` no schema
+esperado, sem `ON DELETE CASCADE`, sem constraints não validadas ou extras,
+e singleton global com geração válida. Nomes de constraints podem variar,
+mas suas definições não. A tabela de revisões também é validada antes do
+registro. Não há reconstrução automática de estruturas preexistentes
+incorretas.
+
+`app/db.py` executa uma inspeção `SELECT` do mesmo contrato no startup
+PostgreSQL, inclusive quando alguém preencheu manualmente a revisão sobre um
+esquema incompatível: o serviço falha fechado. Os metadados das duas tabelas
+de fencing incluem defaults de servidor e CHECKs equivalentes para fixtures
+descartáveis; isso **não ativa DDL** em inicialização PostgreSQL.
+
+Testes exclusivos PostgreSQL 16 descartável:
+`tests/test_postgres_f01_migration_validation.py` cobre criação com
+estruturas ausentes, estruturas preexistentes válidas, reexecução sem reset
+de geração, incompatibilidades de colunas/tipos/timestamp/nullability/
+default/PK/FK/CHECK/singleton, rollback sem novo carimbo, revisão mal
+tipada e recusa do startup de esquema incompatível mesmo carimbado.
+`tests/test_postgres_f01_schema_guard.py` segue exigindo zero DDL/DML
+no startup. Ambos são chamados por `.github/workflows/test.yml` na branch F01.
+
+**Limites preservados:** a migração acima é somente uma proposta versionada;
+não foi executada em Supabase/produção. Nenhuma mudança nos gates
+administrativos REAL, nenhum envio Deriv, merge, deploy ou início de F02.
+A PR #50 permanece DRAFT. O encerramento técnico da F01 depende de CI
+verde no SHA final e revisão independente consolidada P0-01 a P0-05 + F01.
