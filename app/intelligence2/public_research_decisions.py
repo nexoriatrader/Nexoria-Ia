@@ -22,7 +22,7 @@ from .. import db
 from ..research_persistence import HistoricalResearchReport
 from .public_research_coordinator import (
     VERSION as COORDINATION_VERSION,
-    ResearchCapacity, _pg_session, _row_lock, _clock,
+    ResearchCapacity, ResearchTask, _pg_session, _row_lock, _clock, _utc,
     claim_public_task, finish_public_task,
 )
 from .research_orchestrator import VERSION as ORCHESTRATOR_VERSION
@@ -154,7 +154,7 @@ def prioritize_public_research(report, *, now=None, max_items=8):
     }
 
 
-def persist_public_research_snapshot(snapshot, *, now=None):
+def persist_public_research_snapshot(snapshot, *, now=None, claim=None, duration_ms=None):
     """Idempotent internal research publication using EXISTING report table.
 
     Serialized by the same capacity singleton that coordinates worker claims.
@@ -185,22 +185,52 @@ def persist_public_research_snapshot(snapshot, *, now=None):
     with db.SessionLocal() as session:
         _pg_session(session)
         _row_lock(session)
+        task = None
+        if claim is not None:
+            if (
+                not isinstance(claim, dict)
+                or type(claim.get("id")) is not int
+                or type(claim.get("fence")) is not int
+                or not isinstance(claim.get("worker_id"), str)
+                or type(duration_ms) is not int or duration_ms < 0
+            ):
+                raise ValueError("Missing fenced public task identity")
+            task = session.get(ResearchTask, claim["id"], with_for_update=True)
+            if (
+                task is None or task.status != "RUNNING"
+                or task.worker_id != claim["worker_id"]
+                or task.fencing_token != claim["fence"]
+                or task.lease_until is None or now >= _utc(task.lease_until)
+            ):
+                return {"stale": True, "created": False, "digest": None}
         existing = session.scalar(select(HistoricalResearchReport).where(
             HistoricalResearchReport.research_key == key
         ).order_by(HistoricalResearchReport.id.desc()).limit(1))
         if existing is not None:
             if existing.payload_json != body:
                 raise ValueError("Public research snapshot key collision")
-            return {"id": existing.id, "digest": digest, "created": False}
-        record = HistoricalResearchReport(
-            research_key=key, period_from=now, period_to=now,
-            created_at=now, payload_json=body,
-        )
-        session.add(record)
-        session.flush()
-        id_ = record.id
+            identity, created = existing.id, False
+        else:
+            record = HistoricalResearchReport(
+                research_key=key, period_from=now, period_to=now,
+                created_at=now, payload_json=body,
+            )
+            session.add(record)
+            session.flush()
+            identity, created = record.id, True
+        if task is not None:
+            # Save public result + finish fenced work in ONE transaction.
+            # Lost lease cannot persist, even after another worker recovers it.
+            task.status = "DONE"
+            task.research_digest = digest
+            task.duration_ms = duration_ms
+            task.completed_at = now
+            task.updated_at = now
+            task.worker_id = None
+            task.lease_until = None
         session.commit()
-        return {"id": id_, "digest": digest, "created": True}
+        return {"id": identity, "digest": digest, "created": created,
+                "stale": False}
 
 
 async def run_one_public_research_task(*, worker_id, now=None):
@@ -225,17 +255,17 @@ async def run_one_public_research_task(*, worker_id, now=None):
         snapshot = prioritize_public_research(
             source, now=int(now.timestamp()),
         )
-        persisted = await asyncio.to_thread(
-            persist_public_research_snapshot, snapshot, now=now,
-        )
         elapsed = max(0, round((time.monotonic() - started) * 1000))
-        finished = await asyncio.to_thread(
-            finish_public_task, task_id=claim["id"], worker_id=worker_id,
-            fence=claim["fence"], result_digest=persisted["digest"],
-            duration_ms=elapsed, now=datetime.now(timezone.utc),
+        persisted = await asyncio.to_thread(
+            persist_public_research_snapshot, snapshot,
+            now=datetime.now(timezone.utc), claim=claim,
+            duration_ms=elapsed,
         )
         return {
-            "state": "RESEARCH_SAVED" if finished else "STALE_WORKER_FENCED",
+            "state": (
+                "STALE_WORKER_FENCED" if persisted.get("stale")
+                else "RESEARCH_SAVED"
+            ),
             "id": claim["id"], "execution_allowed": False,
         }
     except Exception:
