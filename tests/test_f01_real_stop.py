@@ -273,3 +273,43 @@ def test_repeated_stop_advances_fence_without_rewriting_revocation(stop_env):
     with Session() as s:
         assert s.get(db.RealAuthorizationFence,1).generation==initial+1
         assert s.get(db.RealRobotConsent,1).revoked_at==revoked
+
+
+def test_slow_revocation_does_not_block_async_health_endpoint(stop_env):
+    """STOP's synchronous PostgreSQL-style wait must run outside ASGI loop."""
+    import asyncio
+    import threading
+    import time
+    import httpx
+
+    _,Session,broker,monkeypatch=stop_env
+    started=threading.Event()
+    original=real_runtime.revoke_real_consent_for_stop
+
+    def simulate_slow_db(uid):
+        started.set()
+        time.sleep(0.7)
+        return original(uid)
+
+    monkeypatch.setattr(real_runtime,"revoke_real_consent_for_stop",
+                        simulate_slow_db)
+
+    async def scenario():
+        transport=httpx.ASGITransport(app=main.app)
+        async with httpx.AsyncClient(transport=transport,
+                                    base_url="http://f01.test") as client:
+            task=asyncio.create_task(client.post(
+                "/api/autopilot/stop",
+                cookies={"nexora_sid":"f01-auth-1"}))
+            assert await asyncio.to_thread(started.wait,2.0)
+            t0=time.monotonic()
+            health=await asyncio.wait_for(client.get("/healthz"),timeout=0.5)
+            elapsed=time.monotonic()-t0
+            assert health.status_code==200
+            assert elapsed<0.5
+            response=await asyncio.wait_for(task,timeout=3.5)
+            assert response.status_code==200,response.text
+            assert response.json()["real_revocation_status"]=="REVOKED_NOW"
+
+    asyncio.run(scenario())
+    broker.assert_not_awaited()
