@@ -113,6 +113,8 @@ def _release_event(session, scope: tuple, *, champion_id: int | None,
                    bad_streak: int = 0) -> dict:
     if event not in ("PROMOTED", "MONITORED", "AUTO_ROLLBACK"):
         raise LearningError("Evento de release inválido")
+    if previous is not None and kb._utc(previous[0].created_at)>kb._utc(now):
+        raise LearningError("Release de pesquisa retroativo")
     entry={
         "version":VERSION,"scope":{
             "market":scope[0],"symbol":scope[1],
@@ -160,7 +162,11 @@ def _release_history(session, scope: tuple):
                 or entry.get("previous_sha256")!=expected_previous_sha
                 or entry.get("generation")!=(previous[1]["generation"]+1 if previous else 1)
                 or entry.get("execution_allowed") is not False
-                or entry.get("approved_for_trading") is not False):
+                or entry.get("approved_for_trading") is not False
+                or kb._utc(row.created_at)!=kb._utc(
+                    datetime.fromisoformat(entry["recorded_at"]))
+                or (previous is not None
+                    and kb._utc(row.created_at)<kb._utc(previous[0].created_at))):
                 raise ValueError("release history inconsistency")
             previous=(row,entry)
         except (TypeError,ValueError,KeyError,IndexError) as exc:
@@ -182,6 +188,7 @@ def _model_research_ready(session, knowledge_id: int | None, *, now: datetime,
         and kb._utc(item.valid_from)<=now<kb._utc(item.valid_until)
         and now<kb._utc(item.next_review_at)
         and view["execution_allowed"] is False
+        and view["reusable_for_research"] is True
     )
 
 
@@ -505,7 +512,7 @@ def get_research_release(*, market: str, symbol: str,
     scope=_scope(market,symbol,timeframe_seconds)
     with db.SessionLocal() as session:
         latest=_release_history(session,scope)
-        if latest is None:
+        if latest is None or kb._utc(latest[0].created_at)>now:
             return {
                 "version":VERSION,"state":"NO_VALIDATED_RESEARCH_MODEL",
                 "champion_knowledge_id":None,
