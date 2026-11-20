@@ -245,8 +245,10 @@ def _validated_model(knowledge: object, knowledge_id: int, *,
         if not isinstance(row, dict):
             continue
         group = row.get("origin_group")
-        if group not in _GROUPS or group in by_group:
+        if group not in _GROUPS:
             continue
+        if group in by_group:
+            return "I05_DUPLICATED_INDEPENDENT_EVIDENCE", None
         if (
             row.get("verified") is not True
             or row.get("source_type") != "MODEL_ARTIFACT"
