@@ -76,6 +76,7 @@ td{color:#d8e9f0}tr:last-child td{border:0}
 <div class="brand-sub">Intelligence Monitor</div></div>
 <nav class="nav-wrap" aria-label="Navegação principal">
 <a class="nav active" href="#overview">◈ Visão geral</a>
+<a class="nav" href="#historical-research">▤ Pesquisas históricas</a>
 <a class="nav" href="#modules">▦ Módulos I01–I06</a>
 <a class="nav" href="#processing">◷ Processamento</a>
 <a class="nav" href="#ohlc-archive">▧ OHLC histórico</a><a class="nav" href="#pipeline">⇢ Pipeline</a><a class="nav" href="#records">≡ Histórico de dados</a>
@@ -100,6 +101,19 @@ td{color:#d8e9f0}tr:last-child td{border:0}
 <div class="metric"><div class="label">Eventos repetidos</div><div class="num" id="k-duplicates">—</div><div class="foot">Ignorados por idempotência</div></div>
 <div class="metric"><div class="label">Falhas de execução</div><div class="num" id="k-errors">—</div><div class="foot">Ocorrências registradas</div></div>
 </div>
+<div class="section section-anchor" id="historical-research"><div>
+<h2>Pesquisas históricas — fluxo independente</h2>
+<p>Inicie uma pesquisa com OHLC sintético fechado, classificação de qualidade, indicadores descritivos, arquivo de conhecimento, avaliação cronológica, evidências e relatório final.</p>
+</div><span class="badge neutral" id="research-count">Sem consulta</span></div>
+<section class="surface">
+<div class="connection"><button id="start-research" class="action" type="button" disabled>Iniciar pesquisa histórica</button>
+<span class="muted" id="research-action-status">Autentique-se para iniciar.</span></div>
+<p class="sub">Fonte: REPRODUCIBLE_SYNTHETIC_OHLC_FIXTURE. Esta pesquisa não consulta corretoras nem produz recomendações ou operações.</p>
+<div id="research-runs" class="table-scroll" style="margin-top:14px">Sem pesquisas consultadas.</div>
+</section>
+<div class="section"><div><h2>Detalhe da pesquisa selecionada</h2>
+<p>Entradas e saídas reais das transformações, com SHA-256, horário e duração.</p></div></div>
+<section class="surface"><div id="research-detail" class="muted">Selecione uma execução para visualizar seus resultados e etapas persistidas.</div></section>
 <div class="section section-anchor" id="modules"><div><h2>Estado dos módulos</h2><p>Disponibilidade do código é diferente de integração ativa. Estados baseados em telemetria.</p></div><span class="badge pending">I01–I06 não integrados neste serviço</span></div>
 <div class="module-grid" id="module-grid"><div class="empty surface">Aguardando autenticação para carregar módulos.</div></div>
 <div class="section section-anchor" id="processing"><div><h2>Processamento e integridade</h2><p>Ciclos persistidos, tempo de execução e indicadores reais da demonstração.</p></div><span class="muted" id="last-sync">Sem consulta</span></div>
@@ -138,7 +152,7 @@ function setText(id,val){$(id).textContent=String(val)}
 function element(tag,cls,value){const n=document.createElement(tag);if(cls)n.className=cls;if(value!==undefined)n.textContent=String(value);return n}
 function td(row,value,cls){const n=element('td',cls,value);row.appendChild(n)}
 function statusPill(state){return state==='AVAILABLE'?['badge','Disponível']:state==='DEGRADED'?['badge pending','Atenção']:state==='NOT_CONNECTED'?['badge pending','Não integrado']:['badge error','Indisponível']}
-async function api(path){const result=await fetch(path,{cache:'no-store',headers:{'X-NEXORA-STAGE4-KEY':$('token').value}});if(!result.ok)throw Error('HTTP '+result.status);return result.json()}
+async function api(path,method='GET'){const result=await fetch(path,{cache:'no-store',method,headers:{'X-NEXORA-STAGE4-KEY':$('token').value}});if(!result.ok)throw Error('HTTP '+result.status);return result.json()}
 function modules(data){const root=$('module-grid');root.replaceChildren();for(const m of data.modules){const card=element('article','module-card');const head=element('div','module-head');head.appendChild(element('span','module-id',m.id));const pill=statusPill(m.status);head.appendChild(element('span',pill[0],pill[1]));card.appendChild(head);card.appendChild(element('h3','',m.name));card.appendChild(element('div','details',m.details));if(m.contract_capabilities){
 const caps=m.contract_capabilities;
 const funcs=caps.offline_functions.length?caps.offline_functions.join(', '):'nenhuma exposta';
@@ -149,11 +163,67 @@ function chart(data){const root=$('class-chart');root.replaceChildren();const cl
 function health(data){const grid=$('health-grid');grid.replaceChildren();const h=data.health;const s=data.summary;const points=[['PostgreSQL',h.database],['Atualização',h.dataset_freshness==='CURRENT'?'Em dia':'Atrasada'],['Última leitura',stamp(s.latest_observed_at)],['Tempo médio',(s.mean_processing_ms===null?'—':s.mean_processing_ms+' ms')],['Integridade amostral',h.integrity_sample.status+' · '+h.integrity_sample.checked_rows+' linhas'],['Registros incompletos',nf.format(s.incomplete_observations)],['Registros inválidos',nf.format(s.invalid_observations)],['Tempo ativo',Math.round(h.uptime_seconds/60)+' min']];for(const item of points){const card=element('div');card.appendChild(element('small','',item[0]));card.appendChild(element('strong','',item[1]));grid.appendChild(card)}}
 function makeRows(id,entries,fields){const root=$(id);root.replaceChildren();if(!entries.length){const tr=element('tr');td(tr,'Nenhum registro disponível');root.appendChild(tr);return}for(const item of entries){const tr=element('tr');for(const field of fields){let val=item[field];if(field.endsWith('_at'))val=stamp(val);if(field==='duration_ms')val=val+' ms';if(field==='status')val=val==='OK'?'Concluída':val;if(field==='value')val=String(val)+' '+item.unit;td(tr,val==null?'—':val,field==='status'&&item.status==='ERROR'?'bad':'')}root.appendChild(tr)}}
 function diagnosis(data){const root=$('diagnostics-list');root.replaceChildren();if(!data.diagnostics.length){root.appendChild(element('p','good','Sem avisos ou erros nas execuções consultadas.'));return}for(const d of data.diagnostics){const line=element('div','diagnostic');line.appendChild(element('span',d.level==='ERROR'?'badge error':'badge neutral',d.level==='ERROR'?'Erro':'Informação'));const wrap=element('div');wrap.appendChild(element('b','',d.code));wrap.appendChild(element('div','message muted',d.details+' · '+stamp(d.at)));line.appendChild(wrap);root.appendChild(line)}}
-async function refresh(){if(!connected||busy)return;busy=true;try{const [data,trace,oh]=await Promise.all([
+let selectedResearch=null;
+async function loadResearch(){
+const data=await api('/api/homologation/research/runs?limit=20');
+setText('research-count',nf.format(data.total)+' pesquisa(s)');
+const target=$('research-runs');target.replaceChildren();
+if(!data.runs.length){target.appendChild(element('p','muted','Nenhuma pesquisa iniciada.'));return}
+const table=element('table');const thead=element('thead');const header=element('tr');
+for(const n of ['Quando','Estado','Etapas','Duração','Origem','Detalhes']){header.appendChild(element('th','',n))}
+thead.appendChild(header);table.appendChild(thead);
+const tbody=element('tbody');
+for(const run of data.runs){const row=element('tr');
+for(const val of [stamp(run.finished_at),run.state,run.step_count,run.duration_ms+' ms','SINTÉTICA']){
+td(row,val)}
+const cell=element('td');const btn=element('button','secondary','Visualizar');
+btn.type='button';btn.addEventListener('click',()=>loadResearchDetail(run.id));
+cell.appendChild(btn);row.appendChild(cell);tbody.appendChild(row)}
+table.appendChild(tbody);target.appendChild(table);
+if(!selectedResearch&&data.runs[0])await loadResearchDetail(data.runs[0].id);
+}
+async function loadResearchDetail(id){
+const result=await api('/api/homologation/research/runs/'+id);
+selectedResearch=id;
+const target=$('research-detail');target.replaceChildren();
+target.appendChild(element('h3','','Pesquisa '+id.slice(0,12)+' · '+result.state));
+target.appendChild(element('div','muted','Relatório SHA-256: '+(result.result_sha256||'não gerado')+
+' · '+stamp(result.finished_at)+' · '+result.duration_ms+' ms · origem sintética'));
+if(result.report){const pre=element('pre','',JSON.stringify(result.report,null,2));
+pre.style.whiteSpace='pre-wrap';pre.style.overflowWrap='anywhere';pre.style.fontSize='12px';
+target.appendChild(pre)}
+for(const s of result.stages){
+const details=element('details');details.style.marginTop='12px';
+const sum=element('summary','',s.ordinal+'. '+s.name+' · '+s.state+' · '+s.duration_ms+' ms');
+details.appendChild(sum);
+const text=element('pre','',JSON.stringify({started_at:s.started_at,finished_at:s.finished_at,
+reason:s.reason,input_sha256:s.input_sha256,output_sha256:s.output_sha256,
+input:s.input,output:s.output},null,2));
+text.style.whiteSpace='pre-wrap';text.style.overflowWrap='anywhere';text.style.fontSize='11px';
+text.style.maxHeight='400px';text.style.overflow='auto';
+details.appendChild(text);target.appendChild(details)}
+}
+async function initiateResearch(){
+const btn=$('start-research');btn.disabled=true;setText('research-action-status','Executando pesquisa...');
+try{
+ const started=await api('/api/homologation/research/runs','POST');
+ await loadResearch();await loadResearchDetail(started.id);
+ setText('research-action-status','Concluída: '+started.step_count+' etapas gravadas.');
+}catch(e){setText('research-action-status','Erro ao iniciar: '+e.message)}
+finally{btn.disabled=!connected}
+}
+$('start-research').addEventListener('click',initiateResearch);
+
+async function refresh(){if(!connected||busy)return;busy=true;try{const [data,trace,oh,studies]=await Promise.all([
 api('/api/homologation/monitor/overview?runs_limit=30&records_limit=30'),
 api('/api/homologation/monitor/pipeline?limit=35'),
-api('/api/homologation/monitor/ohlc-quality?limit=4')
+api('/api/homologation/monitor/ohlc-quality?limit=4'),
+api('/api/homologation/research/runs?limit=20')
 ]);
+$('start-research').disabled=false;
+setText('research-count',nf.format(studies.total)+' pesquisa(s)');
+if(!selectedResearch&&studies.runs.length){await loadResearch();}
+else if(selectedResearch){/* Keep the selected result while monitoring refreshes. */}
 setText('k-records',nf.format(data.summary.stored_records));setText('k-runs',nf.format(data.summary.total_runs));setText('k-duplicates',nf.format(data.summary.duplicate_observations));setText('k-errors',nf.format(data.summary.failed_runs));modules(data);chart(data);health(data);makeRows('runs-body',data.runs,['finished_at','status','processed','inserted','duplicates','duration_ms','reason']);makeRows('records-body',data.records,['observed_at','station','metric','value','classification','recorded_at']);diagnosis(data);
 setText('ohlc-count',nf.format(oh.total)+' amostra(s) auditada(s)');
 const area=$('ohlc-audit');area.replaceChildren();

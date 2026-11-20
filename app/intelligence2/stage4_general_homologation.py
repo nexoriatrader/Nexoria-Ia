@@ -132,6 +132,11 @@ def bootstrap_schema() -> None:
         if ohlc_found is None:
             conn.execute(insert(revisions).values(
                 revision=ohlc.REVISION, applied_at=now))
+        research_found = conn.execute(select(revisions.c.revision).where(
+            revisions.c.revision == research.REVISION)).scalar_one_or_none()
+        if research_found is None:
+            conn.execute(insert(revisions).values(
+                revision=research.REVISION, applied_at=now))
     log.warning("stage4_general_schema_verified revision=%s", SCHEMA_REVISION)
 
 
@@ -155,6 +160,10 @@ def verify_schema() -> None:
             revisions.c.revision == ohlc.REVISION)).scalar_one_or_none()
         if active_ohlc != ohlc.REVISION:
             raise RuntimeError("Offline OHLC quality schema not installed")
+        active_research = conn.execute(select(revisions.c.revision).where(
+            revisions.c.revision == research.REVISION)).scalar_one_or_none()
+        if active_research != research.REVISION:
+            raise RuntimeError("Historical research incremental migration not installed")
 
 
 def _value(bucket: int, station: str, metric: str) -> float:
@@ -350,6 +359,12 @@ async def _loop(stop: asyncio.Event):
 async def lifespan(_: FastAPI):
     """Verify DB persistence and real HTTP routes on every isolated restart."""
     verify_schema()
+    previous_research = await asyncio.to_thread(research.list_research, 1)
+    previous_latest = previous_research["runs"][0] if previous_research["runs"] else None
+    log.warning("stage4_research_restart prior_runs=%s previous_id=%s previous_digest=%s",
+                previous_research["total"],
+                previous_latest["id"] if previous_latest else "NONE",
+                previous_latest["result_sha256"] if previous_latest else "NONE")
     old_archive = await asyncio.to_thread(ohlc.read_audits, limit=1)
     quality = await asyncio.to_thread(ohlc.record_fixture_audit)
     after_archive = await asyncio.to_thread(ohlc.read_audits, limit=1)
@@ -396,6 +411,18 @@ async def lifespan(_: FastAPI):
         missing_ohlc_key = await client.get("/api/homologation/monitor/ohlc-quality")
         archived_ohlc = await client.get("/api/homologation/monitor/ohlc-quality",
                                          headers=headers)
+        research_missing = await client.post("/api/homologation/research/runs")
+        new_research = await client.post("/api/homologation/research/runs",
+                                         headers=headers)
+        if new_research.status_code == 200:
+            research_detail = await client.get(
+                "/api/homologation/research/runs/" + new_research.json()["id"],
+                headers=headers,
+            )
+        else:
+            research_detail = None
+        research_list = await client.get("/api/homologation/research/runs",
+                                         headers=headers)
     if not (
         unauthorized.status_code == 401
         and authorized.status_code == 200
@@ -411,6 +438,15 @@ async def lifespan(_: FastAPI):
         and archived_ohlc.status_code == 200
         and archived_ohlc.json().get("total",0) >= 1
         and archived_ohlc.json().get("i01_module_integrated") is False
+        and research_missing.status_code == 401
+        and new_research.status_code == 200
+        and research_detail is not None
+        and research_detail.status_code == 200
+        and research_detail.json().get("step_count") == len(research.STAGES)
+        and len(research_detail.json().get("stages",[])) == len(research.STAGES)
+        and research_detail.json().get("result_sha256") == new_research.json()["result_sha256"]
+        and research_list.status_code == 200
+        and research_list.json().get("total",0) > previous_research["total"]
         and stages.json().get("summary",{}).get("stage_executions",0) >= len(pipeline.STAGES)
         and monitor.json().get("summary",{}).get("stored_records",0) >= len(STATIONS)
         and monitor.json().get("summary",{}).get("total_runs",0) >= 1
@@ -428,6 +464,13 @@ async def lifespan(_: FastAPI):
         "stage4_pipeline_smoke auth_missing=401 trace=200 stages=%s cycles=%s",
         stages.json()["summary"]["stage_executions"],
         stages.json()["summary"]["cycles_observed"],
+    )
+    log.warning(
+        "stage4_research_smoke auth_missing=401 post=200 get=200 list=200 "
+        "prior_runs=%s total_runs=%s run_id=%s digest=%s steps=%s",
+        previous_research["total"], research_list.json()["total"],
+        new_research.json()["id"],new_research.json()["result_sha256"],
+        research_detail.json()["step_count"],
     )
     log.warning(
         "stage4_ohlc_smoke missing_key=401 valid_key=200 "
@@ -632,6 +675,50 @@ async def offline_ohlc_quality(
         raise HTTPException(503, "Historical OHLC quality audit unavailable") from None
 
 
+@app.post("/api/homologation/research/runs")
+async def start_historical_research(
+    x_nexora_stage4_key: str | None = Header(default=None),
+):
+    _auth(x_nexora_stage4_key)
+    try:
+        result = await asyncio.to_thread(research.create_research)
+        return result
+    except Exception:
+        log.exception("stage4_historical_research_failed")
+        raise HTTPException(503, "Historical research unavailable") from None
+
+
+@app.get("/api/homologation/research/runs")
+async def historical_research_history(
+    limit: int = Query(default=20, ge=1, le=100),
+    x_nexora_stage4_key: str | None = Header(default=None),
+):
+    _auth(x_nexora_stage4_key)
+    try:
+        return await asyncio.to_thread(research.list_research, limit)
+    except Exception:
+        log.exception("stage4_research_list_unavailable")
+        raise HTTPException(503, "Research history unavailable") from None
+
+
+@app.get("/api/homologation/research/runs/{run_id}")
+async def historical_research_detail(
+    run_id: str,
+    x_nexora_stage4_key: str | None = Header(default=None),
+):
+    _auth(x_nexora_stage4_key)
+    try:
+        found = await asyncio.to_thread(research.get_research, run_id)
+    except ValueError:
+        raise HTTPException(422, "Invalid research identifier") from None
+    except Exception:
+        log.exception("stage4_research_detail_unavailable")
+        raise HTTPException(503, "Research detail unavailable") from None
+    if found is None:
+        raise HTTPException(404, "Research not found")
+    return found
+
+
 @app.get("/api/homologation/monitor/modules")
 async def monitoring_modules(x_nexora_stage4_key: str | None = Header(default=None)):
     _auth(x_nexora_stage4_key)
@@ -668,4 +755,5 @@ async def index():
 from . import stage4_observability as observer
 from . import stage4_general_pipeline as pipeline
 from . import stage4_ohlc_quality as ohlc
+from . import stage4_historical_research as research
 
