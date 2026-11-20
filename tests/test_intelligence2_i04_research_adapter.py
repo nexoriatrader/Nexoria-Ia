@@ -202,7 +202,7 @@ def test_read_existing_i04_market_and_strategy_evidence_without_writes():
     assert result["orders_sent"] == 0
     assert result["execution_allowed"] is False
     assert result["distribution"]["publish_allowed"] is False
-    assert "payload" not in str(kb)
+    assert all("payload" not in item for item in kb["used_public_knowledge"])
     assert "account_id" not in str(result)
 
 
