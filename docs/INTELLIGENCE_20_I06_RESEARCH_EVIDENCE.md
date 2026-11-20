@@ -1,4 +1,51 @@
-# NEXORA Intelligence 2.0 — I06: avaliação de evidências, pesquisa somente
+# I06 — Research Evidence Engine | NEXORA INTELLIGENCE 2.0
+
+## Classificação formal da entrega
+
+**Nome oficial desta entrega:** `I06 — Research Evidence Engine`.
+A PR #59 NÃO implementa integralmente o `Signal Generation Engine`
+originalmente especificado. O nome e a delimitação abaixo são deliberados:
+nenhum campo de pesquisa concede autorização financeira ou significa
+probabilidade validada de resultado.
+
+### Componentes implementados
+- Reutilização dos dados públicos I01, seleção I02 e contexto/timeframe I03
+  pelo scanner e pelas interfaces já existentes.
+- Qualidade e fechamento efetivo de candles, conflitos entre três timeframes,
+  justificativas, proveniência, fingerprint SHA-256 e flags de não execução.
+- Deduplicação por relatório público, validade de observação e ciclo de vida
+  dos registros de estudo (NEW/UPDATED/UNCHANGED/RETIRED e
+  ACTIVE_RESEARCH/CANCELLED/EXPIRED/CONCLUDED).
+- Avaliação `WAIT` ou `DO NOT TRADE` e indicação independente de
+  `DATA_READY_FOR_STUDY`, sem distribuir sinais.
+- `research_confidence.points` de 0–100 mede SOMENTE **completude de
+  evidências/metadados verificados**. Não mede probabilidade de ganho,
+  acurácia de previsão nem capacidade preditiva validada.
+
+### Componentes parcialmente implementados
+- Identificação observacional de padrões e de tendência UP/DOWN/NEUTRAL,
+  sem classificação operacional de contratos.
+- Parâmetros de perfil de timeframe herdados de I03, sem seleção ou
+  verificação de expiração contratual.
+- TTL de 60 segundos da validade dos **dados públicos**, que não constitui
+  janela de entrada financeira.
+- Família de estratégia identificada por metadados I02, ainda sem versão
+  da estratégia dedicada, modelo validado ou aprendizagem comprovada.
+
+### Integrações futuras
+- I04 Knowledge Base e I05 Learning: não disponíveis nesta cadeia
+  integrada; não inventar interfaces, dados ou aprovações.
+- Strategy Intelligence dedicado e Signal Distribution Engine: contratos
+  não disponíveis; adaptadores permanecem `NOT_CONNECTED` e
+  `publish_allowed=false`.
+- Orquestração centralizada I01/I02/I03/I06: camada separada de
+  consolidação, sem duplicar scanners, cálculos ou caches.
+
+### Fora do escopo desta entrega
+- `CALL`/`PUT`, `SIGNAL APPROVED`, janela para abrir posições,
+  expiração de contratos e ordens Deriv.
+- Autorização REAL, execução automática, alterações de banco,
+  migrações, flags de produção, publicação ativa ou promoção I04/I05.
 
 ## Implementado
 
