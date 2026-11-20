@@ -154,7 +154,7 @@ def test_multiple_threads_never_exceed_persisted_capacity(pg):
     assert metrics["hard_cap"] == 8
 
 
-def _child_claim(pg_url, worker_id, output):
+def _child_claim(pg_url, worker_id, clock, output):
     from sqlalchemy import create_engine
     from sqlalchemy.orm import sessionmaker
     from app import db
@@ -162,7 +162,7 @@ def _child_claim(pg_url, worker_id, output):
     engine = create_engine(pg_url, pool_pre_ping=True)
     db.SessionLocal = sessionmaker(bind=engine, expire_on_commit=False)
     try:
-        out = coord.claim_public_task(worker_id=worker_id, now=CLOCK)
+        out = coord.claim_public_task(worker_id=worker_id, now=clock)
         output.put(out)
     finally:
         engine.dispose()
@@ -177,7 +177,7 @@ def test_distinct_processes_obey_same_cap_and_no_duplicate_claim(pg):
     out = context.Queue()
     procs = [
         context.Process(
-            target=_child_claim, args=(PG, f"proc_{i:04d}", out),
+            target=_child_claim, args=(PG, f"proc_{i:04d}", t, out),
         ) for i in range(6)
     ]
     for p in procs:
