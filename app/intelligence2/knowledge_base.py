@@ -149,7 +149,9 @@ def _identity(category: str, market: str, symbol: str, timeframe_seconds: int,
 def _snapshot_digest(rows: list[db.IntelligenceKnowledgeEvidence]) -> str:
     values = [{
         "source_type": x.source_type, "source_ref": x.source_ref,
-        "source_digest": x.source_digest, "origin_group": x.origin_group,
+        "source_digest": x.source_digest,
+        "evidence_summary_json": x.evidence_summary_json,
+        "origin_group": x.origin_group,
         "verified": x.verified, "observation_count": x.observation_count,
         "group_size": x.group_size,
         "period_from": _timestamp(x.period_from),
@@ -193,6 +195,10 @@ def _read_integrity(session, item) -> list:
     if (len(log) != item.revision
         or [event.revision for event in log] != list(range(1, item.revision + 1))
         or log[-1].to_state != item.state
+        or log[0].from_state is not None
+        or log[0].to_state != "DISCOVERED"
+        or any(log[i].from_state != log[i-1].to_state
+               for i in range(1, len(log)))
         or log[-1].evidence_digest != _snapshot_digest(rows)):
         raise KnowledgeUnavailable("Cadeia de decisões ou evidências incompatível")
     return rows
@@ -201,16 +207,20 @@ def _read_integrity(session, item) -> list:
 def _public_record(item, *, now: datetime, observed_regime: str | None = None) -> dict:
     expired = not (_utc(item.valid_from) <= now < _utc(item.valid_until))
     overdue = now >= _utc(item.next_review_at)
+    # A regime-specific ACTIVE record is not safe to reuse without current
+    # public context supplied by the caller. Missing observations fail closed.
+    regime_missing = item.regime != "UNKNOWN" and observed_regime is None
     regime_mismatch = observed_regime is not None and (
         item.regime not in ("UNKNOWN", observed_regime)
     )
     allowed = item.state == "ACTIVE" and not (
-        expired or overdue or regime_mismatch
+        expired or overdue or regime_missing or regime_mismatch
     )
     reason = (
         "INACTIVE_STATE" if item.state != "ACTIVE" else
         "VALIDITY_EXPIRED" if expired else
         "PERIODIC_REVIEW_DUE" if overdue else
+        "REGIME_CONTEXT_REQUIRED" if regime_missing else
         "REGIME_CHANGED" if regime_mismatch else "CURRENT_VERIFIED_ACTIVE"
     )
     return {
@@ -318,6 +328,7 @@ def append_evidence(*, knowledge_id: int, expected_revision: int,
                     origin_group: str, observation_count: int,
                     period_from: datetime, period_to: datetime,
                     verified: bool, group_size: int = 0,
+                    summary: dict | None = None,
                     now: datetime | None = None) -> dict:
     """Append metadata-only public evidence and its immutable decision event.
 
@@ -331,6 +342,7 @@ def append_evidence(*, knowledge_id: int, expected_revision: int,
                (source_ref, source_digest)):
         raise KnowledgeError("Origem deve ser digest público SHA256")
     origin_group = _token(origin_group, field="origin_group", max_len=64)
+    summary_json, _summary_digest = _payload(summary)
     if type(verified) is not bool:
         raise KnowledgeError("Validação de evidência inválida")
     if type(observation_count) is not int or observation_count < 1:
@@ -359,6 +371,7 @@ def append_evidence(*, knowledge_id: int, expected_revision: int,
         row = db.IntelligenceKnowledgeEvidence(
             knowledge_id=knowledge_id, source_type=source_type,
             source_ref=source_ref, source_digest=source_digest,
+            evidence_summary_json=summary_json,
             origin_group=origin_group, observation_count=observation_count,
             group_size=group_size, period_from=start, period_to=end,
             verified=verified, recorded_at=now,
@@ -379,6 +392,7 @@ def _enough_evidence(item, rows, *, now: datetime, after: datetime | None = None
         row for row in rows
         if row.verified is True and row.observation_count >= MIN_RESEARCH_OBSERVATIONS
         and _utc(row.period_to) <= now
+        and _utc(row.period_to) >= _utc(item.valid_from) - timedelta(days=30)
         and (after is None or _utc(row.recorded_at) > after)
     ]
     if len(eligible) < 2 or len({r.origin_group for r in eligible}) < 2:
@@ -453,6 +467,7 @@ def get_knowledge(knowledge_id: int, *, now: datetime | None = None,
             public["evidence"] = [{
                 "source_type": r.source_type, "source_ref_sha256": r.source_ref,
                 "source_sha256": r.source_digest,
+                "public_evidence_summary": json.loads(r.evidence_summary_json),
                 "origin_group": r.origin_group,
                 "observations": r.observation_count,
                 "aggregation_group_size": r.group_size,
@@ -470,6 +485,44 @@ def get_knowledge(knowledge_id: int, *, now: datetime | None = None,
                 "recorded_at": _timestamp(d.recorded_at),
             } for d in decisions]
         return public
+
+
+def revise_validity(*, knowledge_id: int, expected_revision: int,
+                    valid_from: datetime, valid_until: datetime,
+                    next_review_at: datetime,
+                    reason_code: str, now: datetime | None = None) -> dict:
+    """Explicit, CAS-protected renewal, only after deactivation/review.
+
+    Renewal alone never changes state to ACTIVE or bypasses fresh evidence.
+    """
+    now = _utc(now or db.utcnow())
+    reason_code = _reason(reason_code)
+    start, end, review = map(_utc, (valid_from, valid_until, next_review_at))
+    if not (start <= now < end and now < review <= end):
+        raise KnowledgeError("Janela de renovação inválida")
+    with db.SessionLocal() as session:
+        item = _locked(session, knowledge_id, expected_revision)
+        if item.state not in ("REVIEW_REQUIRED", "INVALIDATED"):
+            raise KnowledgeError("Renovação só após desativação ou revisão")
+        digest = _snapshot_digest(_evidence(session, item.id))
+        result = session.execute(update(db.IntelligenceKnowledge).where(
+            db.IntelligenceKnowledge.id == item.id,
+            db.IntelligenceKnowledge.revision == expected_revision,
+            db.IntelligenceKnowledge.state == item.state,
+        ).values(
+            valid_from=start, valid_until=end, next_review_at=review,
+            revision=expected_revision+1, updated_at=now,
+            reason_code=reason_code,
+        ))
+        if result.rowcount != 1:
+            raise KnowledgeConflict("Renovação concorrente rejeitada")
+        _record(session, item, revision=expected_revision+1,
+                from_state=item.state, to_state=item.state,
+                decision="RENEW_VALIDITY", reason_code=reason_code,
+                evidence_digest=digest, now=now)
+        session.commit()
+        session.refresh(item)
+        return _public_record(item, now=now)
 
 
 def retrieve_active(*, category: str, market: str, symbol: str = "",
