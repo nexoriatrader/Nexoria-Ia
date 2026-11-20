@@ -250,7 +250,49 @@ async def _loop(stop: asyncio.Event):
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
+    """Verify DB persistence and real HTTP routes on every isolated restart."""
     verify_schema()
+    before = await asyncio.to_thread(read_status)
+    log.warning("stage4_restart_check records_before_first_batch=%s previous_observation=%s",
+                before["records"], before["latest_observed_at"])
+    first = await asyncio.to_thread(ingest_batch, interval=_interval())
+    after = await asyncio.to_thread(read_status)
+    log.warning("stage4_live_ingestion dataset=%s inserted=%s total_records=%s",
+                SOURCE, first["inserted"], after["records"])
+
+    # The HTTP self-test invokes the actual ASGI routes with the Render-generated
+    # test secret, never outputs or retains the secret, and never touches a broker.
+    import httpx
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app),
+        base_url="http://stage4-internal-selftest",
+        timeout=12,
+    ) as client:
+        unauthorized = await client.get("/api/homologation/demo/status")
+        headers = {"X-NEXORA-STAGE4-KEY": os.environ["NEXORA_STAGE4_ACCESS_TOKEN"]}
+        authorized = await client.get("/api/homologation/demo/status",
+                                      headers=headers)
+        history = await client.get("/api/homologation/demo/history?limit=25",
+                                   headers=headers)
+        panel = await client.get("/")
+        health = await client.get("/healthz")
+    if not (
+        unauthorized.status_code == 401
+        and authorized.status_code == 200
+        and history.status_code == 200
+        and panel.status_code == 200
+        and health.status_code == 200
+        and authorized.json().get("records", 0) >= len(STATIONS)
+        and history.json().get("count", 0) >= len(STATIONS)
+        and health.json().get("database") == "DATABASE_READY"
+    ):
+        raise RuntimeError("Stage4 authenticated HTTP and PostgreSQL smoke failed")
+    log.warning(
+        "stage4_http_pg_smoke auth_missing=401 auth_valid=200 history=200 "
+        "panel=200 health=200 total_records=%s dataset=%s",
+        authorized.json()["records"], SOURCE,
+    )
+
     stop = asyncio.Event()
     task = asyncio.create_task(_loop(stop), name="stage4-synthetic-sensor-ingest")
     try:
