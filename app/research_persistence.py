@@ -154,6 +154,32 @@ async def research_loop():
                 pruned = await asyncio.to_thread(prune_expired)
                 if pruned:
                     logger.info("Expired shared market snapshots removed: %s", pruned)
+            # Reuse the EXISTING research worker; I04/I05 share the same
+            # public database and stay strictly off unless both flags are
+            # explicitly true. A missing formal I04 schema is not created
+            # here. Any I04/I05 error is isolated from ordinary research.
+            from .intelligence2.knowledge_base import (
+                enabled as knowledge_enabled, review_due_knowledge,
+            )
+            if knowledge_enabled():
+                try:
+                    reviewed = await asyncio.to_thread(review_due_knowledge)
+                    if reviewed:
+                        logger.info("I04 public review due: %s", reviewed)
+                except asyncio.CancelledError:
+                    raise
+                except Exception as exc:
+                    logger.warning("I04 public maintenance unavailable: %s", type(exc).__name__)
+            from .intelligence2.learning_engine import learning_enabled
+            if learning_enabled():
+                try:
+                    from .intelligence2.learning_cycle import run_scheduled_cycle
+                    result = await asyncio.wait_for(run_scheduled_cycle(), timeout=120)
+                    logger.info("I05 public cycle state: %s", result.get("state"))
+                except asyncio.CancelledError:
+                    raise
+                except Exception as exc:
+                    logger.warning("I05 public cycle unavailable: %s", type(exc).__name__)
             existing = await asyncio.to_thread(latest_study)
             last = datetime.fromisoformat(existing["generated_at"]) if existing and existing.get("generated_at") else None
             stale = not last or datetime.now(timezone.utc) - last > timedelta(hours=24)
