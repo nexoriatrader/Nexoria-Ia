@@ -48,6 +48,16 @@ def _fingerprint(source: dict, market: str, asset: dict) -> str:
         "strategy_family": asset.get("strategy_family"),
         "quality": asset.get("candle_quality"),
         "last_closed_epoch": asset.get("last_closed_epoch"),
+        "context_anchors": (
+            [
+                context.get("contexts", {}).get(role, {}).get("last_closed_epoch")
+                if isinstance(context.get("contexts"), dict)
+                and isinstance(context["contexts"].get(role), dict)
+                else None
+                for role in _ROLES
+            ]
+            if isinstance(context, dict) else []
+        ),
         "alignment_state": (
             context.get("alignment", {}).get("state")
             if isinstance(context, dict)
@@ -98,6 +108,24 @@ def _evidence(asset: dict) -> tuple[bool, str, list[str]]:
         for role in _ROLES
     ):
         problems.append("I03_TIMEFRAME_DATA_INVALID")
+    context_clock = ctx.get("observed_at_epoch")
+    if type(context_clock) is not int or context_clock <= 0 or not isinstance(contexts, dict):
+        problems.append("I03_CLOSED_CANDLE_PROVENANCE_MISSING")
+    else:
+        for role in _ROLES:
+            role_context = contexts.get(role)
+            if not isinstance(role_context, dict):
+                continue
+            duration = role_context.get("timeframe_seconds")
+            last_closed = role_context.get("last_closed_epoch")
+            if (
+                type(duration) is not int or duration <= 0
+                or role_context.get("observed_at_epoch") != context_clock
+                or type(last_closed) is not int
+                or last_closed != (context_clock // duration - 1) * duration
+            ):
+                problems.append("I03_CLOSED_CANDLE_PROVENANCE_INVALID")
+                break
     alignment = ctx.get("alignment")
     state = alignment.get("state") if isinstance(alignment, dict) else ctx.get("state")
     if state not in (_RESEARCH_ALIGNMENTS | _RECHECK_ALIGNMENTS):
@@ -162,8 +190,19 @@ def review_public_freshness(asset: dict, *, observed_at: int, now: int) -> dict:
         return {"status": "UNVERIFIED", "reason_code": "I02_LAST_CLOSED_MISSING"}
     if last > observed_at or last > now:
         return {"status": "INVALID", "reason_code": "I02_LAST_CLOSED_IN_FUTURE"}
-    if now - last > 120:
+    # I02 reads M1 public candles via I01. The latest accepted candle is
+    # the one whose entire 60-second interval ended before observation.
+    expected = (observed_at // 60 - 1) * 60
+    if last > expected:
+        return {"status": "INVALID", "reason_code": "I02_OPEN_CANDLE_NOT_CONFIRMED"}
+    if last < expected or now - last > 120:
         return {"status": "STALE", "reason_code": "I02_LAST_CLOSED_STALE"}
+    timeframe_inputs = asset.get("timeframe_inputs")
+    if isinstance(timeframe_inputs, dict) and (
+        timeframe_inputs.get("granularity_seconds") != 60
+        or timeframe_inputs.get("last_closed_epoch") != last
+    ):
+        return {"status": "INVALID", "reason_code": "I02_TIMEFRAME_PROVENANCE_MISMATCH"}
     return {"status": "CURRENT", "reason_code": "I02_CLOSED_CANDLE_CURRENT"}
 
 
@@ -377,6 +416,14 @@ def assess_research_report(
             fingerprint = _fingerprint(i03_report, market, asset)
             previous_record = prior.get(key)
             evidence_valid, evidence_class, reason_codes = _evidence(asset)
+            source_context = asset.get("context_timeframe")
+            if (
+                isinstance(source_context, dict)
+                and source_context.get("observed_at_epoch") != observed
+            ):
+                evidence_valid = False
+                evidence_class = "INVALID"
+                reason_codes = reason_codes + ["I03_OBSERVATION_CLOCK_MISMATCH"]
             freshness = review_public_freshness(
                 asset, observed_at=observed if type(observed) is int else 0,
                 now=now,
