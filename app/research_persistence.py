@@ -167,6 +167,22 @@ async def research_loop():
                     # Knowledge maintenance must not alter financial runtimes,
                     # or block ordinary existing research on absence of schema.
                     logger.warning("I04 review unavailable: %s", type(exc).__name__)
+            # I05 consumes I04 and I01/I03 in the same existing research
+            # scheduler; one bounded public asset, never a parallel worker.
+            # Explicitly off unless BOTH I04 and I05 are opted in.
+            from .intelligence2.learning_engine import learning_enabled
+            if learning_enabled():
+                try:
+                    from .intelligence2.learning_cycle import run_scheduled_cycle
+                    learning_result = await asyncio.wait_for(
+                        run_scheduled_cycle(), timeout=120)
+                    logger.info("I05 public research cycle: %s",
+                                learning_result["state"])
+                except asyncio.CancelledError:
+                    raise
+                except Exception as exc:
+                    logger.warning("I05 public learning unavailable: %s",
+                                   type(exc).__name__)
             existing = await asyncio.to_thread(latest_study)
             last = datetime.fromisoformat(existing["generated_at"]) if existing and existing.get("generated_at") else None
             stale = not last or datetime.now(timezone.utc) - last > timedelta(hours=24)
