@@ -35,7 +35,7 @@ def _bars(seconds=60, *, mode="up", count=96):
         elif mode == "range":
             close = 100 + math.sin(i * .7)
         elif mode == "transition":
-            close = 100 + min(i, 76) * .18 - max(0, i-76) * .9
+            close = 100 + min(i, 85) * .18 - max(0, i-85) * .9
         elif mode == "high_volatility":
             close = 100 + i * .18 + (3 if i % 2 else -3)
         else:
