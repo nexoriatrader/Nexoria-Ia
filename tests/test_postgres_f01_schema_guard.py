@@ -17,12 +17,14 @@ from app import db
 def _safe_url():
     if os.getenv('NEXORA_P0_EPHEMERAL_PG')!='yes':
         pytest.skip('F01 schema guard only executes on disposable PostgreSQL')
-    url=make_url(os.environ['NEXORA_P0_TEST_DATABASE_URL'])
+    raw=os.environ['NEXORA_P0_TEST_DATABASE_URL']
+    url=make_url(raw)
     if not (url.drivername=='postgresql+psycopg'
             and url.host in ('localhost','127.0.0.1') and url.port==5432
             and url.database=='nexora_p0_ci' and url.username=='p0_ci'):
         pytest.fail('Non-disposable PostgreSQL rejected')
-    return str(url)
+    # SQLAlchemy URL.__str__ masks passwords; preserve the original DSN.
+    return raw
 
 
 def test_postgresql_init_db_is_strictly_read_only_and_requires_formal_revision(monkeypatch):
