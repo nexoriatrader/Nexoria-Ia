@@ -1,7 +1,7 @@
 """Durable database. SQLite allowed only for LOCAL development; production requires Postgres."""
 import os
 from datetime import datetime, timezone
-from sqlalchemy import create_engine, Column, Integer, String, Boolean, DateTime, ForeignKey, Text, UniqueConstraint, Index, inspect, text, DDL, event
+from sqlalchemy import create_engine, Column, Integer, String, Boolean, DateTime, ForeignKey, Text, UniqueConstraint, CheckConstraint, Index, inspect, text, DDL, event
 from sqlalchemy.orm import declarative_base, sessionmaker
 
 DB_URL = os.getenv('DATABASE_URL', 'sqlite:///./nexora_local.db')
@@ -256,6 +256,139 @@ class PaperTrade(Base):
 F01_REQUIRED_REVISION = 'f01_global_fencing_v1'
 
 
+
+# The PostgreSQL startup gate must reject a stamped but structurally invalid
+# F01 schema. These contracts also match the formal SQL migration; this path
+# uses catalog SELECTs only and never alters the running database.
+_F01_TABLE_COLUMNS = {
+    'real_authorization_fences': {
+        'user_id': ('integer', True, None),
+        'generation': ('integer', True, '0'),
+        'updated_at': ('timestamp with time zone', True, 'CURRENT_TIMESTAMP'),
+    },
+    'real_global_authorization_fences': {
+        'id': ('integer', True, None),
+        'generation': ('integer', True, '0'),
+        'updated_at': ('timestamp with time zone', True, 'CURRENT_TIMESTAMP'),
+    },
+    'nexora_schema_revisions': {
+        'revision': ('character varying(80)', True, None),
+        'applied_at': ('timestamp with time zone', True, 'CURRENT_TIMESTAMP'),
+    },
+}
+_F01_TABLE_PK = {
+    'real_authorization_fences': ('user_id',),
+    'real_global_authorization_fences': ('id',),
+    'nexora_schema_revisions': ('revision',),
+}
+_F01_TABLE_CHECKS = {
+    'real_authorization_fences': {'generation>=0'},
+    'real_global_authorization_fences': {'generation>=0', 'id=1'},
+    'nexora_schema_revisions': set(),
+}
+
+
+def _verify_f01_postgresql_contract(connection):
+    """Strict catalog-only inspection for fencing/migration revision tables."""
+    schema = connection.execute(text('SELECT current_schema()')).scalar_one()
+    for table, expected_columns in _F01_TABLE_COLUMNS.items():
+        rel = connection.execute(text("""
+            SELECT c.oid, c.relkind
+              FROM pg_catalog.pg_class c
+              JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+             WHERE n.nspname = :schema AND c.relname = :table
+        """), {'schema': schema, 'table': table}).mappings().one_or_none()
+        if rel is None or rel['relkind'] != 'r':
+            raise RuntimeError('Esquema PostgreSQL incompatível F01: tabela ' + table)
+
+        rows = connection.execute(text("""
+            SELECT a.attname AS name,
+                   pg_catalog.format_type(a.atttypid, a.atttypmod) AS type,
+                   a.attnotnull AS not_null,
+                   pg_catalog.pg_get_expr(d.adbin, d.adrelid) AS default_sql
+              FROM pg_catalog.pg_attribute a
+              LEFT JOIN pg_catalog.pg_attrdef d
+                ON d.adrelid = a.attrelid AND d.adnum = a.attnum
+             WHERE a.attrelid = :oid AND a.attnum > 0 AND NOT a.attisdropped
+        """), {'oid': rel['oid']}).mappings().all()
+        actual_columns = {
+            row['name']: (row['type'], row['not_null'], row['default_sql'])
+            for row in rows
+        }
+        if actual_columns != expected_columns:
+            raise RuntimeError('Esquema PostgreSQL incompatível F01: colunas/tipos/defaults ' + table)
+
+        constraints = connection.execute(text("""
+            SELECT p.contype AS kind, p.convalidated AS validated,
+                   p.condeferrable AS deferrable,
+                   p.condeferred AS deferred, p.conislocal AS is_local,
+                   p.connoinherit AS no_inherit,
+                   (SELECT array_agg(a.attname ORDER BY u.ordinality)
+                      FROM unnest(p.conkey) WITH ORDINALITY AS u(attnum, ordinality)
+                      JOIN pg_catalog.pg_attribute a
+                        ON a.attrelid = p.conrelid AND a.attnum = u.attnum) AS columns,
+                   CASE WHEN p.contype = 'c' THEN
+                     regexp_replace(lower(pg_catalog.pg_get_expr(p.conbin, p.conrelid)),
+                                    '[[:space:]()]', '', 'g')
+                   END AS check_expr,
+                   rn.nspname AS ref_schema, rc.relname AS ref_table,
+                   (SELECT array_agg(a.attname ORDER BY u.ordinality)
+                      FROM unnest(p.confkey) WITH ORDINALITY AS u(attnum, ordinality)
+                      JOIN pg_catalog.pg_attribute a
+                        ON a.attrelid = p.confrelid AND a.attnum = u.attnum) AS ref_columns,
+                   p.confupdtype AS on_update, p.confdeltype AS on_delete,
+                   p.confmatchtype AS match_type,
+                   i.indisprimary AS index_primary,
+                   i.indisunique AS index_unique,
+                   i.indisvalid AS index_valid,
+                   i.indisready AS index_ready
+              FROM pg_catalog.pg_constraint p
+              LEFT JOIN pg_catalog.pg_class rc ON rc.oid = p.confrelid
+              LEFT JOIN pg_catalog.pg_namespace rn ON rn.oid = rc.relnamespace
+              LEFT JOIN pg_catalog.pg_index i ON i.indexrelid = p.conindid
+             WHERE p.conrelid = :oid
+        """), {'oid': rel['oid']}).mappings().all()
+
+        allowed_checks = _F01_TABLE_CHECKS[table]
+        expected_constraint_count = 1 + len(allowed_checks) + (table == 'real_authorization_fences')
+        if len(constraints) != expected_constraint_count:
+            raise RuntimeError('Esquema PostgreSQL incompatível F01: constraints ' + table)
+        checks_found = set()
+        pk_found = fk_found = False
+        for constraint in constraints:
+            if (not constraint['validated'] or constraint['deferrable']
+                    or constraint['deferred'] or not constraint['is_local']
+                    or (constraint['kind'] == 'c' and constraint['no_inherit'])):
+                raise RuntimeError('Esquema PostgreSQL incompatível F01: constraint não validada ' + table)
+            columns = tuple(constraint['columns'] or ())
+            if constraint['kind'] == 'p':
+                if (pk_found or columns != _F01_TABLE_PK[table]
+                        or not all(constraint[x] for x in
+                                   ('index_primary', 'index_unique', 'index_valid', 'index_ready'))):
+                    raise RuntimeError('Esquema PostgreSQL incompatível F01: PK ' + table)
+                pk_found = True
+            elif constraint['kind'] == 'c':
+                expr = constraint['check_expr']
+                if expr not in allowed_checks or expr in checks_found:
+                    raise RuntimeError('Esquema PostgreSQL incompatível F01: CHECK ' + table)
+                checks_found.add(expr)
+            elif constraint['kind'] == 'f' and table == 'real_authorization_fences':
+                if (fk_found or columns != ('user_id',)
+                        or constraint['ref_schema'] != schema
+                        or constraint['ref_table'] != 'users'
+                        or tuple(constraint['ref_columns'] or ()) != ('id',)
+                        or constraint['on_update'] != 'a'
+                        or constraint['on_delete'] != 'a'
+                        or constraint['match_type'] != 's'):
+                    raise RuntimeError('Esquema PostgreSQL incompatível F01: FK ' + table)
+                fk_found = True
+            else:
+                raise RuntimeError('Esquema PostgreSQL incompatível F01: constraint inesperada ' + table)
+        if not pk_found or checks_found != allowed_checks or (
+                table == 'real_authorization_fences' and not fk_found):
+            raise RuntimeError('Esquema PostgreSQL incompatível F01: constraint ausente ' + table)
+
+
 def verify_postgresql_schema(connection):
     """Read-only startup gate: PostgreSQL application processes NEVER run DDL.
 
@@ -278,6 +411,7 @@ def verify_postgresql_schema(connection):
         found={c['name'] for c in inspector.get_columns(name)}
         if not set(fields).issubset(found):
             raise RuntimeError('Esquema PostgreSQL incompatível: '+name)
+    _verify_f01_postgresql_contract(connection)
     revision=connection.execute(text(
         'SELECT revision FROM nexora_schema_revisions WHERE revision=:revision'
     ),{'revision':F01_REQUIRED_REVISION}).scalar_one_or_none()
@@ -391,9 +525,12 @@ class RealGlobalAuthorizationFence(Base):
     """Global epoch protecting cold-start revocation against older STARTs."""
     __tablename__ = 'real_global_authorization_fences'
     id = Column(Integer, primary_key=True)
-    generation = Column(Integer, nullable=False, default=0)
+    generation = Column(Integer, nullable=False, default=0, server_default=text('0'))
     updated_at = Column(DateTime(timezone=True), default=utcnow,
-                        onupdate=utcnow, nullable=False)
+                        onupdate=utcnow, nullable=False,
+                        server_default=text('CURRENT_TIMESTAMP'))
+    __table_args__ = (CheckConstraint('id = 1'),
+                      CheckConstraint('generation >= 0'))
 
 
 # Explicit metadata.create_all is permitted ONLY in disposable/local test
@@ -410,9 +547,10 @@ class RealAuthorizationFence(Base):
     """
     __tablename__ = 'real_authorization_fences'
     user_id = Column(Integer, ForeignKey('users.id'), primary_key=True)
-    generation = Column(Integer, nullable=False, default=0)
+    generation = Column(Integer, nullable=False, default=0, server_default=text('0'))
     updated_at = Column(DateTime(timezone=True), default=utcnow, onupdate=utcnow,
-                        nullable=False)
+                        nullable=False, server_default=text('CURRENT_TIMESTAMP'))
+    __table_args__ = (CheckConstraint('generation >= 0'),)
 
 
 class RealRobotConsent(Base):
