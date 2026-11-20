@@ -2246,6 +2246,13 @@ async def start_real_autopilot(request:Request,nexora_sid:str|None=None):
         raise HTTPException(503,'Operações REAL ainda não foram ativadas neste servidor')
     if user.id in autopilot_enabled:
         raise HTTPException(409,'Desligue o robô DEMO antes de iniciar a conta REAL')
+    # Capture the durable generation before the first external await.
+    # This does NOT grant any permission; STOP advances the generation.
+    try:
+        start_generation=await asyncio.to_thread(
+            real_runtime.capture_real_start_generation,user.id)
+    except Exception:
+        raise HTTPException(503,'Coordenação persistida REAL indisponível; nenhuma ativação realizada') from None
     with db.SessionLocal() as sess:
         profile=sess.get(db.AutomationProfile,user.id)
         if not profile or profile.account_mode!='real' or not profile.real_account_id:
@@ -2302,30 +2309,18 @@ async def start_real_autopilot(request:Request,nexora_sid:str|None=None):
     if Decimal(balance['balance'])<stake:
         raise HTTPException(409,'Saldo insuficiente na conta REAL')
     async with real_runtime.user_lock(user.id):
-        with db.SessionLocal() as sess:
-            profile=sess.get(db.AutomationProfile,user.id)
-            if (not profile or profile.account_mode!='real'
-                or profile.real_account_id!=account_id):
-                raise HTTPException(409,'Configuração REAL alterada; inicie novamente')
-            # Re-read the account-specific settings after read-only account
-            # checks. A concurrent edit must not create stale consent.
-            latest_settings=sess.get(db.AccountRiskSettings,(user.id,'real',account_id))
-            if (latest_settings is None or
-                Decimal(str(latest_settings.stake))!=stake or
-                Decimal(str(latest_settings.stop_loss))!=stop):
-                raise HTTPException(409,'Limites REAL alterados; revise as preferências antes de autorizar')
-            consent=sess.get(db.RealRobotConsent,user.id)
-            if consent is None:
-                consent=db.RealRobotConsent(
-                    user_id=user.id,account_id=account_id,
-                    max_stake=str(stake),stop_loss=str(stop))
-                sess.add(consent)
-            else:
-                consent.account_id=account_id
-                consent.max_stake=str(stake)
-                consent.stop_loss=str(stop)
-                consent.revoked_at=None
-            sess.commit()
+        try:
+            # Fence and consent are checked/written under one PostgreSQL
+            # transaction; a STOP from another process cannot interleave.
+            await asyncio.to_thread(
+                real_runtime.finalize_real_start_if_current,
+                user.id,start_generation,account_id,stake,stop)
+        except real_runtime.RealStartInvalidated:
+            raise HTTPException(409,'START invalidado por desligamento confirmado; solicite nova ativação') from None
+        except real_runtime.RealStartConfigurationChanged as exc:
+            raise HTTPException(409,str(exc)) from None
+        except Exception:
+            raise HTTPException(503,'Coordenação persistida REAL indisponível; nenhuma ativação realizada') from None
         real_runtime.last_scan.pop(user.id,None)
         real_runtime.running.add(user.id)
         real_runtime.reasons[user.id]='Conta REAL ligada; aguardando sinal confirmado'
@@ -2416,54 +2411,77 @@ async def autopilot_start(request:Request,payload:AutoPilotSwitch,
     return {'running':True,'access':access,'execution':'DERIV_DEMO_ONLY','real_orders_enabled':False}
 
 
+def _f01_clear_demo_stop_records(uid):
+    """Independent, bounded-transaction DEMO cleanup; no broker or orders."""
+    with db.SessionLocal() as sess:
+        try:
+            profile=sess.get(db.AutomationProfile,uid)
+            mode=profile.account_mode if profile is not None else 'demo'
+            run=sess.get(db.RobotRun,uid)
+            consent=sess.get(db.AutoPilotResumeConsent,uid)
+            if run:sess.delete(run)
+            if consent:sess.delete(consent)
+            sess.commit()
+            return mode
+        except Exception:
+            sess.rollback()
+            raise
+
+
 @app.post('/api/autopilot/stop')
 async def autopilot_stop(request:Request,nexora_sid:str|None=Cookie(default=None)):
     user=active_user(request,nexora_sid)
     was_real_local=user.id in real_runtime.running
-    # F01: stop must revoke persisted REAL consent even when the request was
-    # routed to a different process from the REAL worker. Never rely on the
-    # process-local running set to decide whether consent exists.
+    # F01: persist a STOP generation even if consent is already revoked or
+    # missing. That invalidates START requests already in flight elsewhere.
     try:
         async with real_runtime.user_lock(user.id):
-            real_stop=real_runtime.revoke_real_consent_for_stop(user.id)
-            # Clear local state only AFTER durable revocation was confirmed or
-            # the database verified that no active consent exists.
+            real_stop=await asyncio.to_thread(
+                real_runtime.revoke_real_consent_for_stop,user.id)
             real_runtime.running.discard(user.id)
             real_runtime.reasons[user.id]='Desligado manualmente; contratos REAL continuam em reconciliação'
     except Exception:
-        # An unconfirmed database write is NOT a successful stop. An in-flight
-        # broker request may still exist in another process; fail closed.
-        raise HTTPException(503,'Não foi possível confirmar revogação REAL no banco; estado dos workers desconhecido') from None
-    # Preserve DEMO stop behavior independently of which account's worker is
-    # running in this process. Nothing here changes any order/contract ledger.
+        raise HTTPException(
+            503,'Não foi possível confirmar revogação REAL no banco; estado dos workers desconhecido'
+        ) from None
+
+    # REAL revocation is committed. Report this truth even if DEMO cleanup
+    # fails afterwards; do not silently turn a partial failure into success.
+    demo_status='COMPLETED'
+    configured_mode=None
     async with autopilot_lock:
         autopilot_enabled.discard(user.id)
         automation_scan_progress.pop(user.id,None)
         for key in list(v2_gate_last_log):
-            if key[0]==user.id: v2_gate_last_log.pop(key,None)
-        with db.SessionLocal() as sess:
-            run=sess.get(db.RobotRun,user.id)
-            consent=sess.get(db.AutoPilotResumeConsent,user.id)
-            if run:sess.delete(run)
-            if consent:sess.delete(consent)
-            sess.commit()
-        autopilot_reasons[user.id]='Desligado: novas entradas bloqueadas; contratos abertos permanecem na Deriv'
-    was_real=was_real_local or real_stop['account_id'] is not None
-    # Legacy 'running' is process-local only. A successful persisted
-    # revocation does not prove immediate termination of remote workers.
-    return {
-        'running':False,
-        'execution':'DERIV_REAL' if was_real else 'DERIV_DEMO_ONLY',
-        'real_orders_enabled':real_runtime.real_available() if was_real else False,
+            if key[0]==user.id:v2_gate_last_log.pop(key,None)
+        try:
+            configured_mode=await asyncio.to_thread(
+                _f01_clear_demo_stop_records,user.id)
+            autopilot_reasons[user.id]='Desligado: novas entradas bloqueadas; contratos abertos permanecem na Deriv'
+        except Exception:
+            demo_status='FAILED'
+            autopilot_reasons[user.id]='Revogação REAL confirmada; limpeza DEMO não confirmada'
+    # Historical REAL consent is not evidence of a currently REAL session.
+    # If cleanup failed, avoid inferring a mode from unavailable data.
+    was_real=was_real_local or (configured_mode=='real')
+    body={
+        'running':False if demo_status=='COMPLETED' else None,
+        'execution':'DERIV_REAL' if was_real else
+                    'DERIV_DEMO_ONLY' if configured_mode=='demo' else 'UNKNOWN',
+        'real_orders_enabled':False,
         'running_scope':'LOCAL_PROCESS_ONLY',
         'running_now':None,
         'worker_shutdown_confirmed':None,
         'worker_shutdown_state':'UNKNOWN_REMOTE_WORKERS',
         'real_revocation_status':real_stop['status'],
         'real_revocation_persisted':real_stop['revocation_persisted'],
-        'real_authorization_absent':True
+        'real_authorization_absent':True,
+        'demo_cleanup_status':demo_status,
+        'partial_failure':demo_status!='COMPLETED'
     }
-
+    if demo_status!='COMPLETED':
+        return JSONResponse(status_code=207,content=body)
+    return body
 
 @app.get('/api/status')
 async def status(request:Request,nexora_sid:str|None=Cookie(default=None)):
