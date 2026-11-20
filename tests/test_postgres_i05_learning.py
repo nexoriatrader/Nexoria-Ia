@@ -22,6 +22,7 @@ from app.intelligence2 import learning_engine as eng, learning_registry as reg
 from app.intelligence2 import knowledge_base as kb
 
 NOW=datetime(2026,11,20,12,0,tzinfo=timezone.utc)
+APPROVED_AT=NOW+timedelta(hours=6)
 ROOT=Path(__file__).resolve().parents[1]
 F01=(ROOT/"migrations"/"F01_GLOBAL_FENCING_V1_POSTGRES.sql").read_text()
 I04=(ROOT/"migrations"/"I04_KNOWLEDGE_BASE_V1_POSTGRES.sql").read_text()
@@ -94,6 +95,16 @@ def _history(sequence):
     }
 
 
+def _history_at(sequence, now):
+    history=_history(sequence)
+    shift=int((now-NOW).total_seconds())
+    history["observed_at_epoch"]+=shift
+    history["i01_last_closed_epoch"]+=shift
+    for row in history["observations"]:
+        row["closed_epoch"]+=shift
+    return history
+
+
 def _active_market():
     row=kb.discover(
         category="MARKET",market="derived",symbol="R_100",
@@ -128,10 +139,16 @@ def _validated_model(source,sequence):
     stage=reg.stage_public_candidate(_history(sequence),
                                       market_knowledge_id=source["id"],now=NOW)
     assert stage["state"]=="UNDER_VALIDATION"
+    independent=reg.append_independent_public_validation(
+        model_knowledge_id=stage["knowledge_id"],
+        model_digest=stage["report"]["model_id_sha256"],
+        expected_revision=4,
+        history=_history_at(sequence,APPROVED_AT),now=APPROVED_AT)
+    assert independent["verified"] is True
     accepted=reg.validate_research_challenger(
         model_knowledge_id=stage["knowledge_id"],
         model_digest=stage["report"]["model_id_sha256"],
-        expected_revision=4,now=NOW)
+        expected_revision=independent["revision"],now=APPROVED_AT)
     assert accepted["state"]=="VALIDATED"
     return stage,accepted
 
@@ -152,7 +169,7 @@ def test_postgresql_two_concurrent_public_champions_single_cas_winner(isolated):
                 model_digest=stage["report"]["model_id_sha256"],
                 expected_model_revision=validated["revision"],
                 expected_release_id=None,
-                approval_reason="PG_EXPLICIT_RESEARCH_RELEASE",now=NOW)
+                approval_reason="PG_EXPLICIT_RESEARCH_RELEASE",now=APPROVED_AT)
             return "PROMOTED",result["id"],stage["knowledge_id"]
         except kb.KnowledgeConflict:
             return "STALE",None,stage["knowledge_id"]
@@ -163,7 +180,7 @@ def test_postgresql_two_concurrent_public_champions_single_cas_winner(isolated):
     champion_id=next(x[2] for x in results if x[0]=="PROMOTED")
     persisted=reg.get_research_release(
         market="derived",symbol="R_100",
-        timeframe_seconds=60,now=NOW)
+        timeframe_seconds=60,now=APPROVED_AT)
     assert persisted["champion_knowledge_id"]==champion_id
     assert persisted["generation"]==1
     assert persisted["execution_allowed"] is False
@@ -183,14 +200,14 @@ def test_pg_restart_research_release_readonly_and_no_new_schema(isolated,monkeyp
         model_knowledge_id=stage["knowledge_id"],
         model_digest=stage["report"]["model_id_sha256"],
         expected_model_revision=valid["revision"],expected_release_id=None,
-        approval_reason="PG_RESTART_VERIFIED",now=NOW)
+        approval_reason="PG_RESTART_VERIFIED",now=APPROVED_AT)
     one=reg.get_research_release(
-        market="derived",symbol="R_100",timeframe_seconds=60,now=NOW)
+        market="derived",symbol="R_100",timeframe_seconds=60,now=APPROVED_AT)
     assert one["release_id"]==release["id"]
     original=db.SessionLocal
     db.SessionLocal=sessionmaker(bind=isolated,expire_on_commit=False)
     other=reg.get_research_release(
-        market="derived",symbol="R_100",timeframe_seconds=60,now=NOW)
+        market="derived",symbol="R_100",timeframe_seconds=60,now=APPROVED_AT)
     assert other==one
     with isolated.connect() as conn:
         existing={name for (name,) in conn.execute(text(
