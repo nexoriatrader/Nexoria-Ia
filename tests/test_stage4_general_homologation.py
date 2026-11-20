@@ -18,6 +18,8 @@ def setup_test(monkeypatch, tmp_path):
             revision=demo.observer.REVISION, applied_at=datetime.now(timezone.utc)))
         conn.execute(demo.insert(demo.revisions).values(
             revision=demo.pipeline.REVISION, applied_at=datetime.now(timezone.utc)))
+        conn.execute(demo.insert(demo.revisions).values(
+            revision=demo.ohlc.REVISION, applied_at=datetime.now(timezone.utc)))
     monkeypatch.setattr(demo, "_engine", lambda: engine)
     monkeypatch.setenv("NEXORA_STAGE4_ACCESS_TOKEN", "test-only-strong-secret-32-characters-long")
     return engine

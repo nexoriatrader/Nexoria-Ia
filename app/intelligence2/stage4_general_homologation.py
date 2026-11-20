@@ -127,6 +127,11 @@ def bootstrap_schema() -> None:
         if trace_found is None:
             conn.execute(insert(revisions).values(
                 revision=pipeline.REVISION, applied_at=now))
+        ohlc_found = conn.execute(select(revisions.c.revision).where(
+            revisions.c.revision == ohlc.REVISION)).scalar_one_or_none()
+        if ohlc_found is None:
+            conn.execute(insert(revisions).values(
+                revision=ohlc.REVISION, applied_at=now))
     log.warning("stage4_general_schema_verified revision=%s", SCHEMA_REVISION)
 
 
@@ -146,6 +151,10 @@ def verify_schema() -> None:
             revisions.c.revision == pipeline.REVISION)).scalar_one_or_none()
         if active_trace != pipeline.REVISION:
             raise RuntimeError("Stage4 synthetic pipeline trace migration not installed")
+        active_ohlc = conn.execute(select(revisions.c.revision).where(
+            revisions.c.revision == ohlc.REVISION)).scalar_one_or_none()
+        if active_ohlc != ohlc.REVISION:
+            raise RuntimeError("Offline OHLC quality schema not installed")
 
 
 def _value(bucket: int, station: str, metric: str) -> float:
@@ -341,6 +350,15 @@ async def _loop(stop: asyncio.Event):
 async def lifespan(_: FastAPI):
     """Verify DB persistence and real HTTP routes on every isolated restart."""
     verify_schema()
+    old_archive = await asyncio.to_thread(ohlc.read_audits, limit=1)
+    quality = await asyncio.to_thread(ohlc.record_fixture_audit)
+    after_archive = await asyncio.to_thread(ohlc.read_audits, limit=1)
+    log.warning(
+        "stage4_offline_ohlc_archive prior_audits=%s after_audits=%s "
+        "new_entry=%s quality=%s bars=%s synthetic=true",
+        old_archive["total"], after_archive["total"], quality["inserted"],
+        quality["quality"], quality["bar_count"],
+    )
     old_runs = await asyncio.to_thread(observer.run_count)
     old_traces = await asyncio.to_thread(pipeline.summary)
     log.warning("stage4_monitor_restart existing_persisted_runs=%s", old_runs)
@@ -375,6 +393,9 @@ async def lifespan(_: FastAPI):
         runlog = await client.get("/api/homologation/monitor/runs", headers=headers)
         stages = await client.get("/api/homologation/monitor/pipeline?limit=20", headers=headers)
         missing_stage_key = await client.get("/api/homologation/monitor/pipeline")
+        missing_ohlc_key = await client.get("/api/homologation/monitor/ohlc-quality")
+        archived_ohlc = await client.get("/api/homologation/monitor/ohlc-quality",
+                                         headers=headers)
     if not (
         unauthorized.status_code == 401
         and authorized.status_code == 200
@@ -386,6 +407,10 @@ async def lifespan(_: FastAPI):
         and runlog.status_code == 200
         and stages.status_code == 200
         and missing_stage_key.status_code == 401
+        and missing_ohlc_key.status_code == 401
+        and archived_ohlc.status_code == 200
+        and archived_ohlc.json().get("total",0) >= 1
+        and archived_ohlc.json().get("i01_module_integrated") is False
         and stages.json().get("summary",{}).get("stage_executions",0) >= len(pipeline.STAGES)
         and monitor.json().get("summary",{}).get("stored_records",0) >= len(STATIONS)
         and monitor.json().get("summary",{}).get("total_runs",0) >= 1
@@ -403,6 +428,11 @@ async def lifespan(_: FastAPI):
         "stage4_pipeline_smoke auth_missing=401 trace=200 stages=%s cycles=%s",
         stages.json()["summary"]["stage_executions"],
         stages.json()["summary"]["cycles_observed"],
+    )
+    log.warning(
+        "stage4_ohlc_smoke missing_key=401 valid_key=200 "
+        "archived_snapshots=%s source=%s i01_integrated=false",
+        archived_ohlc.json()["total"], ohlc.FIXTURE,
     )
     log.warning(
         "stage4_monitor_smoke auth_missing=401 overview=200 runs=200 "
@@ -589,6 +619,19 @@ async def pipeline_trace(
         raise HTTPException(503, "Synthetic pipeline trace unavailable") from None
 
 
+@app.get("/api/homologation/monitor/ohlc-quality")
+async def offline_ohlc_quality(
+    limit: int = Query(default=10, ge=1, le=30),
+    x_nexora_stage4_key: str | None = Header(default=None),
+):
+    _auth(x_nexora_stage4_key)
+    try:
+        return await asyncio.to_thread(ohlc.read_audits, limit)
+    except Exception:
+        log.exception("stage4_offline_ohlc_query_unavailable")
+        raise HTTPException(503, "Historical OHLC quality audit unavailable") from None
+
+
 @app.get("/api/homologation/monitor/modules")
 async def monitoring_modules(x_nexora_stage4_key: str | None = Header(default=None)):
     _auth(x_nexora_stage4_key)
@@ -624,4 +667,5 @@ async def index():
 # exist; this registers the additive monitoring table for offline bootstrap.
 from . import stage4_observability as observer
 from . import stage4_general_pipeline as pipeline
+from . import stage4_ohlc_quality as ohlc
 
