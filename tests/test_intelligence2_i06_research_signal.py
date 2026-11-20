@@ -15,6 +15,7 @@ from app import asset_scanner, main
 from app.intelligence2 import research_signal_engine as i06
 
 NOW = 20_000
+ROLE_TF = {"higher": 3600, "intermediate": 300, "lower": 60}
 
 
 def _source(now=NOW):
@@ -39,7 +40,11 @@ def _source(now=NOW):
                 "research_state": "OBSERVED",
                 "candle_quality": "COMPLETE",
                 "closed_candles": 96,
-                "last_closed_epoch": now - 30,
+                "last_closed_epoch": (now // 60 - 1) * 60,
+                "timeframe_inputs": {
+                    "granularity_seconds": 60,
+                    "last_closed_epoch": (now // 60 - 1) * 60,
+                },
                 "context_timeframe": {
                     "version": "intelligence2_i03_v1",
                     "provenance_sha256": "a" * 64,
@@ -58,6 +63,11 @@ def _source(now=NOW):
                             "direction": "UP",
                             "data_quality": "COMPLETE",
                             "execution_allowed": False,
+                            "observed_at_epoch": now,
+                            "timeframe_seconds": ROLE_TF[role],
+                            "last_closed_epoch": (
+                                now // ROLE_TF[role] - 1
+                            ) * ROLE_TF[role],
                         }
                         for role in ("higher", "intermediate", "lower")
                     },
@@ -295,7 +305,7 @@ def test_public_context_consensus_does_not_map_to_contract_direction():
 
 
 @pytest.mark.parametrize("closed,clock,status,reason", [
-    (NOW - 30, NOW, "CURRENT", "I02_CLOSED_CANDLE_CURRENT"),
+    ((NOW // 60 - 1) * 60, NOW, "CURRENT", "I02_CLOSED_CANDLE_CURRENT"),
     (NOW - 121, NOW, "STALE", "I02_LAST_CLOSED_STALE"),
     (NOW + 1, NOW, "INVALID", "I02_LAST_CLOSED_IN_FUTURE"),
     (None, NOW, "UNVERIFIED", "I02_LAST_CLOSED_MISSING"),
@@ -525,3 +535,44 @@ def test_research_confidence_is_not_scaled_by_scanner_score():
     b = _item(i06.assess_research_report(source,now=NOW))
     assert a["research_confidence"] == b["research_confidence"]
     assert a["research_review"] == b["research_review"]
+
+
+@pytest.mark.parametrize("tamper,reason", [
+    ("open_i02_candle", "I02_OPEN_CANDLE_NOT_CONFIRMED"),
+    ("wrong_i02_granularity", "I02_TIMEFRAME_PROVENANCE_MISMATCH"),
+    ("open_i03_candle", "I03_CLOSED_CANDLE_PROVENANCE_INVALID"),
+    ("missing_i03_time", "I03_CLOSED_CANDLE_PROVENANCE_INVALID"),
+    ("i03_report_clock", "I03_OBSERVATION_CLOCK_MISMATCH"),
+])
+def test_open_or_inconsistent_candle_provenance_never_ready_for_study(tamper, reason):
+    source = _with_verified_research_profile()
+    asset = source["markets"]["forex"]["selected"][0]
+    if tamper == "open_i02_candle":
+        asset["last_closed_epoch"] += 60
+        asset["timeframe_inputs"]["last_closed_epoch"] += 60
+    elif tamper == "wrong_i02_granularity":
+        asset["timeframe_inputs"]["granularity_seconds"] = 300
+    elif tamper == "open_i03_candle":
+        asset["context_timeframe"]["contexts"]["lower"]["last_closed_epoch"] += 60
+    elif tamper == "missing_i03_time":
+        asset["context_timeframe"]["contexts"]["higher"]["timeframe_seconds"] = None
+    elif tamper == "i03_report_clock":
+        asset["context_timeframe"]["observed_at_epoch"] += 1
+    record = _item(i06.assess_research_report(source,now=NOW))
+    assert record["research_review"] == "RECHECK_OR_REJECT"
+    assert record["research_confidence"]["points"] == 0
+    assert record["decision"] == "DO NOT TRADE"
+    assert reason in record["reason_codes"]
+    assert record["distribution"]["publish_allowed"] is False
+
+
+def test_context_candle_time_anchor_expected_from_closed_bar_interval():
+    source = _with_verified_research_profile()
+    asset = source["markets"]["forex"]["selected"][0]
+    for role, seconds in ROLE_TF.items():
+        c = asset["context_timeframe"]["contexts"][role]
+        assert c["timeframe_seconds"] == seconds
+        assert c["last_closed_epoch"] + seconds <= NOW
+        assert c["last_closed_epoch"] == (NOW // seconds - 1) * seconds
+    record = _item(i06.assess_research_report(source,now=NOW))
+    assert record["research_review"] == "DATA_READY_FOR_STUDY"
