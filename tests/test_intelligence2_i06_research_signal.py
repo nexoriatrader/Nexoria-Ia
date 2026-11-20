@@ -335,7 +335,9 @@ def test_qualitative_strength_is_not_derived_from_score_magnitude():
     source = _source()
     record = _item(i06.assess_research_report(source,now=NOW))
     assert record["evidence_strength"] == "CONSISTENT"
-    assert record["knowledge_base"] == {"status":"NOT_CONNECTED","used":False}
+    assert record["knowledge_base"]["status"] == "NOT_CONNECTED"
+    assert record["knowledge_base"]["used"] is False
+    assert record["knowledge_base"]["interface_version"] is None
     assert record["strategy_intelligence"]["used"] is False
     source["markets"]["forex"]["selected"][0]["score"] = 999_999
     same = _item(i06.assess_research_report(source,now=NOW))
@@ -404,3 +406,122 @@ def test_invalid_context_no_consensus_or_approval():
     assert record["public_context"]["observed_trend"] == "NEUTRAL"
     assert record["recheck_policy"] == "REVALIDATE_PUBLIC_DATA"
     assert "I03_RESEARCH_ALIGNMENT_UNUSABLE" in record["reason_codes"]
+
+
+def _with_verified_research_profile():
+    source = _source()
+    asset = source["markets"]["forex"]["selected"][0]
+    asset["context_timeframe"]["profile"] = {
+        "version": "intelligence2_timeframes_v1",
+        "higher_seconds": 3600,
+        "intermediate_seconds": 300,
+        "lower_seconds": 60,
+        "expiry_minutes": 5,
+        "broker_contract_expiry_verified": False,
+    }
+    return source
+
+
+def test_complete_public_research_prerequisites_produce_data_review_only():
+    source = _with_verified_research_profile()
+    record = _item(i06.assess_research_report(source,now=NOW))
+    assert record["research_review"] == "DATA_READY_FOR_STUDY"
+    assert record["research_confidence"] == {
+        "points": 100,
+        "grade": "COMPLETE",
+        "kind": "DATA_COMPLETENESS_NOT_PROBABILITY",
+    }
+    assert record["research_prerequisites"]["satisfied_count"] == 5
+    assert record["research_prerequisites"]["timeframe_profile_seconds"] == {
+        "higher": 3600, "intermediate": 300, "lower": 60
+    }
+    assert record["validity_window"] == {
+        "from_epoch": NOW, "until_epoch": NOW+60,
+        "kind": "PUBLIC_DATA_RECHECK_ONLY", "is_current": True,
+    }
+    assert record["strategy_provenance"] == {
+        "family": "public_forex_observation",
+        "strategy_version": None,
+        "i02_source_version": "intelligence2_i02_v1",
+        "status": "UNVERSIONED_PUBLIC_METADATA",
+    }
+    assert record["decision"] == "WAIT"
+    assert record["distribution"]["publish_allowed"] is False
+    assert record["trade_side"] is None
+    assert record["entry_epoch"] is None
+    assert record["contract_expiry_minutes"] is None
+
+
+def test_missing_or_malformed_timeframe_profile_blocks_data_review_readiness():
+    for bad in (None, {}, {
+        "higher_seconds": 60, "intermediate_seconds": 300,
+        "lower_seconds": 900,
+    }, {
+        "higher_seconds": True, "intermediate_seconds": 300,
+        "lower_seconds": 60,
+    }):
+        source = _with_verified_research_profile()
+        source["markets"]["forex"]["selected"][0]["context_timeframe"]["profile"] = bad
+        record = _item(i06.assess_research_report(source,now=NOW))
+        assert record["research_review"] == "RECHECK_OR_REJECT"
+        assert record["research_confidence"]["points"] < 100
+        assert record["research_prerequisites"]["timeframe_profile_seconds"] is None
+        assert record["distribution"]["publish_allowed"] is False
+
+
+def test_invalid_public_evidence_has_zero_completeness_points_even_with_profile():
+    source = _with_verified_research_profile()
+    source["markets"]["forex"]["selected"][0]["candle_quality"] = "GAPPED"
+    record = _item(i06.assess_research_report(source,now=NOW))
+    assert record["decision"] == "DO NOT TRADE"
+    assert record["research_review"] == "RECHECK_OR_REJECT"
+    assert record["research_confidence"]["points"] == 0
+    assert record["research_confidence"]["grade"] == "INVALID"
+
+
+def test_expired_research_is_never_ready_even_when_all_prerequisites_pass():
+    source = _with_verified_research_profile()
+    record = _item(i06.assess_research_report(source,now=NOW+60))
+    assert record["validity_window"]["is_current"] is False
+    assert record["research_confidence"]["points"] == 0
+    assert record["research_review"] == "RECHECK_OR_REJECT"
+    assert record["distribution"]["publish_allowed"] is False
+
+
+def test_changed_public_candle_timestamp_updates_fingerprint_and_lifecycle():
+    source = _with_verified_research_profile()
+    first = i06.assess_research_report(source,now=NOW)
+    changed = deepcopy(source)
+    changed["markets"]["forex"]["selected"][0]["last_closed_epoch"] = NOW-5
+    result = i06.assess_research_report(changed,previous=first,now=NOW)
+    assert _item(result)["lifecycle"] == "UPDATED"
+    assert _item(result)["fingerprint"] != _item(first)["fingerprint"]
+
+
+def test_repeated_observation_does_not_expose_a_distribution_signal():
+    source = _with_verified_research_profile()
+    first = i06.assess_research_report(source,now=NOW)
+    repeat = i06.assess_research_report(source,previous=first,now=NOW)
+    record = _item(repeat)
+    assert record["duplicate_of_previous"] is True
+    assert record["lifecycle"] == "UNCHANGED"
+    assert record["distribution"]["publish_allowed"] is False
+    assert repeat["distribution"]["publish_allowed"] is False
+
+
+def test_missing_integrations_are_explicitly_unconnected_not_mock_successes():
+    adapters = i06.future_research_adapters()
+    assert adapters["knowledge_base"]["interface_version"] is None
+    assert adapters["strategy_intelligence"]["interface_version"] is None
+    assert adapters["distribution"]["interface_version"] is None
+    assert all(item["used"] is False for item in adapters.values())
+    assert adapters["distribution"]["publish_allowed"] is False
+
+
+def test_research_confidence_is_not_scaled_by_scanner_score():
+    source = _with_verified_research_profile()
+    a = _item(i06.assess_research_report(source,now=NOW))
+    source["markets"]["forex"]["selected"][0]["score"] = 999_999_999.0
+    b = _item(i06.assess_research_report(source,now=NOW))
+    assert a["research_confidence"] == b["research_confidence"]
+    assert a["research_review"] == b["research_review"]
