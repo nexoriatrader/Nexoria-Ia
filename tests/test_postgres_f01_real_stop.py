@@ -536,3 +536,95 @@ def test_f01_pg_lock_timeout_fails_without_confirming_stop():
         holder_reply.close()
         stop_reply.close()
         engine.dispose()
+
+
+def _f01_finalize_holding_fence(dsn,uid,account,generation,entered,release,out):
+    """Pause inside the same authorization transaction after acquiring lock."""
+    from app import real_runtime
+    engine=create_engine(dsn,pool_pre_ping=True)
+    Session=sessionmaker(bind=engine,expire_on_commit=False)
+    old=db.SessionLocal
+    old_lock=real_runtime._f01_locked_fence
+    db.SessionLocal=Session
+    def hold_after_lock(sess,user_id):
+        fence=old_lock(sess,user_id)
+        entered.set()
+        if not release.wait(timeout=30):
+            raise RuntimeError("F01 synthetic fencing wait expired")
+        return fence
+    real_runtime._f01_locked_fence=hold_after_lock
+    try:
+        real_runtime.finalize_real_start_if_current(uid,generation,account,"1","6")
+        out.put(("start_committed",))
+    except Exception as exc:
+        out.put(("error",type(exc).__name__+":"+str(exc)[:200]))
+    finally:
+        real_runtime._f01_locked_fence=old_lock
+        db.SessionLocal=old
+        engine.dispose()
+
+
+def test_f01_start_transaction_finishes_before_concurrent_stop_then_stop_wins():
+    """The row lock covers generation check AND consent write in one commit.
+
+    START's synthetic DB update holds the user fence lock. STOP cannot return
+    success until START commits and STOP itself commits the revocation.
+    """
+    import queue
+    from app import real_runtime
+
+    dsn=_dsn()
+    engine=create_engine(dsn,pool_pre_ping=True)
+    db.Base.metadata.create_all(engine)
+    Session=sessionmaker(bind=engine,expire_on_commit=False)
+    ctx=multiprocessing.get_context("spawn")
+    entered,release=ctx.Event(),ctx.Event()
+    start_reply,stop_reply=ctx.Queue(),ctx.Queue()
+    starter=stopper=None
+    cookie="f01-finalize-stop"
+    account="CRF01FINALIZE"
+    try:
+        with Session() as s:
+            uid=_make_user_and_consent(s,"VF01FINALIZE",account,cookie=cookie)
+            s.add(db.RealOrder(
+                user_id=uid,account_id="CRF01FINALIZE_HIST",
+                request_key="f01-finalize-pending",state="PENDING",
+                active_slot="CRF01FINALIZE_HIST",contract_id=None,
+                symbol="R_100",direction="PUT",duration_minutes=5,
+                stake="1",currency="USD"))
+            s.commit()
+            orders_before=_real_rows(s,uid)
+        token=real_runtime.capture_real_start_generation(uid)
+        starter=ctx.Process(target=_f01_finalize_holding_fence,
+            args=(dsn,uid,account,token,entered,release,start_reply))
+        starter.start()
+        assert entered.wait(timeout=30)
+        stopper=ctx.Process(target=_f01_run_stop_process,
+            args=(dsn,cookie,stop_reply))
+        stopper.start()
+        with pytest.raises(queue.Empty):
+            stop_reply.get(timeout=0.35)
+        release.set()
+        start_result=start_reply.get(timeout=35)
+        stop_result=stop_reply.get(timeout=35)
+        starter.join(timeout=30)
+        stopper.join(timeout=30)
+        assert starter.exitcode==0 and stopper.exitcode==0
+        assert start_result==("start_committed",),start_result
+        assert stop_result[0]=="ok" and stop_result[1]==200,stop_result
+        assert stop_result[2]["real_revocation_status"]=="REVOKED_NOW"
+        with Session() as s:
+            assert s.get(db.RealRobotConsent,uid).revoked_at is not None
+            assert s.get(db.RealAuthorizationFence,uid).generation==token+1
+            assert _real_rows(s,uid)==orders_before
+    finally:
+        release.set()
+        for p in (starter,stopper):
+            if p:
+                p.join(timeout=3)
+                if p.is_alive():
+                    p.terminate()
+                    p.join(timeout=5)
+        start_reply.close()
+        stop_reply.close()
+        engine.dispose()
