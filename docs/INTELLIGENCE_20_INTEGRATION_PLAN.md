@@ -44,10 +44,10 @@ Todas as conexões financeiras e estratégias de compra REAL permanecem fora des
 | **I01 — AGORA** | Market Data Infrastructure: facade interna de candles fechados e qualidade, sem cache próprio | `market.shared_candle_request` + `strict_closed_bars` | Testes mocks de source, fechamento, OHLC, tempo, duplicidade, gaps, sem compra; CI geral + PG da base |
 | **I02 — IMPLEMENTADA** | Market Scanner: catálogo público dinâmico, ranking rastreável por mercado, 3 principais + 2 reservas | I01 | Testes de seleção, dados ruins, rotação, sessão, concorrência, continuidade de contratos e CI acumulado |
 | **I03 — IMPLEMENTADA** | Context + Timeframe: reutilização de EMA/RSI, padrões de swings e candles fechados I01; enriquecimento da seleção I02 | I01/I02 | Testes de tendência, volatilidade, transição, conflito/reversão, fechamento, isolamento, não-execução e CI |
-| **I04** | Knowledge Base + Learning: consulta versionada de pesquisa persistida | I03 | Testes de integridade/proveniência, ausência de overwrite financeiro, sem nova migração |
-| **I05** | Strategy Intelligence + Priority + Distribution somente informativa | I04 | Comparações históricas com holdout e rótulos de hipótese; nenhum gatilho de ordem |
-| **I06** | Orchestrator: compor na rotina de pesquisa existente, sem novos loops nem filas | I05 | Testes de cancelamento, limite de concorrência, degradação e inatividade segura |
-| **I07** | Risk Guardian + Execution Reconciliation: vistas de estado existentes, sem mutação | I06 | F01/P0 regressões; UNKNOWN preservado; nenhuma autorização nem reserva criada |
+| **I04 — IMPLEMENTADA** | Knowledge Base persistente: 5 categorias públicas, evidências, estados, versões, revisão e log em PostgreSQL existente | I03 | Testes SQLite sintéticos + PostgreSQL 16 descartável; migração formal preparada, não aplicada em produção |
+| **I05 — PLANEJADA** | Learning Engine utilizando Knowledge Base versionada; sem treinamento ou promoção automática nesta etapa | I04 | Validação, rollback e critérios de treinamento dependem de escopo e autorização futuros |
+| **I06 — A REPLANEJAR** | Strategy Intelligence + Priority + Distribution estritamente informativa | I05 | Exige decisão e testes próprios; não iniciada |
+| **I07+ — A REPLANEJAR** | Orchestrator, Risk Guardian e Execution Reconciliation somente leitura, por etapas separadas | I06 | Sem permissão financeira ou instalação de serviços paralelos |
 | **Fora de escopo** | Ampliação do Execution Engine para negociação REAL | Nenhuma | Proibida nesta fase |
 
 ### I01 — implementação restrita desta branch
@@ -206,3 +206,17 @@ P0-01…P0-05, F01 e PostgreSQL 16 descartável.
 **Regra de preservação:** não há merge, deploy, migração em produção,
 ativação de flags REAL, compra, novo executor, novo ledger, novo modelo
 não validado ou início de I04.
+
+
+## Atualização de escopo I04
+
+A decisão vigente separa a I04 (Intelligence Knowledge Base) da I05 (Learning Engine).
+A I04 é implementada em `app/intelligence2/knowledge_base.py`, usa as três
+novas tabelas aditivas no banco existente, estado/versionamento, proveniência,
+recuperação fail-closed e reaproveita `HistoricalResearchReport`. A migração
+`migrations/I04_KNOWLEDGE_BASE_V1_POSTGRES.sql` é **somente proposta** e não
+foi executada em produção. O processo existente de pesquisa incorpora revisão
+periódica segura apenas após habilitação explícita do serviço.
+A especificação e limites completos estão em
+`docs/INTELLIGENCE_20_I04_KNOWLEDGE_BASE.md`.
+**Não iniciar I05 automaticamente.**
