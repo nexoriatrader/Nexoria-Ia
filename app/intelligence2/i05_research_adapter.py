@@ -10,6 +10,7 @@ from __future__ import annotations
 import asyncio
 from datetime import datetime, timedelta, timezone
 from importlib import import_module
+import math
 import re
 from time import time
 
@@ -217,6 +218,12 @@ def _validated_model(knowledge: object, knowledge_id: int, *,
         or payload["sample_size"] < MIN_TRAIN
         or type(payload.get("holdout_samples")) is not int
         or payload["holdout_samples"] < MIN_HOLDOUT
+        or any(
+            type(payload.get(field)) not in (int, float)
+            or not math.isfinite(payload[field])
+            or not 0 <= payload[field] <= 1
+            for field in ("success_rate", "confidence_heuristic")
+        )
         or not isinstance(item.get("payload_sha256"), str)
         or not _DIGEST.fullmatch(item["payload_sha256"])
         or type(item.get("revision")) is not int or item["revision"] < 2
@@ -300,6 +307,13 @@ def _validated_model(knowledge: object, knowledge_id: int, *,
         "valid_until": item["valid_until"],
         "next_review_at": item["next_review_at"],
         "evidence_class": "INDEPENDENT_PUBLIC_REGIME_VALIDATION",
+        "historical_validation": {
+            "kind": "REGIME_LABEL_HOLDOUT_NOT_TRADING_PROBABILITY",
+            "training_observations": payload["sample_size"],
+            "holdout_observations": payload["holdout_samples"],
+            "holdout_regime_label_accuracy": payload["success_rate"],
+            "holdout_wilson95_lower_bound": payload["confidence_heuristic"],
+        },
         "financial_origin_used": False,
     }
 
