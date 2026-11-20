@@ -380,7 +380,7 @@ def test_f01_old_start_cannot_restore_consent_after_stop_commits():
         starter.join(timeout=30)
         stopper.join(timeout=30)
         assert starter.exitcode==0 and stopper.exitcode==0
-        assert started==("invalidated",0),started
+        assert started[0]=='invalidated' and started[1][1]==0,started
         with Session() as s:
             assert s.get(db.RealRobotConsent,uid).revoked_at is not None
             assert s.get(db.RealAuthorizationFence,uid).generation==1
@@ -443,7 +443,7 @@ def test_f01_stop_before_new_start_requires_new_generation():
         result=start_reply.get(timeout=35)
         starter.join(timeout=30)
         assert starter.exitcode==0
-        assert result==("finalized",1),result
+        assert result[0]=='finalized' and result[1][1]==1,result
         with Session() as s:
             assert s.get(db.RealRobotConsent,uid).revoked_at is None
             assert s.get(db.RealAuthorizationFence,uid).generation==1
@@ -615,7 +615,7 @@ def test_f01_start_transaction_finishes_before_concurrent_stop_then_stop_wins():
         assert stop_result[2]["real_revocation_status"]=="REVOKED_NOW"
         with Session() as s:
             assert s.get(db.RealRobotConsent,uid).revoked_at is not None
-            assert s.get(db.RealAuthorizationFence,uid).generation==token+1
+            assert s.get(db.RealAuthorizationFence,uid).generation==token[1]+1
             assert _real_rows(s,uid)==orders_before
     finally:
         release.set()
