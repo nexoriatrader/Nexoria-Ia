@@ -359,3 +359,14 @@ class DemoOrderProgression(Base):
     source = Column(String(20), nullable=False, default='autopilot')
     account_mode = Column(String(16), nullable=False, default='demo')
     created_at = Column(DateTime(timezone=True), default=utcnow, nullable=False)
+
+
+# I04 persistence uses the SAME SessionLocal/DATABASE_URL as the application,
+# but separate metadata: runtime db.init_db() never auto-creates I04 tables.
+# Only the separately approved formal I04 migration may install the schema.
+from .intelligence2.knowledge_models import (
+    KnowledgeMetadata,
+    IntelligenceKnowledge,
+    IntelligenceKnowledgeEvidence,
+    IntelligenceKnowledgeDecision,
+)
