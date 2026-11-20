@@ -12,6 +12,7 @@ on:
       - fix/f01-real-stop-cross-process
       - feature/intelligence20-market-data-readonly
       - feature/intelligence20-i02-market-scanner
+      - feature/intelligence20-i03-context-timeframe
   pull_request:
     branches:
       - main
@@ -48,13 +49,15 @@ jobs:
         run: python -m pytest -q tests/test_intelligence2_market_data.py
       - name: Intelligence 2.0 I02 market scanner (synthetic, no orders)
         run: python -m pytest -q tests/test_intelligence2_market_scanner.py
+      - name: Intelligence 2.0 I03 context and timeframe engines (synthetic, no orders)
+        run: python -m pytest -q tests/test_intelligence2_context_timeframe.py
       - name: Unit and integration-mock tests
         run: python -m pytest -q --ignore=tests/test_readonly_dashboard_load.py
       - name: Local synthetic 10-user read-only latency probe
         run: python -m pytest -q -s tests/test_readonly_dashboard_load.py
 
   postgres-p0-isolation:
-    if: github.ref == 'refs/heads/feature/p0-01-isolamento-config-demo-real' || github.ref == 'refs/heads/feature/p0-02-safe-unresolved-recovery' || github.ref == 'refs/heads/feature/p0-03-integridade-concorrencia' || github.ref == 'refs/heads/feature/p0-04-consistencia-reinicio' || github.ref == 'refs/heads/feature/p0-05-status-capacidade' || github.ref == 'refs/heads/fix/f01-real-stop-cross-process' || github.ref == 'refs/heads/feature/intelligence20-market-data-readonly' || github.ref == 'refs/heads/feature/intelligence20-i02-market-scanner'
+    if: github.ref == 'refs/heads/feature/p0-01-isolamento-config-demo-real' || github.ref == 'refs/heads/feature/p0-02-safe-unresolved-recovery' || github.ref == 'refs/heads/feature/p0-03-integridade-concorrencia' || github.ref == 'refs/heads/feature/p0-04-consistencia-reinicio' || github.ref == 'refs/heads/feature/p0-05-status-capacidade' || github.ref == 'refs/heads/fix/f01-real-stop-cross-process' || github.ref == 'refs/heads/feature/intelligence20-market-data-readonly' || github.ref == 'refs/heads/feature/intelligence20-i02-market-scanner' || github.ref == 'refs/heads/feature/intelligence20-i03-context-timeframe'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     services:
@@ -88,15 +91,15 @@ jobs:
       - name: Install isolated test dependencies
         run: python -m pip install -r requirements.txt
       - name: Generate ephemeral F01-only authentication test key
-        if: github.ref == 'refs/heads/fix/f01-real-stop-cross-process' || github.ref == 'refs/heads/feature/intelligence20-market-data-readonly' || github.ref == 'refs/heads/feature/intelligence20-i02-market-scanner'
+        if: github.ref == 'refs/heads/fix/f01-real-stop-cross-process' || github.ref == 'refs/heads/feature/intelligence20-market-data-readonly' || github.ref == 'refs/heads/feature/intelligence20-i02-market-scanner' || github.ref == 'refs/heads/feature/intelligence20-i03-context-timeframe'
         run: echo "NEXORA_FERNET_KEY=$(python -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())')" >> "$GITHUB_ENV"
       - name: Validate additive PostgreSQL migration and reversible backout
         run: |
           cases=(tests/test_postgres_mode_isolation.py tests/test_postgres_p002_recovery.py tests/test_postgres_p003_integrity.py tests/test_postgres_p004_restart.py)
-          if [[ "$GITHUB_REF" == "refs/heads/feature/p0-05-status-capacidade" || "$GITHUB_REF" == "refs/heads/fix/f01-real-stop-cross-process" || "$GITHUB_REF" == "refs/heads/feature/intelligence20-market-data-readonly" || "$GITHUB_REF" == "refs/heads/feature/intelligence20-i02-market-scanner" ]]; then
+          if [[ "$GITHUB_REF" == "refs/heads/feature/p0-05-status-capacidade" || "$GITHUB_REF" == "refs/heads/fix/f01-real-stop-cross-process" || "$GITHUB_REF" == "refs/heads/feature/intelligence20-market-data-readonly" || "$GITHUB_REF" == "refs/heads/feature/intelligence20-i02-market-scanner" || "$GITHUB_REF" == "refs/heads/feature/intelligence20-i03-context-timeframe" ]]; then
             cases+=(tests/test_postgres_p005_status.py)
           fi
-          if [[ "$GITHUB_REF" == "refs/heads/fix/f01-real-stop-cross-process" || "$GITHUB_REF" == "refs/heads/feature/intelligence20-market-data-readonly" || "$GITHUB_REF" == "refs/heads/feature/intelligence20-i02-market-scanner" ]]; then
+          if [[ "$GITHUB_REF" == "refs/heads/fix/f01-real-stop-cross-process" || "$GITHUB_REF" == "refs/heads/feature/intelligence20-market-data-readonly" || "$GITHUB_REF" == "refs/heads/feature/intelligence20-i02-market-scanner" || "$GITHUB_REF" == "refs/heads/feature/intelligence20-i03-context-timeframe" ]]; then
             cases+=(tests/test_postgres_f01_real_stop.py tests/test_postgres_f01_schema_guard.py tests/test_postgres_f01_migration_validation.py)
           fi
           python -m pytest -q -s "${cases[@]}"
