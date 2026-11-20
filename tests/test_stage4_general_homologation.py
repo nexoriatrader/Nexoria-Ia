@@ -14,6 +14,8 @@ def setup_test(monkeypatch, tmp_path):
     with engine.begin() as conn:
         conn.execute(demo.insert(demo.revisions).values(
             revision=demo.SCHEMA_REVISION, applied_at=datetime.now(timezone.utc)))
+        conn.execute(demo.insert(demo.revisions).values(
+            revision=demo.observer.REVISION, applied_at=datetime.now(timezone.utc)))
     monkeypatch.setattr(demo, "_engine", lambda: engine)
     monkeypatch.setenv("NEXORA_STAGE4_ACCESS_TOKEN", "test-only-strong-secret-32-characters-long")
     return engine
@@ -83,4 +85,43 @@ def test_http_auth_panel_health_and_history(monkeypatch, tmp_path):
                       headers=headers).status_code == 422
     assert "/api/demo/buy" not in {r.path for r in demo.app.routes}
     assert "/api/real/orders" not in {r.path for r in demo.app.routes}
+    assert client.get("/api/homologation/monitor/overview").status_code == 401
+    overview = client.get("/api/homologation/monitor/overview", headers=headers)
+    assert overview.status_code == 200
+    o = overview.json()
+    assert o["summary"]["stored_records"] == 3
+    assert o["summary"]["total_runs"] == 1
+    assert o["summary"]["new_insertions_observed_since_monitoring"] == 3
+    assert o["synthetic"] is True
+    assert o["health"]["integrity_sample"]["status"] == "PASS"
+    for module in o["modules"]:
+        if module["id"].startswith("I") or module["id"] == "ORCH":
+            assert module["running_in_service"] is False
+            assert module["last_update"] is None
+            assert module["status"] in ("NOT_CONNECTED", "NOT_AVAILABLE")
+    runs = client.get("/api/homologation/monitor/runs", headers=headers)
+    assert runs.status_code == 200 and runs.json()["count"] == 1
+    assert client.get("/api/homologation/monitor/modules", headers=headers).status_code == 200
+    assert client.get("/api/homologation/monitor/diagnostics", headers=headers).status_code == 200
     engine.dispose()
+
+
+def test_monitoring_duplicate_audit_restart_and_invalid_counts(monkeypatch, tmp_path):
+    engine = setup_test(monkeypatch, tmp_path)
+    demo.ingest_batch(now_epoch=1795194000, interval=90)
+    duplicate = demo.ingest_batch(now_epoch=1795194000, interval=90)
+    assert duplicate["inserted"] == 0
+    o = demo.observer.get_overview()
+    assert o["summary"]["stored_records"] == 3
+    assert o["summary"]["total_runs"] == 2
+    assert o["summary"]["processed_observations"] == 6
+    assert o["summary"]["duplicate_observations"] == 3
+    assert o["summary"]["invalid_observations"] == 0
+    assert o["summary"]["incomplete_observations"] == 0
+    assert any(x["code"] == "DUPLICATE_EVENT_KEY" for x in o["diagnostics"])
+    engine.dispose()
+    restarted = create_engine("sqlite:///" + str(tmp_path / "stage4_test.db"))
+    monkeypatch.setattr(demo, "_engine", lambda: restarted)
+    assert demo.observer.get_overview()["summary"]["total_runs"] == 2
+    assert demo.observer.get_overview()["summary"]["stored_records"] == 3
+    restarted.dispose()

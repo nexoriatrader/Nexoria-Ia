@@ -17,7 +17,8 @@ import time
 import logging
 
 from fastapi import FastAPI, Header, HTTPException, Query
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, FileResponse
+from pathlib import Path
 from sqlalchemy import (
     CheckConstraint, Column, DateTime, Float, Integer, MetaData, String,
     Table, UniqueConstraint, create_engine, func, insert, select, text,
@@ -115,6 +116,11 @@ def bootstrap_schema() -> None:
         if found is None:
             conn.execute(insert(revisions).values(
                 revision=SCHEMA_REVISION, applied_at=now))
+        monitor_found = conn.execute(select(revisions.c.revision).where(
+            revisions.c.revision == observer.REVISION)).scalar_one_or_none()
+        if monitor_found is None:
+            conn.execute(insert(revisions).values(
+                revision=observer.REVISION, applied_at=now))
     log.warning("stage4_general_schema_verified revision=%s", SCHEMA_REVISION)
 
 
@@ -126,6 +132,10 @@ def verify_schema() -> None:
             revisions.c.revision == SCHEMA_REVISION)).scalar_one_or_none()
         if found != SCHEMA_REVISION:
             raise RuntimeError("Stage4 demo migration not installed")
+        active_monitor = conn.execute(select(revisions.c.revision).where(
+            revisions.c.revision == observer.REVISION)).scalar_one_or_none()
+        if active_monitor != observer.REVISION:
+            raise RuntimeError("Stage4 monitoring migration not installed")
 
 
 def _value(bucket: int, station: str, metric: str) -> float:
@@ -164,6 +174,7 @@ def ingest_batch(*, now_epoch: int | None = None,
     observed = datetime.fromtimestamp(bucket * interval, tz=timezone.utc)
     written = datetime.now(timezone.utc)
     new_rows = 0
+    started_perf = time.perf_counter()
     with _engine().begin() as conn:
         for station, metric, unit in STATIONS:
             value = _value(bucket, station, metric)
@@ -188,6 +199,12 @@ def ingest_batch(*, now_epoch: int | None = None,
             ).scalar_one_or_none()
             if inserted_id is not None:
                 new_rows += 1
+        observer.record_success(
+            conn, cycle_key="SYNTHETIC_" + str(bucket),
+            started=written, finished=datetime.now(timezone.utc),
+            duration_ms=max(0, round((time.perf_counter()-started_perf)*1000)),
+            processed=len(STATIONS), inserted_count=new_rows,
+        )
     return {
         "state": "SYNTHETIC_BATCH_PERSISTED", "source": SOURCE,
         "observed_at": observed.isoformat(), "inserted": new_rows,
@@ -245,9 +262,16 @@ async def _loop(stop: asyncio.Event):
                      SOURCE, _last_cycle["inserted"], _last_cycle["observed_at"])
         except asyncio.CancelledError:
             raise
-        except Exception:
+        except Exception as exc:
             _last_cycle = {"state": "INGEST_UNAVAILABLE", "source": SOURCE}
             log.exception("stage4_general_ingest_error")
+            try:
+                await asyncio.to_thread(
+                    observer.record_failure,
+                    error_name=type(exc).__name__, duration_ms=0,
+                )
+            except Exception:
+                log.warning("stage4_general_error_audit_unavailable")
         try:
             await asyncio.wait_for(stop.wait(), timeout=interval)
         except asyncio.TimeoutError:
@@ -258,6 +282,8 @@ async def _loop(stop: asyncio.Event):
 async def lifespan(_: FastAPI):
     """Verify DB persistence and real HTTP routes on every isolated restart."""
     verify_schema()
+    old_runs = await asyncio.to_thread(observer.run_count)
+    log.warning("stage4_monitor_restart existing_persisted_runs=%s", old_runs)
     before = await asyncio.to_thread(read_status)
     log.warning("stage4_restart_check records_before_first_batch=%s previous_observation=%s",
                 before["records"], before["latest_observed_at"])
@@ -282,12 +308,20 @@ async def lifespan(_: FastAPI):
                                    headers=headers)
         panel = await client.get("/")
         health = await client.get("/healthz")
+        monitor_missing = await client.get("/api/homologation/monitor/overview")
+        monitor = await client.get("/api/homologation/monitor/overview", headers=headers)
+        runlog = await client.get("/api/homologation/monitor/runs", headers=headers)
     if not (
         unauthorized.status_code == 401
         and authorized.status_code == 200
         and history.status_code == 200
         and panel.status_code == 200
         and health.status_code == 200
+        and monitor_missing.status_code == 401
+        and monitor.status_code == 200
+        and runlog.status_code == 200
+        and monitor.json().get("summary",{}).get("stored_records",0) >= len(STATIONS)
+        and monitor.json().get("summary",{}).get("total_runs",0) >= 1
         and authorized.json().get("records", 0) >= len(STATIONS)
         and history.json().get("count", 0) >= len(STATIONS)
         and health.json().get("database") == "DATABASE_READY"
@@ -297,6 +331,13 @@ async def lifespan(_: FastAPI):
         "stage4_http_pg_smoke auth_missing=401 auth_valid=200 history=200 "
         "panel=200 health=200 total_records=%s dataset=%s",
         authorized.json()["records"], SOURCE,
+    )
+    log.warning(
+        "stage4_monitor_smoke auth_missing=401 overview=200 runs=200 "
+        "modules=%s persisted_runs=%s records=%s",
+        len(monitor.json().get("modules",[])),
+        monitor.json()["summary"]["total_runs"],
+        monitor.json()["summary"]["stored_records"],
     )
 
     stop = asyncio.Event()
@@ -427,6 +468,70 @@ document.getElementById('refresh').addEventListener('click',refresh);
 </script></body></html>"""
 
 
-@app.get("/", response_class=HTMLResponse)
+@app.get("/api/homologation/monitor/overview")
+async def monitoring_overview(
+    runs_limit: int = Query(default=20, ge=1, le=100),
+    records_limit: int = Query(default=20, ge=1, le=100),
+    x_nexora_stage4_key: str | None = Header(default=None),
+):
+    _auth(x_nexora_stage4_key)
+    try:
+        return await asyncio.to_thread(
+            observer.get_overview, runs_limit=runs_limit,
+            records_limit=records_limit,
+        )
+    except Exception:
+        log.exception("stage4_monitor_overview_unavailable")
+        raise HTTPException(503, "Monitoring data unavailable") from None
+
+
+@app.get("/api/homologation/monitor/runs")
+async def monitoring_runs(
+    limit: int = Query(default=35, ge=1, le=100),
+    x_nexora_stage4_key: str | None = Header(default=None),
+):
+    _auth(x_nexora_stage4_key)
+    try:
+        history = await asyncio.to_thread(observer.get_runs, limit=limit)
+        return {"source": SOURCE, "synthetic": True,
+                "count": len(history), "runs": history}
+    except Exception:
+        log.exception("stage4_monitor_runs_unavailable")
+        raise HTTPException(503, "Processing history unavailable") from None
+
+
+@app.get("/api/homologation/monitor/modules")
+async def monitoring_modules(x_nexora_stage4_key: str | None = Header(default=None)):
+    _auth(x_nexora_stage4_key)
+    try:
+        report = await asyncio.to_thread(observer.get_overview, runs_limit=1, records_limit=1)
+        return {"modules": report["modules"], "synthetic": True,
+                "generated_at": report["generated_at"]}
+    except Exception:
+        log.exception("stage4_monitor_modules_unavailable")
+        raise HTTPException(503, "Module status unavailable") from None
+
+
+@app.get("/api/homologation/monitor/diagnostics")
+async def monitoring_diagnostics(x_nexora_stage4_key: str | None = Header(default=None)):
+    _auth(x_nexora_stage4_key)
+    try:
+        report = await asyncio.to_thread(observer.get_overview, runs_limit=70, records_limit=1)
+        return {"diagnostics": report["diagnostics"],
+                "health": report["health"], "limitations": report["limitations"],
+                "synthetic": True, "generated_at": report["generated_at"]}
+    except Exception:
+        log.exception("stage4_monitor_diagnostics_unavailable")
+        raise HTTPException(503, "Diagnostics unavailable") from None
+
+
+@app.get("/")
 async def index():
-    return _HTML
+    return FileResponse(Path(__file__).with_name("stage4_monitor_dashboard.html"),
+                        media_type="text/html")
+
+
+# Import only isolated general observability metadata after the core tables
+# exist; this registers the additive monitoring table for offline bootstrap.
+from . import stage4_observability as observer
+
