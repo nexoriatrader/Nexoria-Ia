@@ -8,7 +8,7 @@ create persistence, access tenants, or introduce trading-side decisions.
 from __future__ import annotations
 
 import asyncio
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from importlib import import_module
 import re
 from time import time
@@ -273,7 +273,7 @@ def _validated_model(knowledge: object, knowledge_id: int, *,
     train, holdout, second = (by_group[k] for k in _GROUPS)
     tf = scope["timeframe_seconds"]
     if (
-        not (train["until"] + __import__("datetime").timedelta(seconds=EMBARGO_BARS * tf)
+        not (train["until"] + timedelta(seconds=EMBARGO_BARS * tf)
              < holdout["from"])
         or not (holdout["until"] + __import__("datetime").timedelta(seconds=EMBARGO_BARS * tf)
                 < second["from"])
