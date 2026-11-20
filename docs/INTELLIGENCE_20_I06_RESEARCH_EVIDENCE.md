@@ -12,12 +12,28 @@ O motor `app/intelligence2/research_signal_engine.py`:
 - registra justificativas por código, classificação **qualitativa** da evidência,
   timestamp, validade (60 segundos) e impressão SHA-256;
 - identifica repetição entre observações, substituição e retirada de itens;
+- verifica a âncora de candle fechado do I02: ausente, futuro ou mais de
+  120 segundos defasado => pesquisa inválida e `DO NOT TRADE`;
+- descreve a tendência observada do I03 apenas como `UP`, `DOWN` ou
+  `NEUTRAL` e exige consenso de três timeframes para uma descrição
+  direcional. Não traduz tendência para CALL/PUT ou instrução de contrato;
+- calcula força de evidência em classes `CONSISTENT`, `INCONCLUSIVE`,
+  `INVALID`, sem usar magnitude do score como chance de ganho;
+- acompanha `ACTIVE_RESEARCH`, `EXPIRED`, `CANCELLED` e
+  `CONCLUDED` como estados de registro de pesquisa, preservando
+  NEW/UNCHANGED/UPDATED/RETIRED para deduplicação;
 - limita a 48 registros por rodada e não produz porcentagem de acerto a partir
   de scores;
 - retorna `WAIT` quando há evidências de pesquisa coerentes ou inconclusivas
   e `DO NOT TRADE` para dados inválidos, conflitantes ou vencidos;
 - informa explicitamente `orders_sent=0`,
   `approved_for_trading=false` e `execution_allowed=false`.
+
+**Integrações efetivamente disponíveis:** a I06 reaproveita `strategy_family`
+e `research_state` de I02 como metadados de estudo. I04 Knowledge Base e o
+Strategy Intelligence específico da arquitetura 2.0 não estão disponíveis
+na `main` atual; por isso retornam `NOT_CONNECTED` e não há promessa de
+consulta a conhecimento, regras de promoção ou estratégia aprendida.
 
 **O I06 não emite sinais executáveis:** sem `SIGNAL APPROVED`,
 `CALL`/`PUT`, expiração contratual ou instante de compra. Os
@@ -62,7 +78,6 @@ está envolvida.
 
 ## Dependência de entrega
 
-A branch I06 parte da correção de CI da PR #58. A PR da I06 deve ter
-como base a branch dessa correção até a PR #58 ser incorporada; assim
-o diff I06 contém apenas a sua implementação. **Não realizar merge,
-deploy ou alteração de flags** sem aprovação separada.
+A PR #58 foi incorporada à `main`. A branch I06 foi sincronizada
+com o merge e a PR #59 aponta para `main`, mantendo diff isolado.
+**Não realizar merge, deploy ou alteração de flags** sem aprovação separada.
