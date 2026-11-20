@@ -201,6 +201,18 @@ def claim_public_task(*, worker_id, now=None):
         if capacity.budget_used >= MAX_REQUESTS_PER_MINUTE:
             session.commit()
             return None
+        # Expired workers with exhausted retries must not stay RUNNING
+        # forever after a restart. A new worker never inherits their fence.
+        for exhausted in session.scalars(select(ResearchTask).where(
+            ResearchTask.status == "RUNNING",
+            ResearchTask.lease_until <= now,
+            ResearchTask.attempts >= MAX_ATTEMPTS,
+        ).with_for_update()).all():
+            exhausted.status = "FAILED"
+            exhausted.worker_id = None
+            exhausted.lease_until = None
+            exhausted.updated_at = now
+            exhausted.error_code = "LEASE_RETRIES_EXHAUSTED"
         running = session.scalar(select(func.count(ResearchTask.id)).where(
             ResearchTask.status == "RUNNING",
             ResearchTask.lease_until > now,
