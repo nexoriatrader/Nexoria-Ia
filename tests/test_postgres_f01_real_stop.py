@@ -293,3 +293,246 @@ def test_stop_serializes_with_existing_postgres_send_guard():
         events.close()
         stop_reply.close()
         engine.dispose()
+
+
+def _f01_start_generation_process(dsn,uid,account,paused,continue_start,out):
+    """Pure consent/fencing worker. Never calls START API or broker adapters."""
+    from app import real_runtime
+    engine=create_engine(dsn,pool_pre_ping=True)
+    Session=sessionmaker(bind=engine,expire_on_commit=False)
+    old=db.SessionLocal
+    db.SessionLocal=Session
+    try:
+        generation=real_runtime.capture_real_start_generation(uid)
+        paused.set()
+        assert continue_start.wait(timeout=35), "synthetic START timeout"
+        try:
+            real_runtime.finalize_real_start_if_current(
+                uid,generation,account,"1","6")
+            out.put(("finalized",generation))
+        except real_runtime.RealStartInvalidated:
+            out.put(("invalidated",generation))
+    except Exception as exc:
+        out.put(("error",type(exc).__name__+":"+str(exc)[:200]))
+    finally:
+        db.SessionLocal=old
+        engine.dispose()
+
+
+def _f01_run_stop_process(dsn,cookie,results):
+    from app import main
+    from fastapi.testclient import TestClient
+    engine=create_engine(dsn,pool_pre_ping=True)
+    Session=sessionmaker(bind=engine,expire_on_commit=False)
+    old=db.SessionLocal
+    db.SessionLocal=Session
+    try:
+        client=TestClient(main.app)
+        client.cookies.set("nexora_sid",cookie)
+        response=client.post("/api/autopilot/stop")
+        results.put(("ok",response.status_code,response.json()))
+    except Exception as exc:
+        results.put(("error",type(exc).__name__+":"+str(exc)[:200]))
+    finally:
+        db.SessionLocal=old
+        engine.dispose()
+
+
+def test_f01_old_start_cannot_restore_consent_after_stop_commits():
+    """START captures generation first; different process STOP commits; START loses."""
+    dsn=_dsn()
+    engine=create_engine(dsn,pool_pre_ping=True)
+    db.Base.metadata.create_all(engine)
+    Session=sessionmaker(bind=engine,expire_on_commit=False)
+    ctx=multiprocessing.get_context("spawn")
+    paused,continue_start=ctx.Event(),ctx.Event()
+    started_result,stopped_result=ctx.Queue(),ctx.Queue()
+    starter=stopper=None
+    cookie="f01-old-start-stop"
+    account="CRF01FENCE_A"
+    try:
+        with Session() as s:
+            uid=_make_user_and_consent(s,"VF01FENCE_A",account,cookie=cookie)
+            other=_make_user_and_consent(s,"VF01FENCE_OTHER","CRF01FENCE_OTHER")
+            s.add(db.RealOrder(user_id=uid,account_id="CRF01FENCE_HIST",
+                request_key="f01-fence-unknown",state="UNKNOWN",
+                active_slot="CRF01FENCE_HIST",
+                symbol="R_100",direction="PUT",duration_minutes=5,
+                stake="1",currency="USD"))
+            s.commit()
+            orders_before=_real_rows(s,uid)
+        starter=ctx.Process(target=_f01_start_generation_process,
+            args=(dsn,uid,account,paused,continue_start,started_result))
+        starter.start()
+        assert paused.wait(timeout=30)
+        stopper=ctx.Process(target=_f01_run_stop_process,
+            args=(dsn,cookie,stopped_result))
+        stopper.start()
+        stopped=stopped_result.get(timeout=35)
+        assert stopped[0]=="ok" and stopped[1]==200,stopped
+        assert stopped[2]["real_revocation_status"]=="REVOKED_NOW"
+        with Session() as s:
+            assert s.get(db.RealRobotConsent,uid).revoked_at is not None
+            assert s.get(db.RealRobotConsent,other).revoked_at is None
+            assert s.get(db.RealAuthorizationFence,uid).generation==1
+        continue_start.set()
+        started=started_result.get(timeout=35)
+        starter.join(timeout=30)
+        stopper.join(timeout=30)
+        assert starter.exitcode==0 and stopper.exitcode==0
+        assert started==("invalidated",0),started
+        with Session() as s:
+            assert s.get(db.RealRobotConsent,uid).revoked_at is not None
+            assert s.get(db.RealAuthorizationFence,uid).generation==1
+            assert s.get(db.RealAuthorizationFence,other) is None
+            assert _real_rows(s,uid)==orders_before
+    finally:
+        continue_start.set()
+        for process in (starter,stopper):
+            if process:
+                process.join(timeout=3)
+                if process.is_alive():
+                    process.terminate()
+                    process.join(timeout=5)
+        started_result.close()
+        stopped_result.close()
+        engine.dispose()
+
+
+def test_f01_stop_before_new_start_requires_new_generation():
+    """STOP commits first; a distinct new request captures a newer generation.
+
+    This synthetic database test does not run any broker or enable REAL flags.
+    """
+    dsn=_dsn()
+    engine=create_engine(dsn,pool_pre_ping=True)
+    db.Base.metadata.create_all(engine)
+    Session=sessionmaker(bind=engine,expire_on_commit=False)
+    ctx=multiprocessing.get_context("spawn")
+    cookie="f01-new-start-after-stop"
+    account="CRF01FENCE_B"
+    stop_reply=ctx.Queue()
+    paused,continue_start=ctx.Event(),ctx.Event()
+    start_reply=ctx.Queue()
+    stopper=starter=None
+    try:
+        with Session() as s:
+            uid=_make_user_and_consent(s,"VF01FENCE_B",account,cookie=cookie)
+            s.add(db.RealOrder(user_id=uid,account_id="CRF01B_HIST",
+                request_key="f01-fence-confirmed",state="CONFIRMED",
+                active_slot="CRF01B_HIST",contract_id="F01FENCECONTRACT",
+                symbol="R_100",direction="CALL",duration_minutes=5,
+                stake="1",currency="USD"))
+            s.commit()
+            original=_real_rows(s,uid)
+        stopper=ctx.Process(target=_f01_run_stop_process,
+            args=(dsn,cookie,stop_reply))
+        stopper.start()
+        stopped=stop_reply.get(timeout=35)
+        stopper.join(timeout=30)
+        assert stopper.exitcode==0
+        assert stopped[0]=="ok" and stopped[1]==200,stopped
+        with Session() as s:
+            assert s.get(db.RealRobotConsent,uid).revoked_at is not None
+            assert s.get(db.RealAuthorizationFence,uid).generation==1
+        starter=ctx.Process(target=_f01_start_generation_process,
+            args=(dsn,uid,account,paused,continue_start,start_reply))
+        starter.start()
+        assert paused.wait(timeout=30)
+        continue_start.set()
+        result=start_reply.get(timeout=35)
+        starter.join(timeout=30)
+        assert starter.exitcode==0
+        assert result==("finalized",1),result
+        with Session() as s:
+            assert s.get(db.RealRobotConsent,uid).revoked_at is None
+            assert s.get(db.RealAuthorizationFence,uid).generation==1
+            assert _real_rows(s,uid)==original
+        # No authorization is retained after a *new* explicit STOP.
+        with Session() as s:
+            from app import real_runtime
+            revoked=real_runtime.revoke_real_consent_for_stop(uid)
+            assert revoked["status"]=="REVOKED_NOW"
+            assert s.get(db.RealAuthorizationFence,uid).generation==2
+        with Session() as s:
+            assert s.get(db.RealRobotConsent,uid).revoked_at is not None
+    finally:
+        continue_start.set()
+        for p in (stopper,starter):
+            if p:
+                p.join(timeout=3)
+                if p.is_alive():
+                    p.terminate()
+                    p.join(timeout=5)
+        stop_reply.close()
+        start_reply.close()
+        engine.dispose()
+
+
+def _f01_hold_user_row(dsn,uid,locked,release,results):
+    from sqlalchemy import select
+    engine=create_engine(dsn,pool_pre_ping=True)
+    Session=sessionmaker(bind=engine,expire_on_commit=False)
+    try:
+        with Session() as sess:
+            assert sess.scalar(select(db.User.id).where(
+                db.User.id==uid).with_for_update())==uid
+            locked.set()
+            assert release.wait(timeout=30)
+            sess.rollback()
+        results.put(("released",))
+    except Exception as exc:
+        results.put(("error",type(exc).__name__))
+    finally:
+        engine.dispose()
+
+
+def test_f01_pg_lock_timeout_fails_without_confirming_stop():
+    """A blocked stop reports HTTP 503; neither revocation nor epoch commits."""
+    dsn=_dsn()
+    engine=create_engine(dsn,pool_pre_ping=True)
+    db.Base.metadata.create_all(engine)
+    Session=sessionmaker(bind=engine,expire_on_commit=False)
+    ctx=multiprocessing.get_context("spawn")
+    locked,release=ctx.Event(),ctx.Event()
+    holder_reply,stop_reply=ctx.Queue(),ctx.Queue()
+    holder=stopper=None
+    try:
+        cookie="f01-postgres-timeout"
+        with Session() as s:
+            uid=_make_user_and_consent(s,"VF01TIMEOUT","CRF01TIMEOUT",
+                                       cookie=cookie)
+        holder=ctx.Process(target=_f01_hold_user_row,
+            args=(dsn,uid,locked,release,holder_reply))
+        holder.start()
+        assert locked.wait(timeout=35)
+        stopped_at=time.monotonic()
+        stopper=ctx.Process(target=_f01_run_stop_process,
+            args=(dsn,cookie,stop_reply))
+        stopper.start()
+        result=stop_reply.get(timeout=12)
+        elapsed=time.monotonic()-stopped_at
+        assert elapsed<9,"Unbounded PostgreSQL STOP lock wait"
+        assert result[0]=="ok" and result[1]==503,result
+        assert "revogação REAL" in result[2]["detail"]
+        with Session() as s:
+            assert s.get(db.RealRobotConsent,uid).revoked_at is None
+            assert s.get(db.RealAuthorizationFence,uid) is None
+        release.set()
+        assert holder_reply.get(timeout=30)[0]=="released"
+        holder.join(timeout=25)
+        stopper.join(timeout=25)
+        assert holder.exitcode==stopper.exitcode==0
+        with Session() as s:
+            assert s.get(db.RealRobotConsent,uid).revoked_at is None
+    finally:
+        release.set()
+        for p in (holder,stopper):
+            if p:
+                p.join(timeout=3)
+                if p.is_alive():
+                    p.terminate()
+                    p.join(timeout=5)
+        holder_reply.close()
+        stop_reply.close()
+        engine.dispose()
