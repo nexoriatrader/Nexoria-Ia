@@ -344,6 +344,18 @@ class RealOrder(Base):
     )
 
 
+class RealAuthorizationFence(Base):
+    """F01: durable, per-user generation invalidating pre-STOP START attempts.
+
+    Never represents an authorization and cannot enable REAL by itself.
+    """
+    __tablename__ = 'real_authorization_fences'
+    user_id = Column(Integer, ForeignKey('users.id'), primary_key=True)
+    generation = Column(Integer, nullable=False, default=0)
+    updated_at = Column(DateTime(timezone=True), default=utcnow, onupdate=utcnow,
+                        nullable=False)
+
+
 class RealRobotConsent(Base):
     """Opt-in REAL activation is separate from saved settings or DEMO consent."""
     __tablename__ = 'real_robot_consents'
