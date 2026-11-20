@@ -11,7 +11,7 @@ independently validated model artifact; I03 contains no such artifact.
 from __future__ import annotations
 
 import math
-from statistics import mean, median, pstdev
+from statistics import median, pstdev
 
 from ..automation_signals import _ema, _rsi
 from ..trade_selector_v2 import swing_structure
@@ -119,9 +119,12 @@ def analyze_context(window: dict, *, market: str, symbol: str,
             state = "LOW_VOLATILITY"
         elif vol >= .012:
             state = "HIGH_VOLATILITY"
+        elif efficiency < .20:
+            # Chop stays ranging even when a noisy EMA pair briefly crosses.
+            state = "RANGING"
         elif cross_recent or (direction == "NEUTRAL" and efficiency >= .35):
             state = "TRANSITION"
-        elif efficiency < .20 or relative_gap < .45:
+        elif relative_gap < .45:
             state = "RANGING"
         elif direction == "UP":
             state = "UPTREND"
