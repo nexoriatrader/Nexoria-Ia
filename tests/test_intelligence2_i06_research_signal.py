@@ -14,7 +14,7 @@ from fastapi.testclient import TestClient
 from app import asset_scanner, main
 from app.intelligence2 import research_signal_engine as i06
 
-NOW = 20_000
+NOW = 20_040
 ROLE_TF = {"higher": 3600, "intermediate": 300, "lower": 60}
 
 
