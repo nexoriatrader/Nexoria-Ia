@@ -154,6 +154,19 @@ async def research_loop():
                 pruned = await asyncio.to_thread(prune_expired)
                 if pruned:
                     logger.info("Expired shared market snapshots removed: %s", pruned)
+            # I04 reuses this EXISTING hourly research loop; no second
+            # scheduler. It only downgrades stale ACTIVE knowledge. Default
+            # OFF until the separately authorized I04 formal migration.
+            from .intelligence2.knowledge_base import enabled as knowledge_enabled, review_due_knowledge
+            if knowledge_enabled():
+                try:
+                    reviewed = await asyncio.to_thread(review_due_knowledge)
+                    if reviewed:
+                        logger.info("I04 public knowledge review due: %s", reviewed)
+                except Exception as exc:
+                    # Knowledge maintenance must not alter financial runtimes,
+                    # or block ordinary existing research on absence of schema.
+                    logger.warning("I04 review unavailable: %s", type(exc).__name__)
             existing = await asyncio.to_thread(latest_study)
             last = datetime.fromisoformat(existing["generated_at"]) if existing and existing.get("generated_at") else None
             stale = not last or datetime.now(timezone.utc) - last > timedelta(hours=24)
