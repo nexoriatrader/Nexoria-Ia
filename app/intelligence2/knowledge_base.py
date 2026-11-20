@@ -308,10 +308,14 @@ def _locked(session, knowledge_id: int, expected_revision: int):
 
 def _cas(session, item, expected_revision: int, *, state: str, reason: str,
          decision: str, now: datetime, digest: str):
+    # SQLAlchemy's ORM synchronize_session may rewrite item.state during
+    # UPDATE. Snapshot the *previous* state before the mutation to preserve
+    # an accurate, contiguous decision chain across dialects/workers.
+    previous_state = item.state
     result = session.execute(update(db.IntelligenceKnowledge).where(
         db.IntelligenceKnowledge.id == item.id,
         db.IntelligenceKnowledge.revision == expected_revision,
-        db.IntelligenceKnowledge.state == item.state,
+        db.IntelligenceKnowledge.state == previous_state,
     ).values(
         state=state, revision=expected_revision+1,
         reason_code=reason, updated_at=now,
@@ -319,7 +323,7 @@ def _cas(session, item, expected_revision: int, *, state: str, reason: str,
     if result.rowcount != 1:
         raise KnowledgeConflict("Atualização concorrente rejeitada")
     _record(session, item, revision=expected_revision+1,
-            from_state=item.state, to_state=state, decision=decision,
+            from_state=previous_state, to_state=state, decision=decision,
             reason_code=reason, evidence_digest=digest, now=now)
 
 
