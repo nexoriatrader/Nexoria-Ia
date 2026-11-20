@@ -361,10 +361,12 @@ def promote_research_champion(*, model_knowledge_id: int,
     reason=kb._reason(approval_reason)
     now=kb._utc(now or db.utcnow())
     with db.SessionLocal() as session:
+        # Acquire transaction lock before the first SELECT, including SQLite.
+        # PostgreSQL serializes release operations across all worker processes.
+        _reg_lock(session,"I05_GLOBAL_RESEARCH_RELEASE_V1")
         artifact=_artifact_row(session,model_digest)
         report,_=_verify_artifact(artifact)
         scope=_scope(report["market"],report["symbol"],report["timeframe_seconds"])
-        _reg_lock(session,_release_key(scope))
         latest=_release_history(session,scope)
         if (latest[0].id if latest else None)!=expected_release_id:
             raise kb.KnowledgeConflict("Release concorrente ou revisão obsoleta")
