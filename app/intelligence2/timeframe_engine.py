@@ -35,6 +35,8 @@ def choose_hierarchy(asset: dict, *, expiry_minutes: int) -> dict:
         raise ValueError("I03: ativo sem seleção pública elegível")
     if asset.get("execution_allowed") is not False:
         raise ValueError("I03: autorização financeira nunca é aceita")
+    if asset.get("candle_quality") != "COMPLETE":
+        raise ValueError("I03: qualidade da I02 não comprovada")
     vol = asset.get("realized_volatility")
     if (isinstance(vol, bool) or not isinstance(vol, (int, float))
         or not math.isfinite(vol) or vol < 0):
