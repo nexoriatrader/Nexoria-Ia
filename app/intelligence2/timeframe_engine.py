@@ -101,6 +101,14 @@ def _decision(contexts: dict, *, profile: dict) -> dict:
     mid_strong = mid.get("strength", 0) >= .60 and mid.get("stability", 0) >= .65
     lower_strong = low.get("strength", 0) >= .60 and low.get("stability", 0) >= .65
 
+    if (hd in ("UP", "DOWN") and ld in ("UP", "DOWN")
+        and hd != ld and high_strong and lower_strong and md == "NEUTRAL"):
+        return {
+            "state": "BLOCKED_STRONG_CONFLICT", "direction": "NEUTRAL",
+            "reason_codes": ["STRONG_HIGHER_LOWER_OPPOSITION_NO_MIDDLE_CONFIRMATION"],
+            "requires_recheck": True, "strategy_research_usable": False,
+        }
+
     if hd in ("UP", "DOWN") and md in ("UP", "DOWN") and hd != md:
         if high_strong and mid_strong:
             return {
