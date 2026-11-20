@@ -93,7 +93,7 @@ def _model(model_id=101):
             "model_id": ("a" if model_id == 101 else "f") * 64,
             "source_version": i05a.I05_SOURCE_VERSION,
             "sample_size": 600, "holdout_samples": 240,
-            "success_rate": .62,
+            "success_rate": .62, "confidence_heuristic": .56,
         },
         "evidence": evidence,
         "decisions": [
@@ -224,6 +224,13 @@ def test_existing_i05_champion_fallback_and_oos_provenance_are_read_only():
     assert learning["champion"]["model_version"] == "REGIME_MARKOV_LAPLACE_V1"
     assert learning["champion"]["regime_scope"] == "UNKNOWN"
     assert learning["champion"]["observed_public_regime"] == "UPTREND"
+    assert learning["champion"]["historical_validation"] == {
+        "kind": "REGIME_LABEL_HOLDOUT_NOT_TRADING_PROBABILITY",
+        "training_observations": 600,
+        "holdout_observations": 240,
+        "holdout_regime_label_accuracy": .62,
+        "holdout_wilson95_lower_bound": .56,
+    }
     periods = learning["champion"]["validation_periods"]
     assert set(periods) == {
         "PUBLIC_TRAIN_WINDOW", "PUBLIC_HOLDOUT_WINDOW",
@@ -289,6 +296,7 @@ def test_unverified_or_private_release_is_never_used(field, bad):
     "missing_second_holdout", "overlapping_holdouts",
     "unverified_holdout", "private_payload",
     "corrupt_decision", "missing_digest", "missing_model_id",
+    "bad_holdout_metric", "bad_wilson_metric",
 ])
 def test_unvalidated_stale_or_corrupted_champion_cannot_influence(mutation):
     provider = PublicKnowledge()
@@ -325,6 +333,10 @@ def test_unvalidated_stale_or_corrupted_champion_cannot_influence(mutation):
         model["payload_sha256"] = None
     elif mutation == "missing_model_id":
         model["payload"]["model_id"] = "not-a-model-digest"
+    elif mutation == "bad_holdout_metric":
+        model["payload"]["success_rate"] = float("nan")
+    elif mutation == "bad_wilson_metric":
+        model["payload"]["confidence_heuristic"] = 1.5
     out = _enrich(knowledge=provider)
     row = out["assets"][0]["learning_engine"]
     assert row["status"] == "I05_MODEL_REVIEW_REQUIRED"
