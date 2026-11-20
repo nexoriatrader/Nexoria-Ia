@@ -36,7 +36,7 @@ from .strategy_lab import run_lab
 from .single_asset_study import run_single_asset_study
 from .research_persistence import research_loop, latest_study, latest_multitimeframe_study, latest_pullback_study  # read-only research
 from .m1_history import m1_collect_loop, history_status
-from .asset_scanner import scan_assets, scan_intelligence_markets
+from .asset_scanner import scan_assets, scan_intelligence_markets, scan_intelligence_context
 from .trade_selector_v2 import (select_demo_signal, last_scan_report, has_pending_signals,
                                 active_market, catalogue, supported, fetch_closed_timeframe,
                                 SIGNAL_PROFILE)
@@ -2979,41 +2979,59 @@ _asset_scanner_lock=asyncio.Lock()
 _asset_scanner_cache=None
 _asset_scanner_cache_time=0.0
 _asset_scanner_cache_version=1
+_asset_scanner_cache_expiry_minutes=None  # I03 public profile key, never an account setting
+_asset_scanner_cache_epoch_bucket=None
 _asset_scanner_last_v2=None  # prior public ranking only; never tenant data
 
 @app.get('/api/research/asset-scanner')
 async def asset_scanner_route(request:Request,nexora_sid:str|None=Cookie(default=None),
-                              version:int=1):
-    """Existing authenticated research route; I02 opts in via ?version=2."""
+                              version:int=1,expiry_minutes:int=5):
+    """Existing authenticated research route, versioned I01/I02/I03 payloads."""
     user=active_user(request,nexora_sid)
-    if version not in (1,2):
+    if version not in (1,2,3):
         raise HTTPException(422,'Versão do scanner inválida')
+    if version==3 and expiry_minutes not in (1,3,5,15):
+        raise HTTPException(422,'Expiração de pesquisa inválida')
     global _asset_scanner_cache,_asset_scanner_cache_time
     global _asset_scanner_cache_version,_asset_scanner_last_v2
+    global _asset_scanner_cache_expiry_minutes,_asset_scanner_cache_epoch_bucket
     async with _asset_scanner_lock:
         now=asyncio.get_running_loop().time()
-        ttl=60 if version==2 else 300
+        public_epoch_bucket=int(time.time()//60)
+        ttl=60 if version in (2,3) else 300
         cached=(_asset_scanner_cache is not None
                 and _asset_scanner_cache_version==version
-                and now-_asset_scanner_cache_time<ttl)
+                and now-_asset_scanner_cache_time<ttl
+                and (version!=3 or (
+                    _asset_scanner_cache_expiry_minutes==expiry_minutes
+                    and _asset_scanner_cache_epoch_bucket==public_epoch_bucket)))
         if cached:
             report=_asset_scanner_cache
         else:
             try:
-                report=(await scan_intelligence_markets(previous=_asset_scanner_last_v2)
-                        if version==2 else await scan_assets())
+                if version==3:
+                    report=await scan_intelligence_context(
+                        previous=_asset_scanner_last_v2,
+                        expiry_minutes=expiry_minutes)
+                elif version==2:
+                    report=await scan_intelligence_markets(
+                        previous=_asset_scanner_last_v2)
+                else:
+                    report=await scan_assets()
             except MarketError as exc:
                 raise HTTPException(502,str(exc)) from None
             _asset_scanner_cache=report
-            _asset_scanner_cache_time=now
+            _asset_scanner_cache_time=asyncio.get_running_loop().time()
             _asset_scanner_cache_version=version
-            if version==2:
+            _asset_scanner_cache_expiry_minutes=(expiry_minutes if version==3 else None)
+            _asset_scanner_cache_epoch_bucket=(public_epoch_bucket if version==3 else None)
+            if version in (2,3):
                 _asset_scanner_last_v2=report
     if version==1:
         return {**report,'cached':cached}
 
-    # Keep private contract continuity OUTSIDE the globally shared scan cache.
-    # No writes, no consent changes, no replacement of existing reconcilers.
+    # Private DEMO/REAL contract continuity stays OUT of shared I02/I03
+    # public knowledge. Do not mutate, delete, revoke or settle orders.
     from .intelligence2.market_scanner import open_contracts_for_user
     with db.SessionLocal() as sess:
         existing_contracts=open_contracts_for_user(sess,user.id)
