@@ -359,8 +359,11 @@ async def _loop(stop: asyncio.Event):
 async def lifespan(_: FastAPI):
     """Verify DB persistence and real HTTP routes on every isolated restart."""
     verify_schema()
-    previous_research = await asyncio.to_thread(research.list_research, 1)
-    previous_latest = previous_research["runs"][0] if previous_research["runs"] else None
+    previous_research = await asyncio.to_thread(research.list_research, 20)
+    previous_latest = next((
+        item for item in previous_research["runs"]
+        if item["state"] == "COMPLETE"
+    ), None)
     log.warning("stage4_research_restart prior_runs=%s previous_id=%s previous_digest=%s",
                 previous_research["total"],
                 previous_latest["id"] if previous_latest else "NONE",
