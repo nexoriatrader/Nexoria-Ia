@@ -576,3 +576,28 @@ def test_context_candle_time_anchor_expected_from_closed_bar_interval():
         assert c["last_closed_epoch"] == (NOW // seconds - 1) * seconds
     record = _item(i06.assess_research_report(source,now=NOW))
     assert record["research_review"] == "DATA_READY_FOR_STUDY"
+
+
+@pytest.mark.parametrize("bad_field,bad_value", [
+    ("trade_side", "CALL"),
+    ("entry_epoch", NOW),
+    ("contract_expiry_minutes", 5),
+    ("execution_allowed", True),
+    ("approved_for_trading", True),
+    ("distribution", {"publish_allowed": True}),
+])
+def test_v4_rejects_forged_record_actions_or_publish_permissions(
+    monkeypatch, bad_field, bad_value,
+):
+    client = _route_client(monkeypatch)
+    monkeypatch.setenv("NEXORA_INTELLIGENCE_READONLY_ENABLED", "true")
+    monkeypatch.setenv("NEXORA_INTELLIGENCE_I06_RESEARCH_ENABLED", "true")
+    report = i06.assess_research_report(_source(), now=NOW)
+    report["research_records"][0][bad_field] = bad_value
+    scanner = AsyncMock(return_value=report)
+    monkeypatch.setattr(main, "scan_intelligence_research", scanner)
+    response = client.get("/api/research/asset-scanner?version=4")
+    assert response.status_code == 502
+    assert main._asset_scanner_research_cache == {}
+    scanner.assert_awaited_once()
+    client.close()
