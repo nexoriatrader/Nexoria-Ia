@@ -41,7 +41,7 @@ def _classify(asset):
     if any(x in combined for x in ("synthetic", "derived", "volatility", "random", "jump", "step", "boom", "crash",
                                    "range break", "basket", "dex", "drift", "tactical")):
         return "derived"
-    if re.search(r"\\bforex\\b", combined) or (re.search(r"\\bcurrency\\b", combined) and "synthetic" not in combined):
+    if re.search(r"\bforex\b", combined) or (re.search(r"\bcurrency\b", combined) and "synthetic" not in combined):
         return "forex"
 
     # The fields of brief/full market datasets may differ across API versions.
