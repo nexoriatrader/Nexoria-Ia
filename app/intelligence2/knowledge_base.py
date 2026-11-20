@@ -676,14 +676,36 @@ def invalidate_on_market_change(*, market: str, symbol: str,
             db.IntelligenceKnowledge.state.in_(("ACTIVE", "REVIEW_REQUIRED")),
             db.IntelligenceKnowledge.regime.not_in(("UNKNOWN", observed_regime)),
         ).order_by(db.IntelligenceKnowledge.id).limit(100)).all()
-        candidates = [(row.id, row.revision) for row in rows]
+        candidates = [(row.id, row.revision, row.timeframe_seconds)
+                      for row in rows]
     changed = 0
-    for knowledge_id, revision in candidates:
+    changed_timeframes = set()
+    for knowledge_id, revision, timeframe_seconds in candidates:
         try:
             change_state(knowledge_id=knowledge_id, expected_revision=revision,
                          target_state="INVALIDATED",
                          reason_code="PUBLIC_MARKET_REGIME_CHANGED", now=now)
             changed += 1
+            changed_timeframes.add(timeframe_seconds)
         except KnowledgeConflict:
             continue
+    # I05 durable event hook, only when opted in. It queues PUBLIC regime
+    # metadata; the existing research maintenance loop does the bounded
+    # processing, never a new background task or order.
+    if changed_timeframes and os.getenv(
+        "NEXORA_INTELLIGENCE_LEARNING_ENABLED", "false"
+    ).lower() == "true" and enabled():
+        import logging
+        from .learning_cycle import record_market_event
+        for timeframe_seconds in sorted(changed_timeframes):
+            try:
+                record_market_event(
+                    market=market, symbol=symbol,
+                    timeframe_seconds=timeframe_seconds,
+                    observed_regime=observed_regime, now=now,
+                )
+            except Exception as exc:
+                logging.getLogger("nexora.research").warning(
+                    "Public I05 event enqueue unavailable: %s", type(exc).__name__
+                )
     return changed
