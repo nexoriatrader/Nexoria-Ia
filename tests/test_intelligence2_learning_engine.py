@@ -288,6 +288,45 @@ def test_controlled_research_champion_fallback_and_release_cas(store,monkeypatch
     assert current["generation"]==2
 
 
+def test_future_dated_research_promotion_not_visible_before_approval(store,monkeypatch):
+    monkeypatch.setenv("NEXORA_INTELLIGENCE_LEARNING_PROMOTION_ENABLED","true")
+    source=_market_knowledge()
+    candidate,validated=_staged_validated(market_source=source)
+    reg.promote_research_champion(
+        model_knowledge_id=candidate["knowledge_id"],
+        model_digest=candidate["report"]["model_id_sha256"],
+        expected_model_revision=validated["revision"],
+        expected_release_id=None,approval_reason="TEST_CHRONOLOGY_GATE",
+        now=APPROVED_AT)
+    old_view=reg.get_research_release(
+        market=MARKET,symbol=SYMBOL,timeframe_seconds=TF,now=NOW)
+    assert old_view["state"]=="NO_VALIDATED_RESEARCH_MODEL"
+    old_model=kb.get_knowledge(candidate["knowledge_id"],now=NOW)
+    assert old_model["reusable_for_research"] is False
+    assert old_model["reuse_status"]=="FUTURE_DECISION_TIMESTAMP"
+
+
+def test_research_release_audit_tampering_fails_closed(store,monkeypatch):
+    monkeypatch.setenv("NEXORA_INTELLIGENCE_LEARNING_PROMOTION_ENABLED","true")
+    source=_market_knowledge()
+    candidate,validated=_staged_validated(market_source=source)
+    promoted=reg.promote_research_champion(
+        model_knowledge_id=candidate["knowledge_id"],
+        model_digest=candidate["report"]["model_id_sha256"],
+        expected_model_revision=validated["revision"],
+        expected_release_id=None,approval_reason="AUDITED_RESEARCH_RELEASE",
+        now=APPROVED_AT)
+    with store() as session:
+        item=session.get(HistoricalResearchReport,promoted["id"])
+        data=json.loads(item.payload_json)
+        data["champion_knowledge_id"]=999999
+        item.payload_json=json.dumps(data)
+        session.commit()
+    with pytest.raises(kb.KnowledgeUnavailable,match="Trilha"):
+        reg.get_research_release(
+            market=MARKET,symbol=SYMBOL,timeframe_seconds=TF,now=APPROVED_AT)
+
+
 def test_open_contract_global_safety_barrier_blocks_model_promotion(store,monkeypatch):
     monkeypatch.setenv("NEXORA_INTELLIGENCE_LEARNING_PROMOTION_ENABLED","true")
     source=_market_knowledge()
