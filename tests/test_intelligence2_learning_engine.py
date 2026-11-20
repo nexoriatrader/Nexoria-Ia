@@ -469,6 +469,48 @@ def test_learning_artifact_retention_does_not_destroy_audit_chain(store):
         ).count()==13
 
 
+def test_learning_status_api_auth_shared_demo_real_and_disabled_gate(store,monkeypatch):
+    from fastapi.testclient import TestClient
+    from app import main
+    from app.security import encrypt,hashsecret
+    with store() as session:
+        for account,mode,sid in (
+            ("V_I05_SHARED","demo","i05-demo"),
+            ("CR_I05_SHARED","real","i05-real"),
+        ):
+            user=db.User(deriv_account_id=account,selected_mode=mode)
+            session.add(user);session.flush()
+            session.add(db.Session(
+                user_id=user.id,session_hash=hashsecret(sid),
+                token_encrypted=encrypt("synthetic-test-only"),
+                expires_at=db.utcnow()+timedelta(hours=1)))
+        session.commit()
+    purchase=AsyncMock(side_effect=AssertionError("I05 financial action forbidden"))
+    monkeypatch.setattr(real_broker,"buy_real_contract",purchase)
+    client=TestClient(main.app)
+    route="/api/research/learning-status?market=derived&symbol=R_100&timeframe_seconds=60"
+    try:
+        assert client.get(route).status_code==401
+        client.cookies.set("nexora_sid","i05-demo")
+        demo=client.get(route)
+        assert demo.status_code==200
+        client.cookies.set("nexora_sid","i05-real")
+        real=client.get(route)
+        assert real.status_code==200
+        assert demo.json()==real.json()
+        assert real.json()["state"]=="NO_VALIDATED_RESEARCH_MODEL"
+        assert real.json()["execution_allowed"] is False
+        assert "account_id" not in str(real.json())
+        assert client.get(
+            "/api/research/learning-status?market=derived&symbol=INVALID!&timeframe_seconds=60"
+        ).status_code==422
+        monkeypatch.setenv("NEXORA_INTELLIGENCE_LEARNING_ENABLED","false")
+        assert client.get(route).status_code==503
+        purchase.assert_not_awaited()
+    finally:
+        client.close()
+
+
 def test_disabled_learning_never_touches_public_broker_or_models(store,monkeypatch):
     monkeypatch.setenv("NEXORA_INTELLIGENCE_LEARNING_ENABLED","false")
     buy=AsyncMock(side_effect=AssertionError("financial purchase forbidden"))
