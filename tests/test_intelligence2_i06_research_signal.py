@@ -39,6 +39,7 @@ def _source(now=NOW):
                 "research_state": "OBSERVED",
                 "candle_quality": "COMPLETE",
                 "closed_candles": 96,
+                "last_closed_epoch": now - 30,
                 "context_timeframe": {
                     "version": "intelligence2_i03_v1",
                     "provenance_sha256": "a" * 64,
@@ -160,6 +161,7 @@ def test_fingerprint_dedup_version_change_and_retirement():
     assert removed["research_records"] == []
     assert removed["retired_records"] == [{
         "market": "forex", "symbol": "FRXEURUSD", "lifecycle": "RETIRED",
+        "lifecycle_state": "CONCLUDED",
         "reason_codes": ["NOT_PRESENT_IN_CURRENT_PUBLIC_SCAN"],
     }]
 
@@ -275,3 +277,76 @@ def test_anonymous_v4_request_rejected_before_feature_or_feed(monkeypatch):
     monkeypatch.delenv("NEXORA_INTELLIGENCE_I06_RESEARCH_ENABLED", raising=False)
     with TestClient(main.app) as client:
         assert client.get("/api/research/asset-scanner?version=4").status_code == 401
+
+
+def test_public_context_consensus_does_not_map_to_contract_direction():
+    source = _source()
+    asset = source["markets"]["forex"]["selected"][0]
+    assert i06.describe_public_context(asset) == {
+        "observed_trend": "UP", "consensus": "THREE_TIMEFRAMES"
+    }
+    asset["context_timeframe"]["contexts"]["lower"]["direction"] = "DOWN"
+    assert i06.describe_public_context(asset) == {
+        "observed_trend": "NEUTRAL", "consensus": "MIXED_OR_PENDING"
+    }
+    assessed = i06.assess_research_report(source, now=NOW)
+    assert _item(assessed)["trade_side"] is None
+    assert _item(assessed)["entry_epoch"] is None
+
+
+@pytest.mark.parametrize("closed,clock,status,reason", [
+    (NOW - 30, NOW, "CURRENT", "I02_CLOSED_CANDLE_CURRENT"),
+    (NOW - 121, NOW, "STALE", "I02_LAST_CLOSED_STALE"),
+    (NOW + 1, NOW, "INVALID", "I02_LAST_CLOSED_IN_FUTURE"),
+    (None, NOW, "UNVERIFIED", "I02_LAST_CLOSED_MISSING"),
+])
+def test_closed_candle_freshness_component(closed,clock,status,reason):
+    source = _source()
+    asset = source["markets"]["forex"]["selected"][0]
+    asset["last_closed_epoch"] = closed
+    result = i06.review_public_freshness(asset, observed_at=NOW, now=clock)
+    assert result == {"status":status,"reason_code":reason}
+    record = _item(i06.assess_research_report(source, now=NOW))
+    assert record["freshness"] == result
+    assert record["decision"] == ("WAIT" if status == "CURRENT" else "DO NOT TRADE")
+
+
+def test_lifecycle_state_new_updated_cancelled_expired_concluded():
+    source = _source()
+    first = i06.assess_research_report(source, now=NOW)
+    assert _item(first)["lifecycle_state"] == "ACTIVE_RESEARCH"
+    invalid = deepcopy(source)
+    invalid["markets"]["forex"]["selected"][0]["candle_quality"] = "GAPPED"
+    cancelled = i06.assess_research_report(invalid,previous=first,now=NOW)
+    assert _item(cancelled)["lifecycle_state"] == "CANCELLED"
+    expired = i06.assess_research_report(source,previous=first,now=NOW+60)
+    assert _item(expired)["lifecycle_state"] == "EXPIRED"
+    updated = deepcopy(source)
+    updated["markets"]["forex"]["selected"][0]["context_timeframe"]["provenance_sha256"] = "b"*64
+    changed = i06.assess_research_report(updated,previous=first,now=NOW)
+    assert _item(changed)["lifecycle"] == "UPDATED"
+    retired = deepcopy(source)
+    retired["markets"]["forex"]["selected"] = []
+    gone = i06.assess_research_report(retired,previous=first,now=NOW)
+    assert gone["retired_records"][0]["lifecycle_state"] == "CONCLUDED"
+
+
+def test_qualitative_strength_is_not_derived_from_score_magnitude():
+    source = _source()
+    record = _item(i06.assess_research_report(source,now=NOW))
+    assert record["evidence_strength"] == "CONSISTENT"
+    assert record["knowledge_base"] == {"status":"NOT_CONNECTED","used":False}
+    assert record["strategy_intelligence"]["used"] is False
+    source["markets"]["forex"]["selected"][0]["score"] = 999_999
+    same = _item(i06.assess_research_report(source,now=NOW))
+    assert same["evidence_strength"] == record["evidence_strength"]
+    assert same["decision"] == record["decision"]
+
+
+def test_missing_knowledge_base_does_not_fabricate_i04_integration():
+    report = i06.assess_research_report(_source(), now=NOW)
+    record = _item(report)
+    assert record["knowledge_base"]["status"] == "NOT_CONNECTED"
+    assert record["trade_side"] is None
+    assert record["contract_expiry_minutes"] is None
+    assert record["approved_for_trading"] is False
