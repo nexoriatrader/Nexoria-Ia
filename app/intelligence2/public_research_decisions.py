@@ -23,7 +23,7 @@ from ..research_persistence import HistoricalResearchReport
 from .public_research_coordinator import (
     VERSION as COORDINATION_VERSION,
     ResearchCapacity, ResearchTask, _pg_session, _row_lock, _clock, _utc,
-    claim_public_task, finish_public_task,
+    claim_public_task, finish_public_task, renew_public_lease,
 )
 from .research_orchestrator import VERSION as ORCHESTRATOR_VERSION
 
@@ -245,6 +245,26 @@ async def run_one_public_research_task(*, worker_id, now=None):
     if claim is None:
         return {"state": "NO_PUBLIC_WORK", "execution_allowed": False}
     started = time.monotonic()
+    lost_lease = asyncio.Event()
+
+    async def _heartbeat():
+        try:
+            while True:
+                await asyncio.sleep(20)
+                alive = await asyncio.to_thread(
+                    renew_public_lease, task_id=claim["id"],
+                    worker_id=worker_id, fence=claim["fence"],
+                    now=datetime.now(timezone.utc),
+                )
+                if not alive:
+                    lost_lease.set()
+                    return
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            lost_lease.set()
+
+    heartbeat = asyncio.create_task(_heartbeat())
     try:
         # Exactly one existing public research chain; no parallel scanner,
         # duplicate model training or financial execution.
@@ -252,8 +272,11 @@ async def run_one_public_research_task(*, worker_id, now=None):
         source = await orchestrate_research_with_i04_i05(
             now=int(now.timestamp()),
         )
+        if lost_lease.is_set():
+            return {"state": "STALE_WORKER_FENCED",
+                    "id": claim["id"], "execution_allowed": False}
         snapshot = prioritize_public_research(
-            source, now=int(now.timestamp()),
+            source, now=int(datetime.now(timezone.utc).timestamp()),
         )
         elapsed = max(0, round((time.monotonic() - started) * 1000))
         persisted = await asyncio.to_thread(
@@ -268,6 +291,10 @@ async def run_one_public_research_task(*, worker_id, now=None):
             ),
             "id": claim["id"], "execution_allowed": False,
         }
+    except asyncio.CancelledError:
+        # Cancellation leaves only a time-bounded lease; another worker
+        # can recover it with a higher fence without accepting stale writes.
+        raise
     except Exception:
         elapsed = max(0, round((time.monotonic() - started) * 1000))
         await asyncio.to_thread(
@@ -276,3 +303,6 @@ async def run_one_public_research_task(*, worker_id, now=None):
             duration_ms=elapsed, now=datetime.now(timezone.utc),
         )
         return {"state": "RECHECK_PUBLIC_RESEARCH", "execution_allowed": False}
+    finally:
+        heartbeat.cancel()
+        await asyncio.gather(heartbeat, return_exceptions=True)
