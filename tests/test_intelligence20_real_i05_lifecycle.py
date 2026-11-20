@@ -1,10 +1,8 @@
-"""Original real I05 lifecycle regression from PR #56 adapted ONLY for
-isolated I04 metadata creation on disposable databases. No broker orders.
-API status tests omitted: they depend on the original PR #56 API branch,
-not the isolated #63 research chain.
-"""
 """I05 public research training/governance tests — no financial execution."""
 from __future__ import annotations
+
+# Original I05 PR #56 persistence lifecycle tests, adapted to separate
+# I04 metadata for disposable SQLite/PostgreSQL; no execution.
 
 import asyncio
 import copy
