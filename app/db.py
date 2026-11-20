@@ -446,7 +446,7 @@ def verify_postgresql_schema(connection):
                 'reason_code','created_at','updated_at'),
             'intelligence_knowledge_evidence':(
                 'id','knowledge_id','source_type','source_ref','source_digest',
-                'evidence_summary_json','origin_group','verified','observation_count','group_size',
+                'evidence_summary_json','recorded_revision','origin_group','verified','observation_count','group_size',
                 'period_from','period_to','recorded_at'),
             'intelligence_knowledge_decisions':(
                 'id','knowledge_id','revision','from_state','to_state',
@@ -666,6 +666,7 @@ class IntelligenceKnowledgeEvidence(Base):
     source_ref=Column(String(160),nullable=False)
     source_digest=Column(String(64),nullable=False)
     evidence_summary_json=Column(Text,nullable=False)
+    recorded_revision=Column(Integer,nullable=False)
     origin_group=Column(String(64),nullable=False)
     verified=Column(Boolean,nullable=False)
     observation_count=Column(Integer,nullable=False)
@@ -675,6 +676,7 @@ class IntelligenceKnowledgeEvidence(Base):
     recorded_at=Column(DateTime(timezone=True),nullable=False,default=utcnow)
     __table_args__=(
         UniqueConstraint('knowledge_id','source_digest',name='uq_knowledge_evidence_digest'),
+        CheckConstraint('recorded_revision >= 2',name='ck_knowledge_evidence_revision'),
         CheckConstraint('observation_count >= 1',name='ck_knowledge_evidence_observations'),
         CheckConstraint('group_size >= 0',name='ck_knowledge_evidence_group'),
         CheckConstraint('period_from <= period_to',name='ck_knowledge_evidence_period'),
