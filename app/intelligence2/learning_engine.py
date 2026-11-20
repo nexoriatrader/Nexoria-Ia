@@ -79,20 +79,35 @@ def _sha(value):
 
 
 def _valid_history(history: dict) -> tuple[list[str], list[int]]:
-    if not isinstance(history, dict) or history.get("version") != SOURCE_VERSION:
+    allowed = {
+        "version", "market", "symbol", "timeframe_seconds",
+        "observed_at_epoch", "data_quality", "observations",
+        "context_version", "i01_last_closed_epoch", "execution_allowed",
+    }
+    if (not isinstance(history, dict) or history.get("version") != SOURCE_VERSION
+        or set(history) != allowed):
         raise LearningError("Histórico I01/I03 público não confiável")
     if (history.get("data_quality") != "COMPLETE"
-        or history.get("execution_allowed") is not False):
+        or history.get("execution_allowed") is not False
+        or history.get("context_version") != CONTEXT_VERSION):
         raise LearningError("Aprendizado exige candles públicos fechados")
+    try:
+        kb._identity(
+            "MARKET", history["market"], history["symbol"], 
+            history["timeframe_seconds"], "regime_learning", "i05_v1"
+        )
+    except (KeyError, kb.KnowledgeError) as exc:
+        raise LearningError("Identificador público inválido") from exc
     timeframe = history.get("timeframe_seconds")
     if type(timeframe) is not int or timeframe not in market_data.SUPPORTED_GRANULARITIES:
         raise LearningError("Timeframe inválido")
     observations = history.get("observations")
-    if not isinstance(observations, list) or len(observations) < MIN_HISTORY-MIN_BARS+1:
+    if not isinstance(observations, list) or len(observations) != MIN_HISTORY-MIN_BARS+1:
         raise LearningError("Amostra pública mínima ausente")
     epochs, states = [], []
     for observation in observations:
-        if not isinstance(observation, dict):
+        if (not isinstance(observation, dict)
+            or set(observation) != {"closed_epoch", "regime"}):
             raise LearningError("Observação inválida")
         epoch, regime = observation.get("closed_epoch"), observation.get("regime")
         if type(epoch) is not int or regime not in REGIMES:
@@ -101,7 +116,11 @@ def _valid_history(history: dict) -> tuple[list[str], list[int]]:
         states.append(regime)
     if any(b-a != timeframe for a,b in zip(epochs,epochs[1:])):
         raise LearningError("Lacuna, duplicidade ou série incompleta")
-    if not all(0 < e <= history.get("observed_at_epoch", 0) for e in epochs):
+    now=history.get("observed_at_epoch")
+    if (type(now) is not int or now <= 0
+        or epochs[-1] != (now//timeframe-1)*timeframe
+        or history.get("i01_last_closed_epoch") != epochs[-1]
+        or epochs[0] <= 0):
         raise LearningError("Lookahead ou relógio incorreto")
     return states, epochs
 
