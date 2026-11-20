@@ -446,7 +446,7 @@ def verify_postgresql_schema(connection):
                 'reason_code','created_at','updated_at'),
             'intelligence_knowledge_evidence':(
                 'id','knowledge_id','source_type','source_ref','source_digest',
-                'origin_group','verified','observation_count','group_size',
+                'evidence_summary_json','origin_group','verified','observation_count','group_size',
                 'period_from','period_to','recorded_at'),
             'intelligence_knowledge_decisions':(
                 'id','knowledge_id','revision','from_state','to_state',
@@ -665,6 +665,7 @@ class IntelligenceKnowledgeEvidence(Base):
     source_type=Column(String(32),nullable=False)
     source_ref=Column(String(160),nullable=False)
     source_digest=Column(String(64),nullable=False)
+    evidence_summary_json=Column(Text,nullable=False)
     origin_group=Column(String(64),nullable=False)
     verified=Column(Boolean,nullable=False)
     observation_count=Column(Integer,nullable=False)
