@@ -125,9 +125,12 @@ def test_robot_get_is_authenticated_off_by_default_and_no_scans(monkeypatch):
     getter = Mock(side_effect=AssertionError("must not query DB when disabled"))
     monkeypatch.setattr(runtime, "load_shared_public_snapshot", getter)
     monkeypatch.delenv("NEXORA_INTELLIGENCE_HOMOLOGATION_READONLY_ENABLED", raising=False)
-    with TestClient(main.app) if False else TestClient(main.app) as client:
+    client = TestClient(main.app)
+    try:
         result = client.get("/api/homologation/robot/research")
         assert result.status_code == 503
+    finally:
+        client.close()
     getter.assert_not_called()
 
 
