@@ -91,7 +91,7 @@ jobs:
             cases+=(tests/test_postgres_p005_status.py)
           fi
           if [[ "$GITHUB_REF" == "refs/heads/fix/f01-real-stop-cross-process" ]]; then
-            cases+=(tests/test_postgres_f01_real_stop.py tests/test_postgres_f01_schema_guard.py)
+            cases+=(tests/test_postgres_f01_real_stop.py tests/test_postgres_f01_schema_guard.py tests/test_postgres_f01_migration_validation.py)
           fi
           python -m pytest -q -s "${cases[@]}"
 
