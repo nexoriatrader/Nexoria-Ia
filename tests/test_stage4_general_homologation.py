@@ -144,8 +144,6 @@ def test_pipeline_runs_actual_evidence_lifecycle_helper_and_is_persisted(monkeyp
     summary=demo.pipeline.summary()
     assert summary["stage_executions"]==10
     assert summary["cycles_observed"]==1
-    with TestClient(demo.app) as client:
-        pass
     engine.dispose()
 
 
@@ -164,3 +162,28 @@ def test_pipeline_api_auth_and_nonfinancial_module_status(monkeypatch,tmp_path):
     assert all(x["running_in_service"] is False for x in status["modules"]
                if x["id"] in ("I01","I02","I03","I04","I05","I06","ORCH"))
     engine.dispose()
+
+
+def test_invalid_synthetic_source_fails_closed_and_creates_no_records(monkeypatch,tmp_path):
+    engine=setup_test(monkeypatch,tmp_path)
+    monkeypatch.setattr(demo,"_value",lambda *args: float("nan"))
+    import pytest
+    with pytest.raises(ValueError,match="Invalid synthetic sensor"):
+        demo.ingest_batch(now_epoch=1795194000,interval=90)
+    assert demo.read_status()["records"]==0
+    assert demo.pipeline.summary()["stage_executions"]==0
+    engine.dispose()
+
+
+def test_multi_cycle_and_restart_preserve_stage_outputs(monkeypatch,tmp_path):
+    engine=setup_test(monkeypatch,tmp_path)
+    demo.ingest_batch(now_epoch=1795194000,interval=90)
+    demo.ingest_batch(now_epoch=1795194180,interval=90)
+    assert demo.pipeline.summary()["cycles_observed"]==2
+    assert demo.pipeline.summary()["stage_executions"]==10
+    engine.dispose()
+    restarted=create_engine("sqlite:///"+str(tmp_path/"stage4_test.db"))
+    monkeypatch.setattr(demo,"_engine",lambda:restarted)
+    assert demo.pipeline.summary()["cycles_observed"]==2
+    assert demo.read_status()["records"]==6
+    restarted.dispose()
