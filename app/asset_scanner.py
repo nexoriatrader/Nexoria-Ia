@@ -130,3 +130,13 @@ async def scan_assets() -> dict:
             'auto_selection_enabled':False,
             'warning':'Hipóteses experimentais, não sinais validados. Sem execução, '
                       'sem estimativa de lucro, sem seleção automática de ativo.'}
+
+
+async def scan_intelligence_markets(*, previous=None, now=None) -> dict:
+    """I02 extension of the existing scanner; no separate trading scanner.
+
+    The I01 facade owns the closed-candle reads. This explicit entrypoint
+    preserves scan_assets() and every legacy consumer unchanged.
+    """
+    from .intelligence2.market_scanner import scan_market_opportunities
+    return await scan_market_opportunities(previous=previous, now=now)
