@@ -45,7 +45,14 @@ def _fingerprint(source: dict, market: str, asset: dict) -> str:
         "provenance": provenance if isinstance(provenance, str) and _VALID_SHA.fullmatch(provenance) else None,
         "observed_at_epoch": observed if type(observed) is int else None,
         "research_state": asset.get("research_state"),
+        "strategy_family": asset.get("strategy_family"),
         "quality": asset.get("candle_quality"),
+        "last_closed_epoch": asset.get("last_closed_epoch"),
+        "alignment_state": (
+            context.get("alignment", {}).get("state")
+            if isinstance(context, dict)
+            and isinstance(context.get("alignment"), dict) else None
+        ),
     }
     return hashlib.sha256(
         json.dumps(material, sort_keys=True, separators=(",", ":"), ensure_ascii=True).encode()
@@ -183,6 +190,94 @@ def research_recheck_policy(*, source_current: bool, evidence_valid: bool) -> st
     return "AFTER_NEXT_CLOSED_CANDLE"
 
 
+def research_evidence_checklist(asset: dict, freshness: dict) -> dict:
+    """Document objective public-data prerequisites for a research review.
+
+    This checklist is not an order entry detector; a passing dataset does
+    not imply a profitable trade or a validated strategy.
+    """
+    ctx = asset.get("context_timeframe")
+    ctx = ctx if isinstance(ctx, dict) else {}
+    profile = ctx.get("profile")
+    profile = profile if isinstance(profile, dict) else {}
+    seconds = tuple(profile.get(key) for key in (
+        "higher_seconds", "intermediate_seconds", "lower_seconds",
+    ))
+    profile_valid = (
+        all(type(value) is int and value > 0 for value in seconds)
+        and seconds[0] > seconds[1] > seconds[2]
+    )
+    verdict = ctx.get("alignment")
+    verdict = verdict if isinstance(verdict, dict) else {}
+    rules = {
+        "i01_complete_closed_candles": (
+            asset.get("candle_quality") == "COMPLETE"
+            and type(asset.get("closed_candles")) is int
+            and asset["closed_candles"] >= 2
+        ),
+        "i02_recent_closed_candle": freshness.get("status") == "CURRENT",
+        "i02_research_strategy_identified": bool(
+            isinstance(asset.get("strategy_family"), str)
+            and asset["strategy_family"].strip()
+        ),
+        "i03_hierarchical_timeframes_verified": profile_valid,
+        "i03_context_has_no_strong_conflict": verdict.get("state") not in (
+            "BLOCKED_STRONG_CONFLICT", "INDETERMINATE",
+        ) and verdict.get("state") in (_RESEARCH_ALIGNMENTS | _RECHECK_ALIGNMENTS),
+    }
+    return {
+        "version": VERSION,
+        "checklist": rules,
+        "satisfied_count": sum(value is True for value in rules.values()),
+        "total_count": len(rules),
+        "timeframe_profile_seconds": (
+            dict(zip(("higher", "intermediate", "lower"), seconds))
+            if profile_valid else None
+        ),
+        "completion_kind": "DATA_VALIDATION_NOT_WIN_PROBABILITY",
+    }
+
+
+def research_data_confidence(checklist: dict, *, research_usable: bool) -> dict:
+    """A bounded, reproducible completeness measure, not a trade signal.
+
+    A missing prerequisite prevents review readiness even when other public
+    indicators happen to align. The score only describes checked metadata.
+    """
+    rules = checklist.get("checklist") if isinstance(checklist, dict) else None
+    if not isinstance(rules, dict) or len(rules) != 5:
+        return {
+            "points": 0, "grade": "INVALID",
+            "kind": "DATA_COMPLETENESS_NOT_PROBABILITY",
+        }
+    satisfied = sum(value is True for value in rules.values())
+    points = 20 * satisfied if research_usable else 0
+    return {
+        "points": points,
+        "grade": ("COMPLETE" if points == 100
+                  else "PARTIAL" if points > 0 else "INVALID"),
+        "kind": "DATA_COMPLETENESS_NOT_PROBABILITY",
+    }
+
+
+def future_research_adapters() -> dict:
+    """Declare unavailable integration boundaries without fabricated contracts."""
+    return {
+        "knowledge_base": {
+            "status": "NOT_CONNECTED", "used": False,
+            "interface_version": None, "evidence_count": 0,
+        },
+        "strategy_intelligence": {
+            "status": "I02_PUBLIC_STRATEGY_METADATA_ONLY",
+            "used": False, "interface_version": None,
+        },
+        "distribution": {
+            "status": "NOT_CONNECTED", "used": False,
+            "interface_version": None, "publish_allowed": False,
+        },
+    }
+
+
 def research_lifecycle(
     *, previous_record: dict | None, fingerprint: str,
     source_current: bool, evidence_valid: bool,
@@ -299,6 +394,11 @@ def assess_research_report(
                 previous_record=previous_record, fingerprint=fingerprint,
                 source_current=current, evidence_valid=evidence_valid,
             )
+            prerequisites = research_evidence_checklist(asset, freshness)
+            data_confidence = research_data_confidence(
+                prerequisites, research_usable=bool(current and evidence_valid),
+            )
+            adapter_status = future_research_adapters()
             records.append({
                 "symbol": symbol,
                 "market": market,
@@ -320,10 +420,28 @@ def assess_research_report(
                 "recheck_policy": research_recheck_policy(
                     source_current=current, evidence_valid=evidence_valid,
                 ),
-                "knowledge_base": {"status": "NOT_CONNECTED", "used": False},
-                "strategy_intelligence": {
-                    "status": "I02_PUBLIC_STRATEGY_METADATA_ONLY", "used": False,
+                "research_prerequisites": prerequisites,
+                "research_confidence": data_confidence,
+                "research_review": (
+                    "DATA_READY_FOR_STUDY"
+                    if data_confidence["points"] == 100 and current
+                    and evidence_valid else "RECHECK_OR_REJECT"
+                ),
+                "validity_window": {
+                    "from_epoch": observed if type(observed) is int else None,
+                    "until_epoch": valid_until,
+                    "kind": "PUBLIC_DATA_RECHECK_ONLY",
+                    "is_current": bool(current),
                 },
+                "strategy_provenance": {
+                    "family": asset.get("strategy_family"),
+                    "strategy_version": None,
+                    "i02_source_version": I02_VERSION,
+                    "status": "UNVERSIONED_PUBLIC_METADATA",
+                },
+                "knowledge_base": adapter_status["knowledge_base"],
+                "strategy_intelligence": adapter_status["strategy_intelligence"],
+                "distribution": adapter_status["distribution"],
                 "evidence_class": evidence_class if current and source_valid else "INVALID",
                 "reason_codes": sorted(set(reason_codes + ["TRADE_ACTIONS_NOT_SUPPORTED"])),
                 "evidence_kind": HEURISTIC,
@@ -356,6 +474,10 @@ def assess_research_report(
         "source_context_coverage_complete": i03_report.get("context_coverage_complete") is True,
         "trade_signal_approval_supported": False,
         "signal_outcomes_supported": ["WAIT", "DO NOT TRADE"],
+        "research_review_outcomes_supported": [
+            "DATA_READY_FOR_STUDY", "RECHECK_OR_REJECT",
+        ],
+        "distribution": future_research_adapters()["distribution"],
         "score_kind": HEURISTIC,
         "orders_sent": 0,
         "approved_for_trading": False,
