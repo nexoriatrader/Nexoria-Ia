@@ -26,6 +26,11 @@ def cleanup_research_reports(*, now=None, session_factory=None):
             select(HistoricalResearchReport.research_key).distinct()
         ).all()
         for key in keys:
+            # I05 release decisions and reproducible PUBLIC model artifacts
+            # are immutable research lineage, not disposable periodic reports.
+            # Future archive/compaction requires its own audited policy.
+            if key.startswith(("I05_ART_", "I05_REL_", "I05_EVT_")) or key == "I05_PUBLIC_REGIME_CYCLE_V1":
+                continue
             rows = session.scalars(
                 select(HistoricalResearchReport)
                 .where(HistoricalResearchReport.research_key == key)
