@@ -9,8 +9,10 @@ on:
       - feature/intelligence20-research-orchestrator-i01-i06
       - feature/intelligence20-i04-research-orchestrator-adapter
       - feature/intelligence20-i05-research-orchestrator-adapter
+      - feature/intelligence20-integrated-research-consolidation
       - feature/intelligence20-i05-research-orchestrator-adapter
       - feature/intelligence20-integrated-research-consolidation
+      - feature/intelligence20-stage2-distributed-research
   pull_request:
     branches:
       - main
@@ -66,6 +68,10 @@ jobs:
         run: python -m pytest -q tests/test_intelligence2_i05_research_adapter.py
       - name: Real I04/I05 persistence contract integration (disposable SQLite)
         run: python -m pytest -q tests/test_intelligence20_consolidated_real_persistence.py
+      - name: Real persisted I05 Champion/Challenger/Fallback/OOS/rollback lifecycle
+        run: python -m pytest -q tests/test_intelligence20_real_i05_lifecycle.py
+      - name: Public research priorities and progressive in-process read load
+        run: python -m pytest -q -s tests/test_intelligence20_public_decision_load.py
       - name: Unit and integration-mock tests
         run: python -m pytest -q
 
@@ -107,3 +113,8 @@ jobs:
         run: echo "NEXORA_FERNET_KEY=$(python -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())')" >> "$GITHUB_ENV"
       - name: Real I04/I05 persistence and recovery on disposable PostgreSQL
         run: python -m pytest -q tests/test_intelligence20_consolidated_real_persistence.py
+      - name: Real I05 champion/fallback lifecycle on disposable PostgreSQL
+        run: python -m pytest -q tests/test_intelligence20_real_i05_lifecycle.py
+      - name: Formal F01 to I04 and research coordination migrations, multiprocess fencing
+        run: python -m pytest -q -s tests/test_intelligence20_public_coordination_pg.py
+
