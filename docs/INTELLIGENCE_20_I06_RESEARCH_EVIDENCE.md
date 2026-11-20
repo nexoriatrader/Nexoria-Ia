@@ -41,6 +41,53 @@ parâmetros `expiry_minutes` da rota continuam sendo somente o perfil
 de análise de timeframes herdado do I03. Resultado de pesquisa não é
 autorização para contratos financeiros.
 
+## Especificação da revisão de pesquisa I06
+
+A revisão foi ampliada sobre o motor da PR #59, **sem substituir**
+seus registros originais. Cada observação pública possui:
+
+- `research_prerequisites.checklist`: cinco pré-requisitos
+  objetivos (candles I01 completos, última janela I02 fechada e atual,
+  família de estudo identificada, três timeframes I03 hierarquizados
+  e ausência de conflito forte);
+- `research_confidence.points`: **0 a 100 em passos de 20**,
+  exclusivamente proporção de metadados verificados, nunca confiança
+  de acerto, probabilidade de ganho ou força de uma recomendação;
+  dados inválidos e vencidos resultam em 0;
+- `research_review`: `DATA_READY_FOR_STUDY` ou
+  `RECHECK_OR_REJECT`. O status não é sinal de compra;
+- `validity_window.from_epoch` e `until_epoch`:
+  **validade da observação pública** por 60 segundos, não uma
+  janela de entrada em contratos;
+- `strategy_provenance`: família e versão da fonte I02,
+  com `strategy_version=null` enquanto a interface dedicada não existir;
+- `public_context`: tendência observada `UP`, `DOWN` ou
+  `NEUTRAL`, jamais convertida em CALL/PUT;
+- `knowledge_base`, `strategy_intelligence` e `distribution`:
+  adaptadores de estado explícitos `NOT_CONNECTED` ou
+  `I02_PUBLIC_STRATEGY_METADATA_ONLY`, sem contratos fictícios
+  nem publicação. `publish_allowed=false`.
+
+O motor verifica os horários de **fechamento efetivo** de candles
+I01 em todos os três timeframes:
+`last_closed_epoch = (observed_at // timeframe_seconds - 1) * timeframe_seconds`.
+Candles abertos, futuros, atrasados ou com proveniência divergente
+impedem revisão pronta. Mudanças de último candle são incorporadas
+ao fingerprint para atualização rastreável.
+
+A rota V4 rejeita resultados forjados mesmo quando os campos de
+execução indevida aparecem **dentro** de um item, antes do cache.
+
+### Diferença explícita para o Signal Generation Engine solicitado
+
+Não são emitidos `CALL`, `PUT`, `SIGNAL APPROVED`,
+expirações contratuais ou instantes de abertura de posição. Esse
+conjunto constituiria recomendações operacionais específicas para
+contratos binários. O equivalente seguro entregue é uma triagem de
+qualidade de dados e consistência de evidências, **sem instrução
+financeira**. A flag I06 permanece OFF; não há envio ao Signal
+Distribution Engine.
+
 ## Integração
 
 O endpoint autenticado existente `GET /api/research/asset-scanner`
