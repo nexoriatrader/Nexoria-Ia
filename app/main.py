@@ -2649,15 +2649,32 @@ async def asset_scanner_route(request:Request,nexora_sid:str|None=Cookie(default
                         expiry_minutes=expiry_minutes)
             except MarketError as exc:
                 raise HTTPException(502,str(exc)) from None
-            if version==4 and (
-                not isinstance(report,dict)
-                or report.get('version')!='intelligence2_i06_evidence_research_v1'
-                or report.get('execution_allowed') is not False
-                or report.get('approved_for_trading') is not False
-                or report.get('trade_signal_approval_supported') is not False
-                or report.get('orders_sent')!=0
-            ):
-                raise HTTPException(502,'I06: relatório de pesquisa inválido')
+            if version==4:
+                records=report.get('research_records') if isinstance(report,dict) else None
+                delivery=report.get('distribution') if isinstance(report,dict) else None
+                if (
+                    not isinstance(report,dict)
+                    or report.get('version')!='intelligence2_i06_evidence_research_v1'
+                    or report.get('execution_allowed') is not False
+                    or report.get('approved_for_trading') is not False
+                    or report.get('trade_signal_approval_supported') is not False
+                    or report.get('orders_sent')!=0
+                    or not isinstance(delivery,dict)
+                    or delivery.get('publish_allowed') is not False
+                    or not isinstance(records,list)
+                    or any(
+                        not isinstance(item,dict)
+                        or item.get('execution_allowed') is not False
+                        or item.get('approved_for_trading') is not False
+                        or item.get('trade_side') is not None
+                        or item.get('entry_epoch') is not None
+                        or item.get('contract_expiry_minutes') is not None
+                        or not isinstance(item.get('distribution'),dict)
+                        or item['distribution'].get('publish_allowed') is not False
+                        for item in records
+                    )
+                ):
+                    raise HTTPException(502,'I06: relatório de pesquisa inválido')
             _asset_scanner_research_cache[key]=(
                 asyncio.get_running_loop().time(),bucket,report)
             if version in (2,3):
