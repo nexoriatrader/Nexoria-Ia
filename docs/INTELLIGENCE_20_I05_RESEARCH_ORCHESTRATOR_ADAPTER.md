@@ -79,9 +79,16 @@ selected I04 MODEL record, and refuse influence unless:
 The returned result carries only public metadata: knowledge ID,
 revision, model version/hash, payload digest, validation periods and
 counts, validity and next-review timestamps, I05 release ID,
-generation and release event. It **does not copy raw artifacts,
-model weights, I04 payloads, predictions, personal identifiers or
-financial data**.
+generation and release event. It also exposes the existing I04
+`sample_size`, `holdout_samples`, `success_rate` and
+`confidence_heuristic` as a versioned `historical_validation`
+summary, explicitly named **historical regime-label holdout accuracy**
+and its Wilson 95% lower bound. Both rates are validated as finite
+and between 0 and 1; neither represents a probability of financial
+gain, a certified forecast or a Signal Confidence score. These values
+never increase evidence completeness or authorize any research action.
+It **does not copy raw artifacts, model weights, I04 payloads,
+predictions, personal identifiers or financial data**.
 
 Champion and Fallback remain as selected by I05. The existing
 `get_research_release` may already select a verified Fallback when
