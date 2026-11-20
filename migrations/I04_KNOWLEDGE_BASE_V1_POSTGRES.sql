@@ -51,6 +51,7 @@ CREATE TABLE IF NOT EXISTS intelligence_knowledge_evidence (
     source_type VARCHAR(32) NOT NULL,
     source_ref VARCHAR(160) NOT NULL,
     source_digest VARCHAR(64) NOT NULL,
+    evidence_summary_json TEXT NOT NULL,
     origin_group VARCHAR(64) NOT NULL,
     verified BOOLEAN NOT NULL,
     observation_count INTEGER NOT NULL,
@@ -97,7 +98,7 @@ BEGIN
     FOR spec IN
         SELECT * FROM (VALUES
            ('intelligence_knowledge',19,5),
-           ('intelligence_knowledge_evidence',12,6),
+           ('intelligence_knowledge_evidence',13,6),
            ('intelligence_knowledge_decisions',9,4)
         ) AS t(name, col_count, constraint_count)
     LOOP
@@ -146,6 +147,7 @@ BEGIN
           ('intelligence_knowledge_evidence','source_type','character varying(32)'),
           ('intelligence_knowledge_evidence','source_ref','character varying(160)'),
           ('intelligence_knowledge_evidence','source_digest','character varying(64)'),
+          ('intelligence_knowledge_evidence','evidence_summary_json','text'),
           ('intelligence_knowledge_evidence','origin_group','character varying(64)'),
           ('intelligence_knowledge_evidence','verified','boolean'),
           ('intelligence_knowledge_evidence','observation_count','integer'),
