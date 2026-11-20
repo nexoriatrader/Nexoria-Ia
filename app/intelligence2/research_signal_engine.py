@@ -103,7 +103,7 @@ def _evidence(asset: dict) -> tuple[bool, str, list[str]]:
             for role in _ROLES
         ):
             problems.append("I03_DIRECTION_CONFLICT")
-        if alignment.get("strategy_research_usable") is not True:
+        if not isinstance(alignment, dict) or alignment.get("strategy_research_usable") is not True:
             problems.append("I03_RESEARCH_ALIGNMENT_UNUSABLE")
     if not isinstance(asset.get("strategy_family"), str) or not asset["strategy_family"].strip():
         problems.append("I02_STRATEGY_UNVERIFIED")
