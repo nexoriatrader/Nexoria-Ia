@@ -36,7 +36,7 @@ from .strategy_lab import run_lab
 from .single_asset_study import run_single_asset_study
 from .research_persistence import research_loop, latest_study, latest_multitimeframe_study, latest_pullback_study  # read-only research
 from .m1_history import m1_collect_loop, history_status
-from .asset_scanner import scan_assets
+from .asset_scanner import scan_assets, scan_intelligence_markets
 from .trade_selector_v2 import (select_demo_signal, last_scan_report, has_pending_signals,
                                 active_market, catalogue, supported, fetch_closed_timeframe,
                                 SIGNAL_PROFILE)
@@ -2978,23 +2978,48 @@ async def strategy_lab_route(request:Request,nexora_sid:str|None=Cookie(default=
 _asset_scanner_lock=asyncio.Lock()
 _asset_scanner_cache=None
 _asset_scanner_cache_time=0.0
+_asset_scanner_cache_version=1
+_asset_scanner_last_v2=None  # prior public ranking only; never tenant data
 
 @app.get('/api/research/asset-scanner')
-async def asset_scanner_route(request:Request,nexora_sid:str|None=Cookie(default=None)):
-    """Authenticated read-only market research, independent of AutoPilot."""
-    active_user(request,nexora_sid)
+async def asset_scanner_route(request:Request,nexora_sid:str|None=Cookie(default=None),
+                              version:int=1):
+    """Existing authenticated research route; I02 opts in via ?version=2."""
+    user=active_user(request,nexora_sid)
+    if version not in (1,2):
+        raise HTTPException(422,'Versão do scanner inválida')
     global _asset_scanner_cache,_asset_scanner_cache_time
+    global _asset_scanner_cache_version,_asset_scanner_last_v2
     async with _asset_scanner_lock:
         now=asyncio.get_running_loop().time()
-        if _asset_scanner_cache is not None and now-_asset_scanner_cache_time<300:
-            return {**_asset_scanner_cache,'cached':True}
-        try:
-            report=await scan_assets()
-        except MarketError as exc:
-            raise HTTPException(502,str(exc)) from None
-        _asset_scanner_cache=report
-        _asset_scanner_cache_time=now
-        return {**report,'cached':False}
+        ttl=60 if version==2 else 300
+        cached=(_asset_scanner_cache is not None
+                and _asset_scanner_cache_version==version
+                and now-_asset_scanner_cache_time<ttl)
+        if cached:
+            report=_asset_scanner_cache
+        else:
+            try:
+                report=(await scan_intelligence_markets(previous=_asset_scanner_last_v2)
+                        if version==2 else await scan_assets())
+            except MarketError as exc:
+                raise HTTPException(502,str(exc)) from None
+            _asset_scanner_cache=report
+            _asset_scanner_cache_time=now
+            _asset_scanner_cache_version=version
+            if version==2:
+                _asset_scanner_last_v2=report
+    if version==1:
+        return {**report,'cached':cached}
+
+    # Keep private contract continuity OUTSIDE the globally shared scan cache.
+    # No writes, no consent changes, no replacement of existing reconcilers.
+    from .intelligence2.market_scanner import open_contracts_for_user
+    with db.SessionLocal() as sess:
+        existing_contracts=open_contracts_for_user(sess,user.id)
+    return {**report,'cached':cached,
+            'preserved_open_contracts':existing_contracts,
+            'contract_continuity':'READ_ONLY_INDEPENDENT_OF_SELECTION'}
 
 
 @app.get('/api/market/symbols')
