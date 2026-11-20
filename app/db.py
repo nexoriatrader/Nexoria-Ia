@@ -398,6 +398,15 @@ def verify_postgresql_schema(connection):
     inspector=inspect(connection)
     all_tables=set(inspector.get_table_names())
     required=set(Base.metadata.tables)
+    # I04 is explicitly opt-in. Existing F01/P0 installations must not be
+    # forced into automatic DDL or unexpected startup failure before the
+    # separately authorized formal I04 schema migration.
+    i04_enabled=os.getenv('NEXORA_INTELLIGENCE_KNOWLEDGE_ENABLED','false').lower()=='true'
+    if not i04_enabled:
+        required.difference_update({
+            'intelligence_knowledge', 'intelligence_knowledge_evidence',
+            'intelligence_knowledge_decisions',
+        })
     required.add('nexora_schema_revisions')
     missing=sorted(required-all_tables)
     if missing:
@@ -422,6 +431,30 @@ def verify_postgresql_schema(connection):
     )).scalar_one_or_none()
     if row is None or row<0:
         raise RuntimeError('Geração global F01 ausente ou inválida; iniciar bloqueado')
+    if i04_enabled:
+        # Only inspect the already-installed schema; never create/stamp it.
+        i04_revision=connection.execute(text(
+            'SELECT revision FROM nexora_schema_revisions WHERE revision=:revision'
+        ),{'revision':'i04_knowledge_base_v1'}).scalar_one_or_none()
+        if i04_revision!='i04_knowledge_base_v1':
+            raise RuntimeError('Migração formal I04 obrigatória')
+        for table,columns in {
+            'intelligence_knowledge':(
+                'id','identity_key','category','market','symbol','timeframe_seconds',
+                'subject','model_version','regime','state','revision','payload_json',
+                'payload_digest','valid_from','valid_until','next_review_at',
+                'reason_code','created_at','updated_at'),
+            'intelligence_knowledge_evidence':(
+                'id','knowledge_id','source_type','source_ref','source_digest',
+                'origin_group','verified','observation_count','group_size',
+                'period_from','period_to','recorded_at'),
+            'intelligence_knowledge_decisions':(
+                'id','knowledge_id','revision','from_state','to_state',
+                'decision','reason_code','evidence_digest','recorded_at'),
+        }.items():
+            actual={c['name'] for c in inspector.get_columns(table)}
+            if actual!=set(columns):
+                raise RuntimeError('Esquema PostgreSQL I04 incompatível: '+table)
 
 
 def init_db():
@@ -593,3 +626,72 @@ class DemoOrderProgression(Base):
     source = Column(String(20), nullable=False, default='autopilot')
     account_mode = Column(String(16), nullable=False, default='demo')
     created_at = Column(DateTime(timezone=True), default=utcnow, nullable=False)
+
+
+# I04 additive, public-knowledge-only tables: existing PostgreSQL deployment
+# requires a SEPARATELY approved migration; init_db() never creates them.
+# No user_id/account_id/financial ledger FK by design.
+class IntelligenceKnowledge(Base):
+    __tablename__='intelligence_knowledge'
+    id=Column(Integer,primary_key=True)
+    identity_key=Column(String(64),nullable=False,unique=True)
+    category=Column(String(24),nullable=False)
+    market=Column(String(64),nullable=False)
+    symbol=Column(String(30),nullable=False)
+    timeframe_seconds=Column(Integer,nullable=False)
+    subject=Column(String(100),nullable=False)
+    model_version=Column(String(64),nullable=False)
+    regime=Column(String(40),nullable=False)
+    state=Column(String(24),nullable=False)
+    revision=Column(Integer,nullable=False)
+    payload_json=Column(Text,nullable=False)
+    payload_digest=Column(String(64),nullable=False)
+    valid_from=Column(DateTime(timezone=True),nullable=False)
+    valid_until=Column(DateTime(timezone=True),nullable=False)
+    next_review_at=Column(DateTime(timezone=True),nullable=False)
+    reason_code=Column(String(100),nullable=False)
+    created_at=Column(DateTime(timezone=True),nullable=False,default=utcnow)
+    updated_at=Column(DateTime(timezone=True),nullable=False,default=utcnow,onupdate=utcnow)
+    __table_args__=(CheckConstraint('revision >= 1',name='ck_knowledge_revision'),
+                    CheckConstraint('timeframe_seconds >= 0',name='ck_knowledge_timeframe'),
+                    CheckConstraint('valid_from < valid_until',name='ck_knowledge_validity'),
+                    Index('ix_knowledge_search','category','market','symbol','state'))
+
+
+class IntelligenceKnowledgeEvidence(Base):
+    __tablename__='intelligence_knowledge_evidence'
+    id=Column(Integer,primary_key=True)
+    knowledge_id=Column(Integer,ForeignKey('intelligence_knowledge.id'),nullable=False,index=True)
+    source_type=Column(String(32),nullable=False)
+    source_ref=Column(String(160),nullable=False)
+    source_digest=Column(String(64),nullable=False)
+    origin_group=Column(String(64),nullable=False)
+    verified=Column(Boolean,nullable=False)
+    observation_count=Column(Integer,nullable=False)
+    group_size=Column(Integer,nullable=False)
+    period_from=Column(DateTime(timezone=True),nullable=False)
+    period_to=Column(DateTime(timezone=True),nullable=False)
+    recorded_at=Column(DateTime(timezone=True),nullable=False,default=utcnow)
+    __table_args__=(
+        UniqueConstraint('knowledge_id','source_digest',name='uq_knowledge_evidence_digest'),
+        CheckConstraint('observation_count >= 1',name='ck_knowledge_evidence_observations'),
+        CheckConstraint('group_size >= 0',name='ck_knowledge_evidence_group'),
+        CheckConstraint('period_from <= period_to',name='ck_knowledge_evidence_period'),
+    )
+
+
+class IntelligenceKnowledgeDecision(Base):
+    __tablename__='intelligence_knowledge_decisions'
+    id=Column(Integer,primary_key=True)
+    knowledge_id=Column(Integer,ForeignKey('intelligence_knowledge.id'),nullable=False,index=True)
+    revision=Column(Integer,nullable=False)
+    from_state=Column(String(24),nullable=True)
+    to_state=Column(String(24),nullable=False)
+    decision=Column(String(40),nullable=False)
+    reason_code=Column(String(100),nullable=False)
+    evidence_digest=Column(String(64),nullable=False)
+    recorded_at=Column(DateTime(timezone=True),nullable=False,default=utcnow)
+    __table_args__=(
+        UniqueConstraint('knowledge_id','revision',name='uq_knowledge_decision_revision'),
+        CheckConstraint('revision >= 1',name='ck_knowledge_decision_revision'),
+    )
