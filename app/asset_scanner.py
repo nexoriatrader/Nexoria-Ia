@@ -154,3 +154,19 @@ async def scan_intelligence_context(*, previous=None, expiry_minutes=5, now=None
     return await enrich_i02_report(
         source, expiry_minutes=expiry_minutes, now=observed_at,
     )
+
+
+async def scan_intelligence_research(*, previous=None, prior_i06=None,
+                                     expiry_minutes=5, now=None) -> dict:
+    """I06 research facade over the existing I01 -> I02 -> I03 scan.
+
+    No new feed, database, user state or order route. The I06 lifecycle
+    is calculated from the prior *public* result in the existing cache.
+    """
+    import time
+    from .intelligence2.research_signal_engine import assess_research_report
+    observed_at = int(time.time() if now is None else now)
+    source = await scan_intelligence_context(
+        previous=previous, expiry_minutes=expiry_minutes, now=observed_at,
+    )
+    return assess_research_report(source, previous=prior_i06, now=observed_at)
