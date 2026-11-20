@@ -1,0 +1,25 @@
+# Stage4 general-data homologation only. References EXISTING Render Postgres.
+# This file defines ONE new web service; it does NOT create/manage a database.
+services:
+  - type: web
+    name: nexora-intelligence20-homologation-demo
+    runtime: python
+    plan: free
+    region: oregon
+    autoDeployTrigger: off
+    buildCommand: pip install -r requirements.txt
+    startCommand: python scripts/bootstrap_stage4_general_demo.py && uvicorn app.intelligence2.stage4_general_homologation:app --host 0.0.0.0 --port $PORT --workers 1
+    healthCheckPath: /healthz
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.8
+      - key: DATABASE_URL
+        fromDatabase:
+          name: nexora-intelligence20-homologation-pg
+          property: connectionString
+      - key: NEXORA_STAGE4_GENERAL_SYNTHETIC_ONLY
+        value: "true"
+      - key: NEXORA_STAGE4_ACCESS_TOKEN
+        generateValue: true
+      - key: NEXORA_STAGE4_INGEST_INTERVAL_SECONDS
+        value: "90"

@@ -1,0 +1,384 @@
+"""Standalone Stage 4 general synthetic-data homologation application.
+
+Never imports app.main, Deriv, gambling, broker, or financial execution paths.
+The ONLY data source is a clearly labeled deterministic synthetic sensor feed.
+PostgreSQL is exclusive to the approved isolated homologation database.
+"""
+from __future__ import annotations
+
+import asyncio
+from contextlib import asynccontextmanager
+from datetime import datetime, timezone
+from functools import lru_cache
+import hashlib
+import hmac
+import os
+import time
+import logging
+
+from fastapi import FastAPI, Header, HTTPException, Query
+from fastapi.responses import HTMLResponse, JSONResponse
+from sqlalchemy import (
+    CheckConstraint, Column, DateTime, Float, Integer, MetaData, String,
+    Table, UniqueConstraint, create_engine, func, insert, select, text,
+)
+from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy.dialects.sqlite import insert as sqlite_insert
+from sqlalchemy.engine import make_url
+
+log = logging.getLogger("nexora.stage4.general_demo")
+SCHEMA_REVISION = "nexora_stage4_general_synthetic_v1"
+EXPECTED_DATABASE = "nexora_intelligence20_homologation_pg"
+SOURCE = "SYNTHETIC_SENSOR_DEMO"
+meta = MetaData()
+measurements = Table(
+    "nexora_stage4_demo_measurements", meta,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("event_key", String(96), nullable=False, unique=True),
+    Column("station", String(24), nullable=False),
+    Column("metric", String(24), nullable=False),
+    Column("value", Float, nullable=False),
+    Column("unit", String(12), nullable=False),
+    Column("classification", String(24), nullable=False),
+    Column("source", String(40), nullable=False),
+    Column("observed_at", DateTime(timezone=True), nullable=False),
+    Column("recorded_at", DateTime(timezone=True), nullable=False),
+    CheckConstraint("source = 'SYNTHETIC_SENSOR_DEMO'",
+                    name="ck_stage4_demo_synthetic_source"),
+    CheckConstraint("classification IN ('NORMAL', 'REVIEW', 'OUTSIDE_RANGE')",
+                    name="ck_stage4_demo_classification"),
+)
+revisions = Table(
+    "nexora_stage4_demo_schema_revisions", meta,
+    Column("revision", String(80), primary_key=True),
+    Column("applied_at", DateTime(timezone=True), nullable=False),
+)
+STATIONS = (("LAB-A", "temperature", "C"),
+            ("LAB-B", "humidity", "pct"),
+            ("LAB-C", "illumination", "lux"))
+VALUES = {
+    "temperature": (16.0, 32.0),
+    "humidity": (25.0, 78.0),
+    "illumination": (100.0, 1200.0),
+}
+_last_cycle = {"state": "PENDING", "source": SOURCE}
+
+
+def require_isolated_postgres() -> str:
+    """Fail before ANY DB access outside the designated test workspace DB."""
+    if os.getenv("NEXORA_STAGE4_GENERAL_SYNTHETIC_ONLY") != "true":
+        raise RuntimeError("Synthetic-only homologation mode is required")
+    raw = os.getenv("DATABASE_URL", "")
+    if raw.startswith("postgres://"):
+        raw = "postgresql+psycopg://" + raw[len("postgres://"):]
+    elif raw.startswith("postgresql://"):
+        raw = "postgresql+psycopg://" + raw[len("postgresql://"):]
+    if not raw.startswith("postgresql+psycopg://"):
+        raise RuntimeError("Isolated PostgreSQL connection required")
+    parsed = make_url(raw)
+    if (parsed.database != EXPECTED_DATABASE or not parsed.host
+            or not parsed.username):
+        raise RuntimeError("Refusing DB: not the dedicated Stage 4 homologation database")
+    return raw
+
+
+@lru_cache(maxsize=1)
+def _engine():
+    return create_engine(require_isolated_postgres(), pool_pre_ping=True,
+                         pool_size=3, max_overflow=2, pool_recycle=180)
+
+
+def _interval() -> int:
+    raw = os.getenv("NEXORA_STAGE4_INGEST_INTERVAL_SECONDS", "90")
+    try:
+        seconds = int(raw)
+    except ValueError as exc:
+        raise RuntimeError("Invalid synthetic ingest interval") from exc
+    if not 30 <= seconds <= 300:
+        raise RuntimeError("Synthetic ingest interval must be 30-300 seconds")
+    return seconds
+
+
+def bootstrap_schema() -> None:
+    """Operator-authorized initial migration, invoked by start command only.
+
+    SQL is never executed on production: assert DB identity and isolated flag.
+    Safe to run on every isolated service restart; additive/idempotent.
+    """
+    require_isolated_postgres()
+    engine = _engine()
+    meta.create_all(engine, checkfirst=True)
+    now = datetime.now(timezone.utc)
+    with engine.begin() as conn:
+        found = conn.execute(select(revisions.c.revision).where(
+            revisions.c.revision == SCHEMA_REVISION)).scalar_one_or_none()
+        if found is None:
+            conn.execute(insert(revisions).values(
+                revision=SCHEMA_REVISION, applied_at=now))
+    log.warning("stage4_general_schema_verified revision=%s", SCHEMA_REVISION)
+
+
+def verify_schema() -> None:
+    """Read-only application startup. No automatic DDL."""
+    require_isolated_postgres()
+    with _engine().connect() as conn:
+        found = conn.execute(select(revisions.c.revision).where(
+            revisions.c.revision == SCHEMA_REVISION)).scalar_one_or_none()
+        if found != SCHEMA_REVISION:
+            raise RuntimeError("Stage4 demo migration not installed")
+
+
+def _value(bucket: int, station: str, metric: str) -> float:
+    digest = hashlib.sha256(
+        f"stage4-synthetic-v1:{bucket}:{station}:{metric}".encode()
+    ).digest()
+    ratio = int.from_bytes(digest[:8], "big") / (2**64 - 1)
+    minimum, maximum = VALUES[metric]
+    return round(minimum + (maximum - minimum) * ratio, 2)
+
+
+def _classify(metric: str, value: float) -> str:
+    stable = {
+        "temperature": (19.0, 27.0),
+        "humidity": (35.0, 65.0),
+        "illumination": (300.0, 900.0),
+    }
+    low, high = stable[metric]
+    if low <= value <= high:
+        return "NORMAL"
+    if (low - (high - low) * .20) <= value <= (high + (high - low) * .20):
+        return "REVIEW"
+    return "OUTSIDE_RANGE"
+
+
+def ingest_batch(*, now_epoch: int | None = None,
+                 interval: int | None = None) -> dict:
+    """Process and persist one idempotent batch of synthetic sensor readings."""
+    interval = _interval() if interval is None else interval
+    if type(interval) is not int or not 30 <= interval <= 300:
+        raise ValueError("Invalid ingest interval")
+    now_epoch = int(time.time()) if now_epoch is None else now_epoch
+    if type(now_epoch) is not int or now_epoch <= 0:
+        raise ValueError("Invalid observation timestamp")
+    bucket = now_epoch // interval
+    observed = datetime.fromtimestamp(bucket * interval, tz=timezone.utc)
+    written = datetime.now(timezone.utc)
+    new_rows = 0
+    with _engine().begin() as conn:
+        for station, metric, unit in STATIONS:
+            value = _value(bucket, station, metric)
+            row = dict(
+                event_key=f"SYNTH_{bucket}_{station}_{metric}",
+                station=station, metric=metric, value=value, unit=unit,
+                classification=_classify(metric, value),
+                source=SOURCE, observed_at=observed, recorded_at=written,
+            )
+            if conn.dialect.name == "postgresql":
+                stmt = pg_insert(measurements).values(**row).on_conflict_do_nothing(
+                    index_elements=["event_key"])
+            elif conn.dialect.name == "sqlite":
+                stmt = sqlite_insert(measurements).values(**row).on_conflict_do_nothing(
+                    index_elements=["event_key"])
+            else:
+                raise RuntimeError("Unsupported demo database engine")
+            new_rows += conn.execute(stmt).rowcount
+    return {
+        "state": "SYNTHETIC_BATCH_PERSISTED", "source": SOURCE,
+        "observed_at": observed.isoformat(), "inserted": new_rows,
+        "batch_size": len(STATIONS), "simulation": True,
+    }
+
+
+def _serialize(row) -> dict:
+    d = dict(row)
+    for key in ("observed_at", "recorded_at"):
+        d[key] = d[key].isoformat() if d.get(key) else None
+    return d
+
+
+def read_history(limit: int = 25) -> list[dict]:
+    if type(limit) is not int or not 1 <= limit <= 100:
+        raise ValueError("Invalid history limit")
+    with _engine().connect() as conn:
+        rows = conn.execute(select(measurements).order_by(
+            measurements.c.id.desc()).limit(limit)).mappings().all()
+    return [_serialize(row) for row in rows]
+
+
+def read_status() -> dict:
+    with _engine().connect() as conn:
+        count = conn.execute(select(func.count()).select_from(measurements)).scalar_one()
+        last = conn.execute(select(measurements.c.observed_at).order_by(
+            measurements.c.id.desc()).limit(1)).scalar_one_or_none()
+        kinds = conn.execute(select(measurements.c.classification,
+                                    func.count()).group_by(
+            measurements.c.classification)).all()
+        revision = conn.execute(select(revisions.c.revision).where(
+            revisions.c.revision == SCHEMA_REVISION)).scalar_one_or_none()
+    return {
+        "application": "NEXORA 2.0 — isolated general-data demo",
+        "state": "DATABASE_READY" if revision == SCHEMA_REVISION else "MIGRATION_REQUIRED",
+        "dataset": SOURCE,
+        "synthetic": True,
+        "records": count,
+        "latest_observed_at": last.isoformat() if last else None,
+        "classifications": {key: value for key, value in kinds},
+        "last_cycle": dict(_last_cycle),
+        "financial_execution": False,
+        "external_feed_connected": False,
+    }
+
+
+async def _loop(stop: asyncio.Event):
+    global _last_cycle
+    interval = _interval()
+    while not stop.is_set():
+        try:
+            _last_cycle = await asyncio.to_thread(ingest_batch, interval=interval)
+            log.info("stage4_general_batch source=%s inserted=%s observed=%s",
+                     SOURCE, _last_cycle["inserted"], _last_cycle["observed_at"])
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            _last_cycle = {"state": "INGEST_UNAVAILABLE", "source": SOURCE}
+            log.exception("stage4_general_ingest_error")
+        try:
+            await asyncio.wait_for(stop.wait(), timeout=interval)
+        except asyncio.TimeoutError:
+            pass
+
+
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    verify_schema()
+    stop = asyncio.Event()
+    task = asyncio.create_task(_loop(stop), name="stage4-synthetic-sensor-ingest")
+    try:
+        yield
+    finally:
+        stop.set()
+        task.cancel()
+        await asyncio.gather(task, return_exceptions=True)
+
+
+app = FastAPI(title="NEXORA 2.0 — Homologação técnica independente",
+              lifespan=lifespan, docs_url=None, redoc_url=None,
+              openapi_url=None)
+
+
+@app.middleware("http")
+async def headers(request, call_next):
+    response = await call_next(request)
+    response.headers.update({
+        "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff",
+        "Referrer-Policy": "no-referrer", "X-Frame-Options": "DENY",
+        "Content-Security-Policy": (
+            "default-src 'none'; style-src 'self' 'unsafe-inline'; "
+            "script-src 'self' 'unsafe-inline'; connect-src 'self'; "
+            "form-action 'none'; frame-ancestors 'none'"
+        ),
+    })
+    return response
+
+
+def _auth(token: str | None):
+    secret = os.getenv("NEXORA_STAGE4_ACCESS_TOKEN", "")
+    if len(secret) < 32:
+        raise HTTPException(503, "Demo access not configured")
+    if token is None or not hmac.compare_digest(secret, token):
+        raise HTTPException(401, "Access key required")
+
+
+@app.get("/healthz")
+async def healthz():
+    try:
+        state = await asyncio.to_thread(read_status)
+        return {"status": "ok", "dataset": SOURCE, "records": state["records"],
+                "synthetic": True, "database": state["state"],
+                "external_feed_connected": False}
+    except Exception:
+        log.exception("stage4_demo_health_db_unavailable")
+        return JSONResponse({"status": "unavailable", "database": "ERROR",
+                             "synthetic": True}, status_code=503)
+
+
+@app.get("/api/homologation/demo/status")
+async def status(x_nexora_stage4_key: str | None = Header(default=None)):
+    _auth(x_nexora_stage4_key)
+    try:
+        return await asyncio.to_thread(read_status)
+    except Exception:
+        log.exception("stage4_demo_status_error")
+        raise HTTPException(503, "Demo database unavailable") from None
+
+
+@app.get("/api/homologation/demo/history")
+async def history(limit: int = Query(default=25, ge=1, le=100),
+                  x_nexora_stage4_key: str | None = Header(default=None)):
+    _auth(x_nexora_stage4_key)
+    try:
+        rows = await asyncio.to_thread(read_history, limit)
+        return {"source": SOURCE, "synthetic": True, "count": len(rows), "rows": rows}
+    except Exception:
+        log.exception("stage4_demo_history_error")
+        raise HTTPException(503, "Demo history unavailable") from None
+
+
+_HTML = """<!doctype html><html lang="pt-BR"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NEXORA Intelligence 2.0 | Homologação</title>
+<style>
+body{font-family:system-ui,sans-serif;background:#091827;color:#e9f6fa;
+max-width:1080px;margin:0 auto;padding:26px}
+h1{font-size:1.8rem;margin-bottom:4px}p,small{color:#bed0db}
+section{background:#152c42;padding:20px;margin:16px 0;border-radius:12px}
+input,button{font:inherit;padding:10px;margin:6px;border-radius:6px}
+button{background:#10bfa8;color:#05242a;border:0;cursor:pointer}
+input{max-width:90%;width:340px}
+pre{white-space:pre-wrap;overflow-wrap:anywhere;color:#ccebea}
+strong{color:#42e9d0}table{border-collapse:collapse;width:100%}
+td,th{padding:8px;border-bottom:1px solid #355064;text-align:left}
+</style></head><body>
+<h1>NEXORA Intelligence 2.0</h1>
+<p><strong>HOMOLOGAÇÃO ISOLADA · DADOS SINTÉTICOS</strong></p>
+<p>Demonstração técnica de sensores, ingestão periódica, classificação e
+persistência PostgreSQL. Sem dados de corretoras, apostas ou execução financeira.</p>
+<section><label>Chave de acesso <input id="key" type="password"
+autocomplete="off" placeholder="Chave exclusiva do Render"></label>
+<button id="refresh" type="button">Consultar dados</button>
+<p><small>A chave fica apenas na memória desta página e não é salva.</small></p></section>
+<section><h2>Estado</h2><pre id="status">Informe a chave e clique em Consultar.</pre></section>
+<section><h2>Histórico persistido</h2><table><thead><tr>
+<th>Observado (UTC)</th><th>Estação</th><th>Métrica</th>
+<th>Valor</th><th>Classificação</th></tr></thead>
+<tbody id="rows"></tbody></table></section>
+<script>
+async function api(path){
+const token=document.getElementById('key').value;
+const response=await fetch(path,{headers:{'X-NEXORA-STAGE4-KEY':token},
+cache:'no-store'});
+if(!response.ok)throw Error('HTTP '+response.status);
+return response.json();
+}
+async function refresh(){
+const status=document.getElementById('status'),rows=document.getElementById('rows');
+try{
+const [s,h]=await Promise.all([api('/api/homologation/demo/status'),
+api('/api/homologation/demo/history?limit=25')]);
+status.textContent=JSON.stringify(s,null,2);
+rows.textContent='';
+for(const v of h.rows){
+const tr=document.createElement('tr');
+for(const field of ['observed_at','station','metric','value','classification']){
+const td=document.createElement('td');td.textContent=String(v[field]);tr.appendChild(td);
+}rows.appendChild(tr);
+}
+}catch(e){status.textContent='Consulta indisponível: '+e.message;rows.textContent='';}
+}
+document.getElementById('refresh').addEventListener('click',refresh);
+</script></body></html>"""
+
+
+@app.get("/", response_class=HTMLResponse)
+async def index():
+    return _HTML

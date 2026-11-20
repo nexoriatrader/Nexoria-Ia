@@ -1,0 +1,86 @@
+"""Technical-only synthetic homologation: test ingestion, auth, restart."""
+from datetime import datetime, timezone
+import os
+import time
+
+from fastapi.testclient import TestClient
+from sqlalchemy import create_engine
+from app.intelligence2 import stage4_general_homologation as demo
+
+
+def setup_test(monkeypatch, tmp_path):
+    engine = create_engine("sqlite:///" + str(tmp_path / "stage4_test.db"))
+    demo.meta.create_all(engine)
+    with engine.begin() as conn:
+        conn.execute(demo.insert(demo.revisions).values(
+            revision=demo.SCHEMA_REVISION, applied_at=datetime.now(timezone.utc)))
+    monkeypatch.setattr(demo, "_engine", lambda: engine)
+    monkeypatch.setenv("NEXORA_STAGE4_ACCESS_TOKEN", "test-only-strong-secret-32-characters-long")
+    return engine
+
+
+def test_production_and_bad_db_fail_closed(monkeypatch):
+    monkeypatch.delenv("NEXORA_STAGE4_GENERAL_SYNTHETIC_ONLY", raising=False)
+    monkeypatch.setenv("DATABASE_URL", "postgresql://root:pw@prod.example/db")
+    try:
+        demo.require_isolated_postgres()
+        assert False
+    except RuntimeError:
+        pass
+    monkeypatch.setenv("NEXORA_STAGE4_GENERAL_SYNTHETIC_ONLY", "true")
+    try:
+        demo.require_isolated_postgres()
+        assert False
+    except RuntimeError:
+        pass
+
+
+def test_classification_is_never_financial():
+    for _, metric, _ in demo.STATIONS:
+        for value in (10, 30, 500):
+            assert demo._classify(metric, value) in (
+                "NORMAL", "REVIEW", "OUTSIDE_RANGE")
+
+
+def test_idempotent_persistence_and_history(monkeypatch, tmp_path):
+    engine = setup_test(monkeypatch, tmp_path)
+    at = 1795194000
+    first = demo.ingest_batch(now_epoch=at, interval=90)
+    second = demo.ingest_batch(now_epoch=at, interval=90)
+    assert first["inserted"] == len(demo.STATIONS)
+    assert second["inserted"] == 0
+    assert demo.read_status()["records"] == len(demo.STATIONS)
+    assert all(row["source"] == demo.SOURCE for row in demo.read_history())
+    engine.dispose()
+    # A fresh SQLAlchemy engine simulates a process restart.
+    restarted = create_engine("sqlite:///" + str(tmp_path / "stage4_test.db"))
+    monkeypatch.setattr(demo, "_engine", lambda: restarted)
+    assert demo.read_status()["records"] == len(demo.STATIONS)
+    assert demo.ingest_batch(now_epoch=at + 180, interval=90)["inserted"] == 3
+    assert demo.read_status()["records"] == 6
+    restarted.dispose()
+
+
+def test_http_auth_panel_health_and_history(monkeypatch, tmp_path):
+    engine = setup_test(monkeypatch, tmp_path)
+    demo.ingest_batch(now_epoch=1795194000, interval=90)
+    client = TestClient(demo.app)
+    assert client.get("/").status_code == 200
+    assert "DADOS SINTÉTICOS" in client.get("/").text
+    assert client.get("/healthz").json()["records"] == 3
+    assert client.get("/api/homologation/demo/history").status_code == 401
+    assert client.get("/api/homologation/demo/status",
+                     headers={"X-NEXORA-STAGE4-KEY": "bad"}).status_code == 401
+    headers = {"X-NEXORA-STAGE4-KEY":
+               "test-only-strong-secret-32-characters-long"}
+    status = client.get("/api/homologation/demo/status", headers=headers)
+    assert status.status_code == 200 and status.json()["synthetic"] is True
+    history = client.get("/api/homologation/demo/history?limit=2",
+                         headers=headers)
+    assert history.status_code == 200 and history.json()["count"] == 2
+    assert all(x["source"] == demo.SOURCE for x in history.json()["rows"])
+    assert client.get("/api/homologation/demo/history?limit=101",
+                      headers=headers).status_code == 422
+    assert "/api/demo/buy" not in {r.path for r in demo.app.routes}
+    assert "/api/real/orders" not in {r.path for r in demo.app.routes}
+    engine.dispose()
