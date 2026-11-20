@@ -480,3 +480,55 @@ def test_learning_artifact_retention_does_not_destroy_audit_chain(store):
         ).count()==13
 
 
+
+
+def test_persisted_research_champion_survives_database_pool_restart(store, monkeypatch):
+    """Actual I05 promotion state and I04 evidence survive new DB connections."""
+    monkeypatch.setenv("NEXORA_INTELLIGENCE_LEARNING_PROMOTION_ENABLED", "true")
+    source = _market_knowledge()
+    candidate, validated = _staged_validated(market_source=source)
+    released = reg.promote_research_champion(
+        model_knowledge_id=candidate["knowledge_id"],
+        model_digest=candidate["report"]["model_id_sha256"],
+        expected_model_revision=validated["revision"],
+        expected_release_id=None,
+        approval_reason="PERSISTED_PUBLIC_RESEARCH_ONLY",
+        now=APPROVED_AT,
+    )
+    assert released["generation"] == 1
+    # Dispose pooled connections, then retrieve using a new SQLAlchemy
+    # connection as would happen after a process restart.
+    store.kw["bind"].dispose()
+    viewed = reg.get_research_release(
+        market=MARKET, symbol=SYMBOL,
+        timeframe_seconds=TF, now=APPROVED_AT,
+    )
+    assert viewed["champion_knowledge_id"] == candidate["knowledge_id"]
+    assert viewed["release_id"] == released["id"]
+    assert viewed["execution_allowed"] is False
+    model = kb.get_knowledge(
+        candidate["knowledge_id"], now=APPROVED_AT,
+        observed_regime="UNKNOWN", include_lineage=True,
+    )
+    assert model["state"] == "ACTIVE"
+    assert model["reusable_for_research"] is True
+
+
+def test_real_model_requiring_review_is_not_reused(store, monkeypatch):
+    monkeypatch.setenv("NEXORA_INTELLIGENCE_LEARNING_PROMOTION_ENABLED", "true")
+    source = _market_knowledge()
+    candidate, validated = _staged_validated(market_source=source)
+    reg.promote_research_champion(
+        model_knowledge_id=candidate["knowledge_id"],
+        model_digest=candidate["report"]["model_id_sha256"],
+        expected_model_revision=validated["revision"],
+        expected_release_id=None,
+        approval_reason="MODEL_REVIEW_TEST", now=APPROVED_AT,
+    )
+    much_later = APPROVED_AT + timedelta(days=60)
+    released = reg.get_research_release(
+        market=MARKET, symbol=SYMBOL,
+        timeframe_seconds=TF, now=much_later,
+    )
+    assert released["state"] == "NO_VALIDATED_RESEARCH_MODEL"
+    assert released["champion_knowledge_id"] is None
