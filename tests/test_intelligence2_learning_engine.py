@@ -100,10 +100,17 @@ def _staged_validated(*, market_source, now=NOW, sequence=None):
         history,market_knowledge_id=market_source["id"],now=now)
     assert stage["state"]=="UNDER_VALIDATION"
     assert stage["report"]["research_eligible"] is True
+    later=now+timedelta(hours=6)
+    independent=reg.append_independent_public_validation(
+        model_knowledge_id=stage["knowledge_id"],
+        model_digest=stage["report"]["model_id_sha256"],
+        expected_revision=4,
+        history=_history(now=later,sequence=sequence),now=later)
+    assert independent["verified"] is True
     evaluated=reg.validate_research_challenger(
         model_knowledge_id=stage["knowledge_id"],
         model_digest=stage["report"]["model_id_sha256"],
-        expected_revision=4,now=now)
+        expected_revision=independent["revision"],now=later)
     assert evaluated["state"]=="VALIDATED"
     return stage,evaluated
 
@@ -194,6 +201,35 @@ def test_stage_persists_model_metadata_and_two_public_windows_no_user_data(store
         assert "account_id" not in artifact.payload_json
         assert "stake" not in artifact.payload_json
         assert "user_id" not in artifact.payload_json
+
+
+def test_independent_second_public_holdout_is_required_and_embargoed(store):
+    source=_market_knowledge()
+    stage=reg.stage_public_candidate(_history(),
+                                     market_knowledge_id=source["id"],now=NOW)
+    with pytest.raises(eng.LearningError,match="Duas validações"):
+        reg.validate_research_challenger(
+            model_knowledge_id=stage["knowledge_id"],
+            model_digest=stage["report"]["model_id_sha256"],
+            expected_revision=4,now=NOW)
+    with pytest.raises(eng.LearningError,match="insuficiente"):
+        reg.append_independent_public_validation(
+            model_knowledge_id=stage["knowledge_id"],
+            model_digest=stage["report"]["model_id_sha256"],
+            expected_revision=4,
+            history=_history(now=NOW+timedelta(hours=3)),now=NOW+timedelta(hours=3))
+    later=NOW+timedelta(hours=6)
+    failed=reg.append_independent_public_validation(
+        model_knowledge_id=stage["knowledge_id"],
+        model_digest=stage["report"]["model_id_sha256"],
+        expected_revision=4,
+        history=_history(now=later,sequence=("UPTREND",)),now=later)
+    assert failed["verified"] is False
+    with pytest.raises(eng.LearningError,match="Duas validações"):
+        reg.validate_research_challenger(
+            model_knowledge_id=stage["knowledge_id"],
+            model_digest=stage["report"]["model_id_sha256"],
+            expected_revision=failed["revision"],now=later)
 
 
 def test_validation_prohibits_unsafe_promotion_without_opt_in(store,monkeypatch):
@@ -331,7 +367,7 @@ def test_artifact_and_release_tampering_fail_closed(store,monkeypatch):
         reg.validate_research_challenger(
             model_knowledge_id=stage["knowledge_id"],
             model_digest=stage["report"]["model_id_sha256"],
-            expected_revision=5,now=NOW)
+            expected_revision=6,now=NOW)
 
 
 def test_event_queue_dedup_and_existing_cycle_without_second_worker(store,monkeypatch):
