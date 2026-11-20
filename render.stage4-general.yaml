@@ -8,7 +8,7 @@ services:
     region: oregon
     autoDeployTrigger: off
     buildCommand: pip install -r requirements.txt
-    startCommand: python scripts/bootstrap_stage4_general_demo.py && uvicorn app.intelligence2.stage4_general_homologation:app --host 0.0.0.0 --port $PORT --workers 1
+    startCommand: python -m scripts.bootstrap_stage4_general_demo && uvicorn app.intelligence2.stage4_general_homologation:app --host 0.0.0.0 --port $PORT --workers 1
     healthCheckPath: /healthz
     envVars:
       - key: PYTHON_VERSION
