@@ -26,19 +26,19 @@ def test_workspace_is_protected_and_does_not_trade(tmp_path,monkeypatch):
                             expires_at=db.utcnow()+timedelta(days=1)))
         sess.commit()
     try:
-        with TestClient(main.app) as client:
-            response=client.get('/nexora2')
-            assert response.status_code==401
-            client.cookies.set('nexora_sid','workspace_sid')
-            response=client.get('/nexora2')
-            assert response.status_code==200
-            assert 'no-store' in response.headers.get('cache-control','')
-            assert 'NEXORA Intelligence 2.0' in response.text
-            assert 'Meus sinais' in response.text
-            assert 'Minhas estratégias' in response.text
-            assert 'Conta REAL · execução bloqueada' in response.text
-            assert '/api/research/asset-scanner?version=1' in response.text
-            assert '/api/research/strategy-lab' in response.text
+        client=TestClient(main.app)
+        response=client.get('/nexora2')
+        assert response.status_code==401
+        client.cookies.set('nexora_sid','workspace_sid')
+        response=client.get('/nexora2')
+        assert response.status_code==200
+        assert 'no-store' in response.headers.get('cache-control','')
+        assert 'NEXORA Intelligence 2.0' in response.text
+        assert 'Meus sinais' in response.text
+        assert 'Minhas estratégias' in response.text
+        assert 'Conta REAL · execução bloqueada' in response.text
+        assert '/api/research/asset-scanner?version=1' in response.text
+        assert '/api/research/strategy-lab' in response.text
     finally:
         engine.dispose()
 
