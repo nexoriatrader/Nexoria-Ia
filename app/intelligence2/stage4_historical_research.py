@@ -328,6 +328,18 @@ def create_research() -> dict:
             pass
         raise RuntimeError("Historical research failed: "+safe) from exc
 
+def _run_synthetic(row):
+    """The provenance comes from immutable persisted report, not the pipeline name."""
+    if row["source"] == SOURCE:
+        return True
+    if row["report_json"]:
+        report = json.loads(row["report_json"])
+        if _sha(report) != row["result_sha256"]:
+            raise RuntimeError("Research provenance integrity error")
+        return report.get("synthetic") is True
+    return False
+
+
 def list_research(limit=20):
     if type(limit) is not int or not 1 <= limit <= 100:
         raise ValueError("Invalid research list limit")
@@ -337,7 +349,7 @@ def list_research(limit=20):
         total=conn.execute(select(func.count()).select_from(runs)).scalar_one()
     return {"total":int(total),"runs":[{
         "id":r["id"],"state":r["state"],"version":r["version"],
-        "source":r["source"],"synthetic":r["source"] == SOURCE,
+        "source":r["source"],"synthetic":_run_synthetic(r),
         "step_count":r["step_count"],"reason":r["reason"],
         "started_at":_iso(r["started_at"]), "finished_at":_iso(r["finished_at"]),
         "duration_ms":r["duration_ms"],
@@ -374,7 +386,7 @@ def get_research(run_id):
         })
     return {
         "id":found["id"],"version":found["version"],
-        "source":found["source"],"synthetic":found["source"] == SOURCE,
+        "source":found["source"],"synthetic":_run_synthetic(found),
         "state":found["state"],"reason":found["reason"],
         "started_at":_iso(found["started_at"]),
         "finished_at":_iso(found["finished_at"]),
