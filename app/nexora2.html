@@ -132,6 +132,16 @@ button:focus-visible,a:focus-visible,input:focus-visible{outline:3px solid var(-
   <p class="status" id="historyStatus" role="status">Nenhuma consulta registrada nesta aba.</p>
   <div class="history-list" id="historyEntries"></div>
 </section>
+<section class="panel" id="personalResearchHistory" aria-labelledby="personalResearchHistoryTitle">
+  <div class="panel-header">
+    <div><h2 id="personalResearchHistoryTitle">Meu histórico de pesquisas · PostgreSQL</h2>
+      <p class="hint">Visitas a pesquisas de treinamento registradas na sua conta, disponíveis em outros acessos ao sistema.</p></div>
+    <button class="action secondary" id="loadPersonalHistoryButton" type="button" onclick="loadPersonalResearchHistory()">CARREGAR MEU HISTÓRICO</button>
+  </div>
+  <p class="note">Este histórico registra somente o tipo e o horário de consultas de estudo. Não registra operações, resultados financeiros nem o conteúdo completo das pesquisas. Até 10 registros recentes; a limpeza automática pode remover os mais antigos após 7 dias, preservando os 3 últimos.</p>
+  <p id="personalHistoryStatus" class="status" role="status">Nenhum histórico pessoal carregado nesta aba.</p>
+  <div id="personalHistoryEntries" class="history-list" aria-live="polite"></div>
+</section>
 <section class="panel" id="persistedResearchLibrary" aria-labelledby="persistedResearchLibraryTitle">
   <div class="panel-header">
     <div><h2 id="persistedResearchLibraryTitle">Biblioteca histórica · PostgreSQL</h2>
@@ -260,6 +270,7 @@ async function runIntelligenceStudy(){
       :'Pesquisa consultada: '+(report.reason||report.state||'sem resultados');
     $('scanReport').hidden=false;
     appendResearchHistory('intelligence',report,rows.length);
+    void savePersonalResearchVisit('intelligence');
   }catch(error){$('scanStatus').textContent='Não foi possível concluir a consulta: '+error.message+
     ($('scanReport').hidden?'':' · O último relatório continua visível.');}
   finally{button.disabled=false;}
@@ -284,6 +295,7 @@ async function runStrategyStudy(){
       :'Consulta concluída: '+(report.reason||report.state||'sem dados');
     $('strategyReport').hidden=false;
     appendResearchHistory('strategies',report,rows.length);
+    void savePersonalResearchVisit('strategies');
   }catch(error){$('strategyStatus').textContent='Não foi possível concluir a consulta: '+error.message+
     ($('strategyReport').hidden?'':' · O último relatório continua visível.');}
   finally{button.disabled=false;}
@@ -340,6 +352,61 @@ function renderResearchHistory(){
 }
 function clearResearchHistory(){
   researchHistory=[];saveResearchHistory();renderResearchHistory();
+}
+
+
+let personalHistoryLoaded=false,personalHistoryRequest=0;
+async function loadPersonalResearchHistory(){
+  const button=$('loadPersonalHistoryButton');
+  const sequence=++personalHistoryRequest;
+  button.disabled=true;
+  $('personalHistoryStatus').textContent='Lendo o histórico da sua conta...';
+  try{
+    const response=await checkedResearch('/api/nexora2/research/history');
+    if(sequence!==personalHistoryRequest)return;
+    const items=Array.isArray(response.items)?response.items.slice(0,10):[];
+    const list=$('personalHistoryEntries');list.replaceChildren();
+    for(const entry of items){
+      if(!['intelligence','strategies'].includes(entry.kind))continue;
+      const item=document.createElement('div');item.className='history-entry';
+      const box=document.createElement('div'),title=document.createElement('strong');
+      const detail=document.createElement('small');
+      title.textContent=entry.kind==='intelligence'?'Consulta Intelligence':'Comparação histórica de estratégias';
+      const when=new Date(entry.at);
+      detail.textContent=(Number.isNaN(when.valueOf())?'Data indisponível':
+        when.toLocaleString('pt-BR',{timeZone:'America/Sao_Paulo',dateStyle:'short',timeStyle:'short'}))+
+        ' · Visita de estudo · Sem ordens';
+      box.append(title,detail);item.append(box);list.append(item);
+    }
+    personalHistoryLoaded=true;
+    $('personalHistoryStatus').textContent=list.childElementCount
+      ?list.childElementCount+' visita(s) de estudo encontradas na sua conta.'
+      :'Nenhuma visita de estudo persistida encontrada nesta conta.';
+  }catch(error){
+    if(sequence===personalHistoryRequest)
+      $('personalHistoryStatus').textContent='Não foi possível ler o histórico: '+error.message;
+  }finally{
+    if(sequence===personalHistoryRequest)button.disabled=false;
+  }
+}
+async function savePersonalResearchVisit(kind){
+  if(!['intelligence','strategies'].includes(kind))return;
+  try{
+    const response=await fetch('/api/nexora2/research/history',{
+      method:'POST',credentials:'same-origin',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({kind})
+    });
+    if(!response.ok)throw Error('Registro indisponível');
+    const result=await response.json();
+    if(result.recorded===true&&personalHistoryLoaded){
+      await loadPersonalResearchHistory();
+    }else if(result.recorded===true){
+      $('personalHistoryStatus').textContent='Consulta registrada na sua conta. Use Carregar meu histórico para visualizar.';
+    }
+  }catch{
+    $('personalHistoryStatus').textContent='A pesquisa foi concluída, mas não foi possível salvar a visita no servidor. Seu histórico desta aba foi mantido.';
+  }
 }
 
 let latestLibraryRequest=0,latestLibraryDetailRequest=0;
