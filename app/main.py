@@ -1,5 +1,6 @@
 """NEXORA IA. Official Deriv DEMO orders and read-only AutoPilot research."""
 import asyncio, json, logging, os, secrets, re, time
+from math import isfinite
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation
 from zoneinfo import ZoneInfo
@@ -2664,7 +2665,7 @@ async def nexora2_research_library_detail(request:Request,report_id:int,
                            not isinstance(candles,bool) and 0<=candles<=100_000_000 else None,
                 'model_count':model_count if model_count is not None and model_count<=5000 else None,
                 'coverage_pct':coverage if isinstance(coverage,(int,float)) and
-                     not isinstance(coverage,bool) and 0<=coverage<=100 else None,
+                     not isinstance(coverage,bool) and isfinite(coverage) and 0<=coverage<=100 else None,
                 'source':'PERSISTED_HISTORICAL_RESEARCH',
             },
             'execution_allowed':False,'orders_sent':0,
