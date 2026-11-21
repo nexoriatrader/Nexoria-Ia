@@ -342,10 +342,10 @@ function clearResearchHistory(){
   researchHistory=[];saveResearchHistory();renderResearchHistory();
 }
 
-let latestLibraryRequest=0;
+let latestLibraryRequest=0,latestLibraryDetailRequest=0;
 async function loadResearchLibrary(){
   const button=$('loadLibraryButton'),sequence=++latestLibraryRequest;
-  button.disabled=true;$('libraryDetails').hidden=true;
+  button.disabled=true;latestLibraryDetailRequest++;$('libraryDetails').hidden=true;
   $('libraryStatus').textContent='Buscando pesquisas persistidas no PostgreSQL...';
   try{
     const result=await checkedResearch('/api/nexora2/research/library');
@@ -382,10 +382,10 @@ async function loadResearchLibraryDetail(id,title){
   $('libraryDetailsTitle').textContent=String(title||'Pesquisa histórica');
   $('libraryDetailsSummary').textContent='Lendo resumo do relatório salvo...';
   $('libraryDetailsNote').textContent='';
-  const marker=id;
+  const marker=++latestLibraryDetailRequest;
   try{
     const record=await checkedResearch('/api/nexora2/research/library/'+encodeURIComponent(id));
-    if(marker!==id)return;
+    if(marker!==latestLibraryDetailRequest)return;
     const s=record.summary||{};
     const details=[
       'Período: '+String(record.period_from||'—')+' até '+String(record.period_to||'—'),
@@ -397,7 +397,8 @@ async function loadResearchLibraryDetail(id,title){
     $('libraryDetailsSummary').textContent=details.join(' · ');
     $('libraryDetailsNote').textContent=String(record.note||'Apenas pesquisa.');
   }catch(error){
-    $('libraryDetailsSummary').textContent='Não foi possível abrir o resumo: '+error.message;
+    if(marker===latestLibraryDetailRequest)
+      $('libraryDetailsSummary').textContent='Não foi possível abrir o resumo: '+error.message;
   }
 }
 function brasiliaDate(instant){
