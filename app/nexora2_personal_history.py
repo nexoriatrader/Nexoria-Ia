@@ -77,9 +77,11 @@ def record_personal_visit(session, user_id, kind):
                   HistoricalResearchReport.id.desc())
         .limit(1)
     )
-    if last and now - _utc(last.created_at) < timedelta(seconds=MIN_REPEAT_SECONDS):
-        # Avoid unbounded writes when a button is clicked repeatedly.
-        return {"recorded": False, "reason": "RECENT_VISIT", "item": _as_public_visit(last)}
+    previous = _as_public_visit(last) if last else None
+    if (previous and previous["kind"] == kind and
+            now - _utc(last.created_at) < timedelta(seconds=MIN_REPEAT_SECONDS)):
+        # Ignore a rapid repeat of the SAME study; keep distinct study modes.
+        return {"recorded": False, "reason": "RECENT_VISIT", "item": previous}
 
     record = HistoricalResearchReport(
         research_key=key,
