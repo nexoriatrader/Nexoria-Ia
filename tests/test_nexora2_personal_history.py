@@ -12,6 +12,8 @@ from app import db,main
 from app.nexora2_personal_history import (
     HISTORY_LIMIT, personal_research_key, list_personal_visits, record_personal_visit,
 )
+from app.research_retention import cleanup_research_reports, KEEP_LATEST
+
 from app.research_persistence import HistoricalResearchReport, RESEARCH_KEY
 from app.security import encrypt,hashsecret
 
@@ -142,3 +144,90 @@ def test_history_ui_does_not_trade_or_fake_financial_results():
     for prohibited in ('/api/demo/buy','/api/real/buy','/api/autopilot/start',
                        '/api/autopilot/stop','START_REAL_AUTOPILOT'):
         assert prohibited not in html
+
+
+def test_fast_switch_between_studies_keeps_both_visits(tmp_path,monkeypatch):
+    engine,sessions,(user_a,_)=setup_db(tmp_path,monkeypatch)
+    try:
+        with sessions() as session:
+            first=record_personal_visit(session,user_a,"intelligence")
+            repeat=record_personal_visit(session,user_a,"intelligence")
+            switched=record_personal_visit(session,user_a,"strategies")
+            assert first["recorded"] is True
+            assert repeat["recorded"] is False
+            assert switched["recorded"] is True
+            assert [item["kind"] for item in list_personal_visits(session,user_a)] == [
+                "strategies", "intelligence"
+            ]
+    finally:
+        engine.dispose()
+
+
+def test_research_retention_batches_personal_keys_without_reading_large_payloads(
+        tmp_path,monkeypatch):
+    """Preserve old per-key retention rules with 1 SELECT for any user count."""
+    engine,sessions,(user_a,user_b)=setup_db(tmp_path,monkeypatch)
+    now=db.utcnow()
+    with sessions() as session:
+        # 12 old visits: keep newest 3 regardless of age.
+        for idx in range(12):
+            stamp=now-timedelta(days=15)+timedelta(minutes=idx)
+            session.add(HistoricalResearchReport(
+                research_key=personal_research_key(user_a),
+                created_at=stamp,period_from=stamp,period_to=stamp,
+                payload_json=json.dumps({"kind":"intelligence",
+                   "source":"NEXORA2_USER_STUDY_VISIT","orders_sent":0})))
+        # 12 recent visits: keep 10, drop only 2 excess entries.
+        for idx in range(12):
+            stamp=now-timedelta(hours=1)+timedelta(minutes=idx)
+            session.add(HistoricalResearchReport(
+                research_key=personal_research_key(user_b),
+                created_at=stamp,period_from=stamp,period_to=stamp,
+                payload_json=json.dumps({"kind":"strategies",
+                   "source":"NEXORA2_USER_STUDY_VISIT","orders_sent":0})))
+        # Unrelated report is preserved.
+        session.add(HistoricalResearchReport(
+            research_key=RESEARCH_KEY,created_at=now,
+            period_from=now,period_to=now,
+            payload_json=json.dumps({"research":"global","opaque":"x"*1000})))
+        session.commit()
+    statements=[]
+    def observe(conn,cursor,statement,params,context,executemany):
+        statements.append(statement)
+    event.listen(engine,"before_cursor_execute",observe)
+    try:
+        deleted=cleanup_research_reports(now=now,session_factory=sessions)
+        assert deleted == (12-KEEP_LATEST)+(12-HISTORY_LIMIT)
+        selects=[s for s in statements if s.lstrip().upper().startswith("SELECT")]
+        deletes=[s for s in statements if s.lstrip().upper().startswith("DELETE")]
+        assert len(selects)==1, statements
+        assert "payload_json" not in selects[0].lower()
+        assert len(deletes)==1, statements
+        assert "historical_research_reports" in deletes[0]
+        assert not any(s.lstrip().upper().startswith(("CREATE","ALTER","DROP"))
+                       for s in statements), statements
+        with sessions() as session:
+            by_key={}
+            for key in (personal_research_key(user_a),
+                        personal_research_key(user_b),RESEARCH_KEY):
+                by_key[key]=session.scalars(
+                    select(HistoricalResearchReport.id)
+                    .where(HistoricalResearchReport.research_key==key)).all()
+            assert len(by_key[personal_research_key(user_a)])==KEEP_LATEST
+            assert len(by_key[personal_research_key(user_b)])==HISTORY_LIMIT
+            assert len(by_key[RESEARCH_KEY])==1
+    finally:
+        event.remove(engine,"before_cursor_execute",observe)
+        engine.dispose()
+
+
+def test_personal_history_never_modifies_broker_models_or_schemas():
+    from inspect import getsource
+    from app import nexora2_personal_history,research_retention
+    for module in (nexora2_personal_history,research_retention):
+        code=getsource(module)
+        for disallowed in (
+            "demo_buy(", "buy_real_contract(", "demo_orders",
+            "real_orders", "CREATE TABLE", "ALTER TABLE", "create_all(",
+        ):
+            assert disallowed not in code
