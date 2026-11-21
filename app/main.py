@@ -2613,7 +2613,12 @@ async def nexora2_research_library(request:Request,nexora_sid:str|None=Cookie(de
     """Authenticated, bounded, read-only persisted studies; never broker orders."""
     active_user(request,nexora_sid)
     with db.SessionLocal() as sess:
-        reports=sess.scalars(select(HistoricalResearchReport).where(
+        # Metadata projection: do not pull large JSON payloads just to list rows.
+        reports=sess.execute(select(
+            HistoricalResearchReport.id,HistoricalResearchReport.research_key,
+            HistoricalResearchReport.created_at,HistoricalResearchReport.period_from,
+            HistoricalResearchReport.period_to
+        ).where(
             HistoricalResearchReport.research_key.in_(tuple(NEXORA2_LIBRARY_LABELS))
         ).order_by(HistoricalResearchReport.created_at.desc(),
                    HistoricalResearchReport.id.desc()).limit(12)).all()
