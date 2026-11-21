@@ -2757,8 +2757,10 @@ async def nexora2_replay_ohlc_research(request:Request,report_id:int,
             "reproduced_identically":(
                 rebuilt["evidence"]==report["evidence"]
                 and rebuilt["statistics"]==report["statistics"]
+                and rebuilt["period_comparison"]==report["period_comparison"]
                 and rebuilt["contexts"]==report["contexts"]
-                and rebuilt["timeframe_alignment"]==report["timeframe_alignment"]),
+                and rebuilt["timeframe_alignment"]==report["timeframe_alignment"]
+                and rebuilt["orchestrator"]==report["orchestrator"]),
             "source":"USER_SUPPLIED_UNVERIFIED_OHLC",
             "orders_sent":0,"execution_allowed":False}
 
