@@ -488,7 +488,8 @@ function renderOhlcSummary(report,id){
   ].join(' · ');
   $('ohlcEvidence').textContent=[
     'Fonte: arquivo de usuário (procedência não verificada)',
-    'SHA-256: '+String(evidence.input_sha256||'—'),
+    'SHA-256 da entrada: '+String(evidence.input_sha256||'—'),
+    'SHA-256 do resultado: '+String(evidence.result_sha256||'—'),
     'Lacunas preenchidas: '+String(evidence.gaps_filled??'—'),
     'Versão: '+String(report.version||'—')
   ].join(' · ');
