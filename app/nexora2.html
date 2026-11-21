@@ -163,6 +163,7 @@ button:focus-visible,a:focus-visible,input:focus-visible{outline:3px solid var(-
   <div class="ohlc-outputs" id="ohlcStudyOutput" hidden aria-live="polite">
     <div class="ohlc-output"><strong id="ohlcTitle">Resumo</strong><p id="ohlcSummary"></p></div>
     <div class="ohlc-output"><strong>Qualidade e evidências</strong><p id="ohlcEvidence"></p></div>
+    <div class="ohlc-output"><strong>Comparação entre períodos históricos</strong><p id="ohlcPeriods"></p></div>
     <div class="ohlc-output"><strong>Módulos e contextos</strong><p id="ohlcModules"></p></div>
     <div class="ohlc-output"><strong>Etapas concluídas e pendências</strong><div id="ohlcStages" class="ohlc-study-history" aria-label="Etapas da pesquisa"></div></div>
     <p class="hint">Os indicadores são descritivos. Não equivalem a previsão, sucesso financeiro, treinamento de modelo ou autorização de operações.</p>
@@ -490,6 +491,17 @@ function renderOhlcSummary(report,id){
     'SHA-256: '+String(evidence.input_sha256||'—'),
     'Lacunas preenchidas: '+String(evidence.gaps_filled??'—'),
     'Versão: '+String(report.version||'—')
+  ].join(' · ');
+  const compare=report.period_comparison||{};
+  const start=compare.first||{},end=compare.second||{};
+  $('ohlcPeriods').textContent=[
+    'Primeira metade: '+String(start.periods??'—')+' candles',
+    'Frequência de alta: '+String(start.up_intervals??'—'),
+    'Volatilidade: '+String(start.realized_volatility??'—'),
+    'Segunda metade: '+String(end.periods??'—')+' candles',
+    'Frequência de alta: '+String(end.up_intervals??'—'),
+    'Volatilidade: '+String(end.realized_volatility??'—'),
+    'Comparação descritiva, sem previsão'
   ].join(' · ');
   const contexts=report.contexts||{};
   $('ohlcModules').textContent=[
