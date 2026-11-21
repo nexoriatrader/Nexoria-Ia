@@ -36,7 +36,17 @@ h1{font-size:clamp(27px,4vw,38px);line-height:1.16;margin:7px 0 10px}
 .form-actions{display:flex;gap:10px;flex-wrap:wrap;margin:15px 0}
 .signal-list{display:grid;gap:9px;margin-top:12px}.signal{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 14px;border:1px solid #35536a;border-radius:12px;background:#0b1d2d}
 .signal strong{font-size:13px;display:block}.signal small{font-size:11px;color:var(--muted);display:block;margin-top:3px}.signal .remove{padding:7px 12px;border:1px solid #62778c;border-radius:8px;background:#243c51;color:#fff;font-weight:700;font-size:11px}
-.foot{border-top:1px solid #26445a;padding:24px 0 36px;font-size:12px;color:var(--muted)}
+.study-detail{margin:16px 0 0;padding:19px;border:1px solid #52748c;border-radius:14px;background:#0c2133}
+.study-detail h3{font-size:16px;margin:0 0 6px}.study-detail .hint{margin:7px 0}
+.detail-heading{display:flex;gap:10px;align-items:flex-start;justify-content:space-between;flex-wrap:wrap}
+.detail-tag{font-size:11px;color:#f8db9b;border:1px solid #826842;border-radius:999px;padding:4px 10px}
+.detail-button{border:1px solid #547890;background:#194460;color:#f3fbff;padding:8px 10px;min-height:37px;border-radius:8px;font-weight:800;font-size:11px}
+.detail-button:hover{border-color:#8edbf9}
+.history-list{display:grid;gap:8px}
+.history-entry{display:flex;flex-wrap:wrap;justify-content:space-between;gap:10px;align-items:flex-start;border:1px solid #344f62;border-radius:12px;background:#0d2436;padding:12px 15px}
+.history-entry strong{display:block;font-size:13px}.history-entry small{display:block;color:var(--muted);font-size:12px}
+.history-note{font-size:12px;color:#9fc2d9;margin:8px 0 12px}
+.foot{border-top:1px solid #26445a;padding:24px 0 36px;font-size:12px;color:var(--muted)
 button:focus-visible,a:focus-visible,input:focus-visible{outline:3px solid var(--blue);outline-offset:2px}
 @media(max-width:730px){.modes{grid-template-columns:1fr}.mode{min-height:124px}.panel-header{flex-direction:column}.form-grid{grid-template-columns:1fr}.hero,.panel{padding:20px}.stats{grid-template-columns:1fr 1fr}.stat:last-child{grid-column:1/-1}.site-head{gap:7px}.back{padding:10px 11px}}
 @media(prefers-reduced-motion:reduce){.mode{transition:none}}
@@ -69,8 +79,14 @@ button:focus-visible,a:focus-visible,input:focus-visible{outline:3px solid var(-
   <p class="status" id="scanStatus" role="status">Nenhum estudo solicitado nesta sessão.</p>
   <div id="scanReport" hidden>
     <div class="stats"><div class="stat"><small>Ativos consultados</small><strong id="scanChecked">—</strong></div><div class="stat"><small>Ativos com estudo</small><strong id="scanFound">—</strong></div><div class="stat"><small>Ordens enviadas</small><strong>0</strong></div></div>
-    <div class="scroll"><table><thead><tr><th>Ativo</th><th>Família</th><th>Velas observadas</th><th>Estado da pesquisa</th></tr></thead><tbody id="scanRows"></tbody></table></div>
+    <div class="scroll"><table><thead><tr><th>Ativo</th><th>Família</th><th>Velas observadas</th><th>Estado da pesquisa</th><th>Detalhes</th></tr></thead><tbody id="scanRows"></tbody></table></div>
     <p class="status" id="scanWarning"></p>
+    <div id="scanDetails" class="study-detail" hidden>
+      <div class="detail-heading"><h3 id="scanDetailsTitle">Evidências da pesquisa</h3><span class="detail-tag">Histórico · não operacional</span></div>
+      <p class="hint" id="scanDetailsMeta"></p>
+      <div class="scroll"><table><thead><tr><th>Intervalo avaliado</th><th>Exemplos da validação</th><th>Acertos direcionais</th><th>Qualidade da amostra</th></tr></thead><tbody id="scanDetailsRows"></tbody></table></div>
+      <p class="hint">Estudo de preços encerrados, não contratos liquidados. Não mede lucro, payout, latência ou capacidade de previsão futura.</p>
+    </div>
   </div>
 </section>
 <section id="panelSignals" class="panel" role="tabpanel" aria-labelledby="tabSignals" hidden>
@@ -94,9 +110,24 @@ button:focus-visible,a:focus-visible,input:focus-visible{outline:3px solid var(-
   <p class="status" id="strategyStatus" role="status">Nenhum estudo solicitado nesta sessão.</p>
   <div id="strategyReport" hidden>
     <div class="stats"><div class="stat"><small>Ativos analisados</small><strong id="strategyAssets">—</strong></div><div class="stat"><small>Estudos por ativo</small><strong id="strategyCount">—</strong></div><div class="stat"><small>Ordens enviadas</small><strong>0</strong></div></div>
-    <div class="scroll"><table><thead><tr><th>Ativo</th><th>Método analisado</th><th>Velas históricas</th><th>Separação dos dados</th></tr></thead><tbody id="strategyRows"></tbody></table></div>
+    <div class="scroll"><table><thead><tr><th>Ativo</th><th>Método analisado</th><th>Velas históricas</th><th>Separação dos dados</th><th>Detalhes</th></tr></thead><tbody id="strategyRows"></tbody></table></div>
     <p class="status" id="strategyWarning"></p>
+    <div id="strategyDetails" class="study-detail" hidden>
+      <div class="detail-heading"><h3 id="strategyDetailsTitle">Evidências da estratégia</h3><span class="detail-tag">Validação histórica</span></div>
+      <p class="hint" id="strategyDetailsMeta"></p>
+      <div class="scroll"><table><thead><tr><th>Intervalo avaliado</th><th>Exemplos da validação</th><th>Acertos direcionais</th><th>Qualidade da amostra</th></tr></thead><tbody id="strategyDetailsRows"></tbody></table></div>
+      <p class="hint">Os resultados são comparações de velas históricas. Não são sinais operacionais nem comprovam resultado financeiro.</p>
+    </div>
   </div>
+</section>
+<section class="panel" id="studyHistory" aria-labelledby="studyHistoryTitle">
+  <div class="panel-header"><div><h2 id="studyHistoryTitle">Histórico das consultas de pesquisa</h2>
+    <p class="hint">Resumo das consultas feitas nesta aba: horário, tipo, quantidade de ativos e estado da pesquisa.</p></div>
+    <button class="action ghost" id="clearStudyHistory" type="button" onclick="clearResearchHistory()">LIMPAR HISTÓRICO DESTA ABA</button>
+  </div>
+  <p class="history-note">Armazenamento temporário somente neste navegador e nesta aba. Não é histórico PostgreSQL nem histórico de ordens. As consultas não são executadas automaticamente.</p>
+  <p class="status" id="historyStatus" role="status">Nenhuma consulta registrada nesta aba.</p>
+  <div class="history-list" id="historyEntries"></div>
 </section>
 </main>
 <footer class="foot">NEXORA Intelligence 2.0 · Ambiente de pesquisa. A conta REAL segue bloqueada para execução nesta experiência. <a href="/">Voltar ao painel original</a>.</footer>
@@ -106,6 +137,8 @@ button:focus-visible,a:focus-visible,input:focus-visible{outline:3px solid var(-
 const $=id=>document.getElementById(id);
 const allowedModes=['intelligence','signals','strategies'];
 let activeMode='intelligence',signalStorageKey=null,studySignals=[];
+let historyStorageKey=null,researchHistory=[];
+const MAX_RESEARCH_HISTORY=20;
 const modeMap={intelligence:['tabIntelligence','panelIntelligence'],signals:['tabSignals','panelSignals'],strategies:['tabStrategies','panelStrategies']};
 function chooseMode(mode){
   if(!allowedModes.includes(mode))return;
@@ -124,22 +157,60 @@ async function checkedResearch(url){
   if(!response.ok)throw Error(typeof data.detail==='string'?data.detail:'Pesquisa temporariamente indisponível.');
   return data;
 }
-function tableRows(target,items,columns){
+function tableRows(target,items,columns,onDetails=null){
   const body=$(target);body.replaceChildren();
   for(const item of items.slice(0,30)){
     const row=document.createElement('tr');
     for(const pick of columns){
       const cell=document.createElement('td');cell.textContent=String(pick(item)??'—');row.append(cell);
     }
+    if(onDetails){
+      const cell=document.createElement('td'),button=document.createElement('button');
+      button.type='button';button.className='detail-button';button.textContent='EXAMINAR';
+      button.addEventListener('click',()=>onDetails(item));
+      cell.append(button);row.append(cell);
+    }
     body.append(row);
   }
   if(!body.childElementCount){
     const row=document.createElement('tr'),cell=document.createElement('td');
-    cell.colSpan=columns.length;cell.textContent='Nenhum resultado disponível para este estudo.';row.append(cell);body.append(row);
+    cell.colSpan=columns.length+(onDetails?1:0);cell.textContent='Nenhum resultado disponível para este estudo.';row.append(cell);body.append(row);
   }
 }
+function validationStats(row){
+  const v=row&&typeof row==='object'?row.validation:null;
+  const sample=v&&Number.isInteger(v.signals)&&v.signals>=0?v.signals:null;
+  const rate=v&&typeof v.hit_rate==='number'&&Number.isFinite(v.hit_rate)&&v.hit_rate>=0&&v.hit_rate<=1?v.hit_rate:null;
+  return {
+    interval:Number.isInteger(row?.duration_minutes)?row.duration_minutes+' min':'—',
+    sample:sample===null?'—':String(sample),
+    rate:rate===null?'Sem resultados':(rate*100).toFixed(1).replace('.',',')+'%',
+    quality:row?.enough_validation_samples===true?'Amostra mínima atingida':'Amostra insuficiente / não confirmada'
+  };
+}
+function showResearchDetails(prefix,item){
+  const data=prefix==='scan'?item?.comparison:item;
+  const rows=Array.isArray(data?.results)?data.results:[];
+  $(prefix+'DetailsTitle').textContent=String(item?.display_name||item?.symbol||'Pesquisa histórica');
+  const times=prefix==='scan'?
+    'Última vela fechada: '+String(item?.last_candle_at||'não informada'):
+    'Período: '+String(item?.period_from||'—')+' até '+String(item?.period_to||'—');
+  $(prefix+'DetailsMeta').textContent=[
+    'Ativo: '+String(item?.symbol||'—'),
+    'Método: '+String(data?.strategy||item?.strategy||'—'),
+    String(data?.split||'Amostras cronológicas'),
+    times
+  ].join(' · ');
+  tableRows(prefix+'DetailsRows',rows,[
+    x=>validationStats(x).interval,
+    x=>validationStats(x).sample,
+    x=>validationStats(x).rate,
+    x=>validationStats(x).quality
+  ]);
+  $(prefix+'Details').hidden=false;
+}
 async function runIntelligenceStudy(){
-  const button=$('scanButton');button.disabled=true;$('scanReport').hidden=true;
+  const button=$('scanButton');button.disabled=true;$('scanDetails').hidden=true;
   $('scanStatus').textContent='Consultando dados públicos e estudos históricos. Nenhuma ordem será enviada.';
   try{
     const report=await checkedResearch('/api/research/asset-scanner?version=1');
@@ -151,17 +222,19 @@ async function runIntelligenceStudy(){
       x=>x.family,
       x=>x.candles,
       x=>x.research_state
-    ]);
+    ],item=>showResearchDetails('scan',item));
     $('scanWarning').textContent=report.warning||report.reason||'Resultados apenas para pesquisa.';
     $('scanStatus').textContent=report.state==='RESEARCH_ONLY'
       ?'Pesquisa concluída. '+rows.length+' ativo(s) com dados; '+(report.cached?'resultado em cache.':'consulta atualizada.')
       :'Pesquisa consultada: '+(report.reason||report.state||'sem resultados');
     $('scanReport').hidden=false;
-  }catch(error){$('scanStatus').textContent='Não foi possível concluir a consulta: '+error.message;}
+    appendResearchHistory('intelligence',report,rows.length);
+  }catch(error){$('scanStatus').textContent='Não foi possível concluir a consulta: '+error.message+
+    ($('scanReport').hidden?'':' · O último relatório continua visível.');}
   finally{button.disabled=false;}
 }
 async function runStrategyStudy(){
-  const button=$('strategyButton');button.disabled=true;$('strategyReport').hidden=true;
+  const button=$('strategyButton');button.disabled=true;$('strategyDetails').hidden=true;
   $('strategyStatus').textContent='Consultando estudos históricos, sem alterar as preferências do robô.';
   try{
     const report=await checkedResearch('/api/research/strategy-lab');
@@ -173,14 +246,69 @@ async function runStrategyStudy(){
       x=>x.strategy,
       x=>x.candles,
       x=>x.split
-    ]);
+    ],item=>showResearchDetails('strategy',item));
     $('strategyWarning').textContent=report.warning||report.reason||'Estudos não autorizam negociação.';
     $('strategyStatus').textContent=report.state==='RESEARCH_ONLY'
       ?'Comparação concluída. '+rows.length+' ativo(s) analisado(s).'
       :'Consulta concluída: '+(report.reason||report.state||'sem dados');
     $('strategyReport').hidden=false;
-  }catch(error){$('strategyStatus').textContent='Não foi possível concluir a consulta: '+error.message;}
+    appendResearchHistory('strategies',report,rows.length);
+  }catch(error){$('strategyStatus').textContent='Não foi possível concluir a consulta: '+error.message+
+    ($('strategyReport').hidden?'':' · O último relatório continua visível.');}
   finally{button.disabled=false;}
+}
+function cleanResearchHistory(entries){
+  if(!Array.isArray(entries))return [];
+  return entries.filter(x=>
+    x&&['intelligence','strategies'].includes(x.kind)&&
+    typeof x.at==='string'&&!Number.isNaN(Date.parse(x.at))&&
+    Number.isInteger(x.assets)&&x.assets>=0&&x.assets<=30&&
+    typeof x.state==='string'&&x.state.length<=60
+  ).slice(0,MAX_RESEARCH_HISTORY);
+}
+function loadResearchHistory(){
+  if(!historyStorageKey)return [];
+  try{return cleanResearchHistory(JSON.parse(sessionStorage.getItem(historyStorageKey)||'[]'));}
+  catch{return [];}
+}
+function saveResearchHistory(){
+  if(!historyStorageKey)return false;
+  try{sessionStorage.setItem(historyStorageKey,JSON.stringify(researchHistory));return true;}
+  catch{return false;}
+}
+function appendResearchHistory(kind,report,assets){
+  if(!['intelligence','strategies'].includes(kind))return;
+  researchHistory.unshift({
+    kind,assets:Math.min(30,Math.max(0,Number.isInteger(assets)?assets:0)),
+    state:String(report?.state||'UNKNOWN').slice(0,60),
+    cached:report?.cached===true,
+    at:new Date().toISOString()
+  });
+  researchHistory=researchHistory.slice(0,MAX_RESEARCH_HISTORY);
+  const stored=saveResearchHistory();
+  renderResearchHistory();
+  if(!stored)$('historyStatus').textContent+=' · Histórico apenas na tela; armazenamento indisponível.';
+}
+function renderResearchHistory(){
+  const list=$('historyEntries');list.replaceChildren();
+  for(const entry of researchHistory){
+    const item=document.createElement('div');item.className='history-entry';
+    const info=document.createElement('div'),title=document.createElement('strong'),detail=document.createElement('small');
+    title.textContent=entry.kind==='intelligence'?'Pesquisa Intelligence':'Comparação de estratégias';
+    const when=new Date(entry.at);
+    const timestamp=Number.isNaN(when.valueOf())?'Horário não informado':when.toLocaleString('pt-BR',{
+      timeZone:'America/Sao_Paulo',dateStyle:'short',timeStyle:'short'
+    });
+    detail.textContent=timestamp+' · '+entry.assets+' ativo(s) · '+entry.state+
+      (entry.cached?' · Resposta em cache':'');
+    info.append(title,detail);item.append(info);list.append(item);
+  }
+  $('historyStatus').textContent=researchHistory.length
+    ?researchHistory.length+' consulta(s) registradas nesta aba, sem ordens.'
+    :'Nenhuma consulta registrada nesta aba.';
+}
+function clearResearchHistory(){
+  researchHistory=[];saveResearchHistory();renderResearchHistory();
 }
 function brasiliaDate(instant){
   const parts=new Intl.DateTimeFormat('en-US',{timeZone:'America/Sao_Paulo',
@@ -255,9 +383,12 @@ async function initNexora2(){
     if(typeof account==='string'&&account.length>0){
       signalStorageKey='nexora2-study-'+account;
       studySignals=storageRead();
+      historyStorageKey='nexora2-research-history-'+account;
+      researchHistory=loadResearchHistory();
     }
     $('signalDate').min=brasiliaToday();$('signalDate').value=brasiliaToday();
     renderStudySignals();
+    renderResearchHistory();
   }catch(error){$('scanStatus').textContent='Não foi possível confirmar a sessão. Volte ao painel para reconectar.';}
 }
 initNexora2();
