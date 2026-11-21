@@ -14,11 +14,11 @@ Mudanças da PR só estarão disponíveis no site depois do CI e da publicação
 | 23–26 | Indicators | PARCIAL: EMA/RSI e contexto; avaliação ampla de indicadores falta |
 | 27–31 | Knowledge Base | PARCIAL: histórico/evidência PostgreSQL na PR; aprendizado validado e atualização faltam |
 | 32–36 | Strategy | PARCIAL: strategy_lab.py; comparação contextual global falta |
-| 37–42 | Statistics | PARCIAL: distribuições, frequência, volatilidade e amplitudes no novo relatório; comparações extensas faltam |
+| 37–42 | Statistics | PARCIAL: distribuições, frequência, volatilidade, amplitudes e comparação cronológica entre metades no novo relatório; séries multiativos ainda faltam |
 | 43–48 | Learning | NÃO CONCLUÍDO: sem modelo ML validado nem champion/challenger/fallback executável |
 | 49–57 | Signals | PARCIAL: anotações locais; importação/fornecedores/validadores/histórico definitivo faltam |
 | 58–63 | Advanced | PARCIAL: upload OHLC e símbolo; configurações de pesquisa completas faltam |
-| 64–69 | Evidence | PARCIAL: evidências SHA-256, versão, input/resultado persistidos e replay na PR; pipeline de relatórios abrangente falta |
+| 64–69 | Evidence | PARCIAL: SHA-256 independentes de entrada e saída, versões, input/resultado persistidos e replay na PR; relatórios multiativos consolidados faltam |
 | 70–75 | Orchestrator | PARCIAL: execução sequencial determinística, etapas auditáveis; fila e distribuição robusta faltam |
 | 76–87 | Dashboard | PARCIAL: painel e pesquisa por arquivo, histórico e leitura de relatórios na PR; visão consolidada ainda falta |
 
