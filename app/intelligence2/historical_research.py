@@ -177,6 +177,14 @@ def build_report(payload: dict, *, clock: int | None = None) -> dict:
     }
     alignment = align_timeframes(contexts, profile=profile)
     stats = describe_returns(bars)
+    half = len(bars)//2
+    comparison = {
+        "method": "CHRONOLOGICAL_EQUAL_COUNT_HALVES",
+        "first": describe_returns(bars[:half]),
+        "second": describe_returns(bars[half:]),
+        "split_epoch": bars[half]["epoch"],
+        "interpretation": "DESCRIPTIVE_NOT_PREDICTIVE",
+    }
     return {
         "version": VERSION, "source": SOURCE, "symbol": symbol,
         "created_from": "USER_UPLOAD", "input": normalized,
@@ -201,9 +209,13 @@ def build_report(payload: dict, *, clock: int | None = None) -> dict:
             *diagnostics,
             {"module": "TIMEFRAME_ALIGNMENT", "version": TF_VERSION,
              "state": alignment["alignment"]["state"]},
+            {"module": "PERIOD_COMPARISON", "state": "COMPLETE",
+             "version": VERSION,
+             "split_epoch": bars[half]["epoch"]},
             {"module": "EVIDENCE_DIGEST", "state": "COMPLETE"},
         ]},
-        "statistics": stats, "contexts": contexts,
+        "statistics": stats, "period_comparison": comparison,
+        "contexts": contexts,
         "timeframe_alignment": alignment,
         "models": {"status": "NO_VALIDATED_MODEL_AVAILABLE",
                    "champion": None, "challenger": None, "fallback": None},
@@ -221,6 +233,7 @@ def summary(report: dict) -> dict:
         "period_to_epoch": report["period_to_epoch"],
         "evidence": report["evidence"],
         "statistics": report["statistics"],
+        "period_comparison": report["period_comparison"],
         "contexts": {role: {
             "state": c["state"], "data_quality": c["data_quality"],
             "reason_codes": c["reason_codes"],
