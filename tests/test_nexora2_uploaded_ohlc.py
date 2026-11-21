@@ -200,7 +200,8 @@ def test_uploaded_research_bounded_and_invalid_payload_not_saved(tmp_path,monkey
 def test_ui_contains_upload_and_replay_without_execution_routes():
     html=(Path(__file__).resolve().parents[1]/"app"/"nexora2.html").read_text()
     for key in ("ohlcFile","ohlcSymbol","ohlcRunButton","ohlcStudyOutput",
-                "ohlcHistoryList","ohlcStatus"):
+                "ohlcStages","ohlcPeriods","ohlcHistoryList","ohlcHistoryStatus",
+                "ohlcStatus"):
         assert f'id="{key}"' in html
     assert "/api/nexora2/ohlc/research" in html
     assert "Reproduzir pesquisa" in html
