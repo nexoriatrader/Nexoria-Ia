@@ -1915,6 +1915,14 @@ class AdminCredentials(BaseModel):
     password:str
 
 
+@app.get('/nexora2')
+async def nexora2_workspace(request:Request,nexora_sid:str|None=Cookie(default=None)):
+    """Authenticated research workspace; no order execution or mutation."""
+    active_user(request,nexora_sid)
+    return FileResponse(Path(__file__).parent/'nexora2.html',media_type='text/html',
+                        headers={'Cache-Control':'no-store'})
+
+
 @app.get('/admin')
 async def admin_home():
     return FileResponse(Path(__file__).parent/'admin.html')
