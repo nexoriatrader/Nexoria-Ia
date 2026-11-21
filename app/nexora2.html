@@ -145,9 +145,22 @@ function chooseMode(mode){
   activeMode=mode;
   for(const [key,ids] of Object.entries(modeMap)){
     $(ids[0]).setAttribute('aria-selected',String(key===mode));
+    $(ids[0]).tabIndex=key===mode?0:-1;
     $(ids[1]).hidden=key!==mode;
   }
   if(mode==='signals')renderStudySignals();
+}
+function onModeKeyboard(event){
+  const target=event.target;
+  if(!target||target.getAttribute('role')!=='tab')return;
+  const idx=allowedModes.indexOf(activeMode);
+  let next;
+  if(event.key==='ArrowRight')next=allowedModes[(idx+1)%allowedModes.length];
+  else if(event.key==='ArrowLeft')next=allowedModes[(idx+allowedModes.length-1)%allowedModes.length];
+  else if(event.key==='Home')next=allowedModes[0];
+  else if(event.key==='End')next=allowedModes[allowedModes.length-1];
+  else return;
+  event.preventDefault();chooseMode(next);$(modeMap[next][0]).focus();
 }
 async function checkedResearch(url){
   const response=await fetch(url,{credentials:'same-origin',headers:{Accept:'application/json'}});
@@ -389,6 +402,8 @@ async function initNexora2(){
     $('signalDate').min=brasiliaToday();$('signalDate').value=brasiliaToday();
     renderStudySignals();
     renderResearchHistory();
+    document.querySelector('.modes').addEventListener('keydown',onModeKeyboard);
+    chooseMode(activeMode);
   }catch(error){$('scanStatus').textContent='Não foi possível confirmar a sessão. Volte ao painel para reconectar.';}
 }
 initNexora2();
