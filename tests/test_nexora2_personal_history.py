@@ -231,3 +231,24 @@ def test_personal_history_never_modifies_broker_models_or_schemas():
             "real_orders", "CREATE TABLE", "ALTER TABLE", "create_all(",
         ):
             assert disallowed not in code
+
+
+def test_malformed_study_rows_are_ignored_not_returned_to_users(tmp_path,monkeypatch):
+    engine,sessions,(user_a,_)=setup_db(tmp_path,monkeypatch)
+    try:
+        with sessions() as session:
+            now=db.utcnow()
+            session.add(HistoricalResearchReport(
+                research_key=personal_research_key(user_a),
+                created_at=now,period_from=now,period_to=now,
+                payload_json=json.dumps({
+                    "kind":["not-hashable"],"source":"NEXORA2_USER_STUDY_VISIT"})))
+            session.commit()
+            assert list_personal_visits(session,user_a)==[]
+            result=record_personal_visit(session,user_a,"intelligence")
+            assert result["recorded"] is True
+            assert [item["kind"] for item in list_personal_visits(session,user_a)]==[
+                "intelligence"
+            ]
+    finally:
+        engine.dispose()
