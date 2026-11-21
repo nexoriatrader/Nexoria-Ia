@@ -164,6 +164,7 @@ button:focus-visible,a:focus-visible,input:focus-visible{outline:3px solid var(-
     <div class="ohlc-output"><strong id="ohlcTitle">Resumo</strong><p id="ohlcSummary"></p></div>
     <div class="ohlc-output"><strong>Qualidade e evidências</strong><p id="ohlcEvidence"></p></div>
     <div class="ohlc-output"><strong>Módulos e contextos</strong><p id="ohlcModules"></p></div>
+    <div class="ohlc-output"><strong>Etapas concluídas e pendências</strong><div id="ohlcStages" class="ohlc-study-history" aria-label="Etapas da pesquisa"></div></div>
     <p class="hint">Os indicadores são descritivos. Não equivalem a previsão, sucesso financeiro, treinamento de modelo ou autorização de operações.</p>
   </div>
   <div class="ohlc-study-history" id="ohlcHistoryList" aria-live="polite"></div>
@@ -498,6 +499,24 @@ function renderOhlcSummary(report,id){
     'Modelo treinado: não disponível',
     'Execução financeira: não permitida por esta pesquisa'
   ].join(' · ');
+  const stageBox=$('ohlcStages');stageBox.replaceChildren();
+  const stages=Array.isArray(report.orchestrator?.stages)
+    ?report.orchestrator.stages.slice(0,12):[];
+  for(const stage of stages){
+    const item=document.createElement('div');item.className='ohlc-history-entry';
+    const name=document.createElement('strong');name.textContent=String(stage.module||'Etapa');
+    const status=document.createElement('span');
+    status.textContent=String(stage.state||'não executado')+
+      (Number.isInteger(stage.bars)?' · '+stage.bars+' candles':'')+
+      (Array.isArray(stage.reason_codes)&&stage.reason_codes.length
+        ?' · '+stage.reason_codes.join(', '):'');
+    item.append(name,status);stageBox.append(item);
+  }
+  if(!stages.length){
+    const message=document.createElement('p');
+    message.textContent='Rastreabilidade de etapas indisponível neste relatório.';
+    stageBox.append(message);
+  }
 }
 async function runUploadedOhlcResearch(event){
   event.preventDefault();
