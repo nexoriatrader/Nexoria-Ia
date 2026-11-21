@@ -74,3 +74,32 @@ def test_workspace_inline_script_compiles(tmp_path):
     result=subprocess.run([node,'--check',str(script)],
                           capture_output=True,text=True,timeout=15)
     assert result.returncode==0,result.stderr
+
+
+def test_workspace_signal_parser_and_brasilia_date(tmp_path):
+    """Exercise the browser's actual parsing logic without a live broker or DOM."""
+    import re
+    import shutil
+    import subprocess
+    import pytest
+    node=shutil.which('node')
+    if not node:
+        pytest.skip('Node.js not available')
+    html=WORKSPACE.read_text(encoding='utf-8')
+    script=re.search(r'<script>(.*?)</script>',html,flags=re.S).group(1)
+    assert script.rstrip().endswith('initNexora2();')
+    script=script.replace('initNexora2();','')
+    script+="""
+const good=validStudySignal('M15 EUR/JPY CALL 19:00');
+if(!good||good.timeframe!=='M15'||good.asset!=='EUR/JPY'||
+   good.direction!=='CALL'||good.hour!=='19:00')process.exit(13);
+if(validStudySignal('M99 EUR/JPY CALL 25:00')!==null)process.exit(14);
+if(validStudySignal('M15 EUR/JPY CALL 19:61')!==null)process.exit(15);
+if(validStudySignal('M15 EUR/JPY BUY 19:00')!==null)process.exit(16);
+if(!/^\\d{4}-\\d{2}-\\d{2}$/.test(brasiliaToday()))process.exit(17);
+if(brasiliaDate(new Date('2026-02-28T15:00:00-03:00'))!=='2026-02-28')process.exit(18);
+"""
+    js=tmp_path/'parser.js'
+    js.write_text(script,encoding='utf-8')
+    outcome=subprocess.run([node,str(js)],capture_output=True,text=True,timeout=15)
+    assert outcome.returncode==0,outcome.stderr
