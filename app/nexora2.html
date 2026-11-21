@@ -49,6 +49,17 @@ h1{font-size:clamp(27px,4vw,38px);line-height:1.16;margin:7px 0 10px}
 .library-details{border:1px solid #466984;border-radius:12px;padding:15px;margin-top:12px;background:#091f30}
 .library-details strong{display:block;margin-bottom:7px;color:#f3d793}
 .library-details p{font-size:12px;line-height:1.65;color:#c3d8e6}
+
+.ohlc-layout{display:grid;grid-template-columns:minmax(0,1fr) minmax(200px,.6fr);gap:14px;align-items:end;margin-top:13px}
+.ohlc-layout .field{min-width:0}.ohlc-layout .field input[type=file]{max-width:100%;font-size:12px}
+.ohlc-outputs{display:grid;gap:9px}.ohlc-output{padding:14px;border:1px solid #395a73;border-radius:13px;background:#0c2032}
+.ohlc-output strong{font-size:12px;display:block;margin-bottom:7px;color:#f5d38a}
+.ohlc-output p{font-size:12px;line-height:1.6;color:#c6dae7;overflow-wrap:anywhere}
+.ohlc-study-history{display:grid;gap:8px;margin:13px 0 0}
+.ohlc-history-entry{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;padding:13px;border:1px solid #36566c;border-radius:13px;background:#0d2639}
+.ohlc-history-entry span{font-size:12px;color:#c3d9e9}
+.ohlc-history-entry button{border-radius:9px;padding:9px 13px;background:#1a4259;border:1px solid #4a7789;color:#e4f6ff;font-weight:800;font-size:11px}
+@media(max-width:680px){.ohlc-layout{grid-template-columns:1fr}}
 .foot{border-top:1px solid #26445a;padding:24px 0 36px;font-size:12px;color:var(--muted)
 button:focus-visible,a:focus-visible,input:focus-visible{outline:3px solid var(--blue);outline-offset:2px}
 @media(max-width:730px){.modes{grid-template-columns:1fr}.mode{min-height:124px}.panel-header{flex-direction:column}.form-grid{grid-template-columns:1fr}.hero,.panel{padding:20px}.stats{grid-template-columns:1fr 1fr}.stat:last-child{grid-column:1/-1}.site-head{gap:7px}.back{padding:10px 11px}}
@@ -131,6 +142,31 @@ button:focus-visible,a:focus-visible,input:focus-visible{outline:3px solid var(-
   <p class="history-note">Armazenamento temporário somente neste navegador e nesta aba. Não é histórico PostgreSQL nem histórico de ordens. As consultas não são executadas automaticamente.</p>
   <p class="status" id="historyStatus" role="status">Nenhuma consulta registrada nesta aba.</p>
   <div class="history-list" id="historyEntries"></div>
+</section>
+<section class="panel" id="ohlcImportResearch" aria-labelledby="ohlcImportTitle">
+  <div class="panel-header">
+    <div><h2 id="ohlcImportTitle">Nova pesquisa histórica · arquivo OHLC</h2>
+    <p class="hint">Inicie uma pesquisa diretamente na NEXORA: envie velas M1 e receba estatísticas, classificação de contexto e análise de três temporalidades.</p></div>
+  </div>
+  <p class="note">Esta ferramenta analisa <strong>dados enviados por você</strong>, sem verificar se vieram de um mercado real. Formato: CSV com colunas <code>epoch,open,high,low,close</code> (timestamp Unix em segundos) ou JSON com lista de candles. Use de 72 a 1500 minutos consecutivos. O arquivo deve conter somente candles encerrados. Não são sinais de compra ou venda.</p>
+  <form id="ohlcResearchForm" onsubmit="runUploadedOhlcResearch(event)">
+    <div class="ohlc-layout">
+      <div class="field"><label for="ohlcFile">Arquivo histórico (.csv ou .json)</label>
+        <input id="ohlcFile" name="ohlcFile" type="file" required accept=".csv,.json,text/csv,application/json" aria-describedby="ohlcImportTitle"></div>
+      <div class="field"><label for="ohlcSymbol">Nome do ativo pesquisado</label>
+        <input id="ohlcSymbol" name="ohlcSymbol" maxlength="30" pattern="[A-Za-z0-9_]{2,30}" required value="CUSTOM_M1" autocomplete="off"></div>
+    </div>
+    <div class="form-actions"><button class="action" id="ohlcRunButton" type="submit">INICIAR PESQUISA</button>
+      <button class="action secondary" type="button" id="ohlcLoadHistoryButton" onclick="loadUploadedOhlcHistory()">MINHAS PESQUISAS SALVAS</button></div>
+  </form>
+  <p class="status" id="ohlcStatus" role="status">Selecione um arquivo histórico para iniciar a pesquisa.</p>
+  <div class="ohlc-outputs" id="ohlcStudyOutput" hidden aria-live="polite">
+    <div class="ohlc-output"><strong id="ohlcTitle">Resumo</strong><p id="ohlcSummary"></p></div>
+    <div class="ohlc-output"><strong>Qualidade e evidências</strong><p id="ohlcEvidence"></p></div>
+    <div class="ohlc-output"><strong>Módulos e contextos</strong><p id="ohlcModules"></p></div>
+    <p class="hint">Os indicadores são descritivos. Não equivalem a previsão, sucesso financeiro, treinamento de modelo ou autorização de operações.</p>
+  </div>
+  <div class="ohlc-study-history" id="ohlcHistoryList" aria-live="polite"></div>
 </section>
 <section class="panel" id="persistedResearchLibrary" aria-labelledby="persistedResearchLibraryTitle">
   <div class="panel-header">
@@ -400,6 +436,134 @@ async function loadResearchLibraryDetail(id,title){
     if(marker===latestLibraryDetailRequest)
       $('libraryDetailsSummary').textContent='Não foi possível abrir o resumo: '+error.message;
   }
+}
+
+let ohlcHistorySeq=0;
+function parseUploadedOhlc(text,filename){
+  if(filename.toLowerCase().endsWith('.json')){
+    const parsed=JSON.parse(text);
+    return Array.isArray(parsed)?parsed:parsed?.candles;
+  }
+  const lines=text.replace(/^\uFEFF/,'').trim().split(/\r?\n/);
+  if(lines.length<2)throw Error('CSV vazio.');
+  const headers=lines.shift().split(',').map(x=>x.trim().toLowerCase());
+  const keys=['epoch','open','high','low','close'];
+  const positions=keys.map(x=>headers.indexOf(x));
+  if(positions.some(x=>x<0))throw Error('CSV: use as colunas epoch,open,high,low,close.');
+  return lines.filter(x=>x.trim()).map((line,index)=>{
+    const pieces=line.split(',');
+    const item={};
+    for(let i=0;i<keys.length;i++){
+      const piece=pieces[positions[i]];
+      if(piece===undefined||!piece.trim())throw Error('CSV: valor ausente na linha '+(index+2));
+      item[keys[i]]=Number(piece.trim());
+    }
+    return item;
+  });
+}
+async function uploadOhlcRequest(url,payload){
+  const response=await fetch(url,{
+    method:'POST',credentials:'same-origin',
+    headers:{'Content-Type':'application/json','Accept':'application/json'},
+    body:JSON.stringify(payload),
+  });
+  const data=await response.json().catch(()=>({}));
+  if(response.status===401){window.location.assign('/');throw Error('Sessão expirada');}
+  if(!response.ok)throw Error(typeof data.detail==='string'?data.detail:'Falha na pesquisa histórica');
+  return data;
+}
+function renderOhlcSummary(report,id){
+  $('ohlcStudyOutput').hidden=false;
+  const stats=report.statistics||{},evidence=report.evidence||{};
+  const alignment=report.timeframe_alignment||{};
+  $('ohlcTitle').textContent='Pesquisa #'+String(id)+' · '+String(report.symbol||'Ativo');
+  $('ohlcSummary').textContent=[
+    'Candles M1: '+String(stats.periods??'—'),
+    'Períodos de alta: '+String(stats.up_intervals??'—'),
+    'Períodos de baixa: '+String(stats.down_intervals??'—'),
+    'Volatilidade histórica: '+String(stats.realized_volatility??'—'),
+    'Alinhamento: '+String(alignment.state||'indeterminado')
+  ].join(' · ');
+  $('ohlcEvidence').textContent=[
+    'Fonte: arquivo de usuário (procedência não verificada)',
+    'SHA-256: '+String(evidence.input_sha256||'—'),
+    'Lacunas preenchidas: '+String(evidence.gaps_filled??'—'),
+    'Versão: '+String(report.version||'—')
+  ].join(' · ');
+  const contexts=report.contexts||{};
+  $('ohlcModules').textContent=[
+    'M15: '+String(contexts.higher?.state||'indisponível'),
+    'M5: '+String(contexts.intermediate?.state||'indisponível'),
+    'M1: '+String(contexts.lower?.state||'indisponível'),
+    'Modelo treinado: não disponível',
+    'Execução financeira: não permitida por esta pesquisa'
+  ].join(' · ');
+}
+async function runUploadedOhlcResearch(event){
+  event.preventDefault();
+  const button=$('ohlcRunButton'),file=$('ohlcFile').files?.[0];
+  const symbol=$('ohlcSymbol').value.trim().toUpperCase();
+  if(!file){$('ohlcStatus').textContent='Escolha o arquivo para pesquisa.';return;}
+  if(file.size>240000){$('ohlcStatus').textContent='Arquivo acima do limite de 240 KB.';return;}
+  if(!/^[A-Z0-9_]{2,30}$/.test(symbol)){
+    $('ohlcStatus').textContent='Informe um nome de ativo válido.';return;
+  }
+  button.disabled=true;
+  $('ohlcStatus').textContent='Validando dados e processando os módulos de pesquisa...';
+  try{
+    const candles=parseUploadedOhlc(await file.text(),file.name);
+    if(!Array.isArray(candles))throw Error('O arquivo deve conter uma lista de candles.');
+    if(candles.length<72||candles.length>1500)throw Error('Envie de 72 a 1500 candles M1.');
+    const result=await uploadOhlcRequest('/api/nexora2/ohlc/research',{
+      symbol,granularity_seconds:60,candles,
+    });
+    renderOhlcSummary(result.report,result.id);
+    $('ohlcStatus').textContent='Pesquisa #'+result.id+' registrada no PostgreSQL da sua conta.';
+    await loadUploadedOhlcHistory();
+  }catch(error){$('ohlcStatus').textContent='Pesquisa não concluída: '+error.message;}
+  finally{button.disabled=false;}
+}
+async function loadUploadedOhlcHistory(){
+  const button=$('ohlcLoadHistoryButton'),seq=++ohlcHistorySeq;
+  button.disabled=true;
+  $('ohlcStatus').textContent='Consultando suas pesquisas persistidas...';
+  try{
+    const data=await checkedResearch('/api/nexora2/ohlc/research');
+    if(seq!==ohlcHistorySeq)return;
+    const target=$('ohlcHistoryList');target.replaceChildren();
+    for(const item of (Array.isArray(data.items)?data.items:[]).slice(0,5)){
+      if(!Number.isInteger(item.id)||item.id<1)continue;
+      const row=document.createElement('div');row.className='ohlc-history-entry';
+      const info=document.createElement('span');info.textContent='Pesquisa #'+item.id+' · '+String(item.created_at||'sem data');
+      const open=document.createElement('button');open.type='button';
+      open.textContent='ABRIR RELATÓRIO';
+      open.addEventListener('click',()=>openUploadedOhlcReport(item.id));
+      const replay=document.createElement('button');replay.type='button';
+      replay.textContent='Reproduzir pesquisa';
+      replay.addEventListener('click',()=>replayUploadedOhlcReport(item.id));
+      row.append(info,open,replay);target.append(row);
+    }
+    $('ohlcStatus').textContent=target.childElementCount
+      ?target.childElementCount+' pesquisa(s) salva(s) na sua conta.':'Nenhuma pesquisa salva nesta conta.';
+  }catch(error){if(seq===ohlcHistorySeq)$('ohlcStatus').textContent='Histórico indisponível: '+error.message;}
+  finally{if(seq===ohlcHistorySeq)button.disabled=false;}
+}
+async function openUploadedOhlcReport(id){
+  try{
+    $('ohlcStatus').textContent='Recuperando pesquisa #'+id+' do PostgreSQL...';
+    const data=await checkedResearch('/api/nexora2/ohlc/research/'+id);
+    renderOhlcSummary(data.report,id);
+    $('ohlcStatus').textContent='Pesquisa #'+id+' recuperada. Evidência verificada na versão salva.';
+  }catch(error){$('ohlcStatus').textContent='Erro ao abrir pesquisa: '+error.message;}
+}
+async function replayUploadedOhlcReport(id){
+  try{
+    $('ohlcStatus').textContent='Recalculando pesquisa #'+id+' a partir das velas salvas...';
+    const data=await uploadOhlcRequest('/api/nexora2/ohlc/research/'+id+'/replay',{});
+    $('ohlcStatus').textContent=data.reproduced_identically
+      ?'Pesquisa #'+id+' reproduzida sem diferenças.'
+      :'Pesquisa #'+id+' apresentou diferenças na reprodução; revise a versão do motor.';
+  }catch(error){$('ohlcStatus').textContent='Falha ao reproduzir pesquisa: '+error.message;}
 }
 function brasiliaDate(instant){
   const parts=new Intl.DateTimeFormat('en-US',{timeZone:'America/Sao_Paulo',
