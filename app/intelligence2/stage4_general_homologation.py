@@ -17,7 +17,7 @@ import os
 import time
 import logging
 
-from fastapi import FastAPI, Header, HTTPException, Query
+from fastapi import FastAPI, Header, HTTPException, Query, Body
 from fastapi.responses import HTMLResponse, JSONResponse, FileResponse
 from pathlib import Path
 from sqlalchemy import (
@@ -137,6 +137,11 @@ def bootstrap_schema() -> None:
         if research_found is None:
             conn.execute(insert(revisions).values(
                 revision=research.REVISION, applied_at=now))
+        upload_found = conn.execute(select(revisions.c.revision).where(
+            revisions.c.revision == user_ohlc.REVISION)).scalar_one_or_none()
+        if upload_found is None:
+            conn.execute(insert(revisions).values(
+                revision=user_ohlc.REVISION, applied_at=now))
     log.warning("stage4_general_schema_verified revision=%s", SCHEMA_REVISION)
 
 
@@ -164,6 +169,11 @@ def verify_schema() -> None:
             revisions.c.revision == research.REVISION)).scalar_one_or_none()
         if active_research != research.REVISION:
             raise RuntimeError("Historical research incremental migration not installed")
+
+        upload_revision = conn.execute(select(revisions.c.revision).where(
+            revisions.c.revision == user_ohlc.REVISION)).scalar_one_or_none()
+        if upload_revision != user_ohlc.REVISION:
+            raise RuntimeError("User OHLC upload migration not installed")
 
 
 def _value(bucket: int, station: str, metric: str) -> float:
@@ -729,6 +739,70 @@ async def historical_research_history(
         raise HTTPException(503, "Research history unavailable") from None
 
 
+@app.get("/api/homologation/assets")
+async def historical_asset_catalog(
+    limit: int = Query(default=50, ge=1, le=100),
+    x_nexora_stage4_key: str | None = Header(default=None),
+):
+    _auth(x_nexora_stage4_key)
+    try:
+        return await asyncio.to_thread(user_ohlc.list_assets, limit)
+    except Exception:
+        log.exception("stage4_asset_catalog_unavailable")
+        raise HTTPException(503, "OHLC catalog unavailable") from None
+
+
+@app.post("/api/homologation/assets")
+async def upload_historical_asset(
+    payload: dict = Body(...),
+    x_nexora_stage4_key: str | None = Header(default=None),
+):
+    _auth(x_nexora_stage4_key)
+    try:
+        return await asyncio.to_thread(user_ohlc.ingest_dataset, payload)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from None
+    except Exception:
+        log.exception("stage4_ohlc_ingest_failed")
+        raise HTTPException(503, "OHLC upload unavailable") from None
+
+
+@app.get("/api/homologation/assets/{dataset_id}")
+async def historical_asset_detail(
+    dataset_id: str,
+    x_nexora_stage4_key: str | None = Header(default=None),
+):
+    _auth(x_nexora_stage4_key)
+    try:
+        result = await asyncio.to_thread(user_ohlc.get_asset, dataset_id)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from None
+    except Exception:
+        log.exception("stage4_ohlc_asset_integrity_failure")
+        raise HTTPException(503, "OHLC archive unavailable") from None
+    if result is None:
+        raise HTTPException(404, "Dataset not found")
+    return {"asset":result[0], "bars":result[1],
+            "provenance_verified":False, "execution_allowed":False}
+
+
+@app.post("/api/homologation/research/runs/uploaded/{dataset_id}")
+async def start_uploaded_historical_research(
+    dataset_id: str,
+    x_nexora_stage4_key: str | None = Header(default=None),
+):
+    _auth(x_nexora_stage4_key)
+    try:
+        return await asyncio.to_thread(user_ohlc.research_dataset, dataset_id)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from None
+    except LookupError:
+        raise HTTPException(404, "Dataset not found") from None
+    except Exception:
+        log.exception("stage4_uploaded_research_failed")
+        raise HTTPException(503, "Uploaded historical research failed") from None
+
+
 @app.get("/api/homologation/research/runs/{run_id}")
 async def historical_research_detail(
     run_id: str,
@@ -784,4 +858,5 @@ from . import stage4_observability as observer
 from . import stage4_general_pipeline as pipeline
 from . import stage4_ohlc_quality as ohlc
 from . import stage4_historical_research as research
+from . import stage4_user_ohlc as user_ohlc
 
