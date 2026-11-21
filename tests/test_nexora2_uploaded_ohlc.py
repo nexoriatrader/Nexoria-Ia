@@ -297,3 +297,11 @@ def test_partial_odd_count_period_comparison_is_chronological():
     assert report["period_comparison"]["split_epoch"]==sample(1139)["candles"][569]["epoch"]
     assert report["period_comparison"]["interpretation"]=="DESCRIPTIVE_NOT_PREDICTIVE"
     assert report["orders_sent"]==0
+
+
+@pytest.mark.parametrize("invalid_clock",[
+    0,-1,True,False,1.5,float("nan"),float("inf"),"2026-11-21",
+])
+def test_invalid_replay_clock_is_rejected_explicitly(invalid_clock):
+    with pytest.raises(ResearchInputError,match="Relógio inválido"):
+        build_report(sample(),clock=invalid_clock)
