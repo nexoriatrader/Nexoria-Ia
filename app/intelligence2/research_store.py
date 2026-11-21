@@ -3,6 +3,8 @@
 No migration, new table, shared cache, broker interface or order effects.
 All reads/writes use the authenticated user_id, never a user-supplied ID.
 """
+import hashlib
+import hmac
 import json
 from datetime import datetime, timezone
 
@@ -85,6 +87,27 @@ def get_own(session, user_id: int, report_id: int) -> dict | None:
         raise ValueError("Relatório armazenado inválido") from None
     if not isinstance(report, dict) or report.get("version") != VERSION:
         raise ValueError("Versão de relatório não compatível")
+    if (report.get("source") != "USER_SUPPLIED_UNVERIFIED_OHLC"
+            or report.get("execution_allowed") is not False
+            or report.get("orders_sent") != 0):
+        raise ValueError("Metadados da pesquisa salva inconsistentes")
+    original = report.get("input")
+    if not isinstance(original, dict):
+        raise ValueError("Entrada original ausente da pesquisa salva")
+    evidence = report.get("evidence")
+    if not isinstance(evidence, dict):
+        raise ValueError("Evidência de pesquisa ausente")
+    claimed = evidence.get("input_sha256")
+    if not isinstance(claimed, str) or len(claimed) != 64:
+        raise ValueError("Hash da evidência não reconhecido")
+    try:
+        canonical = json.dumps(original, sort_keys=True, separators=(",", ":"),
+                               allow_nan=False).encode("utf-8")
+    except (TypeError, ValueError, OverflowError):
+        raise ValueError("Entrada original não é verificável") from None
+    actual = hashlib.sha256(canonical).hexdigest()
+    if not hmac.compare_digest(actual, claimed):
+        raise ValueError("Integridade da evidência alterada; pesquisa indisponível")
     return report
 
 
