@@ -11,7 +11,7 @@ from datetime import datetime, timezone
 from sqlalchemy import delete, select
 
 from ..research_persistence import HistoricalResearchReport
-from .historical_research import VERSION, summary
+from .historical_research import VERSION, summary, result_digest
 
 MAX_PER_USER = 5
 
@@ -108,6 +108,15 @@ def get_own(session, user_id: int, report_id: int) -> dict | None:
     actual = hashlib.sha256(canonical).hexdigest()
     if not hmac.compare_digest(actual, claimed):
         raise ValueError("Integridade da evidência alterada; pesquisa indisponível")
+    expected_result = evidence.get("result_sha256")
+    if not isinstance(expected_result, str) or len(expected_result) != 64:
+        raise ValueError("Impressão digital do resultado ausente")
+    try:
+        computed_result = result_digest(report)
+    except (KeyError, TypeError, ValueError, OverflowError):
+        raise ValueError("Resultado salvo não é verificável") from None
+    if not hmac.compare_digest(expected_result, computed_result):
+        raise ValueError("Resultado histórico alterado; pesquisa indisponível")
     return report
 
 
