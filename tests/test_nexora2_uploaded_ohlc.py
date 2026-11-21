@@ -234,3 +234,47 @@ if(!failed)process.exit(34);
     filename.write_text(script,encoding="utf-8")
     out=subprocess.run([node,str(filename)],text=True,capture_output=True,timeout=15)
     assert out.returncode==0,out.stderr
+
+
+def test_tampered_saved_evidence_rejected_on_detail_and_replay(tmp_path, monkeypatch):
+    engine,factory=_database(tmp_path,monkeypatch)
+    try:
+        client=TestClient(main.app)
+        client.cookies.set("nexora_sid","ohlc-aa")
+        created=client.post("/api/nexora2/ohlc/research",json=sample())
+        assert created.status_code==200,created.text
+        item_id=created.json()["id"]
+        with factory() as session:
+            row=session.get(HistoricalResearchReport,item_id)
+            data=json.loads(row.payload_json)
+            data["input"]["candles"][0]["close"]+=0.01
+            row.payload_json=json.dumps(data,allow_nan=False)
+            session.commit()
+        detail=client.get(f"/api/nexora2/ohlc/research/{item_id}")
+        assert detail.status_code==409
+        assert "Integridade" in detail.json()["detail"]
+        replay=client.post(f"/api/nexora2/ohlc/research/{item_id}/replay")
+        assert replay.status_code==409
+        with factory() as session:
+            assert session.query(HistoricalResearchReport).count()==1
+    finally:
+        engine.dispose()
+
+
+def test_corrupted_stored_ohlc_metadata_is_rejected(tmp_path, monkeypatch):
+    engine,factory=_database(tmp_path,monkeypatch)
+    try:
+        client=TestClient(main.app)
+        client.cookies.set("nexora_sid","ohlc-aa")
+        created=client.post("/api/nexora2/ohlc/research",json=sample())
+        assert created.status_code==200
+        item_id=created.json()["id"]
+        with factory() as session:
+            row=session.get(HistoricalResearchReport,item_id)
+            data=json.loads(row.payload_json)
+            data["orders_sent"]=3
+            row.payload_json=json.dumps(data,allow_nan=False)
+            session.commit()
+        assert client.get(f"/api/nexora2/ohlc/research/{item_id}").status_code==409
+    finally:
+        engine.dispose()
