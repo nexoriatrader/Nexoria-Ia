@@ -51,7 +51,15 @@ h1{font-size:clamp(27px,4vw,38px);line-height:1.16;margin:7px 0 10px}
 .library-details p{font-size:12px;line-height:1.65;color:#c3d8e6}
 .foot{border-top:1px solid #26445a;padding:24px 0 36px;font-size:12px;color:var(--muted)
 button:focus-visible,a:focus-visible,input:focus-visible{outline:3px solid var(--blue);outline-offset:2px}
-@media(max-width:730px){.modes{grid-template-columns:1fr}.mode{min-height:124px}.panel-header{flex-direction:column}.form-grid{grid-template-columns:1fr}.hero,.panel{padding:20px}.stats{grid-template-columns:1fr 1fr}.stat:last-child{grid-column:1/-1}.site-head{gap:7px}.back{padding:10px 11px}}
+.mode-distinction{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:11px;margin:0 0 20px}
+.mode-distinction article{border:1px solid #406178;border-radius:15px;padding:16px 17px;background:#0f273a;min-width:0}
+.mode-distinction strong{font-size:13px;display:block;color:#f4f9ff;margin-bottom:5px}
+.mode-distinction p{font-size:12px;color:#b7d0df;line-height:1.6;margin:0}
+.mode-distinction .demo{background:linear-gradient(145deg,#163b41,#102938);border-color:#407770}
+.panel{box-shadow:0 10px 30px #0002}
+.panel h2{letter-spacing:-.025em}
+.action:focus-visible,.mode:focus-visible{outline:3px solid #8edbf9;outline-offset:3px}
+@media(max-width:730px){.mode-distinction{grid-template-columns:1fr}.modes{grid-template-columns:1fr}.mode{min-height:124px}.panel-header{flex-direction:column}.form-grid{grid-template-columns:1fr}.hero,.panel{padding:20px}.stats{grid-template-columns:1fr 1fr}.stat:last-child{grid-column:1/-1}.site-head{gap:7px}.back{padding:10px 11px}}
 @media(prefers-reduced-motion:reduce){.mode{transition:none}}
 </style>
 </head>
@@ -65,14 +73,18 @@ button:focus-visible,a:focus-visible,input:focus-visible{outline:3px solid var(-
 <section class="hero">
   <span class="eyebrow">ESTÚDIO NEXORA 2.0</span>
   <h1>Escolha como deseja estudar o mercado.</h1>
-  <p>Três experiências no mesmo sistema. Consulte análises públicas, organize exemplos de sinais e compare estudos históricos. Nenhuma opção desta página envia ordens à corretora.</p>
-  <div class="env"><span>Treinamento e pesquisa</span><span class="locked">Conta REAL · execução bloqueada</span><span>Sem compras automáticas</span></div>
+  <p>Uma área para consultar análises históricas, comparar estudos e organizar anotações. Ela é diferente do robô de treinamento existente no painel principal.</p>
+  <div class="env"><span>Pesquisas históricas</span><span>DEMO · saldo virtual</span><span class="locked">Conta REAL · execução bloqueada</span></div>
 </section>
-<h2 class="section-title">Selecione um modo</h2>
+<div class="mode-distinction" aria-label="Diferença entre pesquisa e ambiente DEMO">
+  <article><strong>Pesquisa NEXORA 2.0</strong><p>Mostra estudos e anotações. As consultas desta área não iniciam operações nem representam lucros realizados.</p></article>
+  <article class="demo"><strong>Robô DEMO existente</strong><p>É um módulo separado de treinamento. Nele, as operações são simuladas com saldo virtual, sem movimentar dinheiro real. Esta tela não liga nem configura esse módulo.</p></article>
+</div>
+<h2 class="section-title">Selecione um modo de pesquisa</h2>
 <div class="modes" role="tablist" aria-label="Modos da NEXORA 2.0">
-  <button class="mode" type="button" role="tab" id="tabIntelligence" aria-controls="panelIntelligence" aria-selected="true" onclick="chooseMode('intelligence')"><span class="symbol" aria-hidden="true">✦</span><strong>NEXORA Intelligence</strong><small>Consulta histórica de ativos, hipóteses e evidências de validação.</small></button>
-  <button class="mode" type="button" role="tab" id="tabSignals" aria-controls="panelSignals" aria-selected="false" onclick="chooseMode('signals')"><span class="symbol" aria-hidden="true">◷</span><strong>Meus sinais</strong><small>Agenda de estudo com data e horário. Não agenda compras.</small></button>
-  <button class="mode" type="button" role="tab" id="tabStrategies" aria-controls="panelStrategies" aria-selected="false" onclick="chooseMode('strategies')"><span class="symbol" aria-hidden="true">▤</span><strong>Minhas estratégias</strong><small>Compare metodologias usando estudos públicos, sem ativar operações.</small></button>
+  <button class="mode" type="button" role="tab" id="tabIntelligence" aria-controls="panelIntelligence" aria-selected="true" onclick="chooseMode('intelligence')"><span class="symbol" aria-hidden="true">✦</span><strong>NEXORA Intelligence</strong><small>Examine ativos e evidências de estudos históricos, sem confundir com ordens DEMO.</small></button>
+  <button class="mode" type="button" role="tab" id="tabSignals" aria-controls="panelSignals" aria-selected="false" onclick="chooseMode('signals')"><span class="symbol" aria-hidden="true">◷</span><strong>Meus sinais</strong><small>Organize anotações por data e horário; não agenda operações.</small></button>
+  <button class="mode" type="button" role="tab" id="tabStrategies" aria-controls="panelStrategies" aria-selected="false" onclick="chooseMode('strategies')"><span class="symbol" aria-hidden="true">▤</span><strong>Minhas estratégias</strong><small>Compare metodologias em dados históricos sem alterar o robô.</small></button>
 </div>
 <section id="panelIntelligence" class="panel" role="tabpanel" aria-labelledby="tabIntelligence">
   <div class="panel-header"><div><h2>Intelligence · Pesquisa histórica</h2><p class="hint">Usa o scanner de pesquisa já disponível na NEXORA. A leitura é manual, limitada e baseada em velas encerradas.</p></div>
@@ -81,7 +93,7 @@ button:focus-visible,a:focus-visible,input:focus-visible{outline:3px solid var(-
   <p class="note">Os padrões examinados são hipóteses experimentais. Taxas históricas direcionais não representam lucros e não autorizam execução.</p>
   <p class="status" id="scanStatus" role="status">Nenhum estudo solicitado nesta sessão.</p>
   <div id="scanReport" hidden>
-    <div class="stats"><div class="stat"><small>Ativos consultados</small><strong id="scanChecked">—</strong></div><div class="stat"><small>Ativos com estudo</small><strong id="scanFound">—</strong></div><div class="stat"><small>Ordens enviadas</small><strong>0</strong></div></div>
+    <div class="stats"><div class="stat"><small>Ativos consultados</small><strong id="scanChecked">—</strong></div><div class="stat"><small>Ativos com estudo</small><strong id="scanFound">—</strong></div><div class="stat"><small>Ordens desta consulta</small><strong>0</strong></div></div>
     <div class="scroll"><table><thead><tr><th>Ativo</th><th>Família</th><th>Velas observadas</th><th>Estado da pesquisa</th><th>Detalhes</th></tr></thead><tbody id="scanRows"></tbody></table></div>
     <p class="status" id="scanWarning"></p>
     <div id="scanDetails" class="study-detail" hidden>
@@ -94,7 +106,7 @@ button:focus-visible,a:focus-visible,input:focus-visible{outline:3px solid var(-
 </section>
 <section id="panelSignals" class="panel" role="tabpanel" aria-labelledby="tabSignals" hidden>
   <div class="panel-header"><div><h2>Meus sinais · Agenda de estudo</h2><p class="hint">Registre um exemplo e acompanhe o horário para revisar o comportamento do mercado manualmente.</p></div></div>
-  <p class="note">A agenda fica apenas nesta sessão do navegador. Não há agendamento no servidor, notificação garantida ou execução DEMO/REAL. Para um agendador integrado, será necessária uma implementação específica com persistência e testes.</p>
+  <p class="note">Esta agenda serve apenas para anotações nesta aba do navegador. Não envia nem agenda operações. A automação DEMO existente no painel principal funciona separadamente; esta página não altera suas configurações.</p>
   <form id="signalForm" onsubmit="saveStudySignal(event)">
     <div class="form-grid">
       <div class="field"><label for="signalText">Sinal de estudo (exemplo de formato: M15 EUR/JPY CALL 19:00)</label><input id="signalText" required maxlength="80" autocomplete="off" spellcheck="false" placeholder="M15 EUR/JPY CALL 19:00"></div>
@@ -112,7 +124,7 @@ button:focus-visible,a:focus-visible,input:focus-visible{outline:3px solid var(-
   <p class="note">Os estudos são exploratórios, sem validação de resultados financeiros ou seleção automática de estratégia.</p>
   <p class="status" id="strategyStatus" role="status">Nenhum estudo solicitado nesta sessão.</p>
   <div id="strategyReport" hidden>
-    <div class="stats"><div class="stat"><small>Ativos analisados</small><strong id="strategyAssets">—</strong></div><div class="stat"><small>Estudos por ativo</small><strong id="strategyCount">—</strong></div><div class="stat"><small>Ordens enviadas</small><strong>0</strong></div></div>
+    <div class="stats"><div class="stat"><small>Ativos analisados</small><strong id="strategyAssets">—</strong></div><div class="stat"><small>Estudos por ativo</small><strong id="strategyCount">—</strong></div><div class="stat"><small>Ordens desta consulta</small><strong>0</strong></div></div>
     <div class="scroll"><table><thead><tr><th>Ativo</th><th>Método analisado</th><th>Velas históricas</th><th>Separação dos dados</th><th>Detalhes</th></tr></thead><tbody id="strategyRows"></tbody></table></div>
     <p class="status" id="strategyWarning"></p>
     <div id="strategyDetails" class="study-detail" hidden>
@@ -148,7 +160,7 @@ button:focus-visible,a:focus-visible,input:focus-visible{outline:3px solid var(-
   </div>
 </section>
 </main>
-<footer class="foot">NEXORA Intelligence 2.0 · Ambiente de pesquisa. A conta REAL segue bloqueada para execução nesta experiência. <a href="/">Voltar ao painel original</a>.</footer>
+<footer class="foot">NEXORA Intelligence 2.0 · Área de pesquisas e anotações. O módulo DEMO do robô é separado. A conta REAL segue bloqueada para execução nesta experiência. <a href="/">Voltar ao painel original</a>.</footer>
 </div>
 <script>
 'use strict';
