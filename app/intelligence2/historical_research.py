@@ -187,7 +187,7 @@ def build_report(payload: dict, *, clock: int | None = None) -> dict:
         "split_epoch": bars[half]["epoch"],
         "interpretation": "DESCRIPTIVE_NOT_PREDICTIVE",
     }
-    return {
+    report = {
         "version": VERSION, "source": SOURCE, "symbol": symbol,
         "created_from": "USER_UPLOAD", "input": normalized,
         "period_from_epoch": bars[0]["epoch"],
@@ -225,6 +225,26 @@ def build_report(payload: dict, *, clock: int | None = None) -> dict:
         "disclaimer": "Pesquisa descritiva de dados enviados pelo usuário; "
                       "procedência não verificada, sem previsão ou resultado financeiro.",
     }
+
+
+    report["evidence"]["result_sha256"] = result_digest(report)
+    return report
+
+
+def result_digest(report: dict) -> str:
+    """Fingerprint output evidence without self-referential JSON fields."""
+    proof = {
+        field: report[field] for field in (
+            "version", "source", "symbol", "period_from_epoch",
+            "period_to_epoch", "statistics", "period_comparison",
+            "contexts", "timeframe_alignment", "orchestrator", "models",
+            "orders_sent", "execution_allowed",
+        )
+    }
+    proof["input_sha256"] = report["evidence"]["input_sha256"]
+    raw = json.dumps(proof, sort_keys=True, separators=(",", ":"),
+                     allow_nan=False).encode("utf-8")
+    return hashlib.sha256(raw).hexdigest()
 
 
 def summary(report: dict) -> dict:
