@@ -1,5 +1,6 @@
 """Disposable PostgreSQL end-to-end OHLC research, no production access."""
 import os
+import pytest
 from sqlalchemy import create_engine
 from fastapi.testclient import TestClient
 from app.intelligence2 import stage4_general_homologation as core
@@ -7,7 +8,8 @@ from app.intelligence2 import stage4_ohlc_quality as ohlc
 
 def test_persisted_authenticated_user_research_on_disposable_postgresql(monkeypatch):
     url=os.environ["DATABASE_URL"]
-    assert "nexora_public_test" in url and "127.0.0.1:5432" in url
+    if not ("nexora_public_test" in url and "127.0.0.1:5432" in url):
+        pytest.skip("Requires explicitly named disposable CI PostgreSQL; never run on other DBs")
     secret="isolated-disposable-pg-test-" + "x"*40
     monkeypatch.setenv("NEXORA_STAGE4_ACCESS_TOKEN",secret)
     headers={"X-NEXORA-STAGE4-KEY":secret}
