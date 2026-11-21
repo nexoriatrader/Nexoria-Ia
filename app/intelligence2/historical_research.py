@@ -143,6 +143,12 @@ def build_report(payload: dict, *, clock: int | None = None) -> dict:
     for role, seconds in TF_NAMES.items():
         sampled = aggregate_closed_minutes(bars, seconds)
         eligible = len(sampled) >= MIN_BARS
+        # M5/M15 can end earlier than the last M1 when the final bucket is
+        # incomplete. Analyze each at its own *last complete close*, never
+        # claim that a partial M15 bar is valid or fabricate future minutes.
+        role_asof = sampled[-1]["epoch"] + seconds if sampled else None
+        if role_asof is not None and role_asof > observed_at:
+            raise ResearchInputError("Timeframe agregado ultrapassa o último candle encerrado")
         window = {
             "quality": "COMPLETE" if eligible else "INSUFFICIENT",
             "usable_for_research": eligible,
@@ -152,7 +158,7 @@ def build_report(payload: dict, *, clock: int | None = None) -> dict:
         }
         context = analyze_context(window, market="user_supplied",
                                   symbol=symbol, timeframe_seconds=seconds,
-                                  observed_at=observed_at)
+                                  observed_at=role_asof if role_asof is not None else observed_at)
         contexts[role] = context
         diagnostics.append({
             "module": "CONTEXT_" + role.upper(),
@@ -160,6 +166,8 @@ def build_report(payload: dict, *, clock: int | None = None) -> dict:
             "state": context["state"],
             "bars": len(sampled),
             "quality": window["quality"],
+            "asof_epoch": role_asof,
+            "replay_cutoff_epoch": observed_at,
             "reason_codes": context["reason_codes"],
         })
     profile = {
@@ -179,6 +187,9 @@ def build_report(payload: dict, *, clock: int | None = None) -> dict:
             "input_count": len(bars),
             "input_granularity_seconds": 60,
             "all_input_bars_closed_at_replay_cutoff": True,
+            "timeframe_asof_epochs": {
+                row["module"]: row["asof_epoch"] for row in diagnostics
+            },
             "gaps_filled": 0,
             "market_source_verified": False,
         },
