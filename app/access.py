@@ -31,8 +31,13 @@ def utc(value):
 
 
 def access_status(session, user_id, now=None):
+    """Single-user access policy; used for every authorization decision."""
+    return access_status_for_grant(session.get(db.RobotAccess,user_id),now=now)
+
+
+def access_status_for_grant(grant,now=None):
+    """Apply the identical access policy to an already loaded entitlement."""
     now=utc(now or db.utcnow())
-    grant=session.get(db.RobotAccess,user_id)
     if not access_control_enabled():
         suspended=bool(grant and grant.suspended)
         return {'enforced':False,'allowed':not suspended,

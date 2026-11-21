@@ -18,8 +18,9 @@ from . import db
 from .public_urls import origin_for_request, checkout_return_origin, nexora_referral_origin, canonical_origin
 from .stripe_billing import PLANS, billing_enabled, stripe_expected_livemode, create_checkout, stripe_signature_valid, apply_paid_checkout, plan_can_purchase, test_plan_enabled
 from .automation_markets import GROUPS as AUTOMATION_GROUPS, instruments_by_group, featured_instruments_by_group
-from .access import (access_control_enabled, access_status, start_trial_on_first_robot_start,
-                     register_first_login, referral_report, trial_duration_hours, utc)
+from .access import (access_control_enabled, access_status, access_status_for_grant,
+                     start_trial_on_first_robot_start, register_first_login,
+                     referral_report, trial_duration_hours, utc)
 from .demo import (DemoTradingError, DemoPreBuyDeadlineExceeded, demo_account_balance,
                    demo_contract_status, demo_buy, demo_proposal, demo_expiry_quotes,
                    prepare_demo_buy_socket)
@@ -2039,15 +2040,25 @@ async def admin_access_users(request:Request,q:str=''):
             else:
                 query=query.where(db.User.deriv_account_id.ilike('%'+q.replace('\\','\\\\').replace('%','\\%').replace('_','\\_')+'%',escape='\\'))
         users=sess.scalars(query.order_by(db.User.id.desc()).limit(100)).all()
-        result=[]
-        for target in users:
-            access=access_status(sess,target.id)
-            count=sess.scalar(select(func.count(db.ReferralCredit.invitee_user_id)).where(
-                db.ReferralCredit.referrer_user_id==target.id)) or 0
-            result.append({'user_id':target.id,'nexora_id':nexora_user_code(target.id),
-                           'deriv_account_id':target.deriv_account_id,
-                           'referrals':count,'access':access})
-        return {'items':result}
+        if not users:
+            return {'items':[]}
+        ids=[user.id for user in users]
+        # Three bounded queries regardless of the number of users (avoids N+1).
+        grants={grant.user_id:grant for grant in sess.scalars(
+            select(db.RobotAccess).where(db.RobotAccess.user_id.in_(ids))).all()}
+        referral_counts=dict(sess.execute(
+            select(db.ReferralCredit.referrer_user_id,
+                   func.count(db.ReferralCredit.invitee_user_id))
+            .where(db.ReferralCredit.referrer_user_id.in_(ids))
+            .group_by(db.ReferralCredit.referrer_user_id)).all())
+        now=db.utcnow()
+        return {'items':[{
+            'user_id':user.id,
+            'nexora_id':nexora_user_code(user.id),
+            'deriv_account_id':user.deriv_account_id,
+            'referrals':referral_counts.get(user.id,0),
+            'access':access_status_for_grant(grants.get(user.id),now=now),
+        } for user in users]}
 
 
 @app.post('/api/admin/access/adjust')
