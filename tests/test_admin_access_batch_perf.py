@@ -12,6 +12,7 @@ def test_admin_users_uses_bounded_queries_and_preserves_access(tmp_path, monkeyp
     db.Base.metadata.create_all(engine)
     factory=sessionmaker(bind=engine,expire_on_commit=False)
     monkeypatch.setattr(db,'SessionLocal',factory)
+    monkeypatch.setenv('NEXORA_ADMIN_PASSWORD_HASH','test-only-admin-hash')
     monkeypatch.setenv('NEXORA_ADMIN_SESSION_SECRET','admin-test-secret')
     monkeypatch.setenv('NEXORA_ACCESS_CONTROL_ENABLED','true')
 
