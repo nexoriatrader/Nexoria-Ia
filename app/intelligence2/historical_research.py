@@ -39,8 +39,10 @@ def normalize_input(payload: dict, *, clock: int | None = None) -> dict:
     raw = payload.get("candles")
     if not isinstance(raw, list) or not MIN_BARS <= len(raw) <= MAX_BARS:
         raise ResearchInputError("Informe de 72 a 1500 candles M1")
-    current = int(time.time() if clock is None else clock)
-    if type(current) is not int or current <= 0:
+    if clock is not None and (type(clock) is not int or clock <= 0):
+        raise ResearchInputError("Relógio inválido")
+    current = int(time.time()) if clock is None else clock
+    if current <= 0:
         raise ResearchInputError("Relógio inválido")
     normalized = []
     previous = None
