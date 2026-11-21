@@ -85,6 +85,41 @@ def test_invalid_candles_fail_without_persistence(change):
         build_report(payload)
 
 
+
+@pytest.mark.parametrize("count", [1139, 1141, 1150, 1163])
+def test_partial_final_timeframe_never_uses_unclosed_bucket(count):
+    """Each role uses the last complete M1/M5/M15 close, never the open bar."""
+    from app.intelligence2.historical_research import aggregate_closed_minutes
+    payload=sample(count=count)
+    report=build_report(payload)
+    cutoff=report["period_to_epoch"]
+    for role,seconds in (
+        ("higher",900),("intermediate",300),("lower",60)
+    ):
+        sampled=aggregate_closed_minutes(payload["candles"],seconds)
+        assert sampled,role
+        assert sampled[-1]["epoch"]+seconds<=cutoff
+        assert report["evidence"]["timeframe_asof_epochs"]["CONTEXT_"+role.upper()] == (
+            sampled[-1]["epoch"] + seconds
+        )
+        assert report["contexts"][role]["observed_at_epoch"] == (
+            sampled[-1]["epoch"] + seconds
+        )
+        assert all(item["epoch"]+seconds<=cutoff for item in sampled)
+        assert report["contexts"][role]["state"]!="INDETERMINATE",role
+        assert report["contexts"][role]["data_quality"]=="COMPLETE"
+    assert report["execution_allowed"] is False
+    assert report["source"]=="USER_SUPPLIED_UNVERIFIED_OHLC"
+
+
+def test_less_than_72_complete_m15_candles_reports_insufficient_not_fabricated():
+    data=build_report(sample(count=1068))
+    assert data["contexts"]["higher"]["state"]=="INDETERMINATE"
+    assert data["orchestrator"]["stages"][2]["quality"]=="INSUFFICIENT"
+    assert data["contexts"]["lower"]["data_quality"]=="COMPLETE"
+    assert data["timeframe_alignment"]["approved_for_trading"] is False
+
+
 def test_rejects_not_closed_future_candles():
     payload=sample()
     with pytest.raises(ResearchInputError):
