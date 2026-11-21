@@ -123,4 +123,6 @@ jobs:
         run: python -m pytest -q tests/test_intelligence20_real_i05_lifecycle.py
       - name: Full I01-I06 public research to I04/I05 through PostgreSQL and authenticated homologation GET
         run: python -m pytest -q -s tests/test_intelligence20_public_coordination_pg.py
+      - name: Authenticated historical OHLC research and recovery on disposable PostgreSQL
+        run: python -m pytest -q tests/test_intelligence20_stage4_user_ohlc_pg.py
 
