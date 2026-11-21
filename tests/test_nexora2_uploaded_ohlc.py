@@ -166,3 +166,36 @@ def test_ui_contains_upload_and_replay_without_execution_routes():
     for forbidden in ("/api/autopilot/start","/api/demo/buy",
                       "/api/real/buy","START_REAL_AUTOPILOT"):
         assert forbidden not in html
+
+
+def test_uploaded_csv_parser_and_json_schema_in_node(tmp_path):
+    """Verify actual browser CSV/JSON parser, without any broker or remote data."""
+    import re
+    import shutil
+    import subprocess
+    node=shutil.which("node")
+    if not node:
+        pytest.skip("Node.js not installed")
+    html=(Path(__file__).resolve().parents[1]/"app"/"nexora2.html").read_text()
+    match=re.search(r"<script>(.*?)</script>",html,flags=re.S)
+    assert match
+    script=match.group(1)
+    assert script.rstrip().endswith("initNexora2();")
+    script=script.replace("initNexora2();","")
+    script += r"""
+const csv='epoch,open,high,low,close\n1700000100,100,102,99,101\n';
+const rows=parseUploadedOhlc(csv,'candles.csv');
+if(rows.length!==1||rows[0].epoch!==1700000100||rows[0].close!==101)process.exit(31);
+const json=JSON.stringify([{epoch:1700000100,open:100,high:102,low:99,close:101}]);
+if(parseUploadedOhlc(json,'candles.json').length!==1)process.exit(32);
+if(parseUploadedOhlc(JSON.stringify({candles:[{epoch:5}]}),'data.json').length!==1)
+  process.exit(33);
+let failed=false;
+try{parseUploadedOhlc('timestamp,open,high,low,close\n1,1,2,1,2','bad.csv');}
+catch{failed=true;}
+if(!failed)process.exit(34);
+"""
+    filename=tmp_path/"ohlc-browser-parse.js"
+    filename.write_text(script,encoding="utf-8")
+    out=subprocess.run([node,str(filename)],text=True,capture_output=True,timeout=15)
+    assert out.returncode==0,out.stderr
