@@ -76,6 +76,7 @@ td{color:#d8e9f0}tr:last-child td{border:0}
 <div class="brand-sub">Intelligence Monitor</div></div>
 <nav class="nav-wrap" aria-label="Navegação principal">
 <a class="nav active" href="#overview">◈ Visão geral</a>
+<a class="nav" href="#asset-catalog">▤ Catálogo OHLC</a>
 <a class="nav" href="#historical-research">▤ Pesquisas históricas</a>
 <a class="nav" href="#modules">▦ Módulos I01–I06</a>
 <a class="nav" href="#processing">◷ Processamento</a>
@@ -101,14 +102,35 @@ td{color:#d8e9f0}tr:last-child td{border:0}
 <div class="metric"><div class="label">Eventos repetidos</div><div class="num" id="k-duplicates">—</div><div class="foot">Ignorados por idempotência</div></div>
 <div class="metric"><div class="label">Falhas de execução</div><div class="num" id="k-errors">—</div><div class="foot">Ocorrências registradas</div></div>
 </div>
+<div class="section section-anchor" id="asset-catalog"><div><h2>Catálogo de ativos históricos</h2>
+<p>Envie uma série OHLC CSV fechada e contínua. Cada arquivo é validado, identificado por SHA-256 e armazenado no PostgreSQL.</p></div></div>
+<section class="surface">
+<p class="sub">CSV: epoch,open,high,low,close — timestamp Unix em segundos UTC, linhas cronológicas e preços com ponto decimal. Entre 64 e 1.000 candles. Origem declarada pelo usuário, sem verificação externa.</p>
+<div class="connection">
+<input id="asset-symbol" type="text" placeholder="Identificador (ex.: ATIVO_A)" maxlength="24" aria-label="Identificador do ativo">
+<select id="asset-class" aria-label="Classe do ativo"><option value="OTHER">Outra classe</option><option value="FX">Câmbio (FX)</option><option value="EQUITY">Ações</option><option value="INDEX">Índices</option><option value="CRYPTO">Criptoativo</option></select>
+<select id="asset-frame" aria-label="Duração de cada candle"><option value="60">1 minuto</option><option value="300" selected>5 minutos</option><option value="900">15 minutos</option><option value="3600">1 hora</option></select>
+<select id="asset-origin" aria-label="Origem declarada"><option value="DECLARED_REAL_UNVERIFIED">Dados declarados reais — não verificados</option><option value="SYNTHETIC_TEST">Dados sintéticos de teste</option></select>
+<input id="asset-source" type="text" maxlength="64" placeholder="Nome da fonte declarada" aria-label="Fonte declarada">
+<input id="asset-file" type="file" accept=".csv,text/csv" aria-label="Arquivo histórico CSV">
+<button id="upload-asset" class="action" type="button" disabled>Importar OHLC</button>
+</div>
+<p id="asset-action-status" class="sub">Autentique-se para importar dados históricos.</p>
+<div class="connection" style="margin-top:15px">
+<select id="asset-select" aria-label="Conjunto histórico para pesquisa"><option value="">Nenhum conjunto importado</option></select>
+<button id="run-uploaded" class="action" type="button" disabled>Pesquisar ativo selecionado</button>
+</div>
+<div id="asset-list" class="table-scroll" style="margin-top:14px">Catálogo não consultado.</div>
+<p class="sub">O processamento não consulta corretoras, não confirma a autenticidade da fonte e não executa operações.</p>
+</section>
 <div class="section section-anchor" id="historical-research"><div>
-<h2>Pesquisas históricas — fluxo independente</h2>
-<p>Inicie uma pesquisa com OHLC sintético fechado, classificação de qualidade, indicadores descritivos, arquivo de conhecimento, avaliação cronológica, evidências e relatório final.</p>
+<h2>Pesquisas históricas — execução e resultados</h2>
+<p>Pesquise conjuntos históricos enviados ou execute o teste sintético identificado. Cada pesquisa registra etapas, indicadores, conhecimento, avaliação cronológica e evidências.</p>
 </div><span class="badge neutral" id="research-count">Sem consulta</span></div>
 <section class="surface">
-<div class="connection"><button id="start-research" class="action" type="button" disabled>Iniciar pesquisa histórica</button>
+<div class="connection"><button id="start-research" class="secondary" type="button" disabled>Executar pesquisa sintética de teste</button>
 <span class="muted" id="research-action-status">Autentique-se para iniciar.</span></div>
-<p class="sub">Fonte: REPRODUCIBLE_SYNTHETIC_OHLC_FIXTURE. Esta pesquisa não consulta corretoras nem produz recomendações ou operações.</p>
+<p class="sub">O botão de teste usa REPRODUCIBLE_SYNTHETIC_OHLC_FIXTURE; os conjuntos importados permanecem classificados conforme a origem declarada, não verificada. Sem recomendações ou operações.</p>
 <div id="research-runs" class="table-scroll" style="margin-top:14px">Sem pesquisas consultadas.</div>
 </section>
 <div class="section"><div><h2>Detalhe da pesquisa selecionada</h2>
@@ -139,7 +161,7 @@ td{color:#d8e9f0}tr:last-child td{border:0}
 <section class="surface"><h2>Avisos de processamento</h2><div id="diagnostics-list"><div class="empty">Aguardando dados</div></div></section>
 <section class="surface"><h2>Limites desta homologação</h2><div id="limitations" class="muted" style="font-size:12px;margin-top:14px">Sem consulta realizada.</div></section>
 </div>
-<footer class="footer">NEXORA Intelligence 2.0 · Homologação independente · Dados fictícios identificados · Sem operações financeiras. Atualização automática a cada 30 segundos enquanto conectado.</footer>
+<footer class="footer">NEXORA Intelligence 2.0 · Homologação isolada · Sensores sintéticos e OHLC de usuário sem verificação externa · Sem operações financeiras. Atualização automática a cada 30 segundos enquanto conectado.</footer>
 </main></div>
 <script>
 (function(){
@@ -152,7 +174,7 @@ function setText(id,val){$(id).textContent=String(val)}
 function element(tag,cls,value){const n=document.createElement(tag);if(cls)n.className=cls;if(value!==undefined)n.textContent=String(value);return n}
 function td(row,value,cls){const n=element('td',cls,value);row.appendChild(n)}
 function statusPill(state){return state==='AVAILABLE'?['badge','Disponível']:state==='DEGRADED'?['badge pending','Atenção']:state==='NOT_CONNECTED'?['badge pending','Não integrado']:['badge error','Indisponível']}
-async function api(path,method='GET'){const result=await fetch(path,{cache:'no-store',method,headers:{'X-NEXORA-STAGE4-KEY':$('token').value}});if(!result.ok)throw Error('HTTP '+result.status);return result.json()}
+async function api(path,method='GET',payload=null){const result=await fetch(path,{cache:'no-store',method,headers:{'X-NEXORA-STAGE4-KEY':$('token').value,'Content-Type':'application/json'},body:payload===null?undefined:JSON.stringify(payload)});if(!result.ok){let reason='';try{const b=await result.json();reason=typeof b.detail==='string'?' · '+b.detail:''}catch(e){}throw Error('HTTP '+result.status+reason)}return result.json()}
 function modules(data){const root=$('module-grid');root.replaceChildren();for(const m of data.modules){const card=element('article','module-card');const head=element('div','module-head');head.appendChild(element('span','module-id',m.id));const pill=statusPill(m.status);head.appendChild(element('span',pill[0],pill[1]));card.appendChild(head);card.appendChild(element('h3','',m.name));card.appendChild(element('div','details',m.details));if(m.contract_capabilities){
 const caps=m.contract_capabilities;
 const funcs=caps.offline_functions.length?caps.offline_functions.join(', '):'nenhuma exposta';
@@ -163,6 +185,67 @@ function chart(data){const root=$('class-chart');root.replaceChildren();const cl
 function health(data){const grid=$('health-grid');grid.replaceChildren();const h=data.health;const s=data.summary;const points=[['PostgreSQL',h.database],['Atualização',h.dataset_freshness==='CURRENT'?'Em dia':'Atrasada'],['Última leitura',stamp(s.latest_observed_at)],['Tempo médio',(s.mean_processing_ms===null?'—':s.mean_processing_ms+' ms')],['Integridade amostral',h.integrity_sample.status+' · '+h.integrity_sample.checked_rows+' linhas'],['Registros incompletos',nf.format(s.incomplete_observations)],['Registros inválidos',nf.format(s.invalid_observations)],['Tempo ativo',Math.round(h.uptime_seconds/60)+' min']];for(const item of points){const card=element('div');card.appendChild(element('small','',item[0]));card.appendChild(element('strong','',item[1]));grid.appendChild(card)}}
 function makeRows(id,entries,fields){const root=$(id);root.replaceChildren();if(!entries.length){const tr=element('tr');td(tr,'Nenhum registro disponível');root.appendChild(tr);return}for(const item of entries){const tr=element('tr');for(const field of fields){let val=item[field];if(field.endsWith('_at'))val=stamp(val);if(field==='duration_ms')val=val+' ms';if(field==='status')val=val==='OK'?'Concluída':val;if(field==='value')val=String(val)+' '+item.unit;td(tr,val==null?'—':val,field==='status'&&item.status==='ERROR'?'bad':'')}root.appendChild(tr)}}
 function diagnosis(data){const root=$('diagnostics-list');root.replaceChildren();if(!data.diagnostics.length){root.appendChild(element('p','good','Sem avisos ou erros nas execuções consultadas.'));return}for(const d of data.diagnostics){const line=element('div','diagnostic');line.appendChild(element('span',d.level==='ERROR'?'badge error':'badge neutral',d.level==='ERROR'?'Erro':'Informação'));const wrap=element('div');wrap.appendChild(element('b','',d.code));wrap.appendChild(element('div','message muted',d.details+' · '+stamp(d.at)));line.appendChild(wrap);root.appendChild(line)}}
+function csvToBars(value){
+const lines=value.trim().split(/\r?\n/).map(s=>s.trim()).filter(Boolean);
+if(lines.length<65||lines.length>1001)throw Error('O arquivo deve ter de 64 a 1.000 candles mais o cabeçalho.');
+const delim=lines[0].includes(';')?';':',';
+const cols=lines[0].toLowerCase().split(delim).map(s=>s.trim());
+if(cols.join(',')!=='epoch,open,high,low,close')throw Error('Cabeçalho obrigatório: epoch,open,high,low,close');
+return lines.slice(1).map((line,i)=>{
+const fields=line.split(delim).map(s=>s.trim());
+if(fields.length!==5)throw Error('Número de colunas inválido na linha '+(i+2));
+const values=fields.map(Number);
+if(!values.every(Number.isFinite)||!Number.isSafeInteger(values[0]))throw Error('Valor inválido na linha '+(i+2));
+return {epoch:values[0],open:values[1],high:values[2],low:values[3],close:values[4]};
+});
+}
+function renderAssets(data){
+const select=$('asset-select'),previous=select.value,listing=$('asset-list');
+select.replaceChildren();listing.replaceChildren();
+if(!data.assets.length){select.appendChild(element('option','','Nenhum conjunto importado'));$('run-uploaded').disabled=true;listing.appendChild(element('p','muted','Ainda não há arquivos OHLC.'));return}
+for(const asset of data.assets){const option=element('option','',asset.symbol+' · '+asset.bar_count+' barras · '+asset.granularity_seconds+' s · '+(asset.synthetic?'TESTE SINTÉTICO':'ORIGEM NÃO VERIFICADA'));option.value=asset.id;select.appendChild(option)}
+if([...select.options].some(opt=>opt.value===previous))select.value=previous;
+$('run-uploaded').disabled=!connected;
+const table=element('table');const header=element('tr');
+for(const title of ['Ativo','Classe','Candles','Qualidade','Origem','Arquivo'])header.appendChild(element('th','',title));
+const head=element('thead');head.appendChild(header);table.appendChild(head);
+const body=element('tbody');
+for(const a of data.assets){const tr=element('tr');
+for(const v of [a.symbol,a.asset_class,a.bar_count+' / '+a.granularity_seconds+' s',a.quality,a.synthetic?'SINTÉTICO':'DECLARADA · NÃO VERIFICADA',a.snapshot_sha256.slice(0,12)+'…'])td(tr,v);
+body.appendChild(tr)}
+table.appendChild(body);listing.appendChild(table);
+}
+async function loadAssets(){renderAssets(await api('/api/homologation/assets'))}
+async function uploadAsset(){
+const button=$('upload-asset');button.disabled=true;setText('asset-action-status','Validando arquivo CSV…');
+try{
+const file=$('asset-file').files[0];if(!file)throw Error('Selecione um arquivo .csv.');
+if(file.size>250000)throw Error('Arquivo acima do limite de 250 KB.');
+const bars=csvToBars(await file.text());
+const source=$('asset-source').value.trim();
+const payload={symbol:$('asset-symbol').value.trim(),asset_class:$('asset-class').value,
+origin_type:$('asset-origin').value,source_label:source,granularity_seconds:Number($('asset-frame').value),bars};
+const created=await api('/api/homologation/assets','POST',payload);
+await loadAssets();$('asset-select').value=created.id;
+setText('asset-action-status',created.already_present?'Conjunto já existente: '+created.symbol:
+'Conjunto armazenado: '+created.symbol+' · '+created.bar_count+' candles · origem não verificada.');
+}catch(e){setText('asset-action-status','Importação recusada: '+e.message)}
+finally{button.disabled=!connected}
+}
+async function researchUploaded(){
+const id=$('asset-select').value;
+if(!id){setText('asset-action-status','Selecione um arquivo importado.');return}
+const button=$('run-uploaded');button.disabled=true;setText('asset-action-status','Processando sete etapas do conjunto selecionado…');
+try{
+const started=await api('/api/homologation/research/runs/uploaded/'+encodeURIComponent(id),'POST');
+await loadResearch();await loadResearchDetail(started.id);
+setText('asset-action-status','Pesquisa concluída e persistida: '+started.id.slice(0,12)+' · 7 etapas.');
+}catch(e){setText('asset-action-status','Pesquisa indisponível: '+e.message)}
+finally{button.disabled=!connected}
+}
+$('upload-asset').addEventListener('click',uploadAsset);
+$('run-uploaded').addEventListener('click',researchUploaded);
+
 let selectedResearch=null;
 async function loadResearch(){
 const data=await api('/api/homologation/research/runs?limit=20');
@@ -174,7 +257,7 @@ for(const n of ['Quando','Estado','Etapas','Duração','Origem','Detalhes']){hea
 thead.appendChild(header);table.appendChild(thead);
 const tbody=element('tbody');
 for(const run of data.runs){const row=element('tr');
-for(const val of [stamp(run.finished_at),run.state,run.step_count,run.duration_ms+' ms','SINTÉTICA']){
+for(const val of [stamp(run.finished_at),run.state,run.step_count,run.duration_ms+' ms',run.synthetic?'SINTÉTICA':'NÃO VERIFICADA']){
 td(row,val)}
 const cell=element('td');const btn=element('button','secondary','Visualizar');
 btn.type='button';btn.addEventListener('click',()=>loadResearchDetail(run.id));
@@ -188,7 +271,7 @@ selectedResearch=id;
 const target=$('research-detail');target.replaceChildren();
 target.appendChild(element('h3','','Pesquisa '+id.slice(0,12)+' · '+result.state));
 target.appendChild(element('div','muted','Relatório SHA-256: '+(result.result_sha256||'não gerado')+
-' · '+stamp(result.finished_at)+' · '+result.duration_ms+' ms · origem sintética'));
+' · '+stamp(result.finished_at)+' · '+result.duration_ms+' ms · origem '+(result.synthetic?'sintética':'declarada, não verificada')));
 if(result.report){const pre=element('pre','',JSON.stringify(result.report,null,2));
 pre.style.whiteSpace='pre-wrap';pre.style.overflowWrap='anywhere';pre.style.fontSize='12px';
 target.appendChild(pre)}
@@ -214,13 +297,14 @@ finally{btn.disabled=!connected}
 }
 $('start-research').addEventListener('click',initiateResearch);
 
-async function refresh(){if(!connected||busy)return;busy=true;try{const [data,trace,oh,studies]=await Promise.all([
+async function refresh(){if(!connected||busy)return;busy=true;try{const [data,trace,oh,studies,assets]=await Promise.all([
 api('/api/homologation/monitor/overview?runs_limit=30&records_limit=30'),
 api('/api/homologation/monitor/pipeline?limit=35'),
 api('/api/homologation/monitor/ohlc-quality?limit=4'),
-api('/api/homologation/research/runs?limit=20')
+api('/api/homologation/research/runs?limit=20'),
+api('/api/homologation/assets?limit=50')
 ]);
-$('start-research').disabled=false;
+$('start-research').disabled=false;$('upload-asset').disabled=false;renderAssets(assets);
 setText('research-count',nf.format(studies.total)+' pesquisa(s)');
 if(!selectedResearch&&studies.runs.length){await loadResearch();}
 else if(selectedResearch){/* Keep the selected result while monitoring refreshes. */}
@@ -241,7 +325,7 @@ for(const value of [stamp(stage.finished_at),stage.stage,stage.state,stage.input
 stageTable.appendChild(tr)}
 if(!trace.stages.length){const tr=element('tr');td(tr,'Nenhuma etapa registrada');stageTable.appendChild(tr)}
 const limits=$('limitations');limits.replaceChildren();for(const limitation of data.limitations){limits.appendChild(element('p','',limitation))}
-setText('last-sync','Atualizado: '+stamp(data.generated_at));const fresh=data.health.dataset_freshness==='CURRENT';$('notice').className='alert'+(fresh?'':' warning');setText('notice',fresh?'● Monitoramento disponível. Origem exclusivamente sintética; os módulos I01–I06 estão sem integração ativa.':'● Banco acessível, mas a última ingestão não está recente. Consulte os diagnósticos.');
+setText('last-sync','Atualizado: '+stamp(data.generated_at));const fresh=data.health.dataset_freshness==='CURRENT';$('notice').className='alert'+(fresh?'':' warning');setText('notice',fresh?'● Monitoramento sintético ativo. Pesquisas de OHLC enviado pelo usuário são armazenadas separadamente, com origem não verificada.':'● Banco acessível, mas a última ingestão não está recente. Consulte os diagnósticos.');
 }catch(e){$('notice').className='alert warning';setText('notice','Não foi possível consultar a API autenticada ('+e.message+'). Verifique a chave ou a disponibilidade do serviço.');if(e.message==='HTTP 401')connected=false;}finally{busy=false}}
 $('connect').addEventListener('click',function(){connected=true;refresh()});
 $('reload').addEventListener('click',refresh);
