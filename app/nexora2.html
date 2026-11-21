@@ -168,6 +168,7 @@ button:focus-visible,a:focus-visible,input:focus-visible{outline:3px solid var(-
     <div class="ohlc-output"><strong>Etapas concluídas e pendências</strong><div id="ohlcStages" class="ohlc-study-history" aria-label="Etapas da pesquisa"></div></div>
     <p class="hint">Os indicadores são descritivos. Não equivalem a previsão, sucesso financeiro, treinamento de modelo ou autorização de operações.</p>
   </div>
+  <p class="status" id="ohlcHistoryStatus" role="status">As pesquisas salvas ainda não foram consultadas.</p>
   <div class="ohlc-study-history" id="ohlcHistoryList" aria-live="polite"></div>
 </section>
 <section class="panel" id="persistedResearchLibrary" aria-labelledby="persistedResearchLibraryTitle">
@@ -440,7 +441,7 @@ async function loadResearchLibraryDetail(id,title){
   }
 }
 
-let ohlcHistorySeq=0;
+let ohlcHistorySeq=0,ohlcActionSeq=0;
 function parseUploadedOhlc(text,filename){
   if(filename.toLowerCase().endsWith('.json')){
     const parsed=JSON.parse(text);
@@ -558,7 +559,7 @@ async function runUploadedOhlcResearch(event){
 async function loadUploadedOhlcHistory(){
   const button=$('ohlcLoadHistoryButton'),seq=++ohlcHistorySeq;
   button.disabled=true;
-  $('ohlcStatus').textContent='Consultando suas pesquisas persistidas...';
+  $('ohlcHistoryStatus').textContent='Consultando suas pesquisas persistidas...';
   try{
     const data=await checkedResearch('/api/nexora2/ohlc/research');
     if(seq!==ohlcHistorySeq)return;
@@ -575,27 +576,37 @@ async function loadUploadedOhlcHistory(){
       replay.addEventListener('click',()=>replayUploadedOhlcReport(item.id));
       row.append(info,open,replay);target.append(row);
     }
-    $('ohlcStatus').textContent=target.childElementCount
+    $('ohlcHistoryStatus').textContent=target.childElementCount
       ?target.childElementCount+' pesquisa(s) salva(s) na sua conta.':'Nenhuma pesquisa salva nesta conta.';
-  }catch(error){if(seq===ohlcHistorySeq)$('ohlcStatus').textContent='Histórico indisponível: '+error.message;}
+  }catch(error){if(seq===ohlcHistorySeq)$('ohlcHistoryStatus').textContent='Histórico indisponível: '+error.message;}
   finally{if(seq===ohlcHistorySeq)button.disabled=false;}
 }
 async function openUploadedOhlcReport(id){
+  const seq=++ohlcActionSeq;
   try{
     $('ohlcStatus').textContent='Recuperando pesquisa #'+id+' do PostgreSQL...';
     const data=await checkedResearch('/api/nexora2/ohlc/research/'+id);
+    if(seq!==ohlcActionSeq)return;
     renderOhlcSummary(data.report,id);
     $('ohlcStatus').textContent='Pesquisa #'+id+' recuperada. Evidência verificada na versão salva.';
-  }catch(error){$('ohlcStatus').textContent='Erro ao abrir pesquisa: '+error.message;}
+  }catch(error){
+    if(seq===ohlcActionSeq)
+      $('ohlcStatus').textContent='Erro ao abrir pesquisa: '+error.message;
+  }
 }
 async function replayUploadedOhlcReport(id){
+  const seq=++ohlcActionSeq;
   try{
     $('ohlcStatus').textContent='Recalculando pesquisa #'+id+' a partir das velas salvas...';
     const data=await uploadOhlcRequest('/api/nexora2/ohlc/research/'+id+'/replay',{});
+    if(seq!==ohlcActionSeq)return;
     $('ohlcStatus').textContent=data.reproduced_identically
       ?'Pesquisa #'+id+' reproduzida sem diferenças.'
       :'Pesquisa #'+id+' apresentou diferenças na reprodução; revise a versão do motor.';
-  }catch(error){$('ohlcStatus').textContent='Falha ao reproduzir pesquisa: '+error.message;}
+  }catch(error){
+    if(seq===ohlcActionSeq)
+      $('ohlcStatus').textContent='Falha ao reproduzir pesquisa: '+error.message;
+  }
 }
 function brasiliaDate(instant){
   const parts=new Intl.DateTimeFormat('en-US',{timeZone:'America/Sao_Paulo',
