@@ -2690,11 +2690,21 @@ async def nexora2_imported_ohlc_research(request:Request,
     user=active_user(request,nexora_sid)
     if request.headers.get("content-type", "").split(";",1)[0].strip() != "application/json":
         raise HTTPException(415,"Use application/json")
-    if int(request.headers.get("content-length") or 0) > 280_000:
-        raise HTTPException(413,"Arquivo de pesquisa muito grande")
-    raw=await request.body()
-    if len(raw)>280_000:
-        raise HTTPException(413,"Arquivo de pesquisa muito grande")
+    stated_size=request.headers.get("content-length")
+    if stated_size is not None:
+        if not stated_size.isdecimal():
+            raise HTTPException(400,"Tamanho de requisição inválido")
+        if int(stated_size)>280_000:
+            raise HTTPException(413,"Arquivo de pesquisa muito grande")
+    # Stream with a firm byte ceiling, even if Content-Length is absent/forged.
+    received=0
+    blocks=[]
+    async for chunk in request.stream():
+        received+=len(chunk)
+        if received>280_000:
+            raise HTTPException(413,"Arquivo de pesquisa muito grande")
+        blocks.append(chunk)
+    raw=b"".join(blocks)
     try:
         payload=json.loads(raw)
         report=await asyncio.to_thread(build_uploaded_ohlc_report,payload)
