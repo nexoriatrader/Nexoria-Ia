@@ -46,6 +46,9 @@ h1{font-size:clamp(27px,4vw,38px);line-height:1.16;margin:7px 0 10px}
 .history-entry{display:flex;flex-wrap:wrap;justify-content:space-between;gap:10px;align-items:flex-start;border:1px solid #344f62;border-radius:12px;background:#0d2436;padding:12px 15px}
 .history-entry strong{display:block;font-size:13px}.history-entry small{display:block;color:var(--muted);font-size:12px}
 .history-note{font-size:12px;color:#9fc2d9;margin:8px 0 12px}
+.library-details{border:1px solid #466984;border-radius:12px;padding:15px;margin-top:12px;background:#091f30}
+.library-details strong{display:block;margin-bottom:7px;color:#f3d793}
+.library-details p{font-size:12px;line-height:1.65;color:#c3d8e6}
 .foot{border-top:1px solid #26445a;padding:24px 0 36px;font-size:12px;color:var(--muted)
 button:focus-visible,a:focus-visible,input:focus-visible{outline:3px solid var(--blue);outline-offset:2px}
 @media(max-width:730px){.modes{grid-template-columns:1fr}.mode{min-height:124px}.panel-header{flex-direction:column}.form-grid{grid-template-columns:1fr}.hero,.panel{padding:20px}.stats{grid-template-columns:1fr 1fr}.stat:last-child{grid-column:1/-1}.site-head{gap:7px}.back{padding:10px 11px}}
@@ -128,6 +131,21 @@ button:focus-visible,a:focus-visible,input:focus-visible{outline:3px solid var(-
   <p class="history-note">Armazenamento temporário somente neste navegador e nesta aba. Não é histórico PostgreSQL nem histórico de ordens. As consultas não são executadas automaticamente.</p>
   <p class="status" id="historyStatus" role="status">Nenhuma consulta registrada nesta aba.</p>
   <div class="history-list" id="historyEntries"></div>
+</section>
+<section class="panel" id="persistedResearchLibrary" aria-labelledby="persistedResearchLibraryTitle">
+  <div class="panel-header">
+    <div><h2 id="persistedResearchLibraryTitle">Biblioteca histórica · PostgreSQL</h2>
+    <p class="hint">Pesquisas globais salvas pelo sistema que continuam disponíveis após fechar a aba ou reiniciar o serviço.</p></div>
+    <button class="action secondary" type="button" id="loadLibraryButton" onclick="loadResearchLibrary()">CARREGAR PESQUISAS SALVAS</button>
+  </div>
+  <p class="note">Esta biblioteca é compartilhada entre usuários autenticados, não contém o histórico individual de suas consultas e não mostra resultados de operações. A retenção automática poderá remover pesquisas antigas.</p>
+  <p id="libraryStatus" class="status" role="status">Nenhuma consulta ao PostgreSQL realizada nesta sessão.</p>
+  <div id="libraryItems" class="history-list" aria-live="polite"></div>
+  <div id="libraryDetails" class="library-details" hidden>
+    <strong id="libraryDetailsTitle">Relatório histórico</strong>
+    <p id="libraryDetailsSummary"></p>
+    <p id="libraryDetailsNote" class="hint"></p>
+  </div>
 </section>
 </main>
 <footer class="foot">NEXORA Intelligence 2.0 · Ambiente de pesquisa. A conta REAL segue bloqueada para execução nesta experiência. <a href="/">Voltar ao painel original</a>.</footer>
@@ -322,6 +340,65 @@ function renderResearchHistory(){
 }
 function clearResearchHistory(){
   researchHistory=[];saveResearchHistory();renderResearchHistory();
+}
+
+let latestLibraryRequest=0;
+async function loadResearchLibrary(){
+  const button=$('loadLibraryButton'),sequence=++latestLibraryRequest;
+  button.disabled=true;$('libraryDetails').hidden=true;
+  $('libraryStatus').textContent='Buscando pesquisas persistidas no PostgreSQL...';
+  try{
+    const result=await checkedResearch('/api/nexora2/research/library');
+    if(sequence!==latestLibraryRequest)return;
+    const target=$('libraryItems');target.replaceChildren();
+    const items=Array.isArray(result.items)?result.items.slice(0,12):[];
+    for(const record of items){
+      if(!Number.isInteger(record.id)||record.id<=0)continue;
+      const outer=document.createElement('div');outer.className='history-entry';
+      const information=document.createElement('div');
+      const title=document.createElement('strong');
+      title.textContent=String(record.title||'Pesquisa histórica');
+      const detail=document.createElement('small');
+      const date=new Date(record.created_at);
+      detail.textContent=(Number.isNaN(date.valueOf())?'Data não informada':
+        date.toLocaleString('pt-BR',{timeZone:'America/Sao_Paulo',dateStyle:'short',timeStyle:'short'}))
+        +' · Pesquisa compartilhada · PostgreSQL';
+      information.append(title,detail);
+      const button=document.createElement('button');button.type='button';
+      button.className='detail-button';button.textContent='ABRIR RESUMO';
+      button.addEventListener('click',()=>loadResearchLibraryDetail(record.id,record.title));
+      outer.append(information,button);target.append(outer);
+    }
+    $('libraryStatus').textContent=items.length
+      ?items.length+' pesquisa(s) histórica(s) encontrada(s) na base persistente.'
+      :'Nenhuma pesquisa histórica persistida disponível no momento.';
+  }catch(error){
+    if(sequence===latestLibraryRequest)$('libraryStatus').textContent=
+      'Biblioteca indisponível: '+error.message;
+  }finally{if(sequence===latestLibraryRequest)button.disabled=false;}
+}
+async function loadResearchLibraryDetail(id,title){
+  $('libraryDetails').hidden=false;
+  $('libraryDetailsTitle').textContent=String(title||'Pesquisa histórica');
+  $('libraryDetailsSummary').textContent='Lendo resumo do relatório salvo...';
+  $('libraryDetailsNote').textContent='';
+  const marker=id;
+  try{
+    const record=await checkedResearch('/api/nexora2/research/library/'+encodeURIComponent(id));
+    if(marker!==id)return;
+    const s=record.summary||{};
+    const details=[
+      'Período: '+String(record.period_from||'—')+' até '+String(record.period_to||'—'),
+      'Velas: '+(s.candles??'não informado'),
+      'Modelos examinados: '+(s.model_count??'não informado'),
+      'Cobertura: '+(s.coverage_pct===null||s.coverage_pct===undefined?
+        'não informada':String(s.coverage_pct)+'%')
+    ];
+    $('libraryDetailsSummary').textContent=details.join(' · ');
+    $('libraryDetailsNote').textContent=String(record.note||'Apenas pesquisa.');
+  }catch(error){
+    $('libraryDetailsSummary').textContent='Não foi possível abrir o resumo: '+error.message;
+  }
 }
 function brasiliaDate(instant){
   const parts=new Intl.DateTimeFormat('en-US',{timeZone:'America/Sao_Paulo',
