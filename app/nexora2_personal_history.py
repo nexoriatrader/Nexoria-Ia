@@ -40,7 +40,10 @@ def _as_public_visit(row):
         data = json.loads(row.payload_json)
     except (ValueError, TypeError):
         return None
-    if not isinstance(data, dict) or data.get("kind") not in KIND_LABELS:
+    if not isinstance(data, dict):
+        return None
+    kind = data.get("kind")
+    if not isinstance(kind, str) or kind not in KIND_LABELS:
         return None
     if data.get("source") != "NEXORA2_USER_STUDY_VISIT":
         return None
