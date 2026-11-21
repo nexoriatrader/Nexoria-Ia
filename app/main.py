@@ -36,6 +36,14 @@ from .single_asset_study import run_single_asset_study
 from .research_persistence import (research_loop, latest_study, latest_multitimeframe_study,
     latest_pullback_study, HistoricalResearchReport, RESEARCH_KEY,
     MULTI_RESEARCH_KEY, PULLBACK_KEY)  # read-only research
+from .intelligence2.historical_research import (
+    ResearchInputError, build_report as build_uploaded_ohlc_report,
+    summary as uploaded_ohlc_summary,
+)
+from .intelligence2.research_store import (
+    persist as save_uploaded_ohlc_report, list_own as list_uploaded_ohlc,
+    get_own as get_uploaded_ohlc, details as uploaded_ohlc_details,
+)
 from .m1_history import m1_collect_loop, history_status
 from .asset_scanner import scan_assets, scan_intelligence_markets, scan_intelligence_context
 from .trade_selector_v2 import (select_demo_signal, last_scan_report, has_pending_signals,
@@ -2672,6 +2680,77 @@ async def nexora2_research_library_detail(request:Request,report_id:int,
             'note':'Resumo de pesquisa histórica compartilhada. Não equivale a sinais, '
                    'ordens, lucro realizado ou validação de operações financeiras.',
         }
+
+
+
+# User-supplied historical OHLC: isolated research, never brokerage execution.
+@app.post("/api/nexora2/ohlc/research")
+async def nexora2_imported_ohlc_research(request:Request,
+                nexora_sid:str|None=Cookie(default=None)):
+    user=active_user(request,nexora_sid)
+    if request.headers.get("content-type", "").split(";",1)[0].strip() != "application/json":
+        raise HTTPException(415,"Use application/json")
+    if int(request.headers.get("content-length") or 0) > 280_000:
+        raise HTTPException(413,"Arquivo de pesquisa muito grande")
+    raw=await request.body()
+    if len(raw)>280_000:
+        raise HTTPException(413,"Arquivo de pesquisa muito grande")
+    try:
+        payload=json.loads(raw)
+        report=await asyncio.to_thread(build_uploaded_ohlc_report,payload)
+    except (ValueError, TypeError, OverflowError) as exc:
+        raise HTTPException(422,str(exc)[:220]) from None
+    with db.SessionLocal() as session:
+        report_id=save_uploaded_ohlc_report(session,user.id,report)
+    return {"id":report_id,"scope":"OWN_UNVERIFIED_HISTORICAL_RESEARCH",
+            "report":uploaded_ohlc_summary(report)}
+
+
+@app.get("/api/nexora2/ohlc/research")
+async def nexora2_list_ohlc_research(request:Request,
+                nexora_sid:str|None=Cookie(default=None)):
+    user=active_user(request,nexora_sid)
+    with db.SessionLocal() as session:
+        items=list_uploaded_ohlc(session,user.id)
+    return {"items":items,"scope":"OWN_UNVERIFIED_HISTORICAL_RESEARCH",
+            "execution_allowed":False,"orders_sent":0}
+
+
+@app.get("/api/nexora2/ohlc/research/{report_id}")
+async def nexora2_get_ohlc_research(request:Request,report_id:int,
+                nexora_sid:str|None=Cookie(default=None)):
+    user=active_user(request,nexora_sid)
+    with db.SessionLocal() as session:
+        try:
+            report=get_uploaded_ohlc(session,user.id,report_id)
+        except ValueError as exc:
+            raise HTTPException(409,str(exc)) from None
+    if report is None:
+        raise HTTPException(404,"Pesquisa não encontrada")
+    return uploaded_ohlc_details(report)
+
+
+@app.post("/api/nexora2/ohlc/research/{report_id}/replay")
+async def nexora2_replay_ohlc_research(request:Request,report_id:int,
+                nexora_sid:str|None=Cookie(default=None)):
+    """Recompute saved immutable user OHLC; no new evidence or broker effect."""
+    user=active_user(request,nexora_sid)
+    with db.SessionLocal() as session:
+        try:
+            report=get_uploaded_ohlc(session,user.id,report_id)
+        except ValueError as exc:
+            raise HTTPException(409,str(exc)) from None
+    if report is None:
+        raise HTTPException(404,"Pesquisa não encontrada")
+    rebuilt=await asyncio.to_thread(build_uploaded_ohlc_report,report["input"])
+    return {"id":report_id,
+            "reproduced_identically":(
+                rebuilt["evidence"]==report["evidence"]
+                and rebuilt["statistics"]==report["statistics"]
+                and rebuilt["contexts"]==report["contexts"]
+                and rebuilt["timeframe_alignment"]==report["timeframe_alignment"]),
+            "source":"USER_SUPPLIED_UNVERIFIED_OHLC",
+            "orders_sent":0,"execution_allowed":False}
 
 
 # Explicit, read-only research endpoint; never touches AutoPilot execution settings.

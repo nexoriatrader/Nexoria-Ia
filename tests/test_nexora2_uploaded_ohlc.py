@@ -1,0 +1,168 @@
+"""End-to-end historical OHLC research, tenant isolation, replay, no broker actions."""
+import copy
+import json
+from datetime import timedelta
+from pathlib import Path
+
+import pytest
+from fastapi.testclient import TestClient
+from sqlalchemy import create_engine, event, select
+from sqlalchemy.orm import sessionmaker
+
+from app import db, main
+from app.intelligence2.historical_research import (
+    ResearchInputError, build_report, normalize_input, summary,
+)
+from app.intelligence2.research_store import MAX_PER_USER
+from app.research_persistence import HistoricalResearchReport
+from app.security import encrypt, hashsecret
+
+
+def sample(count=1140):
+    # Synthetic TEST FIXTURE only; backend must label user-uploaded data unverified.
+    start=1_700_000_100 // 900 * 900
+    rows=[]
+    for i in range(count):
+        opening=100.0 + i*.001
+        close=opening + (.02 if i%4 else -.01)
+        rows.append({"epoch":start+i*60,"open":opening,
+                     "high":max(opening,close)+.05,
+                     "low":min(opening,close)-.05,"close":close})
+    return {"symbol":"TEST_OHLC","granularity_seconds":60,"candles":rows}
+
+
+def _database(tmp_path,monkeypatch):
+    engine=create_engine(f"sqlite:///{tmp_path}/research.sqlite")
+    db.Base.metadata.create_all(engine)
+    factory=sessionmaker(bind=engine,expire_on_commit=False)
+    monkeypatch.setattr(db,"SessionLocal",factory)
+    with factory() as session:
+        a=db.User(deriv_account_id="V-OHLC-TEST-A")
+        b=db.User(deriv_account_id="V-OHLC-TEST-B")
+        session.add_all([a,b]);session.flush()
+        for token,user in (("aa",a),("ab",a),("bb",b)):
+            session.add(db.Session(
+                session_hash=hashsecret("ohlc-"+token),
+                user_id=user.id,token_encrypted=encrypt("fake-test-token"),
+                expires_at=db.utcnow()+timedelta(days=2)))
+        session.commit()
+    return engine,factory
+
+
+def test_reproducible_three_timeframes_and_unverified_provenance():
+    input_data=sample()
+    a=build_report(input_data)
+    b=build_report(copy.deepcopy(input_data))
+    assert a==b
+    assert a["source"]=="USER_SUPPLIED_UNVERIFIED_OHLC"
+    assert a["evidence"]["market_source_verified"] is False
+    assert a["evidence"]["input_count"]==1140
+    assert a["execution_allowed"] is False and a["orders_sent"]==0
+    assert a["timeframe_alignment"]["approved_for_trading"] is False
+    assert len(a["orchestrator"]["stages"])==7
+    assert set(a["contexts"])=={"higher","intermediate","lower"}
+    assert all(c["data_quality"]=="COMPLETE" for c in a["contexts"].values())
+    assert a["statistics"]["changes_observed"]==1139
+    assert a["statistics"]["interpretation"]=="DESCRIPTIVE_NOT_PREDICTIVE"
+    assert len(a["evidence"]["input_sha256"])==64
+    assert "candles" not in summary(a)
+
+
+@pytest.mark.parametrize("change",[
+    lambda p: p["candles"][10].update(epoch=p["candles"][9]["epoch"]),
+    lambda p: p["candles"][10].update(epoch=p["candles"][10]["epoch"]+60),
+    lambda p: p["candles"][0].update(high=0.5),
+    lambda p: p["candles"][0].update(close=float("nan")),
+    lambda p: p["candles"][0].update(open=True),
+    lambda p: p.update(granularity_seconds=300),
+    lambda p: p.update(symbol="../bad"),
+    lambda p: p["candles"].append(p["candles"][-1]),
+])
+def test_invalid_candles_fail_without_persistence(change):
+    payload=sample()
+    change(payload)
+    with pytest.raises(ResearchInputError):
+        build_report(payload)
+
+
+def test_rejects_not_closed_future_candles():
+    payload=sample()
+    with pytest.raises(ResearchInputError):
+        build_report(payload,clock=payload["candles"][-1]["epoch"]+59)
+
+
+def test_end_to_end_persists_and_isolates_without_ddl_or_order_writes(tmp_path,monkeypatch):
+    engine,factory=_database(tmp_path,monkeypatch)
+    statements=[]
+    def track(conn,cursor,statement,params,ctx,many):
+        statements.append(statement)
+    event.listen(engine,"before_cursor_execute",track)
+    try:
+        unauth=TestClient(main.app)
+        assert unauth.get("/api/nexora2/ohlc/research").status_code==401
+        assert unauth.post("/api/nexora2/ohlc/research",json=sample()).status_code==401
+        client=TestClient(main.app)
+        client.cookies.set("nexora_sid","ohlc-aa")
+        result=client.post("/api/nexora2/ohlc/research",json=sample())
+        assert result.status_code==200,result.text
+        report_id=result.json()["id"]
+        assert result.json()["report"]["orders_sent"]==0
+        assert len(client.get("/api/nexora2/ohlc/research").json()["items"])==1
+        detail=client.get(f"/api/nexora2/ohlc/research/{report_id}")
+        assert detail.status_code==200
+        assert detail.json()["input"]["candles"]==sample()["candles"]
+        assert client.post(f"/api/nexora2/ohlc/research/{report_id}/replay").json()["reproduced_identically"] is True
+        other=TestClient(main.app)
+        other.cookies.set("nexora_sid","ohlc-bb")
+        assert other.get("/api/nexora2/ohlc/research").json()["items"]==[]
+        assert other.get(f"/api/nexora2/ohlc/research/{report_id}").status_code==404
+        assert other.post(f"/api/nexora2/ohlc/research/{report_id}/replay").status_code==404
+        new_session=TestClient(main.app)
+        new_session.cookies.set("nexora_sid","ohlc-ab")
+        assert new_session.get(f"/api/nexora2/ohlc/research/{report_id}").status_code==200
+        with factory() as session:
+            stored=session.scalars(select(HistoricalResearchReport)).all()
+            assert len(stored)==1
+            assert "TEST_OHLC" in stored[0].payload_json
+        assert not any(s.lstrip().upper().startswith(("CREATE","ALTER","DROP"))
+                       for s in statements)
+        assert not any("demo_orders" in s.lower() or "real_orders" in s.lower()
+                       for s in statements)
+    finally:
+        event.remove(engine,"before_cursor_execute",track)
+        engine.dispose()
+
+
+def test_uploaded_research_bounded_and_invalid_payload_not_saved(tmp_path,monkeypatch):
+    engine,factory=_database(tmp_path,monkeypatch)
+    try:
+        c=TestClient(main.app)
+        c.cookies.set("nexora_sid","ohlc-aa")
+        malformed=c.post("/api/nexora2/ohlc/research",json={"symbol":"BAD","candles":[]})
+        assert malformed.status_code==422
+        assert c.post("/api/nexora2/ohlc/research",
+                      content=b"x"*280_001,
+                      headers={"Content-Type":"application/json"}).status_code==413
+        for n in range(MAX_PER_USER+2):
+            payload=sample()
+            payload["symbol"]=f"TEST_{n}"
+            response=c.post("/api/nexora2/ohlc/research",json=payload)
+            assert response.status_code==200,response.text
+        assert len(c.get("/api/nexora2/ohlc/research").json()["items"])==MAX_PER_USER
+        with factory() as s:
+            assert s.query(HistoricalResearchReport).count()==MAX_PER_USER
+    finally:
+        engine.dispose()
+
+
+def test_ui_contains_upload_and_replay_without_execution_routes():
+    html=(Path(__file__).resolve().parents[1]/"app"/"nexora2.html").read_text()
+    for key in ("ohlcFile","ohlcSymbol","ohlcRunButton","ohlcStudyOutput",
+                "ohlcHistoryList","ohlcStatus"):
+        assert f'id="{key}"' in html
+    assert "/api/nexora2/ohlc/research" in html
+    assert "Reproduzir pesquisa" in html
+    assert "dados enviados por você" in html
+    for forbidden in ("/api/autopilot/start","/api/demo/buy",
+                      "/api/real/buy","START_REAL_AUTOPILOT"):
+        assert forbidden not in html
