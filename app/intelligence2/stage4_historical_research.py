@@ -337,7 +337,7 @@ def list_research(limit=20):
         total=conn.execute(select(func.count()).select_from(runs)).scalar_one()
     return {"total":int(total),"runs":[{
         "id":r["id"],"state":r["state"],"version":r["version"],
-        "source":r["source"],"synthetic":True,
+        "source":r["source"],"synthetic":r["source"] == SOURCE,
         "step_count":r["step_count"],"reason":r["reason"],
         "started_at":_iso(r["started_at"]), "finished_at":_iso(r["finished_at"]),
         "duration_ms":r["duration_ms"],
@@ -374,7 +374,7 @@ def get_research(run_id):
         })
     return {
         "id":found["id"],"version":found["version"],
-        "source":found["source"],"synthetic":True,
+        "source":found["source"],"synthetic":found["source"] == SOURCE,
         "state":found["state"],"reason":found["reason"],
         "started_at":_iso(found["started_at"]),
         "finished_at":_iso(found["finished_at"]),
