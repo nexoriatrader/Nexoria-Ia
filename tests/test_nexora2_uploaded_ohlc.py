@@ -59,9 +59,15 @@ def test_reproducible_three_timeframes_and_unverified_provenance():
     assert a["evidence"]["input_count"]==1140
     assert a["execution_allowed"] is False and a["orders_sent"]==0
     assert a["timeframe_alignment"]["approved_for_trading"] is False
-    assert len(a["orchestrator"]["stages"])==7
+    assert len(a["orchestrator"]["stages"])==8
     assert set(a["contexts"])=={"higher","intermediate","lower"}
     assert all(c["data_quality"]=="COMPLETE" for c in a["contexts"].values())
+    assert a["period_comparison"]["method"]=="CHRONOLOGICAL_EQUAL_COUNT_HALVES"
+    assert a["period_comparison"]["first"]["periods"]==570
+    assert a["period_comparison"]["second"]["periods"]==570
+    assert a["period_comparison"]["first"]["changes_observed"]==569
+    assert "period_comparison" in summary(a)
+    assert any(stage["module"]=="PERIOD_COMPARISON" for stage in a["orchestrator"]["stages"])
     assert a["statistics"]["changes_observed"]==1139
     assert a["statistics"]["interpretation"]=="DESCRIPTIVE_NOT_PREDICTIVE"
     assert len(a["evidence"]["input_sha256"])==64
@@ -278,3 +284,16 @@ def test_corrupted_stored_ohlc_metadata_is_rejected(tmp_path, monkeypatch):
         assert client.get(f"/api/nexora2/ohlc/research/{item_id}").status_code==409
     finally:
         engine.dispose()
+
+
+def test_partial_odd_count_period_comparison_is_chronological():
+    report=build_report(sample(count=1139))
+    first=report["period_comparison"]["first"]
+    second=report["period_comparison"]["second"]
+    assert first["periods"]==569
+    assert second["periods"]==570
+    assert first["changes_observed"]==568
+    assert second["changes_observed"]==569
+    assert report["period_comparison"]["split_epoch"]==sample(1139)["candles"][569]["epoch"]
+    assert report["period_comparison"]["interpretation"]=="DESCRIPTIVE_NOT_PREDICTIVE"
+    assert report["orders_sent"]==0
