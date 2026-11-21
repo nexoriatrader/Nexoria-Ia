@@ -13,11 +13,10 @@ button.secondary{background:#1a3c55;color:#effaff;border:1px solid #41647a}butto
 .grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}.buttons{display:flex;gap:10px;flex-wrap:wrap;margin-top:16px}
 table{width:100%;border-collapse:collapse;white-space:nowrap}th,td{padding:11px;border-bottom:1px solid #294356;text-align:left;font-size:13px}
 tr[data-id]{cursor:pointer}tr[data-id]:hover,tr[data-id].selected{background:#203a50} .small-note{font-size:12px;color:#aabed0}.scroll{overflow:auto}
-#feedback{color:#d7e9b7;margin-top:12px;min-height:18px}#audit{white-space:pre-line;color:#b6cddd;font-size:13px}
-.research-metrics{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin:14px 0}.research-metric{background:#071827;border:1px solid #294356;border-radius:12px;padding:12px}.research-metric strong{display:block;font-size:20px;color:#ffdb91}.research-tag{display:inline-block;padding:3px 9px;border-radius:20px;background:#244458;color:#d2eaff;font-size:12px}.negative{color:#ff9fa7}.positive{color:#a8efc5}.research-warning{padding:12px;border:1px solid #755c36;background:#2c281f;border-radius:10px;color:#ffe6b0;font-size:13px}.research-table td:first-child{font-weight:700}
-[hidden]{display:none!important}@media(max-width:600px){.grid,.research-metrics{grid-template-columns:1fr}.card{padding:15px}}
+#feedback{color:#d7e9b7;margin-top:12px;min-height:18px}
+[hidden]{display:none!important}@media(max-width:600px){.grid{grid-template-columns:1fr}.card{padding:15px}}
 </style></head><body><main>
-<h1>NEXORA IA · Admin</h1><p>Acesso exclusivo para gerenciar prazos, suspensões e estornos. Operações financeiras não são executadas aqui.</p>
+<h1>NEXORA · Administração</h1><p>Gestão de usuários e prazos de acesso. As proteções e registros administrativos permanecem ativos no servidor.</p>
 <section id="login" class="card">
 <h2>Entrar na administração</h2>
 <form id="loginForm"><label>Login</label><input id="loginName" value="Admin" autocomplete="username" required>
@@ -44,50 +43,7 @@ tr[data-id]{cursor:pointer}tr[data-id]:hover,tr[data-id].selected{background:#20
 <div class="buttons"><button onclick="save()">SALVAR ALTERAÇÃO</button></div>
 <div id="feedback" role="status"></div>
 </div>
-<section class="card" id="strategyLab" aria-labelledby="strategyTitle">
-<h2 id="strategyTitle">Laboratório de Estratégias · Volatility 100 (1s)</h2>
-<p>Pesquisa privada do Admin. Histórico da Deriv, sem Martingale, ciclos ou execução de ordens.</p>
-<div class="buttons"><button class="secondary" type="button" id="researchReload" onclick="loadResearch()">CONSULTAR RELATÓRIO</button><span class="research-tag">Somente leitura · M5</span></div>
-<div id="researchStatus" role="status" class="small-note" style="margin-top:12px">Consultando relatório armazenado...</div>
-<div class="research-warning" style="margin-top:12px" id="m1Coverage" role="status">Histórico M1: consultando cobertura da Deriv...</div>
-<div class="card" style="margin-top:14px;background:#0b1c2b;border-color:#32506b">
-<h3 style="margin:0 0 10px;font-size:15px">Estudo M1 · M3 · M5 · M15</h3>
-<p class="small-note">104 combinações exploratórias: 96 testes técnicos e aleatórios + 8 testes da estratégia H1/M15 + Sweep + CHoCH + reteste (M1/M5). Sem ordens; payout histórico não verificado.</p>
-<div class="buttons"><button class="secondary" type="button" onclick="loadMultiResearch()">VER ESTUDO MULTITIMEFRAME</button></div>
-<div id="multiStatus" class="small-note" role="status" style="margin-top:10px">Aguardando consulta...</div>
-<div id="multiBody" hidden>
-<div class="research-metrics">
-<div class="research-metric"><span class="small-note">M1 verificadas</span><strong id="multiCandles">—</strong></div>
-<div class="research-metric"><span class="small-note">Combinações</span><strong id="multiModels">—</strong></div>
-<div class="research-metric"><span class="small-note">Selecionado no treino</span><strong id="multiSelected" style="font-size:12px">—</strong></div>
-</div>
-<div class="scroll"><table><thead><tr><th>Tempo</th><th>Expiração</th><th>Estratégia</th><th>Sinais de validação</th><th>Acertos</th><th>P&L hipotético / US$ 1</th></tr></thead><tbody id="multiRows"></tbody></table></div>
-<p class="research-warning" style="margin-top:12px">A tabela pode conter resultados positivos por acaso devido às várias comparações. Somente o modelo selecionado no treinamento deve orientar uma avaliação fora da amostra; nenhum resultado autoriza operações.</p>
-</div>
-</div>
-<div class="card" style="margin-top:14px;background:#0b1c2b;border-color:#32506b">
-<h3 style="margin:0 0 10px;font-size:15px">EMA 20 + EMA 50 + RSI 14 · Pullback M1/M3</h3>
-<p class="small-note">Apenas Rise/Fall hipotético. Expirações 3 e 5 minutos. Entrada aproximada ao fechamento da confirmação; payout ilustrativo de 88%.</p>
-<div class="buttons"><button class="secondary" type="button" onclick="loadPullback()">VER BACKTEST DE PULLBACK</button></div>
-<div id="pullbackStatus" class="small-note" role="status" style="margin-top:10px">Aguardando consulta...</div>
-<div id="pullbackBody" hidden>
-<div class="scroll"><table><thead><tr><th>Gráfico</th><th>Expiração</th><th>Treino</th><th>Sinais validação</th><th>Vitórias</th><th>Acerto validação</th><th>Resultado US$ 1</th></tr></thead><tbody id="pullbackRows"></tbody></table></div>
-<p class="research-warning" style="margin-top:12px">Estudo exploratório sobre um período já inspecionado. Ganhos estimados não são contratos liquidados nem demonstram eficácia futura. Sem Martingale e sem operações reais.</p>
-</div>
-</div>
-<div id="researchResults" hidden>
-<div class="research-metrics">
-<div class="research-metric"><span class="small-note">Velas de 5 min</span><strong id="researchCandles">—</strong></div>
-<div class="research-metric"><span class="small-note">Período UTC</span><strong id="researchPeriod" style="font-size:12px;line-height:1.6">—</strong></div>
-<div class="research-metric"><span class="small-note">Última coleta</span><strong id="researchUpdated" style="font-size:13px">—</strong></div>
-</div>
-<h3 style="font-size:14px;margin:18px 0 7px">Validação fora da amostra (30% finais)</h3>
-<div class="scroll"><table class="research-table"><thead><tr><th>Estratégia</th><th>Sinais</th><th>Vitórias</th><th>Derrotas</th><th>Acerto</th><th>Expectativa*</th></tr></thead><tbody id="researchRows"></tbody></table></div>
-<p class="small-note" style="margin-top:12px" id="researchTraining">—</p>
-<div class="research-warning" id="researchDisclaimer">* Retorno líquido hipotético de 88% por vitória. Não representa execução, payout real ou lucro comprovado.</div>
-</div>
-</section>
-<details class="card"><summary>Histórico administrativo</summary><p id="audit">—</p></details>
+
 </section>
 <div id="error" role="alert" style="color:#ff9fa7"></div>
 </main>
@@ -95,91 +51,12 @@ tr[data-id]{cursor:pointer}tr[data-id]:hover,tr[data-id].selected{background:#20
 const $=id=>document.getElementById(id);
 async function call(url,opts={}){const r=await fetch(url,{credentials:'same-origin',...opts});
  const d=await r.json();if(!r.ok)throw Error(d.detail||'Falha de comunicação');return d;}
-async function show(){try{const s=await call('/api/admin/session');$('login').hidden=s.authenticated;$('panel').hidden=!s.authenticated;if(s.authenticated){await Promise.all([refresh(),loadResearch(),loadM1Coverage(),loadMultiResearch(),loadPullback()]);}}catch(e){$('error').textContent=e.message}}
+async function show(){try{const s=await call('/api/admin/session');$('login').hidden=s.authenticated;$('panel').hidden=!s.authenticated;if(s.authenticated){await refresh();}}catch(e){$('error').textContent=e.message}}
 $('loginForm').addEventListener('submit',async e=>{e.preventDefault();$('error').textContent='';
  try{await call('/api/admin/login',{method:'POST',headers:{'Content-Type':'application/json'},
  body:JSON.stringify({login:$('loginName').value,password:$('loginPassword').value})});
  $('loginPassword').value='';await show()}catch(e){$('error').textContent=e.message}});
-async function logout(){await call('/api/admin/logout',{method:'POST'});$('panel').hidden=true;$('login').hidden=false;$('researchResults').hidden=true}
-function fmtPct(v){return typeof v==='number'?(v*100).toFixed(2).replace('.',',')+'%':'—'}
-function researchName(s){return ({ema50_trend:'EMA 50 · Tendência',bollinger_reversal:'Bollinger · Reversão',channel_breakout:'Rompimento · Canal',random_control:'Controle aleatório'})[s]||String(s)}
-function researchDate(v){return v?new Date(v).toLocaleString('pt-BR',{timeZone:'America/Sao_Paulo'}):'—'}
-async function loadPullback(){
- $('pullbackStatus').textContent='Lendo resultado salvo...';
- try{
-  const r=await call('/api/admin/research/pullback-m1-m3');
-  if(r.state==='PENDING'){$('pullbackBody').hidden=true;$('pullbackStatus').textContent=r.message;return}
-  if(r.state!=='RESEARCH_ONLY'||!Array.isArray(r.results))throw Error('Relatório inválido');
-  $('pullbackRows').replaceChildren();
-  for(const item of r.results){
-   const tr=document.createElement('tr'),v=item.holdout||{},t=item.training||{};
-   const values=[item.timeframe,item.expiry_minutes+' min',fmtPct(t.win_rate),v.signals,v.wins,fmtPct(v.win_rate),v.pnl_per_1_usd_at_88pct];
-   values.forEach((value,i)=>{const td=document.createElement('td');td.textContent=String(value??'—');
-      if(i===6)td.className=Number(value)>=0?'positive':'negative';tr.append(td)});
-   $('pullbackRows').append(tr);
-  }
-  $('pullbackStatus').textContent=r.m1_candles.toLocaleString('pt-BR')+' velas M1 · '+r.missing_minutes+' minuto(s) ausente(s) · Atualizado '+researchDate(r.generated_at);
-  $('pullbackBody').hidden=false;
- }catch(e){$('pullbackBody').hidden=true;$('pullbackStatus').textContent='Falha na consulta: '+e.message}
-}
-async function loadMultiResearch(){
- $('multiStatus').textContent='Consultando relatório M1-M15...';
- try{
-  const data=await call('/api/admin/research/multi-timeframe');
-  if(data.state==='PENDING'){$('multiBody').hidden=true;$('multiStatus').textContent=data.message;return}
-  if(data.state!=='RESEARCH_ONLY'||!Array.isArray(data.results))throw Error('Formato inesperado');
-  $('multiCandles').textContent=Number(data.m1_candles).toLocaleString('pt-BR');
-  $('multiModels').textContent=String(data.models_tested);
-  const winner=data.training_selected;
-  $('multiSelected').textContent=winner?winner.timeframe+' / '+winner.expiry_minutes+' min / '+winner.strategy:'Nenhum';
-  const sorted=data.results.slice().sort((a,b)=>(b.holdout?.pnl_per_1_usd_at_88pct??-1e9)-(a.holdout?.pnl_per_1_usd_at_88pct??-1e9));
-  $('multiRows').replaceChildren();
-  for(const item of sorted.slice(0,30)){
-   const tr=document.createElement('tr'),v=item.holdout||{};
-   const name=item.strategy==='smc_sweep_choch_fvg_50'?'SMC: Sweep + CHoCH + FVG/50%':item.strategy;
-   const values=[item.timeframe,item.expiry_minutes+' min',name,v.signals,fmtPct(v.win_rate),v.pnl_per_1_usd_at_88pct];
-   values.forEach((value,index)=>{const td=document.createElement('td');td.textContent=String(value??'—');
-   if(index===5)td.className=Number(value)>=0?'positive':'negative';tr.append(td)});
-   $('multiRows').append(tr);
-  }
-  $('multiBody').hidden=false;
-  $('multiStatus').textContent='Histórico '+data.period_from.slice(0,10)+' a '+data.period_to.slice(0,10)+' · Melhor do treinamento: '+(winner?fmtPct(winner.holdout.win_rate)+' na validação':'não identificado')+'.';
- }catch(e){$('multiBody').hidden=true;$('multiStatus').textContent='Falha ao consultar: '+e.message}
-}
-async function loadM1Coverage(){
- try{
-  const r=await call('/api/admin/research/m1-history');
-  const count=Number(r.candles||0).toLocaleString('pt-BR');
-  const period=r.first_utc&&r.last_utc?' · '+r.first_utc.slice(0,10)+' até '+r.last_utc.slice(0,10):'';
-  const usable=Number(r.candles)>=43000 && Number(r.coverage_pct)>=99.9;
-  const state=r.complete?'Histórico M1 completo':usable?'Histórico M1 utilizável com pequenas lacunas':'Histórico M1 ainda não concluído';
-  const gapInfo=Number.isFinite(Number(r.missing_intervals))?' · '+r.missing_intervals+' minuto(s) ausente(s)':'';
-  $('m1Coverage').textContent=state+' · '+count+' velas'+period+gapInfo+(usable?' · testes ignoram as lacunas; sem preços inventados':' · coleta automática solicitada à Deriv');
- }catch(e){$('m1Coverage').textContent='Histórico M1: não foi possível consultar a cobertura ('+e.message+').'}
-}
-async function loadResearch(){
- const button=$('researchReload');button.disabled=true;$('researchStatus').textContent='Consultando estudo no banco...';
- try{
-  const data=await call('/api/admin/research/volatility100-30d');
-  if(data.state==='PENDING'){$('researchResults').hidden=true;$('researchStatus').textContent=data.message;return}
-  if(data.state!=='RESEARCH_ONLY'||!Array.isArray(data.strategies)||data.symbol!=='1HZ100V')throw Error('Formato de relatório inválido');
-  $('researchCandles').textContent=Number(data.candles).toLocaleString('pt-BR');
-  $('researchPeriod').textContent=(data.period_from||'').slice(0,10)+' até '+(data.period_to||'').slice(0,10);
-  $('researchUpdated').textContent=researchDate(data.generated_at);
-  $('researchRows').replaceChildren();
-  for(const item of data.strategies){
-   const v=item.holdout||{},tr=document.createElement('tr');
-   const values=[researchName(item.strategy),v.signals??'—',v.wins??'—',v.losses??'—',fmtPct(v.win_rate_excluding_draws),fmtPct(v.illustrative_ev_at_88pct)];
-   values.forEach((value,i)=>{const td=document.createElement('td');td.textContent=String(value);if(i===5)td.className=typeof v.illustrative_ev_at_88pct==='number'&&v.illustrative_ev_at_88pct<0?'negative':'positive';tr.append(td)});
-   $('researchRows').append(tr);
-  }
-  $('researchTraining').textContent='Treinamento: 70% iniciais · Validação: 30% finais · '+data.strategies.length+' métodos · Ordens enviadas: '+data.orders_sent+'.';
-  $('researchDisclaimer').textContent='* '+(data.warning||'Expectativa com retorno líquido hipotético de 88%; não representa contratos liquidados da Deriv. Nenhuma estratégia está aprovada para operação automática.');
-  $('researchStatus').textContent='Relatório histórico disponível. Nenhuma estratégia é ativada por esta página.';
-  $('researchResults').hidden=false;
- }catch(e){$('researchResults').hidden=true;$('researchStatus').textContent='Não foi possível carregar o estudo: '+e.message}
- finally{button.disabled=false;loadM1Coverage()}
-}
+async function logout(){await call('/api/admin/logout',{method:'POST'});$('panel').hidden=true;$('login').hidden=false}
 function actionUI(){$('daysField').hidden=!['add_hours','remove_hours'].includes($('action').value)}
 function formatNexoraId(id){return 'NXR-'+String(id).padStart(6,'0')}
 function parseNexoraId(raw){
@@ -189,7 +66,7 @@ function parseNexoraId(raw){
 async function refresh(){try{
  $('error').textContent='';
  const query=$('userSearch').value.trim();
- const [users,audit]=await Promise.all([call('/api/admin/access/users'+(query?'?q='+encodeURIComponent(query):'')),call('/api/admin/access/audit')]);
+ const users=await call('/api/admin/access/users'+(query?'?q='+encodeURIComponent(query):''));
  $('users').replaceChildren();
  if(!users.items.length){const tr=document.createElement('tr'),td=document.createElement('td');td.colSpan=5;td.textContent='Nenhum usuário encontrado';tr.append(td);$('users').append(tr)}
  for(const u of users.items){const tr=document.createElement('tr');tr.dataset.id=u.user_id;
@@ -197,8 +74,7 @@ async function refresh(){try{
  u.access.expires_at?new Date(u.access.expires_at).toLocaleString('pt-BR',{timeZone:'America/Sao_Paulo'}):'—'];
  for(const value of values){const cell=document.createElement('td');cell.textContent=String(value);tr.append(cell)}
  tr.onclick=()=>{$('userId').value=u.nexora_id;document.querySelectorAll('tr[data-id]').forEach(row=>row.classList.toggle('selected',row===tr))};$('users').append(tr)}
- $('audit').textContent=audit.items.map(x=>new Date(x.at).toLocaleString('pt-BR',{timeZone:'America/Sao_Paulo'})
- +' · '+formatNexoraId(x.user_id)+' · '+x.action+' · '+x.note).join('\n')||'Nenhuma alteração registrada';
+
 }catch(e){$('error').textContent=e.message}}
 $('userSearch').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();refresh()}});
 async function save(){const user_id=parseNexoraId($('userId').value),action=$('action').value,
