@@ -71,6 +71,7 @@ def test_reproducible_three_timeframes_and_unverified_provenance():
     assert a["statistics"]["changes_observed"]==1139
     assert a["statistics"]["interpretation"]=="DESCRIPTIVE_NOT_PREDICTIVE"
     assert len(a["evidence"]["input_sha256"])==64
+    assert len(a["evidence"]["result_sha256"])==64
     assert "candles" not in summary(a)
 
 
@@ -305,3 +306,29 @@ def test_partial_odd_count_period_comparison_is_chronological():
 def test_invalid_replay_clock_is_rejected_explicitly(invalid_clock):
     with pytest.raises(ResearchInputError,match="Relógio inválido"):
         build_report(sample(),clock=invalid_clock)
+
+
+def test_tampered_statistical_result_is_rejected_even_with_intact_input(
+        tmp_path,monkeypatch):
+    engine,factory=_database(tmp_path,monkeypatch)
+    try:
+        client=TestClient(main.app)
+        client.cookies.set("nexora_sid","ohlc-aa")
+        created=client.post("/api/nexora2/ohlc/research",json=sample())
+        assert created.status_code==200,created.text
+        report_id=created.json()["id"]
+        with factory() as session:
+            record=session.get(HistoricalResearchReport,report_id)
+            body=json.loads(record.payload_json)
+            untouched_input_hash=body["evidence"]["input_sha256"]
+            body["statistics"]["up_intervals"]+=1
+            assert body["evidence"]["input_sha256"]==untouched_input_hash
+            record.payload_json=json.dumps(body,allow_nan=False)
+            session.commit()
+        details=client.get(f"/api/nexora2/ohlc/research/{report_id}")
+        assert details.status_code==409
+        assert "Resultado" in details.json()["detail"]
+        replay=client.post(f"/api/nexora2/ohlc/research/{report_id}/replay")
+        assert replay.status_code==409
+    finally:
+        engine.dispose()
