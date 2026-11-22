@@ -245,7 +245,12 @@ def result_digest(report: dict) -> str:
             "orders_sent", "execution_allowed",
         )
     }
-    proof["input_sha256"] = report["evidence"]["input_sha256"]
+    # Cover provenance, timeframe cutoffs and validation metadata, too.
+    # Exclude only the digest itself to avoid a self-referential hash.
+    proof["evidence"] = {
+        key: value for key, value in report["evidence"].items()
+        if key != "result_sha256"
+    }
     raw = json.dumps(proof, sort_keys=True, separators=(",", ":"),
                      allow_nan=False).encode("utf-8")
     return hashlib.sha256(raw).hexdigest()
