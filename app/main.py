@@ -38,6 +38,7 @@ from .research_persistence import (research_loop, latest_study, latest_multitime
     latest_pullback_study, HistoricalResearchReport, RESEARCH_KEY,
     MULTI_RESEARCH_KEY, PULLBACK_KEY)  # read-only research
 from .intelligence2.research_compare import compare_saved_reports
+from .intelligence2.research_export import export_report as export_verified_ohlc_report
 from .intelligence2.historical_research import (
     ResearchInputError, build_report as build_uploaded_ohlc_report,
     summary as uploaded_ohlc_summary,
@@ -2817,12 +2818,7 @@ async def nexora2_export_own_ohlc_research(request:Request,report_id:int,
     if report is None:
         raise HTTPException(404,"Pesquisa não encontrada")
     return JSONResponse(
-        content={
-            "format":"NEXORA_2_RESEARCH_EXPORT_V1",
-            "scope":"OWN_UNVERIFIED_HISTORICAL_RESEARCH",
-            "study_id":report_id,
-            **uploaded_ohlc_details(report),
-        },
+        content=export_verified_ohlc_report(report,report_id),
         headers={
             "Content-Disposition":f'attachment; filename="nexora-pesquisa-{report_id}.json"',
             "Cache-Control":"private, no-store",
