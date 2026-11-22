@@ -18,7 +18,7 @@ Mudanças da PR só estarão disponíveis no site depois do CI e da publicação
 | 43–48 | Learning | NÃO CONCLUÍDO: sem modelo ML validado nem champion/challenger/fallback executável |
 | 49–57 | Signals | PARCIAL: anotações locais e histórico pessoal de visitas de pesquisa; gestão completa de sinais e fornecedores ainda falta |
 | 58–63 | Advanced | PARCIAL: upload OHLC e símbolo; configurações de pesquisa completas faltam |
-| 64–69 | Evidence | PARCIAL: SHA-256 de entrada/saída, procedência, versões, relatórios persistidos, replay e exportação JSON privada com conferência de integridade na PR #75; relatórios multiativos completos ainda faltam |
+| 64–69 | Evidence | PARCIAL: SHA-256 de entrada/saída, versões, relatórios e replay; exportação JSON integral por conta e verificador de checksums offline sem banco ou corretora na PR #75; estudos consolidados multiativos ainda faltam |
 | 70–75 | Orchestrator | PARCIAL: execução sequencial determinística, etapas auditáveis; fila e distribuição robusta faltam |
 | 76–87 | Dashboard | PARCIAL: painel modernizado, textos DEMO/pesquisa esclarecidos e interface de importação OHLC, histórico pessoal, comparação e relatórios na PR #75; visão geral de todos os módulos ainda falta |
 
