@@ -391,3 +391,68 @@ def test_tampered_provenance_and_cutoff_metadata_rejected(tmp_path,monkeypatch,m
         assert client.post(f"/api/nexora2/ohlc/research/{report_id}/replay").status_code==409
     finally:
         engine.dispose()
+
+
+@pytest.mark.parametrize("tiny", [5e-324, 1e-200, 1e-13])
+def test_numerically_unstable_tiny_prices_are_rejected(tiny):
+    payload=sample()
+    payload["candles"][0].update(open=tiny,high=tiny,low=tiny,close=tiny)
+    with pytest.raises(ResearchInputError,match="intervalo numérico seguro"):
+        build_report(payload)
+
+
+def test_extremely_large_integer_price_is_rejected_without_crashing():
+    payload=sample()
+    gigantic=10**400
+    payload["candles"][0].update(
+        open=gigantic, high=gigantic, low=gigantic, close=gigantic
+    )
+    with pytest.raises(ResearchInputError,match="intervalo numérico seguro"):
+        build_report(payload)
+
+
+def test_upload_rejects_malformed_content_length_with_400(tmp_path,monkeypatch):
+    engine,factory=_database(tmp_path,monkeypatch)
+    try:
+        client=TestClient(main.app)
+        client.cookies.set("nexora_sid","ohlc-aa")
+        response=client.post(
+            "/api/nexora2/ohlc/research",content=b"{}",
+            headers={
+                "Content-Type":"application/json",
+                "Content-Length":"9"*12,
+            },
+        )
+        assert response.status_code==400,response.text
+        assert "Tamanho de requisição inválido" in response.json()["detail"]
+        with factory() as session:
+            assert session.query(HistoricalResearchReport).count()==0
+    finally:
+        engine.dispose()
+
+
+@pytest.mark.parametrize("field,replacement",[
+    ("disclaimer","Garantia fictícia indevida"),
+    ("created_from","UNTRUSTED_DIFFERENT_SOURCE"),
+])
+def test_tampered_report_labels_are_covered_by_result_digest(
+        tmp_path,monkeypatch,field,replacement):
+    engine,factory=_database(tmp_path,monkeypatch)
+    try:
+        client=TestClient(main.app)
+        client.cookies.set("nexora_sid","ohlc-aa")
+        saved=client.post("/api/nexora2/ohlc/research",json=sample())
+        assert saved.status_code==200,saved.text
+        report_id=saved.json()["id"]
+        with factory() as session:
+            row=session.get(HistoricalResearchReport,report_id)
+            report=json.loads(row.payload_json)
+            assert report["evidence"]["result_sha256"]
+            report[field]=replacement
+            row.payload_json=json.dumps(report,allow_nan=False)
+            session.commit()
+        response=client.get(f"/api/nexora2/ohlc/research/{report_id}")
+        assert response.status_code==409,response.text
+        assert "Resultado histórico alterado" in response.json()["detail"]
+    finally:
+        engine.dispose()
