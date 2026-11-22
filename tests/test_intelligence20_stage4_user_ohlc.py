@@ -173,7 +173,7 @@ def test_historical_comparison_is_authenticated_descriptive_and_read_only(isolat
     assert page.status_code == 200
     assert 'id="research-compare"' in page.text
     assert 'id="compare-research"' in page.text
-    assert "renderCompareOptions(data.runs)" in page.text
+    assert "renderCompareOptions(studies.runs)" in page.text
     assert "comparisonRequest" in page.text
 
     uploaded = client.post("/api/homologation/assets", json=sample(),
@@ -253,3 +253,72 @@ def test_historical_comparison_never_ranks_mixed_provenance(isolated_db):
     assert result["left"]["origin_type"] == "DECLARED_REAL_UNVERIFIED"
     assert result["left"]["provenance_verified"] is False
     assert result["financial_execution_allowed"] is False
+
+
+def test_research_archive_pagination_filters_auth_and_non_mutation(isolated_db):
+    client = TestClient(core.app)
+    page = client.get("/")
+    assert page.status_code == 200
+    assert 'id="research-search"' in page.text
+    assert 'id="research-state"' in page.text
+    assert 'id="research-prev"' in page.text
+    assert 'id="research-next"' in page.text
+    assert "id_prefix" in page.text
+
+    uploaded = client.post("/api/homologation/assets", json=sample(),
+                           headers=HEADERS)
+    assert uploaded.status_code == 200, uploaded.text
+    dataset = uploaded.json()["id"]
+    ids = []
+    for _ in range(4):
+        response = client.post(
+            "/api/homologation/research/runs/uploaded/" + dataset,
+            headers=HEADERS,
+        )
+        assert response.status_code == 200, response.text
+        ids.append(response.json()["id"])
+
+    base = "/api/homologation/research/runs"
+    assert client.get(base + "?limit=2").status_code == 401
+    assert client.get(base + "?limit=2&offset=0", headers=HEADERS).status_code == 200
+    first = client.get(base + "?limit=2&offset=0", headers=HEADERS).json()
+    second = client.get(base + "?limit=2&offset=2", headers=HEADERS).json()
+    last = client.get(base + "?limit=2&offset=4", headers=HEADERS).json()
+
+    assert first["total"] == second["total"] == last["total"] == 4
+    assert first["offset"] == 0 and second["offset"] == 2
+    assert first["limit"] == 2
+    assert first["has_more"] is True
+    assert second["has_more"] is False
+    assert last["has_more"] is False and last["runs"] == []
+    assert {r["id"] for r in first["runs"]}.isdisjoint(
+        {r["id"] for r in second["runs"]})
+    all_ids = [r["id"] for r in first["runs"] + second["runs"]]
+    assert set(all_ids) == set(ids)
+    assert all(r["state"] == "COMPLETE" for r in first["runs"] + second["runs"])
+    assert client.get(base, headers=HEADERS).json()["total"] == 4
+
+    filtered = client.get(
+        base + "?limit=2&state=COMPLETE&id_prefix=" + ids[0][:12].upper(),
+        headers=HEADERS,
+    )
+    assert filtered.status_code == 200, filtered.text
+    assert filtered.json()["total"] == 1
+    assert filtered.json()["runs"][0]["id"] == ids[0]
+    assert filtered.json()["has_more"] is False
+
+    no_errors = client.get(base + "?state=ERROR", headers=HEADERS)
+    assert no_errors.status_code == 200
+    assert no_errors.json()["total"] == 0 and no_errors.json()["runs"] == []
+    for query in ("offset=-1", "offset=100001", "limit=101",
+                  "state=RUNNING", "id_prefix=not-hex"):
+        invalid = client.get(base + "?" + query, headers=HEADERS)
+        assert invalid.status_code == 422, (query, invalid.text)
+
+    restored = client.get(
+        "/api/homologation/research/runs/" + all_ids[-1], headers=HEADERS)
+    assert restored.status_code == 200
+    assert len(restored.json()["stages"]) == 7
+    assert client.get(base, headers=HEADERS).json()["total"] == 4
+    assert not any("/buy" in route.path or "/orders" in route.path
+                   for route in core.app.routes)
