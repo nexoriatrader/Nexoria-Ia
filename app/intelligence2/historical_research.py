@@ -264,6 +264,10 @@ def summary(report: dict) -> dict:
             "state": c["state"], "data_quality": c["data_quality"],
             "reason_codes": c["reason_codes"],
             "confidence_kind": c["confidence_kind"],
+            "source": c["source"],
+            "timeframe_seconds": c["timeframe_seconds"],
+            "observed_at_epoch": c["observed_at_epoch"],
+            "last_closed_epoch": c["last_closed_epoch"],
         } for role, c in report["contexts"].items()},
         "timeframe_alignment": {
             "state": alignment["alignment"]["state"],
