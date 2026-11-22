@@ -26,6 +26,7 @@ FOCUSED_TESTS = (
     "tests/test_nexora2_dashboard_clarity.py",
     "tests/test_nexora2_uploaded_ohlc.py",
     "tests/test_nexora2_ohlc_compare.py",
+    "tests/test_nexora2_ohlc_export.py",
     "tests/test_nexora2_integrated_workspace.py",
     "tests/test_intelligence2_context_timeframe.py",
 )
