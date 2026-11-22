@@ -1,6 +1,8 @@
 """End-to-end isolated uploaded OHLC HTTP + persistence, never any broker calls."""
 from datetime import datetime, timezone
-from sqlalchemy import create_engine
+import csv
+from io import StringIO
+from sqlalchemy import create_engine, update
 from sqlalchemy.pool import StaticPool
 from fastapi.testclient import TestClient
 import pytest
@@ -320,5 +322,81 @@ def test_research_archive_pagination_filters_auth_and_non_mutation(isolated_db):
     assert restored.status_code == 200
     assert len(restored.json()["stages"]) == 7
     assert client.get(base, headers=HEADERS).json()["total"] == 4
+    assert not any("/buy" in route.path or "/orders" in route.path
+                   for route in core.app.routes)
+
+
+def test_authenticated_ohlc_csv_roundtrip_inspector_and_integrity(isolated_db):
+    client = TestClient(core.app)
+    page = client.get("/")
+    assert page.status_code == 200
+    assert 'id="asset-detail"' in page.text
+    assert "Inspecionar" in page.text
+    assert "Baixar CSV completo" in page.text
+    assert "async function loadAssetDetail(" in page.text
+    assert "URL.revokeObjectURL" in page.text
+
+    uploaded = client.post("/api/homologation/assets", json=sample(),
+                           headers=HEADERS)
+    assert uploaded.status_code == 200, uploaded.text
+    asset_id = uploaded.json()["id"]
+    path = "/api/homologation/assets/" + asset_id + "/csv"
+
+    assert client.get(path).status_code == 401
+    assert client.get(path, headers={"X-NEXORA-STAGE4-KEY": "invalid"}).status_code == 401
+    assert client.get("/api/homologation/assets/invalid/csv",
+                      headers=HEADERS).status_code == 422
+    assert client.get("/api/homologation/assets/" + "0" * 32 + "/csv",
+                      headers=HEADERS).status_code == 404
+
+    before = client.get("/api/homologation/assets", headers=HEADERS).json()
+    stored = client.get("/api/homologation/assets/" + asset_id,
+                        headers=HEADERS).json()
+    result = client.get(path, headers=HEADERS)
+    assert result.status_code == 200, result.text[:120]
+    assert result.headers["content-type"].startswith("text/csv")
+    assert result.headers["cache-control"] == "no-store"
+    assert result.headers["x-nexora-data-origin"] == "SYNTHETIC_TEST"
+    assert result.headers["content-disposition"] == (
+        'attachment; filename="nexora-ohlc-' + asset_id + '.csv"'
+    )
+    assert KEY not in result.text
+    csv_rows = csv.DictReader(StringIO(result.text))
+    assert csv_rows.fieldnames == ["epoch", "open", "high", "low", "close"]
+    rows = list(csv_rows)
+    assert len(rows) == stored["asset"]["bar_count"] == 96
+    for index in (0, 32, 95):
+        for column in ("open", "high", "low", "close"):
+            assert float(rows[index][column]) == stored["bars"][index][column]
+        assert int(rows[index]["epoch"]) == stored["bars"][index]["epoch"]
+    assert client.get(path, headers=HEADERS).text == result.text
+    assert client.get("/api/homologation/assets",
+                      headers=HEADERS).json() == before
+
+    # A modified archive must not be exported even when it is present.
+    with isolated_db.begin() as conn:
+        conn.execute(update(uploads.datasets).where(
+            uploads.datasets.c.id == asset_id).values(bars_json="[]"))
+    assert client.get(path, headers=HEADERS).status_code == 503
+    assert client.get("/api/homologation/assets/" + asset_id,
+                      headers=HEADERS).status_code == 503
+
+
+def test_unverified_ohlc_export_preserves_origin_marker(isolated_db):
+    client = TestClient(core.app)
+    uploaded = client.post(
+        "/api/homologation/assets", json=sample("DECLARED_REAL_UNVERIFIED"),
+        headers=HEADERS,
+    )
+    assert uploaded.status_code == 200, uploaded.text
+    exported = client.get(
+        "/api/homologation/assets/" + uploaded.json()["id"] + "/csv",
+        headers=HEADERS,
+    )
+    assert exported.status_code == 200
+    assert exported.headers["x-nexora-data-origin"] == "UNVERIFIED"
+    assert len(list(csv.DictReader(StringIO(exported.text)))) == 96
+    assert client.get("/api/homologation/assets/" + uploaded.json()["id"],
+                      headers=HEADERS).json()["provenance_verified"] is False
     assert not any("/buy" in route.path or "/orders" in route.path
                    for route in core.app.routes)
