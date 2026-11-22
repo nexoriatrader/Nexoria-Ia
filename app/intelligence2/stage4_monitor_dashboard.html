@@ -138,7 +138,20 @@ td{color:#d8e9f0}tr:last-child td{border:0}
 <div class="connection"><button id="start-research" class="secondary" type="button" disabled>Executar pesquisa sintética de teste</button>
 <span class="muted" id="research-action-status">Autentique-se para iniciar.</span></div>
 <p class="sub">O botão de teste usa REPRODUCIBLE_SYNTHETIC_OHLC_FIXTURE; os conjuntos importados permanecem classificados conforme a origem declarada, não verificada. Sem recomendações ou operações.</p>
+<div class="connection" style="margin-top:15px">
+<label for="research-search">Identificador da pesquisa <input id="research-search" type="search" maxlength="32" autocomplete="off" placeholder="Prefixo do ID (hexadecimal)"></label>
+<label for="research-state">Estado <select id="research-state">
+<option value="">Todos</option><option value="COMPLETE">Concluídas</option><option value="ERROR">Com erro</option>
+</select></label>
+<button id="research-filter" class="secondary" type="button" disabled>Buscar pesquisas</button>
+<button id="research-clear" class="secondary" type="button" disabled>Limpar filtros</button>
+</div>
 <div id="research-runs" class="table-scroll" style="margin-top:14px">Sem pesquisas consultadas.</div>
+<div class="connection" style="margin-top:14px">
+<button id="research-prev" class="secondary" type="button" disabled>← Anterior</button>
+<span id="research-page" class="muted" role="status">Autentique-se para consultar o histórico.</span>
+<button id="research-next" class="secondary" type="button" disabled>Próxima →</button>
+</div>
 </section>
 <div class="section"><div><h2>Detalhe da pesquisa selecionada</h2>
 <p>Entradas e saídas reais das transformações, com SHA-256, horário e duração.</p></div></div>
@@ -335,25 +348,85 @@ comparisonRequest++;$('compare-result').replaceChildren();
 setText('compare-status','Selecione Comparar pesquisas para consultar os resultados.');
 });
 
-async function loadResearch(){
-const data=await api('/api/homologation/research/runs?limit=20');
-setText('research-count',nf.format(data.total)+' pesquisa(s)');
-renderCompareOptions(data.runs);
-const target=$('research-runs');target.replaceChildren();
-if(!data.runs.length){target.appendChild(element('p','muted','Nenhuma pesquisa iniciada.'));return}
-const table=element('table');const thead=element('thead');const header=element('tr');
-for(const n of ['Quando','Estado','Etapas','Duração','Origem','Detalhes']){header.appendChild(element('th','',n))}
-thead.appendChild(header);table.appendChild(thead);
-const tbody=element('tbody');
-for(const run of data.runs){const row=element('tr');
-for(const val of [stamp(run.finished_at),run.state,run.step_count,run.duration_ms+' ms',run.synthetic?'SINTÉTICA':'NÃO VERIFICADA']){
-td(row,val)}
-const cell=element('td');const btn=element('button','secondary','Visualizar');
-btn.type='button';btn.addEventListener('click',()=>loadResearchDetail(run.id));
-cell.appendChild(btn);row.appendChild(cell);tbody.appendChild(row)}
-table.appendChild(tbody);target.appendChild(table);
-if(!selectedResearch&&data.runs[0])await loadResearchDetail(data.runs[0].id);
+let researchOffset=0, researchListRequest=0;
+const researchPageSize=15;
+let researchApplied={prefix:'',state:''};
+function resetResearchSelection(){
+ selectedResearch=null;researchDetailRequest++;
+ $('research-detail').replaceChildren();
+ $('research-detail').appendChild(element('p','muted','Selecione uma pesquisa para visualizar seus resultados e etapas persistidas.'));
 }
+async function loadResearch(){
+ if(!connected)return;
+ const request=++researchListRequest;
+ const params=new URLSearchParams({limit:String(researchPageSize),offset:String(researchOffset)});
+ if(researchApplied.prefix)params.set('id_prefix',researchApplied.prefix);
+ if(researchApplied.state)params.set('state',researchApplied.state);
+ const target=$('research-runs');
+ setText('research-page','Consultando registros…');
+ try{
+ const data=await api('/api/homologation/research/runs?'+params.toString());
+ if(request!==researchListRequest)return;
+ setText('research-count',nf.format(data.total)+(researchApplied.prefix||researchApplied.state?' resultado(s)':' pesquisa(s)'));
+ target.replaceChildren();
+ $('research-prev').disabled=!connected||researchOffset===0;
+ $('research-next').disabled=!connected||!data.has_more;
+ const first=data.runs.length?researchOffset+1:0;
+ const last=researchOffset+data.runs.length;
+ setText('research-page',first?('Exibindo '+nf.format(first)+'–'+nf.format(last)+' de '+nf.format(data.total)):
+ ('Nenhuma pesquisa corresponde aos filtros.'));
+ if(!data.runs.length){
+ target.appendChild(element('p','muted','Nenhuma pesquisa encontrada. Ajuste os filtros ou consulte outra página.'));
+ resetResearchSelection();return;
+ }
+ const table=element('table'),thead=element('thead'),header=element('tr');
+ for(const name of ['Quando','Estado','Etapas','Duração','Origem','Identificador','Detalhes']){
+ header.appendChild(element('th','',name));
+ }
+ thead.appendChild(header);table.appendChild(thead);
+ const tbody=element('tbody');
+ for(const run of data.runs){
+ const row=element('tr');
+ for(const value of [stamp(run.finished_at),run.state,run.step_count,
+ run.duration_ms+' ms',run.synthetic?'SINTÉTICA':'NÃO VERIFICADA',run.id.slice(0,12)+'…'])td(row,value);
+ const cell=element('td');const btn=element('button','secondary','Visualizar');
+ btn.type='button';btn.addEventListener('click',()=>loadResearchDetail(run.id));
+ cell.appendChild(btn);row.appendChild(cell);tbody.appendChild(row);
+ }
+ table.appendChild(tbody);target.appendChild(table);
+ if(!selectedResearch)await loadResearchDetail(data.runs[0].id);
+ }catch(e){
+ if(request!==researchListRequest)return;
+ setText('research-page','Falha ao consultar histórico: '+e.message);
+ $('research-prev').disabled=true;$('research-next').disabled=true;
+ }
+}
+function applyResearchFilters(){
+ const prefix=$('research-search').value.trim().toLowerCase();
+ if(prefix&&!/^[0-9a-f]{1,32}$/.test(prefix)){
+ setText('research-page','O identificador deve usar de 1 a 32 caracteres hexadecimais (0–9, a–f).');return;
+ }
+ researchApplied={prefix,state:$('research-state').value};
+ researchOffset=0;resetResearchSelection();loadResearch();
+}
+function clearResearchFilters(){
+ $('research-search').value='';$('research-state').value='';
+ researchApplied={prefix:'',state:''};
+ researchOffset=0;resetResearchSelection();loadResearch();
+}
+$('research-filter').addEventListener('click',applyResearchFilters);
+$('research-clear').addEventListener('click',clearResearchFilters);
+$('research-search').addEventListener('keydown',event=>{
+ if(event.key==='Enter'){event.preventDefault();applyResearchFilters()}
+});
+$('research-prev').addEventListener('click',()=>{
+ if(researchOffset<researchPageSize)return;
+ researchOffset-=researchPageSize;resetResearchSelection();loadResearch();
+});
+$('research-next').addEventListener('click',()=>{
+ researchOffset+=researchPageSize;resetResearchSelection();loadResearch();
+});
+
 async function downloadResearchEvidence(id,button,status){
 if(!connected){status.textContent='Autentique-se antes de exportar.';return}
 button.disabled=true;status.textContent='Preparando evidências persistidas…';
@@ -412,6 +485,8 @@ async function initiateResearch(){
 const btn=$('start-research');btn.disabled=true;setText('research-action-status','Executando pesquisa...');
 try{
  const started=await api('/api/homologation/research/runs','POST');
+ $('research-search').value='';$('research-state').value='';
+ researchApplied={prefix:'',state:''};researchOffset=0;resetResearchSelection();
  await loadResearch();await loadResearchDetail(started.id);
  setText('research-action-status','Concluída: '+started.step_count+' etapas gravadas.');
 }catch(e){setText('research-action-status','Erro ao iniciar: '+e.message)}
@@ -423,13 +498,13 @@ async function refresh(){if(!connected||busy)return;busy=true;try{const [data,tr
 api('/api/homologation/monitor/overview?runs_limit=30&records_limit=30'),
 api('/api/homologation/monitor/pipeline?limit=35'),
 api('/api/homologation/monitor/ohlc-quality?limit=4'),
-api('/api/homologation/research/runs?limit=20'),
+api('/api/homologation/research/runs?limit=100'),
 api('/api/homologation/assets?limit=50')
 ]);
 $('start-research').disabled=false;$('upload-asset').disabled=false;renderAssets(assets);
-setText('research-count',nf.format(studies.total)+' pesquisa(s)');
-if(!selectedResearch&&studies.runs.length){await loadResearch();}
-else if(selectedResearch){/* Keep the selected result while monitoring refreshes. */}
+$('research-filter').disabled=false;$('research-clear').disabled=false;
+renderCompareOptions(studies.runs);
+await loadResearch();
 setText('k-records',nf.format(data.summary.stored_records));setText('k-runs',nf.format(data.summary.total_runs));setText('k-duplicates',nf.format(data.summary.duplicate_observations));setText('k-errors',nf.format(data.summary.failed_runs));modules(data);chart(data);health(data);makeRows('runs-body',data.runs,['finished_at','status','processed','inserted','duplicates','duration_ms','reason']);makeRows('records-body',data.records,['observed_at','station','metric','value','classification','recorded_at']);diagnosis(data);
 setText('ohlc-count',nf.format(oh.total)+' amostra(s) auditada(s)');
 const area=$('ohlc-audit');area.replaceChildren();
