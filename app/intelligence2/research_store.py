@@ -16,6 +16,14 @@ from .historical_research import VERSION, summary, result_digest
 MAX_PER_USER = 5
 
 
+def _utc_iso(value: datetime) -> str:
+    # SQLite round-trips UTC datetimes without timezone info, whereas
+    # PostgreSQL may retain the offset. Present both consistently as UTC.
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc).isoformat()
+
+
 def _key(user_id: int) -> str:
     if type(user_id) is not int or user_id < 1:
         raise ValueError("Identificador de usuário inválido")
@@ -63,9 +71,9 @@ def list_own(session, user_id: int) -> list[dict]:
     ).all()
     return [{
         "id": row.id,
-        "created_at": row.created_at.isoformat(),
-        "period_from": row.period_from.isoformat(),
-        "period_to": row.period_to.isoformat(),
+        "created_at": _utc_iso(row.created_at),
+        "period_from": _utc_iso(row.period_from),
+        "period_to": _utc_iso(row.period_to),
         "source": "USER_SUPPLIED_UNVERIFIED_OHLC",
     } for row in rows]
 
