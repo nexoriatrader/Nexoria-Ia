@@ -92,3 +92,29 @@ def test_history_scan_rejects_shallow_clone(tmp_path, monkeypatch):
     scanner = load_scanner(monkeypatch)
     with pytest.raises(RuntimeError, match="raso"):
         scanner.audit_history(shallow)
+
+
+def test_historical_fixture_ignorelist_only_matches_reserved_stage4_example(
+        tmp_path, monkeypatch):
+    scanner = load_scanner(monkeypatch)
+    fixture = (
+        '    monkeypatch.setenv("DATABASE_URL", '
+        '"postgres://dummy:placeholder@prod.example/db")'
+    )
+    assert scanner.audit_historical_text(
+        "tests/test_stage4_general_homologation.py", fixture
+    ) == []
+    # Identical content elsewhere is not exempt from scrutiny.
+    assert scanner.audit_historical_text(
+        "app/config.py", fixture
+    ) == [(1, "postgres_password_url")]
+
+    real_host = fixture.replace("prod.example", "database.internal")
+    assert scanner.audit_historical_text(
+        "tests/test_stage4_general_homologation.py", real_host
+    ) == [(1, "postgres_password_url")]
+
+    other_shape = fixture.replace("monkeypatch.setenv", "dangerous_call")
+    assert scanner.audit_historical_text(
+        "tests/test_stage4_general_homologation.py", other_shape
+    ) == [(1, "postgres_password_url")]
