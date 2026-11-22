@@ -128,6 +128,11 @@ td{color:#d8e9f0}tr:last-child td{border:0}
 <button id="run-uploaded" class="action" type="button" disabled>Pesquisar ativo selecionado</button>
 </div>
 <div id="asset-list" class="table-scroll" style="margin-top:14px">Catálogo não consultado.</div>
+<div id="asset-detail" style="margin-top:18px">
+<h3>Inspeção do conjunto OHLC</h3>
+<p id="asset-detail-status" class="sub" role="status">Selecione Inspecionar no catálogo para visualizar os candles.</p>
+<div id="asset-detail-view" class="table-scroll"></div>
+</div>
 <p class="sub">O processamento não consulta corretoras, não confirma a autenticidade da fonte e não executa operações.</p>
 </section>
 <div class="section section-anchor" id="historical-research"><div>
@@ -238,15 +243,72 @@ for(const asset of data.assets){const option=element('option','',asset.symbol+' 
 if([...select.options].some(opt=>opt.value===previous))select.value=previous;
 $('run-uploaded').disabled=!connected;
 const table=element('table');const header=element('tr');
-for(const title of ['Ativo','Classe','Candles','Qualidade','Origem','Arquivo'])header.appendChild(element('th','',title));
+for(const title of ['Ativo','Classe','Candles','Qualidade','Origem','Arquivo','Inspeção'])header.appendChild(element('th','',title));
 const head=element('thead');head.appendChild(header);table.appendChild(head);
 const body=element('tbody');
 for(const a of data.assets){const tr=element('tr');
 for(const v of [a.symbol,a.asset_class,a.bar_count+' / '+a.granularity_seconds+' s',a.quality,a.synthetic?'SINTÉTICO':'DECLARADA · NÃO VERIFICADA',a.snapshot_sha256.slice(0,12)+'…'])td(tr,v);
-body.appendChild(tr)}
+const inspection=element('td');const inspectButton=element('button','secondary','Inspecionar');
+inspectButton.type='button';inspectButton.addEventListener('click',()=>loadAssetDetail(a.id));
+inspection.appendChild(inspectButton);tr.appendChild(inspection);body.appendChild(tr)}
 table.appendChild(body);listing.appendChild(table);
 }
 async function loadAssets(){renderAssets(await api('/api/homologation/assets'))}
+let assetDetailRequest=0;
+async function downloadAssetCsv(id,button){
+ if(!connected){setText('asset-detail-status','Autentique-se para baixar o CSV.');return}
+ button.disabled=true;
+ setText('asset-detail-status','Preparando CSV a partir do arquivo armazenado e validado…');
+ let url=null;
+ try{
+ const result=await fetch('/api/homologation/assets/'+encodeURIComponent(id)+'/csv',{
+ cache:'no-store',headers:{'X-NEXORA-STAGE4-KEY':$('token').value}});
+ if(!result.ok)throw Error('HTTP '+result.status);
+ const body=await result.text();
+ if(!body.startsWith('epoch,open,high,low,close\\n'))throw Error('Cabeçalho CSV inválido');
+ const blob=new Blob([body],{type:'text/csv;charset=utf-8'});
+ url=URL.createObjectURL(blob);
+ const link=element('a');link.href=url;link.download='nexora-ohlc-'+id+'.csv';
+ document.body.appendChild(link);link.click();link.remove();
+ setText('asset-detail-status','CSV exportado. Integridade do arquivo conferida; origem externa não verificada.');
+ }catch(e){setText('asset-detail-status','Exportação indisponível: '+e.message)}
+ finally{if(url)setTimeout(()=>URL.revokeObjectURL(url),1000);button.disabled=false}
+}
+async function loadAssetDetail(id){
+ const request=++assetDetailRequest,target=$('asset-detail-view');
+ target.replaceChildren();
+ setText('asset-detail-status','Carregando e verificando a integridade do conjunto…');
+ try{
+ const data=await api('/api/homologation/assets/'+encodeURIComponent(id));
+ if(request!==assetDetailRequest)return;
+ const asset=data.asset,bars=data.bars;
+ if(!asset||!Array.isArray(bars)||bars.length!==asset.bar_count)throw Error('Inconsistência na quantidade de candles');
+ target.replaceChildren();
+ const meta=element('p','muted',asset.symbol+' · '+asset.bar_count+' candles · '+asset.granularity_seconds+
+ ' segundos por candle · '+(asset.synthetic?'SINTÉTICO DE TESTE':'ORIGEM DECLARADA, NÃO VERIFICADA'));
+ target.appendChild(meta);
+ target.appendChild(element('p','muted','SHA-256 arquivado: '+asset.snapshot_sha256));
+ const row=element('div','connection');row.style.margin='12px 0';
+ const button=element('button','secondary','Baixar CSV completo');button.type='button';
+ button.addEventListener('click',()=>downloadAssetCsv(id,button));row.appendChild(button);target.appendChild(row);
+ target.appendChild(element('p','muted','Prévia: últimos '+Math.min(30,bars.length)+' candles em horário de Brasília. A exportação contém todas as linhas.'));
+ const table=element('table'),thead=element('thead'),header=element('tr');
+ for(const title of ['Observado','Abertura','Máxima','Mínima','Fechamento'])header.appendChild(element('th','',title));
+ thead.appendChild(header);table.appendChild(thead);
+ const tbody=element('tbody');
+ for(const candle of bars.slice(-30)){
+ const tr=element('tr');
+ for(const value of [stamp(candle.epoch*1000),candle.open,candle.high,candle.low,candle.close])td(tr,value);
+ tbody.appendChild(tr);
+ }
+ table.appendChild(tbody);target.appendChild(table);
+ setText('asset-detail-status','Integridade SHA-256 conferida pelo servidor; autenticidade da fonte não verificada.');
+ }catch(e){
+ if(request!==assetDetailRequest)return;
+ target.replaceChildren();setText('asset-detail-status','Falha na inspeção: '+e.message);
+ }
+}
+
 async function uploadAsset(){
 const button=$('upload-asset');button.disabled=true;setText('asset-action-status','Validando arquivo CSV…');
 try{
@@ -258,6 +320,7 @@ const payload={symbol:$('asset-symbol').value.trim(),asset_class:$('asset-class'
 origin_type:$('asset-origin').value,source_label:source,granularity_seconds:Number($('asset-frame').value),bars};
 const created=await api('/api/homologation/assets','POST',payload);
 await loadAssets();$('asset-select').value=created.id;
+await loadAssetDetail(created.id);
 setText('asset-action-status',created.already_present?'Conjunto já existente: '+created.symbol:
 'Conjunto armazenado: '+created.symbol+' · '+created.bar_count+' candles · origem não verificada.');
 }catch(e){setText('asset-action-status','Importação recusada: '+e.message)}
