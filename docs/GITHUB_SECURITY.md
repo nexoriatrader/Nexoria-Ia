@@ -14,10 +14,13 @@ Auditoria: 17/11/2026. Repositório: `nexoriatrader/Nexoria-Ia`.
 - O `DERIV_CLIENT_ID` é identificador público OAuth, **não** senha nem token negociador.
 
 ## Antes do lançamento (ações de conta)
-1. **Mantenha o repositório privado.** Não use a opção de transformá-lo
-   em público para contornar a restrição do GitHub Free.
-2. Configure **GitHub Pro** (ou um plano com regras de proteção para repos
-   privados) e depois proteja `main` em Settings > Branches / Rules:
+1. **Não altere a visibilidade antes de auditar o histórico e logs.**
+   A conta atingiu a franquia GitHub Actions de repositórios privados.
+   Em repositórios públicos, executores padrão podem ser gratuitos, mas
+   toda a árvore, o histórico alcançável, os PRs e os logs podem ficar visíveis.
+   Esta vantagem de cobrança NÃO é uma liberação de segurança.
+2. Configure proteção de `main` e exija revisão por PR, quando disponível
+   no plano, em Settings > Branches / Rules:
    exigir PR antes de merge, checagens `NEXORA Python tests`,
    `NEXORA progression safety regression`, `NEXORA repository security audit`,
    impedir force-push e exclusão de branch, e impedir bypass não autorizado.
@@ -35,12 +38,40 @@ Auditoria: 17/11/2026. Repositório: `nexoriatrader/Nexoria-Ia`.
 7. Usar PR e revisão para mudanças; evitar commits diretos em `main` enquanto
    não houver regras obrigatórias. `main` está ligada ao auto deploy do Render.
 
+## Solicitação de visibilidade pública — pré-condições (22/11/2026)
+
+- A visibilidade do repositório `nexoriatrader/Nexoria-Ia` **continua privada**.
+  A conexão atual ao GitHub permite atualizar arquivos, mas não alterar
+  a visibilidade administrativa da conta.
+- A PR #75 contém o auditor de objetos históricos
+  `scripts/check_repository_history.py`, testes de regressão e o workflow
+  atualizado para `fetch-depth: 0`. Nenhum desses testes foi executado
+  pelo GitHub Actions enquanto os executores não forem atribuídos.
+- Uma inspeção pontual de 30 arquivos sensíveis no HEAD da PR #75 não
+  encontrou padrões evidentes das credenciais procuradas. **Isso não é uma
+  auditoria completa, não inclui histórico, anexos ou logs, e não autoriza
+  tornar pública a plataforma**.
+- Antes de qualquer abertura, executar **num checkout local completo**
+  `python3 scripts/check_repository_security.py` e
+  `python3 scripts/check_repository_history.py`, conferir todos os refs,
+  arquivos anexos e logs passados, e analisar padrões não reconhecidos
+  pelo scanner. Não basta excluir um arquivo do último commit.
+- Se houver qualquer indício de segredo real, **revogar/rotacionar**
+  primeiro e considerar repositório público limpo e separado para testes
+  apenas de pesquisa educacional. A publicação direta do histórico anterior
+  expõe materiais antigos e não pode ser desfeita pela reversão de
+  visibilidade.
+- A `main` segue conectada à produção Render. Não permitir merge/deploy,
+  alterações em controles de execução REAL ou mudanças nos mecanismos
+  DEMO como parte do processo de auditoria.
+
 ## Escopo e limitações da auditoria automática
-A checagem atual reconhece padrões fortes de credenciais e arquivos sensíveis
-rastreados em HEAD. Ela não testa tokens Deriv opacos sem prefixo conhecido,
-não examina todo o histórico e não bloqueia commits diretos em `main` antes
-do push quando a branch não é protegida. Para uma proteção completa, são
-necessárias regras de branch/PR e revisão de incidentes e segredos.
+A checagem em HEAD reconhece padrões fortes de credenciais e arquivos
+sensíveis atuais. A PR #75 acrescenta checagem de objetos históricos **alcançáveis
+nas referências buscadas**, mas não reconhece tokens opacos sem formato,
+não inspeciona refs apagadas, forks, anexos, logs ou segredos externos.
+Nenhum scanner substitui revisão humana, rotação de segredos comprometidos
+nem regras obrigatórias de branch e PR.
 
 ## NEXORA no navegador
 O repositório ser privado não impede que o HTML, CSS e JavaScript enviados
