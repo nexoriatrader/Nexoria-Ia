@@ -814,7 +814,7 @@ async def export_historical_asset_csv(
         raise HTTPException(404, "Dataset not found")
     asset, bars = found
     stream = StringIO()
-    writer = csv.writer(stream, lineterminator="\\n")
+    writer = csv.writer(stream, lineterminator="\n")
     writer.writerow(("epoch", "open", "high", "low", "close"))
     for bar in bars:
         writer.writerow((bar["epoch"], bar["open"], bar["high"],
