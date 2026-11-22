@@ -243,3 +243,114 @@ if(!$('robotEasyDiagnosisExplanation').textContent.includes('desatualizadas'))
         text=True, capture_output=True, timeout=20, check=False,
     )
     assert result.returncode == 0, result.stderr
+
+
+def test_new_studio_dashboard_is_a_real_visual_template():
+    parsed = _IndexTags()
+    parsed.feed(HTML)
+    for element_id in ("nxNeoChartBars", "nxNeoChartEmpty", "nxNeoSampleCount",
+                       "nxNeoChecked", "nxNeoChartTitle", "nxNeoChartNote",
+                       "nxNeoMore"):
+        assert parsed.ids.count(element_id) == 1, element_id
+    panel = HTML.split('<section id="dashboard" class="hidden nx-neo-dashboard">', 1)[1].split(
+        '<section id="robot-config" class="hidden">', 1
+    )[0]
+    assert '<h1>Visão geral' in panel
+    assert "nx-neo-metrics" in panel
+    assert panel.count('class="nx-neo-metric') >= 4
+    assert "Atividade do scanner" in panel
+    assert "Sem leituras nesta visita" in panel
+    assert "Detalhes e resultados" in panel
+    assert "nx-neo-mobile-nav" in panel
+    assert "Acompanhe o sistema com clareza" in panel
+    assert "Sem dados simulados" in panel
+    assert "robotEasyDiagnosis" in panel
+    assert "robotEasyHistory" in panel
+    assert "dash-control-card" in panel
+    assert "dash-daily-card" in panel
+    assert "dash-realtime-card" in panel
+    assert "robotButton" in panel
+    assert "robotStartNotice" in panel
+    assert "id=\"profitMetric\"" in panel
+    assert "id=\"realProfitMetric\"" in panel
+    assert "id=\"dashScanMonitor\"" in panel
+    assert "body:has(#dashboard:not(.hidden)) .primary-nav{display:none}" in HTML
+    assert "@media(max-width:640px)" in HTML
+    assert "prefers-reduced-motion:reduce" in HTML
+    assert 'aria-label="Navegação rápida do painel"' in panel
+    assert 'aria-label="Atualizar dados do painel"' in panel
+    assert "function renderNxNeoScannerChart(status)" in HTML
+    assert "renderNxNeoScannerChart(status);" in HTML
+    assert "markNxNeoScannerUncertain();" in HTML
+    assert "function renderRobotEasyDiagnosis(status)" in HTML
+    start = HTML.index('const nxNeoScanSamples=[];')
+    stop = HTML.index('function renderScanMonitor(status){', start)
+    block = HTML[start:stop]
+    for forbidden in ("fetch(", "POST", "localStorage", "sessionStorage",
+                      "sendBeacon", "document.cookie", "/api/autopilot/start",
+                      "/api/autopilot/stop"):
+        assert forbidden not in block
+
+
+def test_studio_chart_only_uses_recent_server_confirmed_scans():
+    if not shutil.which("node"):
+        return
+    block = "const nxNeoScanSamples=[];" + HTML.split(
+        "const nxNeoScanSamples=[];", 1
+    )[1].split("function renderScanMonitor(status){", 1)[0]
+    runtime = r"""
+const elements=new Map();
+function element(){
+ return {
+  textContent:'',dataset:{},children:[],style:{},hidden:false,
+  title:'', attrs:{},
+  replaceChildren(){this.children=[];},
+  appendChild(item){this.children.push(item);},
+  setAttribute(name,value){this.attrs[name]=value;}
+ };
+}
+const $=id=>{
+ if(!elements.has(id))elements.set(id,element());
+ return elements.get(id);
+};
+const document={createElement(){return element();}};
+"""
+    checks = r"""
+const stamp=new Date().toISOString();
+renderNxNeoScannerChart({running:true,scan_progress:{}});
+if(nxNeoScanSamples.length!==0||$('nxNeoChartEmpty').hidden)
+ throw Error('Chart invented activity with no data');
+renderNxNeoScannerChart({running:true,scan_progress:{
+ last_scan_at:stamp,total:80,checked:40}});
+if(nxNeoScanSamples.length!==1||$('nxNeoChartBars').children.length!==1)
+ throw Error('Real scan did not render');
+if($('nxNeoChecked').textContent!=='40 / 80')
+ throw Error('Observed coverage missing');
+if($('nxNeoChartBars').children[0].style.height!=='50.0%')
+ throw Error('Bar not computed from coverage');
+renderNxNeoScannerChart({running:true,scan_progress:{
+ last_scan_at:stamp,total:80,checked:40}});
+if(nxNeoScanSamples.length!==1)throw Error('Duplicate scan counted twice');
+renderNxNeoScannerChart({running:false,scan_progress:{
+ last_scan_at:new Date(Date.now()-900000).toISOString(),total:80,checked:80}});
+if(nxNeoScanSamples.length!==1)throw Error('Stale or paused scan added as new');
+if($('nxNeoChecked').textContent!=='—')
+ throw Error('Stale count presented as current');
+for(let i=0;i<14;i++){
+ renderNxNeoScannerChart({running:true,scan_progress:{
+  last_scan_at:new Date(Date.now()-14000+i*1000).toISOString(),
+  total:20,checked:i}});
+}
+if(nxNeoScanSamples.length!==12)throw Error('Unbounded scan samples');
+if($('nxNeoChartBars').children.length!==12)throw Error('Unbounded chart bars');
+markNxNeoScannerUncertain();
+if($('nxNeoChartNote').textContent!=='Consulta sem confirmação')
+ throw Error('No connection failure indicator');
+if($('nxNeoChecked').textContent!=='—')
+ throw Error('Old coverage displayed on failure');
+"""
+    result = subprocess.run(
+        ["node", "-e", runtime + block + checks],
+        text=True, capture_output=True, timeout=20, check=False,
+    )
+    assert result.returncode == 0, result.stderr
