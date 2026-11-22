@@ -274,15 +274,58 @@ async function downloadAssetCsv(id,button){
  }catch(e){setText('asset-detail-status','Exportação indisponível: '+e.message)}
  finally{if(url)setTimeout(()=>URL.revokeObjectURL(url),1000);button.disabled=false}
 }
+function renderAssetQuality(audit){
+ const block=element('section','');
+ block.style.margin='14px 0';
+ block.appendChild(element('h3','','Diagnóstico de qualidade dos dados'));
+ const report=element('div','module-grid');
+ const summaries=[
+  ['Integridade armazenada',audit.archive_integrity_verified?'SHA-256 válido':'Não verificada'],
+  ['Cobertura temporal',nf.format(audit.coverage_seconds/3600)+' horas'],
+  ['Candles observados',nf.format(audit.observed_candles)+' de '+nf.format(audit.expected_candles)],
+  ['Lacunas temporais',nf.format(audit.missing_candles)],
+  ['Timestamps duplicados',nf.format(audit.duplicate_epochs)],
+  ['Intervalos irregulares',nf.format(audit.irregular_intervals)],
+  ['Linhas OHLC inconsistentes',nf.format(audit.invalid_ohlc_rows)],
+  ['Primeira amostra',stamp(audit.first_closed_epoch*1000)],
+  ['Última amostra',stamp(audit.last_closed_epoch*1000)],
+  ['Menor e maior fechamento',audit.minimum_close+' / '+audit.maximum_close]
+ ];
+ for(const pair of summaries){
+  const tile=element('div','module-card');
+  tile.appendChild(element('div','muted',pair[0]));
+  tile.appendChild(element('b','',pair[1]));
+  report.appendChild(tile);
+ }
+ block.appendChild(report);
+ block.appendChild(element('p','muted','Integridade do arquivo não comprova a autenticidade da fonte. Sem previsões ou operações.'));
+ return block;
+}
+function downloadAssetQuality(id,audit,button){
+ button.disabled=true;
+ let url=null;
+ try{
+ const body=JSON.stringify(audit,null,2)+'\\n';
+ const blob=new Blob([body],{type:'application/json;charset=utf-8'});
+ url=URL.createObjectURL(blob);
+ const link=element('a');link.href=url;link.download='nexora-ohlc-qualidade-'+id+'.json';
+ document.body.appendChild(link);link.click();link.remove();
+ setText('asset-detail-status','Diagnóstico exportado, incluindo hash e ressalva de origem não verificada.');
+ }catch(e){setText('asset-detail-status','Erro ao exportar diagnóstico: '+e.message)}
+ finally{if(url)setTimeout(()=>URL.revokeObjectURL(url),1000);button.disabled=false}
+}
 async function loadAssetDetail(id){
  const request=++assetDetailRequest,target=$('asset-detail-view');
  target.replaceChildren();
  setText('asset-detail-status','Carregando e verificando a integridade do conjunto…');
  try{
- const data=await api('/api/homologation/assets/'+encodeURIComponent(id));
+ const [data,audit]=await Promise.all([api('/api/homologation/assets/'+encodeURIComponent(id)),api('/api/homologation/assets/'+encodeURIComponent(id)+'/quality')]);
  if(request!==assetDetailRequest)return;
  const asset=data.asset,bars=data.bars;
  if(!asset||!Array.isArray(bars)||bars.length!==asset.bar_count)throw Error('Inconsistência na quantidade de candles');
+ if(audit.dataset_id!==id||audit.archive_digest_sha256!==asset.snapshot_sha256||
+ audit.observed_candles!==asset.bar_count||!audit.archive_integrity_verified)
+ throw Error('Diagnóstico e arquivo armazenado não correspondem');
  target.replaceChildren();
  const meta=element('p','muted',asset.symbol+' · '+asset.bar_count+' candles · '+asset.granularity_seconds+
  ' segundos por candle · '+(asset.synthetic?'SINTÉTICO DE TESTE':'ORIGEM DECLARADA, NÃO VERIFICADA'));
@@ -290,7 +333,11 @@ async function loadAssetDetail(id){
  target.appendChild(element('p','muted','SHA-256 arquivado: '+asset.snapshot_sha256));
  const row=element('div','connection');row.style.margin='12px 0';
  const button=element('button','secondary','Baixar CSV completo');button.type='button';
- button.addEventListener('click',()=>downloadAssetCsv(id,button));row.appendChild(button);target.appendChild(row);
+ button.addEventListener('click',()=>downloadAssetCsv(id,button));row.appendChild(button);
+ const auditButton=element('button','secondary','Baixar diagnóstico JSON');auditButton.type='button';
+ auditButton.addEventListener('click',()=>downloadAssetQuality(id,audit,auditButton));
+ row.appendChild(auditButton);target.appendChild(row);
+ target.appendChild(renderAssetQuality(audit));
  target.appendChild(element('p','muted','Prévia: últimos '+Math.min(30,bars.length)+' candles em horário de Brasília. A exportação contém todas as linhas.'));
  const table=element('table'),thead=element('thead'),header=element('tr');
  for(const title of ['Observado','Abertura','Máxima','Mínima','Fechamento'])header.appendChild(element('th','',title));
