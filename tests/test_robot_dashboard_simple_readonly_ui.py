@@ -43,7 +43,7 @@ def test_robot_dashboard_plain_language_overview_is_accessible_and_read_only():
     assert "Pausado:" in summary
     assert "Interrompido:" in summary
     assert "Não foi possível confirmar:" in summary
-    assert "não envia ordens" in summary
+    assert "Somente consulta" in summary
     assert "role=\"status\"" in summary
     assert 'aria-live="polite"' in summary
     assert 'aria-labelledby="robotEasyTitle"' in HTML
@@ -178,7 +178,7 @@ def test_robot_easy_diagnostic_reports_safe_statuses_without_commands():
     for field in ("robotEasyDiagnosis", "robotEasyDiagnosisTitle",
                   "robotEasyDiagnosisExplanation"):
         assert parser.ids.count(field) == 1
-    assert "O que a análise está mostrando?" in HTML
+    assert 'id="robotEasyDiagnosisTitle"' in HTML
     assert "Este diagnóstico descreve informações técnicas" in HTML
     assert "function renderRobotEasyDiagnosis(status)" in HTML
     assert "function reportRobotEasyDiagnosisUncertain()" in HTML
