@@ -44,3 +44,24 @@ Uma execução local aprovada **não substitui**:
 3. Revisão de código e liberação independente de produção.
 
 A `main` deve permanecer preservada até essas etapas terminarem. O módulo DEMO existente continua separado, sem mudanças operacionais; as proteções REAL continuam vigentes.
+
+## Conferência offline de um relatório histórico exportado
+
+O botão **BAIXAR RELATÓRIO JSON** exporta a entrada OHLC e o relatório
+analítico completo, com evidências por módulo (não somente o resumo da tela).
+Após obter o arquivo, é possível verificar sua integridade sem internet,
+sem bibliotecas externas, sem consultar o PostgreSQL e sem credenciais:
+
+```bash
+python scripts/verify_nexora2_export.py caminho/para/nexora-pesquisa-123.json
+```
+
+A mensagem `internal_checksums_match: true` significa somente que os
+**checksums SHA-256 internos do arquivo são consistentes**. Os hashes **não**
+constituem assinatura digital, não garantem autoria ou imutabilidade contra
+quem puder substituir o arquivo e seus hashes, **não verificam a origem das
+cotações**, e não são previsões ou resultados financeiros.
+
+O validador rejeita arquivos truncados, formatos incompatíveis, JSON com
+chaves repetidas, valores não finitos e dados ou evidências modificados.
+Ele não chama a corretora, não executa ordens e não altera arquivos.
