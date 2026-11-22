@@ -121,3 +121,21 @@ def test_historical_fixture_ignorelist_only_matches_reserved_stage4_example(
     assert scanner.audit_historical_text(
         "tests/test_stage4_general_homologation.py", other_shape
     ) == [(1, "postgres_password_url")]
+
+
+def test_historical_selftest_exclusion_is_exact_and_not_for_real_hosts(
+        tmp_path, monkeypatch):
+    scanner = load_scanner(monkeypatch)
+    scheme = "post" + "gres"
+    archived_line = f'''        '"{scheme}://dummy:placeholder@prod.example/db")' '''
+    location = "tests/test_repository_history_security.py"
+    assert scanner.audit_historical_text(location, archived_line) == []
+    assert scanner.audit_historical_text(
+        "app/config.py", archived_line
+    ) == [(1, "postgres_password_url")]
+    assert scanner.audit_historical_text(
+        location, archived_line.replace("prod.example", "db.real.internal")
+    ) == [(1, "postgres_password_url")]
+    assert scanner.audit_historical_text(
+        location, archived_line.replace("dummy:placeholder", "admin:admin")
+    ) == [(1, "postgres_password_url")]
