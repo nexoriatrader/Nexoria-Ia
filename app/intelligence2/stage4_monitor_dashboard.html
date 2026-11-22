@@ -246,7 +246,7 @@ finally{button.disabled=!connected}
 $('upload-asset').addEventListener('click',uploadAsset);
 $('run-uploaded').addEventListener('click',researchUploaded);
 
-let selectedResearch=null;
+let selectedResearch=null, researchDetailRequest=0;
 async function loadResearch(){
 const data=await api('/api/homologation/research/runs?limit=20');
 setText('research-count',nf.format(data.total)+' pesquisa(s)');
@@ -265,13 +265,46 @@ cell.appendChild(btn);row.appendChild(cell);tbody.appendChild(row)}
 table.appendChild(tbody);target.appendChild(table);
 if(!selectedResearch&&data.runs[0])await loadResearchDetail(data.runs[0].id);
 }
+async function downloadResearchEvidence(id,button,status){
+if(!connected){status.textContent='Autentique-se antes de exportar.';return}
+button.disabled=true;status.textContent='Preparando evidências persistidas…';
+let blobUrl=null;
+try{
+ const documentData=await api('/api/homologation/research/runs/'+encodeURIComponent(id)+'/export');
+ if(!documentData.research||documentData.research.id!==id)throw Error('Identificador inconsistente');
+ const blob=new Blob([JSON.stringify(documentData,null,2)+'\n'],{type:'application/json;charset=utf-8'});
+ blobUrl=URL.createObjectURL(blob);
+ const link=element('a');link.href=blobUrl;link.download='nexora-research-'+id+'.json';
+ document.body.appendChild(link);link.click();link.remove();
+ status.textContent='Relatório e etapas exportados; a origem dos dados permanece não verificada.';
+}catch(e){status.textContent='Falha ao exportar: '+e.message}
+finally{
+ if(blobUrl)setTimeout(()=>URL.revokeObjectURL(blobUrl),1000);
+ button.disabled=false;
+}
+}
 async function loadResearchDetail(id){
-const result=await api('/api/homologation/research/runs/'+id);
+const request=++researchDetailRequest;
 selectedResearch=id;
 const target=$('research-detail');target.replaceChildren();
+target.appendChild(element('p','muted','Carregando pesquisa '+id.slice(0,12)+'…'));
+let result;
+try{result=await api('/api/homologation/research/runs/'+encodeURIComponent(id))}
+catch(e){
+ if(request!==researchDetailRequest)return;
+ target.replaceChildren();target.appendChild(element('p','bad','Não foi possível consultar a pesquisa: '+e.message));
+ return;
+}
+if(request!==researchDetailRequest)return;
+target.replaceChildren();
 target.appendChild(element('h3','','Pesquisa '+id.slice(0,12)+' · '+result.state));
 target.appendChild(element('div','muted','Relatório SHA-256: '+(result.result_sha256||'não gerado')+
 ' · '+stamp(result.finished_at)+' · '+result.duration_ms+' ms · origem '+(result.synthetic?'sintética':'declarada, não verificada')));
+const actions=element('div','connection');actions.style.margin='14px 0';
+const download=element('button','secondary','Baixar evidências (JSON)');download.type='button';
+const exportStatus=element('span','muted','Download autenticado: relatório, etapas e identificadores de integridade.');
+download.addEventListener('click',()=>downloadResearchEvidence(id,download,exportStatus));
+actions.appendChild(download);actions.appendChild(exportStatus);target.appendChild(actions);
 if(result.report){const pre=element('pre','',JSON.stringify(result.report,null,2));
 pre.style.whiteSpace='pre-wrap';pre.style.overflowWrap='anywhere';pre.style.fontSize='12px';
 target.appendChild(pre)}
