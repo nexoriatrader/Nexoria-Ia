@@ -333,3 +333,36 @@ def test_tampered_statistical_result_is_rejected_even_with_intact_input(
         assert replay.status_code==409
     finally:
         engine.dispose()
+
+
+def test_user_uploaded_provenance_propagates_to_every_context_and_summary():
+    payload=sample(1141)
+    result=build_report(payload)
+    visible=summary(result)
+    assert result["source"]=="USER_SUPPLIED_UNVERIFIED_OHLC"
+    assert result["evidence"]["market_source_verified"] is False
+    for role,seconds in (("higher",900),("intermediate",300),("lower",60)):
+        context=result["contexts"][role]
+        assert context["source"]=="USER_SUPPLIED_UNVERIFIED_OHLC"
+        assert context["market"]=="user_supplied"
+        assert context["timeframe_seconds"]==seconds
+        assert context["observed_at_epoch"]+0<=result["period_to_epoch"]
+        small=visible["contexts"][role]
+        assert small["source"]=="USER_SUPPLIED_UNVERIFIED_OHLC"
+        assert small["observed_at_epoch"]==context["observed_at_epoch"]
+        assert small["last_closed_epoch"]==context["last_closed_epoch"]
+        assert small["timeframe_seconds"]==seconds
+        assert result["timeframe_alignment"]["contexts"][role]["source"]==(
+            "USER_SUPPLIED_UNVERIFIED_OHLC"
+        )
+    assert "i01_public_closed_candles" not in json.dumps(result)
+    assert result["orders_sent"]==0
+
+
+def test_insufficient_uploaded_timeframe_is_not_mislabeled_as_public():
+    result=build_report(sample(1068))
+    assert result["contexts"]["higher"]["state"]=="INDETERMINATE"
+    assert result["contexts"]["higher"]["source"]=="USER_SUPPLIED_UNVERIFIED_OHLC"
+    assert summary(result)["contexts"]["higher"]["source"]==(
+        "USER_SUPPLIED_UNVERIFIED_OHLC"
+    )
