@@ -208,3 +208,57 @@ def test_export_verifier_rejects_missing_unsafe_or_non_integer_ids():
     bad["report"]["orders_sent"] = 1
     with pytest.raises(ValueError, match="Metadados"):
         verify_export_checksums(bad)
+
+
+def test_standalone_export_checksum_cli_runs_without_database_or_broker(
+        tmp_path):
+    import subprocess
+    import sys
+    from app.intelligence2.research_export import verify_export_checksums
+
+    script = Path(__file__).resolve().parents[1] / "scripts" / "verify_nexora2_export.py"
+    study = export_report(build_report(_fixture("STANDALONE_CHECK")), 15)
+    source = tmp_path / "complete-evidence.json"
+    source.write_text(json.dumps(study, allow_nan=False), encoding="utf-8")
+    result = subprocess.run(
+        [sys.executable, str(script), str(source)],
+        capture_output=True, text=True, timeout=15,
+        env={"PATH": "", "PYTHONIOENCODING": "utf-8"},
+    )
+    assert result.returncode == 0, result.stderr
+    parsed = json.loads(result.stdout)
+    assert parsed == verify_export_checksums(study)
+
+    changed = json.loads(source.read_text(encoding="utf-8"))
+    changed["report"]["contexts"]["lower"]["evidence"]["rsi14"] += .5
+    source.write_text(json.dumps(changed, allow_nan=False), encoding="utf-8")
+    bad = subprocess.run(
+        [sys.executable, str(script), str(source)],
+        capture_output=True, text=True, timeout=15,
+        env={"PATH": "", "PYTHONIOENCODING": "utf-8"},
+    )
+    assert bad.returncode == 1
+    assert "Checksum do relatório analítico" in bad.stderr
+    assert "rsi14" not in bad.stderr
+    assert "STANDALONE_CHECK" not in bad.stderr
+
+
+def test_standalone_validator_rejects_duplicate_json_keys_and_truncated_input(
+        tmp_path):
+    import subprocess
+    import sys
+    script = Path(__file__).resolve().parents[1] / "scripts" / "verify_nexora2_export.py"
+    for idx, contents in enumerate((
+        '{"study_id":1,"study_id":2}',
+        '{"format":"NEXORA_2_RESEARCH_EXPORT_V1","input":',
+        '{"nan": NaN}',
+    )):
+        path = tmp_path / f"malformed-{idx}.json"
+        path.write_text(contents, encoding="utf-8")
+        result = subprocess.run(
+            [sys.executable, str(script), str(path)],
+            capture_output=True, text=True, timeout=15,
+            env={"PATH": "", "PYTHONIOENCODING": "utf-8"},
+        )
+        assert result.returncode == 1
+        assert "INVALID:" in result.stderr
