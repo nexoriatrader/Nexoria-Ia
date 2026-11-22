@@ -466,3 +466,45 @@ def test_research_store_utc_dates_are_explicit_across_sqlite_and_postgres():
     brazil=datetime(2026,11,21,11,30,0,
                     tzinfo=timezone(timedelta(hours=-3)))
     assert _utc_iso(brazil)=="2026-11-21T14:30:00+00:00"
+
+
+def test_isolated_nonzero_range_is_counted_against_flat_median():
+    from app.intelligence2.historical_research import describe_returns
+    bars=[]
+    for i in range(72):
+        high=100.20 if i==35 else 100.0
+        bars.append({"epoch":1_700_000_100+i*60,
+                     "open":100.0,"high":high,
+                     "low":100.0,"close":100.0})
+    stats=describe_returns(bars)
+    assert stats["periods"]==72
+    assert stats["unusually_wide_candles"]==1
+    assert stats["unchanged_intervals"]==71
+    assert stats["realized_volatility"]==0
+    assert stats["interpretation"]=="DESCRIPTIVE_NOT_PREDICTIVE"
+
+
+def test_brazilian_percentage_formatter_is_explicit_and_nan_safe(tmp_path):
+    import re
+    import shutil
+    import subprocess
+    node=shutil.which("node")
+    if not node:
+        pytest.skip("Node.js não disponível")
+    html=(Path(__file__).resolve().parents[1]/"app"/"nexora2.html").read_text()
+    script=re.search(r"<script>(.*?)</script>",html,re.S).group(1)
+    script=script.replace("initNexora2();","")
+    script+="""
+if(formatHistoricalPercent(0.015)==='1,50%' &&
+   formatHistoricalPercent(0.51)==='51,00%' &&
+   formatHistoricalPercent(-0.004)==='-0,40%' &&
+   formatHistoricalPercent(NaN)==='não informado' &&
+   formatHistoricalPercent(null)==='não informado')
+  process.exit(0);
+process.exit(32);
+"""
+    file=tmp_path/"percentage-format.js"
+    file.write_text(script,encoding="utf-8")
+    result=subprocess.run([node,str(file)],capture_output=True,
+                          text=True,timeout=15)
+    assert result.returncode==0,result.stderr
