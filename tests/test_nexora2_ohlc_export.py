@@ -262,3 +262,21 @@ def test_standalone_validator_rejects_duplicate_json_keys_and_truncated_input(
         )
         assert result.returncode == 1
         assert "INVALID:" in result.stderr
+
+
+def test_export_builder_rejects_invalid_report_without_server():
+    import copy
+    import pytest
+    good = build_report(_fixture("EXPORT_GUARD"))
+    for mutation in (
+        lambda report: report.update(orders_sent=0.0),
+        lambda report: report["evidence"].update(input_count=False),
+        lambda report: report["statistics"].update(up_intervals=9999),
+        lambda report: report["input"].update(candles=None),
+    ):
+        candidate = copy.deepcopy(good)
+        mutation(candidate)
+        with pytest.raises((ValueError, TypeError)):
+            export_report(candidate, 100)
+    with pytest.raises(ValueError):
+        export_report(good, True)
