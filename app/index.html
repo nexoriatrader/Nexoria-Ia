@@ -680,6 +680,17 @@ html,body{max-width:100%;overflow-x:clip}
 .robot-easy-guide p{color:#c3d8e4;margin:9px 0;line-height:1.6}
 .robot-easy.is-uncertain{border-color:#af854e!important}
 @media(max-width:720px){#dashboard .robot-easy{padding:16px}.robot-easy-grid{grid-template-columns:1fr;gap:9px}.robot-easy-tile{padding:14px}.robot-easy-actions{align-items:stretch}.robot-easy-actions button{width:100%}}
+.robot-easy-connection{display:inline-flex;align-items:center;gap:7px;border-radius:99px;padding:9px 12px;border:1px solid #466b80;background:#112f43;color:#d5ebf6;font-size:12px;font-weight:800}
+.robot-easy-connection[data-state="ok"]{border-color:#478978;color:#a4ebd6;background:#10382f}
+.robot-easy-connection[data-state="uncertain"]{border-color:#a28653;color:#ffdfaa;background:#3a2b1c}
+.robot-easy-history{margin-top:13px;border-radius:13px;border:1px solid #345b70;background:#0c2536;padding:12px 15px}
+.robot-easy-history summary{cursor:pointer;min-height:36px;font-size:13px;font-weight:850;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.robot-easy-history summary:focus-visible{outline:3px solid #9ce5ff;outline-offset:3px}
+.robot-easy-history-count{color:#b6cfdf;font-size:12px;font-weight:600}
+.robot-easy-history p{font-size:12px;color:#b8cedc;line-height:1.6;margin:10px 0}
+.robot-easy-history ol{padding-left:24px;margin:10px 0;display:grid;gap:7px}
+.robot-easy-history li{font-size:13px;color:#d6eaf4;line-height:1.6;padding-left:4px}
+.robot-easy-history li[data-result="uncertain"]{color:#ffe0ab}
 /* Inline configuration validation: clear visual field errors and accessible focus */
 #robot-config .auto-invalid{border:2px solid #fa6b75!important;background:rgba(103,27,41,.28)!important;box-shadow:0 0 0 3px rgba(250,107,117,.12)}
 #robot-config .auto-field-error{color:#ff9ba4;font-size:12px;font-weight:700;line-height:1.5;margin:5px 0 9px}
@@ -944,6 +955,7 @@ html,body{max-width:100%;overflow-x:clip}
         <h2 id="robotEasyTitle">Como está o robô agora?</h2>
         <p>Consulte a situação, o ambiente e a última análise. Esta seção apenas lê informações: não liga o robô, não envia ordens e não muda configurações.</p></div>
       <span id="robotEasyUpdated" class="robot-easy-time">Aguardando consulta</span>
+      <span id="robotEasyConnection" class="robot-easy-connection" data-state="unknown" role="status">Conexão: aguardando</span>
     </div>
     <div class="robot-easy-grid">
       <article class="robot-easy-tile"><span class="robot-easy-label">Situação</span>
@@ -960,6 +972,14 @@ html,body{max-width:100%;overflow-x:clip}
       <button id="robotEasyRefresh" type="button" onclick="refreshRobotEasyOverview()">↻ Atualizar informações</button>
       <span id="robotEasyFeedback" class="robot-easy-feedback" role="status" aria-live="polite">Aguardando dados confirmados.</span>
     </div>
+
+    <details class="robot-easy-history">
+      <summary>Últimas verificações <span id="robotEasyHistoryCount" class="robot-easy-history-count">Nenhuma ainda</span></summary>
+      <p>Registros de consultas técnicas nesta página, não de operações. A lista é temporária e desaparece quando a página é fechada ou recarregada.</p>
+      <ol id="robotEasyHistory" aria-label="Últimas consultas ao estado do sistema">
+        <li>Aguardando a primeira consulta.</li>
+      </ol>
+    </details>
     <details class="robot-easy-guide">
       <summary>O que significam estes estados?</summary>
       <p><strong>Em funcionamento:</strong> o servidor informa que o processo está ativo, mas isso não comprova uma operação.</p>
@@ -1661,6 +1681,25 @@ async function loadAutopilotReadiness(){
    if(!robotRunning)showRobotNotice('Não foi possível verificar a disponibilidade do robô. Atualize os dados para tentar novamente.');
  }
 }
+const robotEasyChecks=[];
+function recordRobotEasyCheck(kind,label){
+ // Client-side, session-page only; never store credentials, financial data or orders.
+ const safeLabel=String(label);
+ robotEasyChecks.unshift({kind:kind==='uncertain'?'uncertain':'ok',label:safeLabel,time:new Date()});
+ if(robotEasyChecks.length>6)robotEasyChecks.length=6;
+ const list=$('robotEasyHistory');
+ list.replaceChildren();
+ const formatter=new Intl.DateTimeFormat('pt-BR',{
+   timeZone:'America/Sao_Paulo',hour:'2-digit',minute:'2-digit',second:'2-digit'
+ });
+ for(const item of robotEasyChecks){
+  const li=document.createElement('li');
+  li.dataset.result=item.kind;
+  li.textContent=formatter.format(item.time)+' · '+item.label;
+  list.appendChild(li);
+ }
+ $('robotEasyHistoryCount').textContent=robotEasyChecks.length+' consulta(s)';
+}
 function renderRobotEasyOverview(status){
  // Read-only reflection of GET /api/status; do not trigger broker actions.
  const running=Boolean(status.running),interrupted=Boolean(status.interrupted_after_restart);
@@ -1691,11 +1730,15 @@ function renderRobotEasyOverview(status){
  $('robotEasyUpdated').textContent='Atualizado às '+new Intl.DateTimeFormat('pt-BR',{
   timeZone:'America/Sao_Paulo',hour:'2-digit',minute:'2-digit',second:'2-digit'}).format(new Date());
  $('robotEasyFeedback').textContent='Consulta concluída. Nenhuma operação ou configuração foi alterada.';
+ const conn=$('robotEasyConnection');conn.dataset.state='ok';conn.textContent='Conexão: confirmada';
+ recordRobotEasyCheck('ok',labels[state]);
 }
 function reportRobotEasyUncertainty(){
  $('robotEasyOverview').classList.add('is-uncertain');
  $('robotEasyUpdated').textContent='Sem confirmação recente';
  $('robotEasyFeedback').textContent='Não foi possível confirmar o estado atual. Os dados anteriores podem estar desatualizados. Não presuma que o robô foi desligado.';
+ const conn=$('robotEasyConnection');conn.dataset.state='uncertain';conn.textContent='Conexão: sem confirmação';
+ recordRobotEasyCheck('uncertain','Falha ao consultar o estado. Dados anteriores podem estar desatualizados.');
 }
 async function refreshRobotEasyOverview(){
  const button=$('robotEasyRefresh');
