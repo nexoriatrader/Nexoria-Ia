@@ -340,21 +340,45 @@ def _run_synthetic(row):
     return False
 
 
-def list_research(limit=20):
+def list_research(limit=20, offset=0, state=None, id_prefix=None):
+    """Page immutable historical records with stable ordering and no table DDL."""
     if type(limit) is not int or not 1 <= limit <= 100:
         raise ValueError("Invalid research list limit")
+    if type(offset) is not int or not 0 <= offset <= 100000:
+        raise ValueError("Invalid research list offset")
+    if state not in (None, "COMPLETE", "ERROR"):
+        raise ValueError("Invalid research state filter")
+    if id_prefix is not None:
+        if (not isinstance(id_prefix, str)
+                or not 1 <= len(id_prefix) <= 32
+                or any(c not in "0123456789abcdefABCDEF" for c in id_prefix)):
+            raise ValueError("Invalid research identifier prefix")
+        id_prefix = id_prefix.lower()
+    criteria = []
+    if state is not None:
+        criteria.append(runs.c.state == state)
+    if id_prefix is not None:
+        criteria.append(runs.c.id.startswith(id_prefix, autoescape=True))
     with core._engine().connect() as conn:
-        records=conn.execute(select(runs).order_by(
-            runs.c.finished_at.desc(),runs.c.id.desc()).limit(limit)).mappings().all()
-        total=conn.execute(select(func.count()).select_from(runs)).scalar_one()
-    return {"total":int(total),"runs":[{
-        "id":r["id"],"state":r["state"],"version":r["version"],
-        "source":r["source"],"synthetic":_run_synthetic(r),
-        "step_count":r["step_count"],"reason":r["reason"],
-        "started_at":_iso(r["started_at"]), "finished_at":_iso(r["finished_at"]),
-        "duration_ms":r["duration_ms"],
-        "result_sha256":r["result_sha256"],
-    } for r in records]}
+        records = conn.execute(
+            select(runs).where(*criteria).order_by(
+                runs.c.finished_at.desc(), runs.c.id.desc()
+            ).limit(limit).offset(offset)
+        ).mappings().all()
+        total = conn.execute(
+            select(func.count()).select_from(runs).where(*criteria)
+        ).scalar_one()
+    return {"total": int(total), "offset": offset, "limit": limit,
+            "has_more": offset + len(records) < int(total),
+            "runs": [{
+                "id": r["id"], "state": r["state"], "version": r["version"],
+                "source": r["source"], "synthetic": _run_synthetic(r),
+                "step_count": r["step_count"], "reason": r["reason"],
+                "started_at": _iso(r["started_at"]),
+                "finished_at": _iso(r["finished_at"]),
+                "duration_ms": r["duration_ms"],
+                "result_sha256": r["result_sha256"],
+            } for r in records]}
 
 def get_research(run_id):
     if not isinstance(run_id,str) or len(run_id)!=32 or any(
