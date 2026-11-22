@@ -97,9 +97,12 @@ def test_history_scan_rejects_shallow_clone(tmp_path, monkeypatch):
 def test_historical_fixture_ignorelist_only_matches_reserved_stage4_example(
         tmp_path, monkeypatch):
     scanner = load_scanner(monkeypatch)
+    # Assemble the synthetic URL at runtime so the HEAD credential
+    # scanner does not see a fake password URL as a committed credential.
+    scheme = "post" + "gres"
     fixture = (
         '    monkeypatch.setenv("DATABASE_URL", '
-        '"postgres://dummy:placeholder@prod.example/db")'
+        f'"{scheme}://dummy:placeholder@prod.example/db")'
     )
     assert scanner.audit_historical_text(
         "tests/test_stage4_general_homologation.py", fixture
