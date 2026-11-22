@@ -354,3 +354,38 @@ if($('nxNeoChecked').textContent!=='—')
         text=True, capture_output=True, timeout=20, check=False,
     )
     assert result.returncode == 0, result.stderr
+
+
+
+def test_studio_styles_remain_inside_style_element():
+    """The CSS must never render as visible page text."""
+    html_head = HTML.split("</head>", 1)[0]
+    marker = "/* NEXORA Studio dashboard: genuine UI redesign, isolated to #dashboard. */"
+    assert html_head.count(marker) == 1
+    assert html_head.count("<style>") == html_head.count("</style>")
+    assert "</style>\n<style>\n" + marker in html_head
+
+    class StyleGuard(HTMLParser):
+        def __init__(self):
+            super().__init__()
+            self.in_style = False
+            self.found_in_style = False
+            self.unstyled_css = False
+
+        def handle_starttag(self, tag, attrs):
+            if tag == "style":
+                self.in_style = True
+
+        def handle_endtag(self, tag):
+            if tag == "style":
+                self.in_style = False
+
+        def handle_data(self, data):
+            if marker in data:
+                self.found_in_style |= self.in_style
+                self.unstyled_css |= not self.in_style
+
+    guard = StyleGuard()
+    guard.feed(HTML)
+    assert guard.found_in_style
+    assert not guard.unstyled_css
