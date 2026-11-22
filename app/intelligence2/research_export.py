@@ -24,18 +24,22 @@ def export_report(report: dict, study_id: int) -> dict:
     if (not isinstance(report, dict)
             or report.get("version") != VERSION
             or report.get("source") != SOURCE
-            or report.get("orders_sent") != 0
+            or type(report.get("orders_sent")) is not int
+            or report["orders_sent"] != 0
             or report.get("execution_allowed") is not False):
         raise ValueError("Relatório histórico incompatível")
     # Eliminate duplicated input while retaining every versioned result field.
     # The authenticated store validates both hashes before this is called.
-    return {
+    bundle = {
         "format": EXPORT_FORMAT,
         "scope": EXPORT_SCOPE,
         "study_id": study_id,
         "input": report["input"],
         "report": {key: value for key, value in report.items() if key != "input"},
     }
+    # Guard direct module callers as well as HTTP callers.
+    verify_export_checksums(bundle)
+    return bundle
 
 
 def verify_export_checksums(bundle: dict) -> dict:
@@ -79,9 +83,12 @@ def verify_export_checksums(bundle: dict) -> dict:
         raise ValueError("Checksum da entrada histórica não confere")
     if not hmac.compare_digest(actual_output, output_hash):
         raise ValueError("Checksum do resultado histórico não confere")
+    bars = inp.get("candles")
     if (evidence.get("market_source_verified") is not False
             or inp.get("symbol") != result.get("symbol")
-            or evidence.get("input_count") != len(inp.get("candles", []))):
+            or not isinstance(bars, list)
+            or type(evidence.get("input_count")) is not int
+            or evidence["input_count"] != len(bars)):
         raise ValueError("Procedência ou contagem de entrada inconsistentes")
     return {
         "internal_checksums_match": True,
