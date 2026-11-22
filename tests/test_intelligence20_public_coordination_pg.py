@@ -30,7 +30,9 @@ pytestmark = pytest.mark.skipif(
     reason="PostgreSQL disposable database required; not a mock",
 )
 ROOT = Path(__file__).resolve().parents[1] / "migrations"
-CLOCK = datetime(2026, 11, 20, 18, 0, tzinfo=timezone.utc)
+# A frozen 2026 timestamp eventually falls behind PostgreSQL's real clock;
+# keep simulated test windows ahead of the ephemeral DB initialization time.
+CLOCK = datetime.now(timezone.utc).replace(microsecond=0) + timedelta(days=3)
 
 
 def _migration(engine, name):
