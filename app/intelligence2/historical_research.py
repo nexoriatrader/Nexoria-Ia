@@ -20,6 +20,8 @@ VERSION = "nexora2_uploaded_ohlc_v1"
 SOURCE = "USER_SUPPLIED_UNVERIFIED_OHLC"
 MIN_BARS = 72
 MAX_BARS = 1500
+# Do not accept subnormal/near-zero prices that can overflow returns.
+MIN_FINITE_PRICE = 1e-12
 SYMBOL_PATTERN = re.compile(r"[A-Za-z0-9_]{2,30}\Z")
 TF_NAMES = {"higher": 900, "intermediate": 300, "lower": 60}
 
@@ -60,9 +62,17 @@ def normalize_input(payload: dict, *, clock: int | None = None) -> dict:
             value = candle.get(name)
             if type(value) not in (int, float):
                 raise ResearchInputError(f"Candle {index+1}: {name} não é numérico")
-            number = float(value)
-            if not math.isfinite(number) or not 0 < number <= 1_000_000_000:
-                raise ResearchInputError(f"Candle {index+1}: {name} fora do intervalo válido")
+            try:
+                number = float(value)
+            except (ValueError, OverflowError, TypeError):
+                raise ResearchInputError(
+                    f"Candle {index+1}: {name} fora do intervalo numérico seguro"
+                ) from None
+            if (not math.isfinite(number)
+                    or not MIN_FINITE_PRICE <= number <= 1_000_000_000):
+                raise ResearchInputError(
+                    f"Candle {index+1}: {name} fora do intervalo numérico seguro"
+                )
             values[name] = number
         if (values["low"] > min(values["open"], values["close"])
             or values["high"] < max(values["open"], values["close"])
