@@ -366,3 +366,28 @@ def test_insufficient_uploaded_timeframe_is_not_mislabeled_as_public():
     assert summary(result)["contexts"]["higher"]["source"]==(
         "USER_SUPPLIED_UNVERIFIED_OHLC"
     )
+
+
+@pytest.mark.parametrize("mutation",[
+    lambda data: data["evidence"].update(market_source_verified=True),
+    lambda data: data["evidence"].update(gaps_filled=7),
+    lambda data: data["evidence"]["timeframe_asof_epochs"].update(CONTEXT_HIGHER=0),
+])
+def test_tampered_provenance_and_cutoff_metadata_rejected(tmp_path,monkeypatch,mutation):
+    engine,factory=_database(tmp_path,monkeypatch)
+    try:
+        client=TestClient(main.app)
+        client.cookies.set("nexora_sid","ohlc-aa")
+        created=client.post("/api/nexora2/ohlc/research",json=sample())
+        assert created.status_code==200,created.text
+        report_id=created.json()["id"]
+        with factory() as session:
+            row=session.get(HistoricalResearchReport,report_id)
+            data=json.loads(row.payload_json)
+            mutation(data)
+            row.payload_json=json.dumps(data,allow_nan=False)
+            session.commit()
+        assert client.get(f"/api/nexora2/ohlc/research/{report_id}").status_code==409
+        assert client.post(f"/api/nexora2/ohlc/research/{report_id}/replay").status_code==409
+    finally:
+        engine.dispose()
