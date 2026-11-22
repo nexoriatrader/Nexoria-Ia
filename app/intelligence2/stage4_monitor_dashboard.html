@@ -70,6 +70,13 @@ td{color:#d8e9f0}tr:last-child td{border:0}
 @media(max-width:1180px){.metrics{grid-template-columns:repeat(2,minmax(0,1fr))}.module-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:850px){.wrapper{display:block}aside{height:auto;position:static;padding:15px 18px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}.brand{font-size:21px}.brand-sub{margin:0}.nav-wrap{display:flex;overflow:auto;gap:5px;max-width:100%}.nav{white-space:nowrap;padding:8px 9px;font-size:12px}.nav-tag,.nav-foot{display:none}main{padding:20px 15px 38px}.top{display:block}.connection{margin-top:16px}.panels{grid-template-columns:1fr}}
 @media(max-width:500px){.metric .num{font-size:25px}.metrics{gap:8px}.metric{padding:14px}.module-grid{grid-template-columns:1fr}.surface{padding:15px}.connection input{flex:1;width:150px}.top h1{font-size:28px}.info-grid{grid-template-columns:1fr 1fr}}
+
+#research-compare select{min-width:220px;max-width:100%;padding:10px;border:1px solid #395568;background:#0b2030;color:var(--text);border-radius:10px}
+.compare-columns{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-top:14px}
+.compare-column{padding:15px;border:1px solid var(--border);background:var(--card2);border-radius:10px;min-width:0}
+.compare-column dt{font-size:11px;color:var(--muted);margin-top:11px}
+.compare-column dd{margin:2px 0;overflow-wrap:anywhere;font-weight:600}
+@media(max-width:720px){.compare-columns{grid-template-columns:1fr}}
 </style></head><body><div class="wrapper">
 <aside>
 <div><div class="brand">NEX<span>ORA</span><span style="font-size:10px;vertical-align:top"> 2.0</span></div>
@@ -136,6 +143,17 @@ td{color:#d8e9f0}tr:last-child td{border:0}
 <div class="section"><div><h2>Detalhe da pesquisa selecionada</h2>
 <p>Entradas e saídas reais das transformações, com SHA-256, horário e duração.</p></div></div>
 <section class="surface"><div id="research-detail" class="muted">Selecione uma execução para visualizar seus resultados e etapas persistidas.</div></section>
+<section class="surface" id="research-compare">
+<h2>Comparar duas pesquisas históricas</h2>
+<p class="sub">Comparação somente descritiva dos registros persistidos. Não indica qualidade de estratégias, previsão ou oportunidade de negociação.</p>
+<div class="connection" style="margin-top:15px">
+<label for="compare-left">Pesquisa A <select id="compare-left" aria-label="Pesquisa A"></select></label>
+<label for="compare-right">Pesquisa B <select id="compare-right" aria-label="Pesquisa B"></select></label>
+<button class="secondary" id="compare-research" type="button" disabled>Comparar pesquisas</button>
+</div>
+<p id="compare-status" class="sub" role="status">Autentique-se para comparar pesquisas concluídas.</p>
+<div id="compare-result" aria-live="polite"></div>
+</section>
 <div class="section section-anchor" id="modules"><div><h2>Estado dos módulos</h2><p>Disponibilidade do código é diferente de integração ativa. Estados baseados em telemetria.</p></div><span class="badge pending">I01–I06 não integrados neste serviço</span></div>
 <div class="module-grid" id="module-grid"><div class="empty surface">Aguardando autenticação para carregar módulos.</div></div>
 <div class="section section-anchor" id="processing"><div><h2>Processamento e integridade</h2><p>Ciclos persistidos, tempo de execução e indicadores reais da demonstração.</p></div><span class="muted" id="last-sync">Sem consulta</span></div>
@@ -247,9 +265,80 @@ $('upload-asset').addEventListener('click',uploadAsset);
 $('run-uploaded').addEventListener('click',researchUploaded);
 
 let selectedResearch=null, researchDetailRequest=0;
+let comparisonRequest=0;
+function renderCompareOptions(runs){
+const eligible=runs.filter(run=>run.state==='COMPLETE');
+const left=$('compare-left'),right=$('compare-right');
+const oldLeft=left.value,oldRight=right.value;
+for(const select of [left,right]){
+select.replaceChildren();
+for(const run of eligible){
+ const label=stamp(run.finished_at)+' · '+(run.synthetic?'SINTÉTICA':'ORIGEM NÃO VERIFICADA')+' · '+run.id.slice(0,8);
+ const option=element('option','',label);option.value=run.id;select.appendChild(option);
+}}
+if(eligible.length){
+left.value=eligible.some(x=>x.id===oldLeft)?oldLeft:eligible[0].id;
+right.value=eligible.some(x=>x.id===oldRight)?oldRight:(eligible[1]?.id||eligible[0].id);
+}
+$('compare-research').disabled=!connected||eligible.length<2;
+if(eligible.length<2)setText('compare-status','São necessárias duas pesquisas concluídas para comparar.');
+}
+function compareFrameList(root,side){
+const frames=side.timeframes||[];
+if(!frames.length){root.appendChild(element('p','muted','Sem resumos históricos armazenados.'));return}
+for(const f of frames){
+ const block=element('div','diagnostic');
+ const wrap=element('div');
+ wrap.appendChild(element('b','','Janela '+f.granularity_seconds+' s · '+f.observations+' candles'));
+ const summary=element('div','muted',
+ 'Amplitude média relativa: '+(f.mean_relative_bar_range??'—')+
+ ' · Dispersão de variações de fechamento: '+(f.dispersion_of_close_changes??'—'));
+ wrap.appendChild(summary);block.appendChild(wrap);root.appendChild(block);
+}}
+function compareSide(side,title){
+const col=element('div','compare-column');col.appendChild(element('h3','',title));
+const data=element('dl');
+for(const pair of [
+['Pesquisa',side.id],['Origem',side.synthetic?'SINTÉTICA': 'DECLARADA · NÃO VERIFICADA'],
+['Conjunto',side.symbol_or_dataset],['Estado',side.state],
+['Finalizada',stamp(side.finished_at)],['Etapas verificadas',side.step_count],
+['Integridade SHA-256',side.result_sha256||'Ausente']
+]){
+const dt=element('dt','',pair[0]),dd=element('dd','',pair[1]);data.appendChild(dt);data.appendChild(dd);
+}
+col.appendChild(data);compareFrameList(col,side);return col;
+}
+async function compareResearch(){
+const left=$('compare-left').value,right=$('compare-right').value;
+const target=$('compare-result'),button=$('compare-research');
+const request=++comparisonRequest;
+target.replaceChildren();
+if(!left||!right||left===right){setText('compare-status','Selecione duas pesquisas concluídas diferentes.');return}
+button.disabled=true;setText('compare-status','Consultando evidências persistidas…');
+try{
+const data=await api('/api/homologation/research/compare?left='+encodeURIComponent(left)+'&right='+encodeURIComponent(right));
+if(request!==comparisonRequest)return;
+target.replaceChildren();target.appendChild(element('p','muted',data.context_note));
+const note=element('p','muted',data.limitations);target.appendChild(note);
+const frames=data.shared_timeframes_seconds.length?data.shared_timeframes_seconds.join(', ')+' s':'nenhuma';
+target.appendChild(element('p','muted','Janelas temporais compartilhadas: '+frames+' · Integridade recuperada do PostgreSQL.'));
+const columns=element('div','compare-columns');
+columns.appendChild(compareSide(data.left,'Pesquisa A'));
+columns.appendChild(compareSide(data.right,'Pesquisa B'));target.appendChild(columns);
+setText('compare-status','Comparação descritiva concluída. Não há classificação de desempenho.');
+}catch(e){if(request===comparisonRequest)setText('compare-status','Comparação indisponível: '+e.message)}
+finally{if(request===comparisonRequest)button.disabled=!connected}
+}
+$('compare-research').addEventListener('click',compareResearch);
+for(const id of ['compare-left','compare-right'])$(id).addEventListener('change',()=>{
+comparisonRequest++;$('compare-result').replaceChildren();
+setText('compare-status','Selecione Comparar pesquisas para consultar os resultados.');
+});
+
 async function loadResearch(){
 const data=await api('/api/homologation/research/runs?limit=20');
 setText('research-count',nf.format(data.total)+' pesquisa(s)');
+renderCompareOptions(data.runs);
 const target=$('research-runs');target.replaceChildren();
 if(!data.runs.length){target.appendChild(element('p','muted','Nenhuma pesquisa iniciada.'));return}
 const table=element('table');const thead=element('thead');const header=element('tr');
