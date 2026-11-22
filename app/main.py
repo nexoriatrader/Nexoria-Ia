@@ -2800,6 +2800,37 @@ async def nexora2_get_ohlc_research(request:Request,report_id:int,
     return uploaded_ohlc_details(report)
 
 
+@app.get("/api/nexora2/ohlc/research/{report_id}/export")
+async def nexora2_export_own_ohlc_research(request:Request,report_id:int,
+                nexora_sid:str|None=Cookie(default=None)):
+    """Download only this user's validated study evidence as JSON.
+
+    The export is a read-only snapshot; it never retrieves broker credentials,
+    execution data, session tokens or reports belonging to another account.
+    """
+    user=active_user(request,nexora_sid)
+    with db.SessionLocal() as session:
+        try:
+            report=get_uploaded_ohlc(session,user.id,report_id)
+        except ValueError as exc:
+            raise HTTPException(409,str(exc)) from None
+    if report is None:
+        raise HTTPException(404,"Pesquisa não encontrada")
+    return JSONResponse(
+        content={
+            "format":"NEXORA_2_RESEARCH_EXPORT_V1",
+            "scope":"OWN_UNVERIFIED_HISTORICAL_RESEARCH",
+            "study_id":report_id,
+            **uploaded_ohlc_details(report),
+        },
+        headers={
+            "Content-Disposition":f'attachment; filename="nexora-pesquisa-{report_id}.json"',
+            "Cache-Control":"private, no-store",
+            "X-Content-Type-Options":"nosniff",
+        },
+    )
+
+
 @app.post("/api/nexora2/ohlc/research/{report_id}/replay")
 async def nexora2_replay_ohlc_research(request:Request,report_id:int,
                 nexora_sid:str|None=Cookie(default=None)):
