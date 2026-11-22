@@ -657,6 +657,29 @@ html,body{max-width:100%;overflow-x:clip}
 #dashboard .dash-control-card,#dashboard .dash-realtime-card{margin-bottom:14px}
 @media(max-width:600px){.robot-config-page-heading{align-items:stretch}.robot-config-page-heading .robot-back-button{width:100%}#robot-config .auto-config{padding:16px}}
 </style><style>
+/* Friendly read-only robot dashboard. Financial controls remain unchanged. */
+#dashboard .robot-easy{padding:22px;border:1px solid #487189;background:radial-gradient(circle at 95% 0%,#2962864d,transparent 50%),linear-gradient(135deg,#132d43,#0a1c2c);border-radius:21px}
+.robot-easy-head{display:flex;justify-content:space-between;align-items:flex-start;gap:14px;flex-wrap:wrap}
+.robot-easy-head h2{font-size:clamp(19px,3vw,24px);margin:5px 0 7px}
+.robot-easy-head p{font-size:13px;color:#b9d1df;line-height:1.6;max-width:660px}
+.robot-easy-overline{font-size:11px;letter-spacing:.15em;font-weight:900;color:#9ee4d8}
+.robot-easy-time{font-size:12px;border:1px solid #416e83;border-radius:99px;padding:9px 11px;color:#b5d5e3}
+.robot-easy-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin:18px 0}
+.robot-easy-tile{min-width:0;border:1px solid #395c72;border-radius:16px;background:#0b2235;padding:17px}
+.robot-easy-label{font-size:12px;font-weight:750;color:#aac7d8}
+.robot-easy-tile strong{display:block;font-size:clamp(17px,2.2vw,22px);line-height:1.2;margin:9px 0;overflow-wrap:anywhere}
+.robot-easy-tile p{font-size:12px;color:#bad0dd;line-height:1.6}
+#robotEasyState[data-state="active"]{color:#9cefd5}
+#robotEasyState[data-state="interrupted"],#robotEasyState[data-state="unavailable"]{color:#ffe2a5}
+.robot-easy-actions{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+.robot-easy-actions button{min-height:46px;background:#205473;border:1px solid #6bb0cb;border-radius:12px;color:#f4fbff;padding:10px 17px;font-size:13px;font-weight:850}
+.robot-easy-actions button:focus-visible,.robot-easy-guide summary:focus-visible{outline:3px solid #9ce5ff;outline-offset:3px}
+.robot-easy-feedback{font-size:12px;color:#b4d1df}
+.robot-easy-guide{margin-top:15px;border:1px solid #355b70;border-radius:12px;background:#112b3c;padding:12px 15px;font-size:13px}
+.robot-easy-guide summary{cursor:pointer;min-height:34px;font-weight:850}
+.robot-easy-guide p{color:#c3d8e4;margin:9px 0;line-height:1.6}
+.robot-easy.is-uncertain{border-color:#af854e!important}
+@media(max-width:720px){#dashboard .robot-easy{padding:16px}.robot-easy-grid{grid-template-columns:1fr;gap:9px}.robot-easy-tile{padding:14px}.robot-easy-actions{align-items:stretch}.robot-easy-actions button{width:100%}}
 /* Inline configuration validation: clear visual field errors and accessible focus */
 #robot-config .auto-invalid{border:2px solid #fa6b75!important;background:rgba(103,27,41,.28)!important;box-shadow:0 0 0 3px rgba(250,107,117,.12)}
 #robot-config .auto-field-error{color:#ff9ba4;font-size:12px;font-weight:700;line-height:1.5;margin:5px 0 9px}
@@ -914,7 +937,38 @@ html,body{max-width:100%;overflow-x:clip}
   </form>
 </section>
 <section id="dashboard" class="hidden">
-  <div class="section-heading compact-dash-heading"><div><div class="eyebrow">VISÃO GERAL</div><h1>Painel do Robô</h1></div></div>
+  <div class="section-heading compact-dash-heading"><div><div class="eyebrow">VISÃO GERAL</div><h1>Painel do Robô</h1><p>Primeiro, veja o que está acontecendo. As informações detalhadas estão abaixo.</p></div></div>
+  <section class="card robot-easy" id="robotEasyOverview" aria-labelledby="robotEasyTitle">
+    <div class="robot-easy-head">
+      <div><span class="robot-easy-overline">RESUMO SIMPLES · SOMENTE LEITURA</span>
+        <h2 id="robotEasyTitle">Como está o robô agora?</h2>
+        <p>Consulte a situação, o ambiente e a última análise. Esta seção apenas lê informações: não liga o robô, não envia ordens e não muda configurações.</p></div>
+      <span id="robotEasyUpdated" class="robot-easy-time">Aguardando consulta</span>
+    </div>
+    <div class="robot-easy-grid">
+      <article class="robot-easy-tile"><span class="robot-easy-label">Situação</span>
+        <strong id="robotEasyState" data-state="unknown">Consultando...</strong>
+        <p id="robotEasyStateHelp">Aguardando resposta do servidor.</p></article>
+      <article class="robot-easy-tile"><span class="robot-easy-label">Ambiente configurado</span>
+        <strong id="robotEasyMode">Não confirmado</strong>
+        <p id="robotEasyModeHelp">Informação da configuração; nenhuma operação é iniciada aqui.</p></article>
+      <article class="robot-easy-tile"><span class="robot-easy-label">Última análise registrada</span>
+        <strong id="robotEasyScan">Consultando...</strong>
+        <p id="robotEasyScanHelp">Análise registrada não significa compra ou recomendação.</p></article>
+    </div>
+    <div class="robot-easy-actions">
+      <button id="robotEasyRefresh" type="button" onclick="refreshRobotEasyOverview()">↻ Atualizar informações</button>
+      <span id="robotEasyFeedback" class="robot-easy-feedback" role="status" aria-live="polite">Aguardando dados confirmados.</span>
+    </div>
+    <details class="robot-easy-guide">
+      <summary>O que significam estes estados?</summary>
+      <p><strong>Em funcionamento:</strong> o servidor informa que o processo está ativo, mas isso não comprova uma operação.</p>
+      <p><strong>Pausado:</strong> o servidor responde, mas o processo não está ativo.</p>
+      <p><strong>Interrompido:</strong> houve uma interrupção informada pelo sistema; confira os avisos.</p>
+      <p><strong>Não foi possível confirmar:</strong> a conexão falhou. O estado anterior pode estar desatualizado; não presuma que o robô foi desligado.</p>
+      <p>Esta visão informa o estado técnico, sem recomendar operações ou antecipar resultados.</p>
+    </details>
+  </section>
   <div class="card dash-control-card">
     <div class="dash-control-head">
       <div class="dash-robot-name"><span class="dash-robot-icon" aria-hidden="true">◈</span><div><strong>NEXORA IA</strong><span>Automatizador de operações</span></div></div>
@@ -1607,6 +1661,48 @@ async function loadAutopilotReadiness(){
    if(!robotRunning)showRobotNotice('Não foi possível verificar a disponibilidade do robô. Atualize os dados para tentar novamente.');
  }
 }
+function renderRobotEasyOverview(status){
+ // Read-only reflection of GET /api/status; do not trigger broker actions.
+ const running=Boolean(status.running),interrupted=Boolean(status.interrupted_after_restart);
+ const available=Boolean(status.auto_buy_enabled);
+ const state=running?'active':interrupted?'interrupted':available?'paused':'unavailable';
+ const labels={active:'Em funcionamento',interrupted:'Interrompido',paused:'Pausado',unavailable:'Indisponível'};
+ const descriptions={
+  active:'O servidor informa que o processo está ativo. Isso não confirma operações.',
+  interrupted:'O sistema registrou uma interrupção. Consulte os avisos abaixo.',
+  paused:'O sistema respondeu, mas o processo não está em execução.',
+  unavailable:'O sistema respondeu, mas o recurso não está disponível no momento.'};
+ $('robotEasyOverview').classList.remove('is-uncertain');
+ $('robotEasyState').dataset.state=state;
+ $('robotEasyState').textContent=labels[state];
+ $('robotEasyStateHelp').textContent=descriptions[state];
+ const real=status.configured_account_mode==='real';
+ $('robotEasyMode').textContent=real?'Conta REAL configurada':'Conta de treinamento';
+ $('robotEasyModeHelp').textContent=real
+  ?'Ambiente configurado, sem confirmação de execução financeira.'
+  :'Ambiente de treinamento. Consultar o painel não inicia operações.';
+ const scan=status.scan_progress||{},stamp=scan.last_checked_at||scan.last_scan_at;
+ const date=stamp?new Date(stamp):null;
+ const valid=date&&!Number.isNaN(date.getTime());
+ const fresh=valid&&Date.now()-date.getTime()<=120000&&Date.now()-date.getTime()>=-5000;
+ $('robotEasyScan').textContent=!valid?'Sem registro':fresh?'Análise recente':'Análise antiga';
+ $('robotEasyScanHelp').textContent=!valid?'Nenhuma análise confirmada foi informada.':
+  'Registrada às '+new Intl.DateTimeFormat('pt-BR',{timeZone:'America/Sao_Paulo',hour:'2-digit',minute:'2-digit',second:'2-digit'}).format(date)+'. Análise não significa compra.';
+ $('robotEasyUpdated').textContent='Atualizado às '+new Intl.DateTimeFormat('pt-BR',{
+  timeZone:'America/Sao_Paulo',hour:'2-digit',minute:'2-digit',second:'2-digit'}).format(new Date());
+ $('robotEasyFeedback').textContent='Consulta concluída. Nenhuma operação ou configuração foi alterada.';
+}
+function reportRobotEasyUncertainty(){
+ $('robotEasyOverview').classList.add('is-uncertain');
+ $('robotEasyUpdated').textContent='Sem confirmação recente';
+ $('robotEasyFeedback').textContent='Não foi possível confirmar o estado atual. Os dados anteriores podem estar desatualizados. Não presuma que o robô foi desligado.';
+}
+async function refreshRobotEasyOverview(){
+ const button=$('robotEasyRefresh');
+ button.disabled=true;
+ $('robotEasyFeedback').textContent='Consultando as informações mais recentes…';
+ try{await refreshDashboard()}finally{button.disabled=false}
+}
 function renderScanMonitor(status){
  const card=$('dashScanMonitor');if(!card||!status)return;
  const running=Boolean(status.running),data=status.scan_progress;
@@ -1681,6 +1777,7 @@ async function refreshDashboard(){
    robotRunning=Boolean(status.running);
    robotConfiguredMode=status.configured_account_mode==='real'?'real':'demo';
    renderScanMonitor(status);
+   renderRobotEasyOverview(status);
    const available=Boolean(status.auto_buy_enabled);
    $('robotState').textContent=robotRunning?'ATIVO':status.interrupted_after_restart?'INTERROMPIDO':available?'PRONTO':'INDISPONÍVEL';
    $('robotMessage').textContent=status.reason||'Aguardando oportunidades no mercado DEMO';
@@ -1756,6 +1853,7 @@ async function refreshDashboard(){
  }catch(e){
    if(sequence!==dashboardStatusSequence)return null;
    $('feedState').textContent='○ Comunicação temporariamente indisponível. Último estado do robô preservado.';
+   reportRobotEasyUncertainty();
    // Keep the last known status; do not imply that the server stopped trading.
    return null;
  }
