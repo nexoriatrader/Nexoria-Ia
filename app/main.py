@@ -2727,7 +2727,10 @@ async def nexora2_imported_ohlc_research(request:Request,
         raise HTTPException(415,"Use application/json")
     stated_size=request.headers.get("content-length")
     if stated_size is not None:
-        if not stated_size.isdecimal():
+        # Prevent huge numeric strings from raising ValueError during int().
+        # HTTP Content-Length is ASCII digits only; stream ceiling remains final.
+        if (not stated_size or len(stated_size)>10
+                or not all("0" <= char <= "9" for char in stated_size)):
             raise HTTPException(400,"Tamanho de requisição inválido")
         if int(stated_size)>280_000:
             raise HTTPException(413,"Arquivo de pesquisa muito grande")
@@ -2810,14 +2813,14 @@ async def nexora2_replay_ohlc_research(request:Request,report_id:int,
     if report is None:
         raise HTTPException(404,"Pesquisa não encontrada")
     rebuilt=await asyncio.to_thread(build_uploaded_ohlc_report,report["input"])
+    # Compare the full server-generated report, including evidence, models,
+    # provenance and all stage metadata. The report contains no creation
+    # timestamp, so a genuine replay should be exactly deterministic.
+    original_digest=report["evidence"]["result_sha256"]
+    rebuilt_digest=rebuilt["evidence"]["result_sha256"]
+    reproduced=(rebuilt_digest==original_digest and rebuilt==report)
     return {"id":report_id,
-            "reproduced_identically":(
-                rebuilt["evidence"]==report["evidence"]
-                and rebuilt["statistics"]==report["statistics"]
-                and rebuilt["period_comparison"]==report["period_comparison"]
-                and rebuilt["contexts"]==report["contexts"]
-                and rebuilt["timeframe_alignment"]==report["timeframe_alignment"]
-                and rebuilt["orchestrator"]==report["orchestrator"]),
+            "reproduced_identically":reproduced,
             "source":"USER_SUPPLIED_UNVERIFIED_OHLC",
             "orders_sent":0,"execution_allowed":False}
 
