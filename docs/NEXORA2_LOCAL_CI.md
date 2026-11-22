@@ -21,7 +21,7 @@ python scripts/run_nexora2_offline_ci.py --mode focused
 python scripts/run_nexora2_offline_ci.py --mode full --report /tmp/nexora2-local-ci.json
 ```
 
-O modo `focused` testa o painel NEXORA 2.0, o histórico pessoal, a pesquisa OHLC, a comparação e o Context Engine. O modo `full` inclui toda a suíte Python. Ambos incluem compilação, guarda de diffs e scanner de segredos.
+O modo `focused` testa o painel NEXORA 2.0, o histórico pessoal, a pesquisa OHLC, a comparação e o Context Engine. O modo `full` inclui toda a suíte Python. Ambos incluem compilação, guarda de diffs, scanner dos arquivos atuais e auditoria de credenciais no histórico Git alcançável (é obrigatório usar clone completo).
 
 Para inspecionar os comandos sem executar testes:
 
@@ -65,3 +65,25 @@ cotações**, e não são previsões ou resultados financeiros.
 O validador rejeita arquivos truncados, formatos incompatíveis, JSON com
 chaves repetidas, valores não finitos e dados ou evidências modificados.
 Ele não chama a corretora, não executa ordens e não altera arquivos.
+
+## Antes de considerar visibilidade pública
+
+**Não torne público o repositório inteiro apenas porque os 2.000 minutos de
+Actions foram consumidos.** A publicação também expõe o histórico de commits
+e pode tornar públicos logs de workflows anteriores.
+
+Execute em um clone **não superficial**, com todas as referências relevantes
+obtidas do GitHub:
+
+```bash
+python3 scripts/check_repository_security.py
+python3 scripts/check_repository_history.py
+```
+
+Um resultado limpo detecta somente padrões conhecidos. Ele NÃO certifica a
+ausência de credenciais opacas, segredos em refs apagadas, anexos, logs ou
+sistemas externos. Verifique estes materiais antes de publicar qualquer código.
+Se houver segredo comprometido, é necessário revogar/rotacionar credenciais;
+apagá-las do HEAD não basta. A `main` de produção não deve ser alterada como
+parte dessas verificações.
+
