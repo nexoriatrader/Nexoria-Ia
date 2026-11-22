@@ -691,6 +691,17 @@ html,body{max-width:100%;overflow-x:clip}
 .robot-easy-history ol{padding-left:24px;margin:10px 0;display:grid;gap:7px}
 .robot-easy-history li{font-size:13px;color:#d6eaf4;line-height:1.6;padding-left:4px}
 .robot-easy-history li[data-result="uncertain"]{color:#ffe0ab}
+/* Plain-language scanner diagnosis; informational, never a trading signal. */
+.robot-easy-diagnosis{padding:17px 18px;margin:2px 0 16px;border:1px solid #426a82;background:#10293b;border-radius:16px}
+.robot-easy-diagnosis-heading{display:block;color:#a8d5e6;font-size:12px;font-weight:850;margin-bottom:8px}
+.robot-easy-diagnosis strong{font-size:clamp(16px,2.5vw,19px);line-height:1.35;color:#effaff}
+.robot-easy-diagnosis p{font-size:13px;line-height:1.6;color:#c2d7e3;margin:8px 0 0}
+.robot-easy-diagnosis[data-state="unknown"],.robot-easy-diagnosis[data-state="stale"]{border-color:#977a52;background:#30291f}
+.robot-easy-diagnosis[data-state="unknown"] strong,.robot-easy-diagnosis[data-state="stale"] strong{color:#ffe4b8}
+.robot-easy-diagnosis details{margin-top:12px;border-top:1px solid #446479;padding-top:10px}
+.robot-easy-diagnosis summary{cursor:pointer;color:#b5e0ee;font-size:12px;font-weight:800;min-height:31px}
+.robot-easy-diagnosis summary:focus-visible{outline:3px solid #9ce5ff;outline-offset:3px}
+@media(max-width:720px){.robot-easy-diagnosis{padding:14px}}
 /* Inline configuration validation: clear visual field errors and accessible focus */
 #robot-config .auto-invalid{border:2px solid #fa6b75!important;background:rgba(103,27,41,.28)!important;box-shadow:0 0 0 3px rgba(250,107,117,.12)}
 #robot-config .auto-field-error{color:#ff9ba4;font-size:12px;font-weight:700;line-height:1.5;margin:5px 0 9px}
@@ -967,6 +978,18 @@ html,body{max-width:100%;overflow-x:clip}
       <article class="robot-easy-tile"><span class="robot-easy-label">Última análise registrada</span>
         <strong id="robotEasyScan">Consultando...</strong>
         <p id="robotEasyScanHelp">Análise registrada não significa compra ou recomendação.</p></article>
+    </div>
+    <div class="robot-easy-diagnosis" id="robotEasyDiagnosis" data-state="unknown" role="status" aria-live="polite">
+      <span class="robot-easy-diagnosis-heading">O que a análise está mostrando?</span>
+      <strong id="robotEasyDiagnosisTitle">Aguardando informações</strong>
+      <p id="robotEasyDiagnosisExplanation">O sistema ainda não confirmou uma leitura. Não significa que ocorreu uma operação.</p>
+      <details>
+        <summary>Entender esta informação</summary>
+        <p><strong>Dados insuficientes:</strong> faltam registros para uma análise completa.</p>
+        <p><strong>Critérios não confirmados:</strong> a verificação não encontrou todas as condições esperadas.</p>
+        <p><strong>Sem leitura recente:</strong> a última informação pode estar desatualizada.</p>
+        <p>Este diagnóstico descreve informações técnicas e não recomenda operações nem garante resultados.</p>
+      </details>
     </div>
     <div class="robot-easy-actions">
       <button id="robotEasyRefresh" type="button" onclick="refreshRobotEasyOverview()">↻ Atualizar informações</button>
@@ -1700,6 +1723,67 @@ function recordRobotEasyCheck(kind,label){
  }
  $('robotEasyHistoryCount').textContent=robotEasyChecks.length+' consulta(s)';
 }
+function renderRobotEasyDiagnosis(status){
+ // Describe recorded checks, not forecasts, instructions or trade readiness.
+ const scan=status.scan_progress||{};
+ const interrupted=Boolean(status.interrupted_after_restart);
+ let state='unknown',title='Aguardando informações';
+ let explanation='Ainda não foi informada uma análise concluída.';
+ const last=scan.last_scan_at?new Date(scan.last_scan_at):null;
+ const valid=last&&!Number.isNaN(last.getTime());
+ const age=valid?Date.now()-last.getTime():NaN;
+ const fresh=valid&&age>=-5000&&age<=120000;
+ const checked=scan.last_checked_at?new Date(scan.last_checked_at):null;
+ const recentCheck=checked&&!Number.isNaN(checked.getTime())&&
+  Date.now()-checked.getTime()>=-5000&&Date.now()-checked.getTime()<=120000;
+ if(interrupted){
+  title='Análises interrompidas';
+  explanation='O servidor informou uma interrupção. O diagnóstico anterior não representa a situação atual.';
+ }else if(!status.running){
+  state='paused';title='Análises não estão em andamento';
+  explanation='Não há uma análise em execução. O histórico abaixo pode conter informações anteriores.';
+ }else if(!fresh){
+  state='stale';
+  title=recentCheck?'Verificação sem conclusão recente':'Sem análise recente';
+  explanation='Ainda não há uma análise concluída recentemente confirmada pelo servidor. Não é possível tirar conclusões de registros antigos.';
+ }else if(scan.stage==='scanning'&&recentCheck){
+  state='checking';title='Verificando informações';
+  explanation='A análise está em andamento; nenhum resultado novo foi confirmado.';
+ }else{
+  const counts=scan.reason_counts||{};
+  const has=(key)=>Number(counts[key])>0;
+  if(has('dados_indisponiveis')){
+   title='Alguns dados não foram recebidos';
+   explanation='Houve indisponibilidade de informações nesta verificação. Os resultados podem estar incompletos.';
+  }else if(has('velas_insuficientes')||has('velas_incompletas')){
+   title='Histórico insuficiente para analisar';
+   explanation='Faltaram registros históricos ou havia uma sequência incompleta.';
+  }else if(has('aguardando_fechamento_m1')){
+   title='Aguardando novos dados';
+   explanation='A verificação aguardou o fechamento de um novo registro de mercado.';
+  }else if(has('indicadores_nao_confirmados')||has('estrategia_sem_sinal')){
+   title='Critérios não confirmados';
+   explanation='A última verificação não confirmou todos os critérios necessários para classificar uma situação.';
+  }else if(has('sinal_confirmado')||scan.stage==='signal'){
+   title='Critérios identificados na análise';
+   explanation='O sistema registrou critérios técnicos, mas isso não é uma recomendação, ordem ou resultado financeiro.';
+  }else{
+   title='Verificação registrada';
+   explanation='Uma análise foi concluída e registrada. Isso não significa que ocorreu uma operação.';
+  }
+  state='checked';
+ }
+ const box=$('robotEasyDiagnosis');
+ box.dataset.state=state;
+ $('robotEasyDiagnosisTitle').textContent=title;
+ $('robotEasyDiagnosisExplanation').textContent=explanation;
+}
+function reportRobotEasyDiagnosisUncertain(){
+ $('robotEasyDiagnosis').dataset.state='unknown';
+ $('robotEasyDiagnosisTitle').textContent='Não foi possível confirmar';
+ $('robotEasyDiagnosisExplanation').textContent=
+  'A consulta falhou. Informações anteriores podem estar desatualizadas; nenhuma conclusão atual está confirmada.';
+}
 function renderRobotEasyOverview(status){
  // Read-only reflection of GET /api/status; do not trigger broker actions.
  const running=Boolean(status.running),interrupted=Boolean(status.interrupted_after_restart);
@@ -1729,12 +1813,14 @@ function renderRobotEasyOverview(status){
   'Registrada às '+new Intl.DateTimeFormat('pt-BR',{timeZone:'America/Sao_Paulo',hour:'2-digit',minute:'2-digit',second:'2-digit'}).format(date)+'. Análise não significa compra.';
  $('robotEasyUpdated').textContent='Atualizado às '+new Intl.DateTimeFormat('pt-BR',{
   timeZone:'America/Sao_Paulo',hour:'2-digit',minute:'2-digit',second:'2-digit'}).format(new Date());
+ renderRobotEasyDiagnosis(status);
  $('robotEasyFeedback').textContent='Consulta concluída. Nenhuma operação ou configuração foi alterada.';
  const conn=$('robotEasyConnection');conn.dataset.state='ok';conn.textContent='Conexão: confirmada';
  recordRobotEasyCheck('ok',labels[state]);
 }
 function reportRobotEasyUncertainty(){
  $('robotEasyOverview').classList.add('is-uncertain');
+ reportRobotEasyDiagnosisUncertain();
  $('robotEasyUpdated').textContent='Sem confirmação recente';
  $('robotEasyFeedback').textContent='Não foi possível confirmar o estado atual. Os dados anteriores podem estar desatualizados. Não presuma que o robô foi desligado.';
  const conn=$('robotEasyConnection');conn.dataset.state='uncertain';conn.textContent='Conexão: sem confirmação';
