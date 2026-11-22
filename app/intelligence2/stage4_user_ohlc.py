@@ -137,6 +137,75 @@ def get_asset(dataset_id):
         raise RuntimeError("DATASET_INTEGRITY_ERROR")
     return _view(row),bars
 
+
+def inspect_asset_quality(dataset_id):
+    """Recompute data-quality evidence from the immutable archive, read-only.
+
+    Integrity means the persisted bytes match the stored digest; it never
+    establishes whether an external market supplied authentic prices.
+    """
+    stored = get_asset(dataset_id)
+    if stored is None:
+        return None
+    asset, bars = stored
+    step = asset["granularity_seconds"]
+    first_epoch = bars[0]["epoch"]
+    last_epoch = bars[-1]["epoch"]
+    consecutive = [b["epoch"] - a["epoch"] for a, b in zip(bars, bars[1:])]
+    missing = sum(max(0, (difference // step) - 1) for difference in consecutive
+                  if difference > step and difference % step == 0)
+    duplicates = sum(difference == 0 for difference in consecutive)
+    invalid_interval = sum(difference <= 0 or difference % step != 0
+                           for difference in consecutive)
+    bad_ohlc = sum(
+        not (
+            isinstance(bar["high"], (int, float))
+            and isinstance(bar["low"], (int, float))
+            and all(isinstance(bar[field], (int, float))
+                    for field in ("open", "close"))
+            and bar["high"] >= max(bar["open"], bar["close"], bar["low"])
+            and bar["low"] <= min(bar["open"], bar["close"], bar["high"])
+        ) for bar in bars
+    )
+    if missing or duplicates or invalid_interval or bad_ohlc:
+        raise RuntimeError("ARCHIVED_OHLC_QUALITY_INCONSISTENCY")
+    return {
+        "audit_version": "nexora-ohlc-quality-v1",
+        "dataset_id": asset["id"],
+        "symbol": asset["symbol"],
+        "asset_class": asset["asset_class"],
+        "source_label": asset["source_label"],
+        "origin_type": asset["origin_type"],
+        "synthetic": asset["synthetic"],
+        "archive_digest_sha256": asset["snapshot_sha256"],
+        "archive_integrity_verified": True,
+        "provenance_verified": False,
+        "external_market_feed_connected": False,
+        "execution_allowed": False,
+        "quality": "COMPLETE",
+        "granularity_seconds": step,
+        "observed_candles": len(bars),
+        "expected_candles": ((last_epoch - first_epoch) // step) + 1,
+        "missing_candles": missing,
+        "duplicate_epochs": duplicates,
+        "irregular_intervals": invalid_interval,
+        "invalid_ohlc_rows": bad_ohlc,
+        "first_closed_epoch": first_epoch,
+        "last_closed_epoch": last_epoch,
+        "coverage_seconds": last_epoch - first_epoch + step,
+        "first_close": bars[0]["close"],
+        "last_close": bars[-1]["close"],
+        "minimum_close": min(bar["close"] for bar in bars),
+        "maximum_close": max(bar["close"] for bar in bars),
+        "limitations": [
+            "Integrity verified against the archived SHA-256, not an external source",
+            "Uploaded prices are not independently authenticated",
+            "Quality measurements are descriptive only, not predictive signals",
+            "No broker integration, trading orders, or financial execution",
+        ],
+    }
+
+
 def research_dataset(dataset_id):
     source_pair = get_asset(dataset_id)
     if source_pair is None:
