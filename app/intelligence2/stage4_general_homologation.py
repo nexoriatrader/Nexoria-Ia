@@ -730,11 +730,18 @@ async def start_historical_research(
 @app.get("/api/homologation/research/runs")
 async def historical_research_history(
     limit: int = Query(default=20, ge=1, le=100),
+    offset: int = Query(default=0, ge=0, le=100000),
+    state: str | None = Query(default=None, max_length=16),
+    id_prefix: str | None = Query(default=None, min_length=1, max_length=32),
     x_nexora_stage4_key: str | None = Header(default=None),
 ):
     _auth(x_nexora_stage4_key)
     try:
-        return await asyncio.to_thread(research.list_research, limit)
+        return await asyncio.to_thread(
+            research.list_research, limit, offset, state, id_prefix
+        )
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from None
     except Exception:
         log.exception("stage4_research_list_unavailable")
         raise HTTPException(503, "Research history unavailable") from None
