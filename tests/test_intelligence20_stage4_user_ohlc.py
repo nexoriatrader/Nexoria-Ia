@@ -117,3 +117,51 @@ def test_origin_markers_cannot_claim_verified_prices(isolated_db):
     assert stored["report"]["origin_type"]=="DECLARED_REAL_UNVERIFIED"
     assert stored["report"]["provenance_verified"] is False
     assert "No signals, orders or trading recommendations" in stored["report"]["limitations"]
+
+
+def test_exported_research_evidence_is_authenticated_and_read_only(isolated_db):
+    client = TestClient(core.app)  # isolated API; no broker or startup loop
+    page = client.get("/")
+    assert page.status_code == 200
+    assert "Baixar evidências (JSON)" in page.text
+    assert "researchDetailRequest" in page.text
+    assert "URL.revokeObjectURL" in page.text
+
+    uploaded = client.post("/api/homologation/assets", json=sample(),
+                           headers=HEADERS)
+    assert uploaded.status_code == 200, uploaded.text
+    started = client.post(
+        "/api/homologation/research/runs/uploaded/" + uploaded.json()["id"],
+        headers=HEADERS,
+    )
+    assert started.status_code == 200, started.text
+    run_id = started.json()["id"]
+    path = "/api/homologation/research/runs/" + run_id + "/export"
+
+    assert client.get(path).status_code == 401
+    assert client.get("/api/homologation/research/runs/not-an-id/export",
+                      headers=HEADERS).status_code == 422
+    assert client.get("/api/homologation/research/runs/" + "0" * 32 + "/export",
+                      headers=HEADERS).status_code == 404
+
+    before = client.get("/api/homologation/research/runs",
+                        headers=HEADERS).json()["total"]
+    response = client.get(path, headers=HEADERS)
+    assert response.status_code == 200, response.text
+    assert response.headers["content-type"].startswith("application/json")
+    assert response.headers["cache-control"] == "no-store"
+    assert response.headers["content-disposition"] == (
+        'attachment; filename="nexora-research-' + run_id + '.json"'
+    )
+    exported = response.json()
+    assert exported["format_version"] == "nexora-historical-research-evidence-v1"
+    assert exported["provenance_verified"] is False
+    assert exported["financial_execution_allowed"] is False
+    assert exported["research"]["id"] == run_id
+    assert exported["research"]["result_sha256"] == started.json()["result_sha256"]
+    assert exported["research"]["report"]["provenance_verified"] is False
+    assert len(exported["research"]["stages"]) == len(research.STAGES)
+    assert KEY not in response.text
+    assert client.get(path, headers=HEADERS).json() == exported
+    assert client.get("/api/homologation/research/runs",
+                      headers=HEADERS).json()["total"] == before
