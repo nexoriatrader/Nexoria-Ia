@@ -265,7 +265,7 @@ async function downloadAssetCsv(id,button){
  cache:'no-store',headers:{'X-NEXORA-STAGE4-KEY':$('token').value}});
  if(!result.ok)throw Error('HTTP '+result.status);
  const body=await result.text();
- if(!body.startsWith('epoch,open,high,low,close\\n'))throw Error('Cabeçalho CSV inválido');
+ if(!body.startsWith('epoch,open,high,low,close\n'))throw Error('Cabeçalho CSV inválido');
  const blob=new Blob([body],{type:'text/csv;charset=utf-8'});
  url=URL.createObjectURL(blob);
  const link=element('a');link.href=url;link.download='nexora-ohlc-'+id+'.csv';
