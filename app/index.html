@@ -801,6 +801,46 @@ html,body{max-width:100%;overflow-x:clip}
 @media(max-width:620px){.lp-plan-grid{grid-template-columns:1fr;max-width:430px}.lp-plan{padding:16px}.lp-faq-list summary{padding:15px;font-size:13px}.lp-faq-list details p{padding:0 15px 16px}}
 </style>
 <style>
+/* V2 command surface: status and stop-only safety control at the top. */
+#dashboard .nx-neo-command{position:relative;display:flex;align-items:center;justify-content:space-between;gap:18px;flex-wrap:wrap;margin:0 0 15px;padding:21px 23px;border:1px solid #377b83;border-radius:23px;background:radial-gradient(ellipse at 100% 0%,#2da9ae31,transparent 60%),linear-gradient(120deg,#163e4e 0%,#10283c 53%,#0c2034 100%);box-shadow:inset 0 1px #d0fff31e,0 18px 40px #02091235}
+#dashboard .nx-neo-command-brand{display:flex;align-items:center;gap:14px;min-width:0}
+#dashboard .nx-neo-command-symbol{display:grid;place-items:center;width:57px;height:57px;flex:0 0 57px;border-radius:18px;background:linear-gradient(140deg,#348c9d,#1a5c73);border:1px solid #71c8cb7d;font-size:31px;color:#c7fff3;box-shadow:0 7px 23px #27b3b13d}
+#dashboard .nx-neo-command-identity h2{font-size:clamp(21px,3vw,27px);line-height:1.15;letter-spacing:-.035em;margin:5px 0 4px;color:#f0fcff}
+#dashboard .nx-neo-command-identity h2 span{font-size:12px;vertical-align:middle;padding:4px 8px;border:1px solid #6597a6;border-radius:7px;color:#c7e5ef;font-weight:850;letter-spacing:.02em;margin-left:4px}
+#dashboard .nx-neo-command-subtext{color:#a8ccdc;font-size:12px;line-height:1.5}
+#dashboard .nx-neo-command-actions{display:flex;align-items:center;justify-content:flex-end;gap:11px;flex-wrap:wrap}
+#dashboard .nx-neo-command-pill{display:inline-flex;align-items:center;gap:9px;background:#152d3f;border:1px solid #52758b;padding:11px 15px;color:#dcecf5;border-radius:99px;font-size:12px;font-weight:900;white-space:nowrap}
+#dashboard .nx-neo-command-pill[data-state="active"]{border-color:#399982;background:#153d38;color:#b3f8e1}
+#dashboard .nx-neo-command-pill[data-state="paused"]{border-color:#688ca5;background:#18364d;color:#d5eaff}
+#dashboard .nx-neo-command-pill[data-state="interrupted"],#dashboard .nx-neo-command-pill[data-state="unknown"]{border-color:#a18458;background:#372b22;color:#ffe3b4}
+#dashboard .nx-neo-command-dot{display:block;width:9px;height:9px;border-radius:50%;background:currentColor;box-shadow:0 0 0 3px #ffffff16}
+#dashboard .nx-neo-stop{min-height:46px;padding:10px 19px;border-radius:12px;border:1px solid #ffb2a9;background:linear-gradient(120deg,#f07a74,#c95561);box-shadow:0 5px 14px #b632472b;color:#211013;font-size:13px;font-weight:950;white-space:nowrap}
+#dashboard .nx-neo-stop:disabled{opacity:.65;cursor:not-allowed}
+#dashboard .nx-neo-stop[hidden]{display:none!important}
+#dashboard .nx-neo-controls{padding:0 14px;margin:0 0 10px;background:linear-gradient(145deg,#102b40,#0b2032);border:1px solid #315772;border-radius:18px}
+#dashboard .nx-neo-controls>summary{display:flex;align-items:center;justify-content:space-between;gap:12px;cursor:pointer;padding:16px 6px;list-style:none;min-height:67px}
+#dashboard .nx-neo-controls>summary::-webkit-details-marker{display:none}
+#dashboard .nx-neo-controls>summary strong{display:block;color:#e6f4fb;margin-top:4px;font-size:15px}
+#dashboard .nx-neo-controls-expand{font-size:12px;color:#a0d9ee;white-space:nowrap;font-weight:850}
+#dashboard .nx-neo-controls[open]>summary{border-bottom:1px solid #35586b;margin-bottom:12px}
+#dashboard .nx-neo-controls>.dash-control-card{margin:0 0 13px!important}
+#dashboard .nx-neo-controls .dash-control-main .hero-action{background:linear-gradient(125deg,#34748c,#265777)!important;color:#effbff!important;border:1px solid #72b3cb;border-radius:15px;box-shadow:none;min-height:54px;font-size:14px;letter-spacing:0}
+#dashboard .nx-neo-controls .dash-control-main .hero-action:disabled{opacity:.6}
+#dashboard .nx-neo-controls .dash-configure-button{border-radius:13px;background:#1b4863;border-color:#568daa}
+#dashboard .nx-neo-controls .dash-access{border-radius:13px}
+#dashboard .nx-neo-controls .dash-control-grid{gap:12px}
+#dashboard .nx-neo-controls summary:focus-visible{outline:3px solid #a8eaff;outline-offset:1px;border-radius:9px}
+@media(max-width:640px){
+ #dashboard .nx-neo-command{padding:16px;border-radius:19px;gap:14px}
+ #dashboard .nx-neo-command-symbol{width:48px;height:48px;flex-basis:48px;border-radius:14px;font-size:26px}
+ #dashboard .nx-neo-command-actions{justify-content:space-between;width:100%}
+ #dashboard .nx-neo-command-pill{padding:10px 13px;font-size:11px}
+ #dashboard .nx-neo-stop{flex:1;min-width:125px;min-height:46px;padding:10px 12px}
+ #dashboard .nx-neo-controls{padding:0 10px}
+ #dashboard .nx-neo-controls>summary{padding:14px 5px}
+ #dashboard .nx-neo-controls .dash-control-main .hero-action{min-height:56px;height:auto}
+}
+
 /* NEXORA Studio dashboard: genuine UI redesign, isolated to #dashboard. */
 #dashboard.nx-neo-dashboard{--nx-tint:#90d6f4;--nx-teal:#83e8cf;--nx-ink:#eff8ff;--nx-border:#2b506a;--nx-glass:#0e2234;max-width:1120px;margin:0 auto;padding-bottom:34px}
 #dashboard .nx-neo-top{display:flex;justify-content:space-between;align-items:flex-end;gap:20px;margin:17px 0 23px}
@@ -1088,6 +1128,21 @@ html,body{max-width:100%;overflow-x:clip}
     </div>
   </header>
 
+  <section class="nx-neo-command" aria-labelledby="nxNeoCommandTitle">
+    <div class="nx-neo-command-brand">
+      <div class="nx-neo-command-symbol" aria-hidden="true">✦</div>
+      <div class="nx-neo-command-identity">
+        <span class="nx-neo-section-caption">CENTRAL NEXORA</span>
+        <h2 id="nxNeoCommandTitle">Robô IA <span>2.0</span></h2>
+        <span id="nxNeoRunHelp" class="nx-neo-command-subtext">Verificando o estado do servidor</span>
+      </div>
+    </div>
+    <div class="nx-neo-command-actions">
+      <span id="nxNeoRunStatus" class="nx-neo-command-pill" data-state="unknown" role="status" aria-live="polite"><span class="nx-neo-command-dot" aria-hidden="true"></span>Consultando</span>
+      <button id="nxNeoQuickStop" type="button" class="nx-neo-stop" onclick="nxNeoStopRunningRobot()" disabled hidden aria-label="Desligar robô em funcionamento"><span aria-hidden="true">■</span> Desligar robô</button>
+    </div>
+  </section>
+
   <section id="robotEasyOverview" class="nx-neo-overview" aria-labelledby="robotEasyTitle">
     <div class="nx-neo-status-head">
       <div>
@@ -1177,7 +1232,8 @@ html,body{max-width:100%;overflow-x:clip}
     </div>
   </section>
 
-  <div class="nx-neo-control-heading"><div><span class="nx-neo-section-caption">PAINEL ORIGINAL PRESERVADO</span><h2>Área de controle</h2></div><span>Controles e contas existentes</span></div>
+  <details class="nx-neo-controls" id="nxNeoControls">
+    <summary><span><span class="nx-neo-section-caption">OPÇÕES COMPLEMENTARES</span><strong>Configurações e contas</strong></span><span class="nx-neo-controls-expand">Ver detalhes <span aria-hidden="true">⌄</span></span></summary>
   <div class="card dash-control-card">
     <div class="dash-control-head">
       <div class="dash-robot-name"><span class="dash-robot-icon" aria-hidden="true">◈</span><div><strong>NEXORA IA</strong><span>Automatizador de operações</span></div></div>
@@ -1236,7 +1292,8 @@ html,body{max-width:100%;overflow-x:clip}
       <span id="lastOrder"></span>
     </div>
   </div>
-  
+  </details>
+
   <details class="nx-neo-more" id="nxNeoMore">
     <summary><span>Detalhes e resultados</span><span class="nx-neo-more-action">Ver informações <span aria-hidden="true">⌄</span></span></summary>
     <div class="card dash-daily-card" id="dailyResultsCard">
@@ -1961,6 +2018,39 @@ function reportRobotEasyDiagnosisUncertain(){
  $('robotEasyDiagnosisExplanation').textContent=
   'A consulta falhou. Informações anteriores podem estar desatualizadas; nenhuma conclusão atual está confirmada.';
 }
+function renderNxNeoTopCommand(status){
+ const running=Boolean(status.running),interrupted=Boolean(status.interrupted_after_restart);
+ const pill=$('nxNeoRunStatus'),stop=$('nxNeoQuickStop');
+ const state=running?'active':interrupted?'interrupted':status.auto_buy_enabled?'paused':'unavailable';
+ pill.dataset.state=state;
+ pill.textContent=running?'● Em funcionamento':interrupted?'● Interrompido':status.auto_buy_enabled?'● Pausado':'● Indisponível';
+ $('nxNeoRunHelp').textContent=running?'Processo ativo · estado confirmado':interrupted?'Interrupção informada pelo servidor':'Monitoramento e informações do sistema';
+ stop.hidden=!running;
+ stop.disabled=!running||$('robotButton').dataset.commandPending==='true'||stop.dataset.commandPending==='true';
+}
+function markNxNeoTopUncertain(){
+ $('nxNeoRunStatus').dataset.state='unknown';
+ $('nxNeoRunStatus').textContent='● Sem confirmação';
+ $('nxNeoRunHelp').textContent='Falha na consulta · último estado pode estar desatualizado';
+ // A last-known active process may still be stopped; never assume shutdown.
+ const stop=$('nxNeoQuickStop');
+ stop.hidden=!robotRunning;
+ stop.disabled=!robotRunning||$('robotButton').dataset.commandPending==='true'||stop.dataset.commandPending==='true';
+}
+async function nxNeoStopRunningRobot(){
+ // Safety-only shortcut. It can never use the start branch of toggleRobot().
+ const stop=$('nxNeoQuickStop'),control=$('robotButton');
+ if(!robotRunning||stop.hidden||stop.disabled||control.dataset.commandPending==='true')return;
+ stop.dataset.commandPending='true';
+ stop.disabled=true;
+ try{
+  if(robotRunning)await toggleRobot();
+ }finally{
+  stop.dataset.commandPending='false';
+  stop.disabled=true; // Wait for a new authoritative status before another request.
+  await refreshDashboard();
+ }
+}
 function renderRobotEasyOverview(status){
  // Read-only reflection of GET /api/status; do not trigger broker actions.
  const running=Boolean(status.running),interrupted=Boolean(status.interrupted_after_restart);
@@ -2122,6 +2212,7 @@ async function refreshDashboard(){
    robotConfiguredMode=status.configured_account_mode==='real'?'real':'demo';
    renderScanMonitor(status);
    renderRobotEasyOverview(status);
+   renderNxNeoTopCommand(status);
    renderNxNeoScannerChart(status);
    const available=Boolean(status.auto_buy_enabled);
    $('robotState').textContent=robotRunning?'ATIVO':status.interrupted_after_restart?'INTERROMPIDO':available?'PRONTO':'INDISPONÍVEL';
@@ -2199,6 +2290,7 @@ async function refreshDashboard(){
    if(sequence!==dashboardStatusSequence)return null;
    $('feedState').textContent='○ Comunicação temporariamente indisponível. Último estado do robô preservado.';
    reportRobotEasyUncertainty();
+   markNxNeoTopUncertain();
    markNxNeoScannerUncertain();
    // Keep the last known status; do not imply that the server stopped trading.
    return null;

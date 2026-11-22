@@ -357,35 +357,108 @@ if($('nxNeoChecked').textContent!=='—')
 
 
 
-def test_studio_styles_remain_inside_style_element():
-    """The CSS must never render as visible page text."""
-    html_head = HTML.split("</head>", 1)[0]
-    marker = "/* NEXORA Studio dashboard: genuine UI redesign, isolated to #dashboard. */"
-    assert html_head.count(marker) == 1
-    assert html_head.count("<style>") == html_head.count("</style>")
-    assert "</style>\n<style>\n" + marker in html_head
+def test_command_bar_prioritizes_stop_only_and_preserves_existing_controls():
+    parsed = _IndexTags()
+    parsed.feed(HTML)
+    for key in ("nxNeoCommandTitle", "nxNeoRunStatus", "nxNeoRunHelp",
+                "nxNeoQuickStop", "nxNeoControls"):
+        assert parsed.ids.count(key) == 1, key
+    section = HTML.split(
+        '<section id="dashboard" class="hidden nx-neo-dashboard">', 1
+    )[1].split('<section id="robot-config" class="hidden">', 1)[0]
+    assert section.index('class="nx-neo-command"') < section.index(
+        'id="robotEasyOverview"'
+    )
+    assert section.index('id="nxNeoQuickStop"') < section.index(
+        'id="robotEasyOverview"'
+    )
+    assert 'onclick="nxNeoStopRunningRobot()"' in section
+    assert 'id="nxNeoQuickStop"' in section
+    assert 'disabled hidden aria-label="Desligar robô em funcionamento"' in section
+    assert '<details class="nx-neo-controls" id="nxNeoControls">' in section
+    assert section.index('<details class="nx-neo-controls"') < section.index(
+        '<div class="card dash-control-card">'
+    )
+    assert 'id="robotButton"' in section
+    assert section.count('id="robotButton"') == 1
+    assert 'onclick="toggleRobot()"' in section
+    assert 'id="robotState"' in section
+    assert 'id="robotStartNotice"' in section
+    assert 'id="balanceMetric"' in section
+    assert "if(!health.real_orders_enabled)" in HTML
+    assert 'function markNxNeoTopUncertain()' in HTML
+    assert 'renderNxNeoTopCommand(status);' in HTML
+    assert 'markNxNeoTopUncertain();' in HTML
+    assert "#dashboard .nx-neo-stop[hidden]{display:none!important}" in HTML
+    style_head = HTML.split("</head>", 1)[0]
+    assert style_head.count("<style>") == style_head.count("</style>")
 
-    class StyleGuard(HTMLParser):
-        def __init__(self):
-            super().__init__()
-            self.in_style = False
-            self.found_in_style = False
-            self.unstyled_css = False
 
-        def handle_starttag(self, tag, attrs):
-            if tag == "style":
-                self.in_style = True
-
-        def handle_endtag(self, tag):
-            if tag == "style":
-                self.in_style = False
-
-        def handle_data(self, data):
-            if marker in data:
-                self.found_in_style |= self.in_style
-                self.unstyled_css |= not self.in_style
-
-    guard = StyleGuard()
-    guard.feed(HTML)
-    assert guard.found_in_style
-    assert not guard.unstyled_css
+def test_stop_only_shortcut_never_calls_start_or_repeats_a_pending_command():
+    start = HTML.index("function renderNxNeoTopCommand(status){")
+    end = HTML.index("function renderRobotEasyOverview(status){", start)
+    block = HTML[start:end]
+    for forbidden in ("fetch(", "POST", "/api/autopilot/start",
+                      "/api/autopilot/stop", "sendBeacon", "localStorage"):
+        assert forbidden not in block
+    assert "if(!robotRunning||stop.hidden||stop.disabled" in block
+    assert "if(robotRunning)await toggleRobot();" in block
+    if not shutil.which("node"):
+        return
+    runtime = r"""
+const elements=new Map();
+const $=id=>{
+ if(!elements.has(id))elements.set(id,{
+  textContent:'',dataset:{},hidden:false,disabled:false
+ });
+ return elements.get(id);
+};
+let robotRunning=false;
+let stopped=0, refreshed=0;
+async function toggleRobot(){
+ if(!robotRunning)throw Error('Shortcut called start path');
+ stopped++;
+ robotRunning=false;
+}
+async function refreshDashboard(){refreshed++;}
+"""
+    checks = r"""
+(async()=>{
+  renderNxNeoTopCommand({running:false,auto_buy_enabled:true});
+  if(!$('nxNeoQuickStop').hidden)throw Error('Stop button visible while stopped');
+  await nxNeoStopRunningRobot();
+  if(stopped!==0)throw Error('Stop shortcut called with stopped process');
+  robotRunning=true;
+  renderNxNeoTopCommand({running:true,auto_buy_enabled:true});
+  if($('nxNeoQuickStop').hidden||$('nxNeoQuickStop').disabled)
+   throw Error('Stop button not available for running process');
+  if($('nxNeoRunStatus').textContent!=='● Em funcionamento')
+   throw Error('Wrong status shown');
+  await nxNeoStopRunningRobot();
+  if(stopped!==1||refreshed!==1)throw Error('Stop not dispatched once');
+  await nxNeoStopRunningRobot();
+  if(stopped!==1)throw Error('Repeated stop invoked');
+  robotRunning=true;
+  renderNxNeoTopCommand({running:true,auto_buy_enabled:true});
+  $('robotButton').dataset.commandPending='true';
+  renderNxNeoTopCommand({running:true,auto_buy_enabled:true});
+  if(!$('nxNeoQuickStop').disabled)throw Error('Stop button ignores pending command');
+  await nxNeoStopRunningRobot();
+  if(stopped!==1)throw Error('Stop invoked while command pending');
+  $('robotButton').dataset.commandPending='false';
+  renderNxNeoTopCommand({running:true,auto_buy_enabled:true});
+  markNxNeoTopUncertain();
+  if($('nxNeoRunStatus').dataset.state!=='unknown')
+   throw Error('Connection failure must be obvious');
+  if(!$('nxNeoRunHelp').textContent.includes('desatualizado'))
+   throw Error('Missing status uncertainty warning');
+  robotRunning=false;
+  renderNxNeoTopCommand({running:false,auto_buy_enabled:true});
+  if(!$('nxNeoQuickStop').hidden)throw Error('Inactive stop button became visible');
+})().catch(e=>{console.error(e);process.exitCode=1;});
+"""
+    result = subprocess.run(
+        ["node", "-e", runtime + block + checks],
+        capture_output=True, text=True, timeout=20, check=False
+    )
+    assert result.returncode == 0, result.stderr
