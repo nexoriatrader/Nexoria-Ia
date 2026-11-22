@@ -247,16 +247,13 @@ def build_report(payload: dict, *, clock: int | None = None) -> dict:
 
 def result_digest(report: dict) -> str:
     """Fingerprint output evidence without self-referential JSON fields."""
+    # Hash every output field, including provenance text and report metadata.
+    # The normalized input is independently covered by input_sha256.
     proof = {
-        field: report[field] for field in (
-            "version", "source", "symbol", "period_from_epoch",
-            "period_to_epoch", "statistics", "period_comparison",
-            "contexts", "timeframe_alignment", "orchestrator", "models",
-            "orders_sent", "execution_allowed",
-        )
+        key: value for key, value in report.items()
+        if key not in ("input", "evidence")
     }
-    # Cover provenance, timeframe cutoffs and validation metadata, too.
-    # Exclude only the digest itself to avoid a self-referential hash.
+    # Exclude only the digest itself to avoid self-reference.
     proof["evidence"] = {
         key: value for key, value in report["evidence"].items()
         if key != "result_sha256"
