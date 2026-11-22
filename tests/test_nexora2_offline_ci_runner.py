@@ -47,10 +47,11 @@ def test_local_plan_covers_ci_layers_without_deployment():
     run = runner()
     full = run.command_plan("full", "python3")
     focused = run.command_plan("focused", "python3")
-    assert len(full) == 5
-    assert len(focused) == 4
+    assert len(full) == 6
+    assert len(focused) == 5
     assert full[0][1] == ["python3", "-m", "compileall", "-q", "app", "tests"]
     assert any("scripts/check_repository_security.py" in cmd for _, cmd in full)
+    assert any("scripts/check_repository_history.py" in cmd for _, cmd in full)
     assert any("scripts/research_release_diff_guard.py" in cmd for _, cmd in full)
     assert full[-1][1] == ["python3", "-m", "pytest", "-q"]
     assert "tests/test_nexora2_integrated_workspace.py" in focused[-1][1]
