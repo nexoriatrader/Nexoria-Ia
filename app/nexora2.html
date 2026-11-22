@@ -52,6 +52,7 @@ h1{font-size:clamp(27px,4vw,38px);line-height:1.16;margin:7px 0 10px}
 
 .ohlc-layout{display:grid;grid-template-columns:minmax(0,1fr) minmax(200px,.6fr);gap:14px;align-items:end;margin-top:13px}
 .ohlc-layout .field{min-width:0}.ohlc-layout .field input[type=file]{max-width:100%;font-size:12px}
+.ohlc-layout .field select{width:100%;border:1px solid #49677d;background:#081a2b;color:#f0f7fc;border-radius:10px;padding:12px;min-height:47px}
 .ohlc-outputs{display:grid;gap:9px}.ohlc-output{padding:14px;border:1px solid #395a73;border-radius:13px;background:#0c2032}
 .ohlc-output strong{font-size:12px;display:block;margin-bottom:7px;color:#f5d38a}
 .ohlc-output p{font-size:12px;line-height:1.6;color:#c6dae7;overflow-wrap:anywhere}
@@ -170,6 +171,17 @@ button:focus-visible,a:focus-visible,input:focus-visible{outline:3px solid var(-
   </div>
   <p class="status" id="ohlcHistoryStatus" role="status">As pesquisas salvas ainda não foram consultadas.</p>
   <div class="ohlc-study-history" id="ohlcHistoryList" aria-live="polite"></div>
+  <div class="ohlc-output" id="ohlcComparePanel">
+    <strong>Comparar duas pesquisas salvas</strong>
+    <p>Compare distribuições históricas de dois estudos da sua conta. Não é ranking de ativos nem resultado de operações.</p>
+    <div class="ohlc-layout">
+      <div class="field"><label for="ohlcCompareLeft">Primeira pesquisa</label><select id="ohlcCompareLeft" aria-label="Primeira pesquisa para comparação"></select></div>
+      <div class="field"><label for="ohlcCompareRight">Segunda pesquisa</label><select id="ohlcCompareRight" aria-label="Segunda pesquisa para comparação"></select></div>
+    </div>
+    <div class="form-actions"><button class="action secondary" id="ohlcCompareButton" type="button" onclick="compareUploadedOhlcReports()" disabled>COMPARAR HISTÓRICOS</button></div>
+    <p class="status" id="ohlcCompareStatus" role="status">Carregue pelo menos duas pesquisas salvas para comparar.</p>
+    <p id="ohlcCompareResult" class="hint" hidden></p>
+  </div>
 </section>
 <section class="panel" id="persistedResearchLibrary" aria-labelledby="persistedResearchLibraryTitle">
   <div class="panel-header">
@@ -441,7 +453,7 @@ async function loadResearchLibraryDetail(id,title){
   }
 }
 
-let ohlcHistorySeq=0,ohlcActionSeq=0;
+let ohlcHistorySeq=0,ohlcActionSeq=0,ohlcCompareSeq=0;
 function parseUploadedOhlc(text,filename){
   if(filename.toLowerCase().endsWith('.json')){
     const parsed=JSON.parse(text);
@@ -578,8 +590,65 @@ async function loadUploadedOhlcHistory(){
     }
     $('ohlcHistoryStatus').textContent=target.childElementCount
       ?target.childElementCount+' pesquisa(s) salva(s) na sua conta.':'Nenhuma pesquisa salva nesta conta.';
+    const left=$('ohlcCompareLeft'),right=$('ohlcCompareRight');
+    const previousLeft=left.value,previousRight=right.value;
+    left.replaceChildren();right.replaceChildren();
+    const options=(Array.isArray(data.items)?data.items:[])
+      .filter(x=>Number.isInteger(x.id)&&x.id>0).slice(0,5);
+    for(const select of [left,right]){
+      for(const item of options){
+        const option=document.createElement('option');
+        option.value=String(item.id);
+        option.textContent='Pesquisa #'+item.id+' · '+String(item.period_from||'período não informado');
+        select.append(option);
+      }
+    }
+    if(options.length>=2){
+      left.value=options.some(x=>String(x.id)===previousLeft)?previousLeft:String(options[0].id);
+      right.value=options.some(x=>String(x.id)===previousRight)?previousRight:String(options[1].id);
+    }
+    $('ohlcCompareButton').disabled=options.length<2;
+    $('ohlcCompareStatus').textContent=options.length>=2
+      ?'Escolha duas pesquisas distintas e compare apenas os indicadores históricos.'
+      :'São necessárias pelo menos duas pesquisas persistidas na sua conta.';
   }catch(error){if(seq===ohlcHistorySeq)$('ohlcHistoryStatus').textContent='Histórico indisponível: '+error.message;}
   finally{if(seq===ohlcHistorySeq)button.disabled=false;}
+}
+async function compareUploadedOhlcReports(){
+  const left=Number($('ohlcCompareLeft').value),right=Number($('ohlcCompareRight').value);
+  if(!Number.isSafeInteger(left)||!Number.isSafeInteger(right)||
+     left<1||right<1||left===right){
+    $('ohlcCompareStatus').textContent='Selecione duas pesquisas diferentes.';
+    return;
+  }
+  const seq=++ohlcCompareSeq,button=$('ohlcCompareButton');
+  button.disabled=true;$('ohlcCompareResult').hidden=true;
+  $('ohlcCompareStatus').textContent='Comparando registros históricos da sua conta...';
+  try{
+    const data=await checkedResearch('/api/nexora2/ohlc/research/compare?left_id='+
+      encodeURIComponent(left)+'&right_id='+encodeURIComponent(right));
+    if(seq!==ohlcCompareSeq)return;
+    const a=data.left||{},b=data.right||{},difference=data.delta_right_minus_left||{};
+    $('ohlcCompareResult').textContent=[
+      'Primeira: '+String(a.symbol||'—')+' · '+String(a.candles??'—')+' candles',
+      'Fração de alta: '+String(a.up_fraction??'—'),
+      'Volatilidade: '+String(a.realized_volatility??'—'),
+      'Segunda: '+String(b.symbol||'—')+' · '+String(b.candles??'—')+' candles',
+      'Fração de alta: '+String(b.up_fraction??'—'),
+      'Volatilidade: '+String(b.realized_volatility??'—'),
+      'Diferença de volatilidade (segunda − primeira): '+
+        String(difference.realized_volatility??'—'),
+      data.matching_windows?'Janelas temporais iguais':'Janelas temporais diferentes',
+      'Fontes enviadas pelo usuário, não verificadas; sem previsão ou ranking.'
+    ].join(' · ');
+    $('ohlcCompareResult').hidden=false;
+    $('ohlcCompareStatus').textContent='Comparação histórica concluída.';
+  }catch(error){
+    if(seq===ohlcCompareSeq)
+      $('ohlcCompareStatus').textContent='Comparação indisponível: '+error.message;
+  }finally{
+    if(seq===ohlcCompareSeq)button.disabled=false;
+  }
 }
 async function openUploadedOhlcReport(id){
   const seq=++ohlcActionSeq;
