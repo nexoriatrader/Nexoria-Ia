@@ -566,6 +566,12 @@ async function uploadOhlcRequest(url,payload){
   if(!response.ok)throw Error(typeof data.detail==='string'?data.detail:'Falha na pesquisa histórica');
   return data;
 }
+function formatHistoricalPercent(value){
+  if(typeof value!=='number'||!Number.isFinite(value))return 'não informado';
+  return (value*100).toLocaleString('pt-BR',{
+    minimumFractionDigits:2,maximumFractionDigits:2
+  })+'%';
+}
 function renderOhlcSummary(report,id){
   $('ohlcStudyOutput').hidden=false;
   const stats=report.statistics||{},evidence=report.evidence||{};
@@ -575,7 +581,8 @@ function renderOhlcSummary(report,id){
     'Candles M1: '+String(stats.periods??'—'),
     'Períodos de alta: '+String(stats.up_intervals??'—'),
     'Períodos de baixa: '+String(stats.down_intervals??'—'),
-    'Volatilidade histórica: '+String(stats.realized_volatility??'—'),
+    'Volatilidade histórica (desvio-padrão): '+formatHistoricalPercent(stats.realized_volatility),
+    'Candles com amplitude atípica: '+String(stats.unusually_wide_candles??'—'),
     'Alinhamento: '+String(alignment.state||'indeterminado')
   ].join(' · ');
   $('ohlcEvidence').textContent=[
@@ -589,11 +596,11 @@ function renderOhlcSummary(report,id){
   const start=compare.first||{},end=compare.second||{};
   $('ohlcPeriods').textContent=[
     'Primeira metade: '+String(start.periods??'—')+' candles',
-    'Frequência de alta: '+String(start.up_intervals??'—'),
-    'Volatilidade: '+String(start.realized_volatility??'—'),
+    'Períodos de alta: '+String(start.up_intervals??'—'),
+    'Volatilidade (desvio-padrão): '+formatHistoricalPercent(start.realized_volatility),
     'Segunda metade: '+String(end.periods??'—')+' candles',
-    'Frequência de alta: '+String(end.up_intervals??'—'),
-    'Volatilidade: '+String(end.realized_volatility??'—'),
+    'Períodos de alta: '+String(end.up_intervals??'—'),
+    'Volatilidade (desvio-padrão): '+formatHistoricalPercent(end.realized_volatility),
     'Comparação descritiva, sem previsão'
   ].join(' · ');
   const contexts=report.contexts||{};
@@ -717,13 +724,13 @@ async function compareUploadedOhlcReports(){
     const a=data.left||{},b=data.right||{},difference=data.delta_right_minus_left||{};
     $('ohlcCompareResult').textContent=[
       'Primeira: '+String(a.symbol||'—')+' · '+String(a.candles??'—')+' candles',
-      'Fração de alta: '+String(a.up_fraction??'—'),
-      'Volatilidade: '+String(a.realized_volatility??'—'),
+      'Intervalos de alta: '+formatHistoricalPercent(a.up_fraction),
+      'Volatilidade (desvio-padrão): '+formatHistoricalPercent(a.realized_volatility),
       'Segunda: '+String(b.symbol||'—')+' · '+String(b.candles??'—')+' candles',
-      'Fração de alta: '+String(b.up_fraction??'—'),
-      'Volatilidade: '+String(b.realized_volatility??'—'),
+      'Intervalos de alta: '+formatHistoricalPercent(b.up_fraction),
+      'Volatilidade (desvio-padrão): '+formatHistoricalPercent(b.realized_volatility),
       'Diferença de volatilidade (segunda − primeira): '+
-        String(difference.realized_volatility??'—'),
+        formatHistoricalPercent(difference.realized_volatility)+' (diferença em pontos percentuais)',
       data.matching_windows?'Janelas temporais iguais':'Janelas temporais diferentes',
       'Fontes enviadas pelo usuário, não verificadas; sem previsão ou ranking.'
     ].join(' · ');
@@ -743,7 +750,7 @@ async function openUploadedOhlcReport(id){
     const data=await checkedResearch('/api/nexora2/ohlc/research/'+id);
     if(seq!==ohlcActionSeq)return;
     renderOhlcSummary(data.report,id);
-    $('ohlcStatus').textContent='Pesquisa #'+id+' recuperada. Evidência verificada na versão salva.';
+    $('ohlcStatus').textContent='Pesquisa #'+id+' recuperada. Integridade interna conferida; procedência do mercado não verificada.';
   }catch(error){
     if(seq===ohlcActionSeq)
       $('ohlcStatus').textContent='Erro ao abrir pesquisa: '+error.message;
