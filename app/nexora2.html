@@ -647,6 +647,13 @@ async function runUploadedOhlcResearch(event){
   }catch(error){$('ohlcStatus').textContent='Pesquisa não concluída: '+error.message;}
   finally{button.disabled=false;}
 }
+function formattedOhlcDate(raw){
+  const value=new Date(raw);
+  if(!raw||Number.isNaN(value.valueOf()))return 'data não informada';
+  return value.toLocaleString('pt-BR',{
+    timeZone:'America/Sao_Paulo',dateStyle:'short',timeStyle:'short'
+  });
+}
 async function loadUploadedOhlcHistory(){
   const button=$('ohlcLoadHistoryButton'),seq=++ohlcHistorySeq;
   button.disabled=true;
@@ -658,7 +665,7 @@ async function loadUploadedOhlcHistory(){
     for(const item of (Array.isArray(data.items)?data.items:[]).slice(0,5)){
       if(!Number.isInteger(item.id)||item.id<1)continue;
       const row=document.createElement('div');row.className='ohlc-history-entry';
-      const info=document.createElement('span');info.textContent='Pesquisa #'+item.id+' · '+String(item.created_at||'sem data');
+      const info=document.createElement('span');info.textContent='Pesquisa #'+item.id+' · '+formattedOhlcDate(item.created_at);
       const open=document.createElement('button');open.type='button';
       open.textContent='ABRIR RELATÓRIO';
       open.addEventListener('click',()=>openUploadedOhlcReport(item.id));
@@ -678,7 +685,7 @@ async function loadUploadedOhlcHistory(){
       for(const item of options){
         const option=document.createElement('option');
         option.value=String(item.id);
-        option.textContent='Pesquisa #'+item.id+' · '+String(item.period_from||'período não informado');
+        option.textContent='Pesquisa #'+item.id+' · '+formattedOhlcDate(item.period_from);
         select.append(option);
       }
     }
