@@ -13,6 +13,7 @@ import websockets
 from fastapi import FastAPI, HTTPException, Cookie, Request
 from fastapi.responses import FileResponse, RedirectResponse, JSONResponse, Response
 from pydantic import BaseModel
+from typing import Literal
 from sqlalchemy import select, delete, func
 
 from . import db
@@ -45,6 +46,7 @@ from .intelligence2.research_store import (
     persist as save_uploaded_ohlc_report, list_own as list_uploaded_ohlc,
     get_own as get_uploaded_ohlc, details as uploaded_ohlc_details,
 )
+from .nexora2_personal_history import list_personal_visits, record_personal_visit
 from .m1_history import m1_collect_loop, history_status
 from .asset_scanner import scan_assets, scan_intelligence_markets, scan_intelligence_context
 from .trade_selector_v2 import (select_demo_signal, last_scan_report, has_pending_signals,
@@ -2616,6 +2618,38 @@ def nexora2_library_meta(record):
         'period_to':utc(record.period_to).isoformat(),
         'scope':'SHARED_SYSTEM_RESEARCH',
     }
+
+
+class Nexora2VisitInput(BaseModel):
+    kind: Literal["intelligence", "strategies"]
+
+
+@app.get("/api/nexora2/research/history")
+async def nexora2_personal_history(request:Request,
+                    nexora_sid:str|None=Cookie(default=None)):
+    """Own-user study-visit journal; no broker/execution access."""
+    user=active_user(request,nexora_sid)
+    with db.SessionLocal() as session:
+        return {
+            "items":list_personal_visits(session,user.id),
+            "scope":"OWN_RESEARCH_VISITS",
+            "storage":"EXISTING_POSTGRES_RESEARCH_TABLE",
+            "orders_sent":0,
+            "retention":"No máximo 10 visitas recentes; após 7 dias, registros "
+                        "antigos podem ser removidos, preservando as 3 mais recentes.",
+            "note":"Somente visitas registradas pelo usuário. Não é histórico "
+                   "de contratos, ganhos ou validação financeira.",
+        }
+
+
+@app.post("/api/nexora2/research/history")
+async def nexora2_record_personal_history(payload:Nexora2VisitInput,
+                    request:Request,nexora_sid:str|None=Cookie(default=None)):
+    """Save a minimal server-timestamped annotation after a research page view."""
+    user=active_user(request,nexora_sid)
+    with db.SessionLocal() as session:
+        result=record_personal_visit(session,user.id,payload.kind)
+    return {**result,"scope":"OWN_RESEARCH_VISITS","orders_sent":0}
 
 
 @app.get('/api/nexora2/research/library')
