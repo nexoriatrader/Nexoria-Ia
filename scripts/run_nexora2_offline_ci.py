@@ -66,6 +66,7 @@ def command_plan(mode: str, python: str) -> list[tuple[str, list[str]]]:
         ("Python syntax", [python, "-m", "compileall", "-q", "app", "tests"]),
         ("Research release guard", [python, "scripts/research_release_diff_guard.py"]),
         ("Repository secret scan", [python, "scripts/check_repository_security.py"]),
+        ("Git history secret scan", [python, "scripts/check_repository_history.py"]),
     ]
     if mode == "focused":
         plan.append(("NEXORA research regressions", [python, "-m", "pytest", "-q", *FOCUSED_TESTS]))
