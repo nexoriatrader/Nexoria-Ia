@@ -7,6 +7,8 @@ PostgreSQL is exclusive to the approved isolated homologation database.
 from __future__ import annotations
 
 import asyncio
+import csv
+from io import StringIO
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from functools import lru_cache
@@ -19,7 +21,7 @@ import logging
 
 from fastapi import FastAPI, Header, HTTPException, Query, Body
 from fastapi.encoders import jsonable_encoder
-from fastapi.responses import HTMLResponse, JSONResponse, FileResponse
+from fastapi.responses import HTMLResponse, JSONResponse, FileResponse, Response
 from pathlib import Path
 from sqlalchemy import (
     CheckConstraint, Column, DateTime, Float, Integer, MetaData, String,
@@ -792,6 +794,42 @@ async def historical_asset_detail(
         raise HTTPException(404, "Dataset not found")
     return {"asset":result[0], "bars":result[1],
             "provenance_verified":False, "execution_allowed":False}
+
+
+@app.get("/api/homologation/assets/{dataset_id}/csv")
+async def export_historical_asset_csv(
+    dataset_id: str,
+    x_nexora_stage4_key: str | None = Header(default=None),
+):
+    """Export validated stored OHLC only; no broker feeds or financial actions."""
+    _auth(x_nexora_stage4_key)
+    try:
+        found = await asyncio.to_thread(user_ohlc.get_asset, dataset_id)
+    except ValueError:
+        raise HTTPException(422, "Invalid dataset identifier") from None
+    except Exception:
+        log.exception("stage4_ohlc_csv_integrity_failure")
+        raise HTTPException(503, "OHLC CSV export unavailable") from None
+    if found is None:
+        raise HTTPException(404, "Dataset not found")
+    asset, bars = found
+    stream = StringIO()
+    writer = csv.writer(stream, lineterminator="\\n")
+    writer.writerow(("epoch", "open", "high", "low", "close"))
+    for bar in bars:
+        writer.writerow((bar["epoch"], bar["open"], bar["high"],
+                         bar["low"], bar["close"]))
+    return Response(
+        content=stream.getvalue(),
+        media_type="text/csv; charset=utf-8",
+        headers={
+            "Content-Disposition":
+                f'attachment; filename="nexora-ohlc-{asset["id"]}.csv"',
+            "X-NEXORA-DATA-ORIGIN": (
+                "SYNTHETIC_TEST" if asset["synthetic"] else "UNVERIFIED"
+            ),
+        },
+    )
 
 
 @app.post("/api/homologation/research/runs/uploaded/{dataset_id}")
