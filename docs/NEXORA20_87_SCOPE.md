@@ -7,7 +7,7 @@ Mudanças da PR só estarão disponíveis no site depois do CI e da publicação
 | Itens | Bloco | Estado atual e lacuna |
 |---|---|---|
 | 1–3 | Modos | PARCIAL: três abas de pesquisa/anotação; experiência avançada ainda incompleta |
-| 4–8 | Market | PARCIAL: OHLC público via I01 e upload histórico M1 na PR; monitoramento comparativo amplo falta |
+| 4–8 | Market | PARCIAL: OHLC público via I01, importação histórica M1 e comparação descritiva entre duas pesquisas próprias na PR; monitoramento de mercados e comparação ampla ainda faltam |
 | 9–12 | Asset | PARCIAL: scanner I02 e classificações, nem tudo integrado ao painel |
 | 13–18 | Context | MÓDULO EXISTENTE: I03; aplicação ao OHLC de upload na PR |
 | 19–22 | Timeframe | MÓDULO EXISTENTE: I03; agregação M1/M5/M15 e alinhamento na PR |
@@ -18,7 +18,7 @@ Mudanças da PR só estarão disponíveis no site depois do CI e da publicação
 | 43–48 | Learning | NÃO CONCLUÍDO: sem modelo ML validado nem champion/challenger/fallback executável |
 | 49–57 | Signals | PARCIAL: anotações locais; importação/fornecedores/validadores/histórico definitivo faltam |
 | 58–63 | Advanced | PARCIAL: upload OHLC e símbolo; configurações de pesquisa completas faltam |
-| 64–69 | Evidence | PARCIAL: SHA-256 independentes de entrada e saída, versões, input/resultado persistidos e replay na PR; relatórios multiativos consolidados faltam |
+| 64–69 | Evidence | PARCIAL: SHA-256 de entrada e saída incluindo procedência, versões, relatórios persistidos e replay na PR; relatórios multiativos completos ainda faltam |
 | 70–75 | Orchestrator | PARCIAL: execução sequencial determinística, etapas auditáveis; fila e distribuição robusta faltam |
 | 76–87 | Dashboard | PARCIAL: painel e pesquisa por arquivo, histórico e leitura de relatórios na PR; visão consolidada ainda falta |
 
