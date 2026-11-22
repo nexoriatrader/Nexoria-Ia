@@ -126,8 +126,12 @@ def describe_returns(candles: list[dict]) -> dict:
     flat = count - up - down
     spread = [row["high"] - row["low"] for row in candles]
     middle = statistics.median(spread)
-    anomalies = sum((value > middle * 8 and middle > 0)
-                    for value in spread)
+    # When the median range is zero, any nonzero range stands out from
+    # the flat baseline. This is a descriptive anomaly, not a signal.
+    anomalies = sum(
+        value > (middle * 8 if middle > 0 else 0)
+        for value in spread
+    )
     return {
         "periods": len(candles), "changes_observed": count,
         "up_intervals": up, "down_intervals": down, "unchanged_intervals": flat,
