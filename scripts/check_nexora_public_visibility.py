@@ -39,7 +39,8 @@ def check_visibility(opener=urllib.request.urlopen) -> tuple[str, str]:
         return "UNKNOWN", "GitHub public API unavailable or invalid response"
 
     if (not isinstance(data, dict)
-            or data.get("full_name", "").lower() != REPO.lower()):
+            or not isinstance(data.get("full_name"), str)
+            or data["full_name"].lower() != REPO.lower()):
         return "UNKNOWN", "Repository identity could not be verified"
     if data.get("private") is False and data.get("visibility") == "public":
         return "PUBLIC", "Correct NEXORA repository anonymously accessible"
