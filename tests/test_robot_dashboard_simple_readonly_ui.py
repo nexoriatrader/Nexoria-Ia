@@ -170,3 +170,76 @@ if(Object.keys(robotEasyChecks[0]).sort().join(',')!=='kind,label,time')
         text=True, capture_output=True, timeout=20, check=False,
     )
     assert result.returncode == 0, result.stderr
+
+
+def test_robot_easy_diagnostic_reports_safe_statuses_without_commands():
+    parser = _IndexTags()
+    parser.feed(HTML)
+    for field in ("robotEasyDiagnosis", "robotEasyDiagnosisTitle",
+                  "robotEasyDiagnosisExplanation"):
+        assert parser.ids.count(field) == 1
+    assert "O que a análise está mostrando?" in HTML
+    assert "Este diagnóstico descreve informações técnicas" in HTML
+    assert "function renderRobotEasyDiagnosis(status)" in HTML
+    assert "function reportRobotEasyDiagnosisUncertain()" in HTML
+    assert "renderRobotEasyDiagnosis(status);" in HTML
+    assert "reportRobotEasyDiagnosisUncertain();" in HTML
+    block = HTML.split("function renderRobotEasyDiagnosis(status)", 1)[1].split(
+        "function renderScanMonitor(status)", 1
+    )[0]
+    for forbidden in ("fetch(", "sessionStorage", "localStorage",
+                      "/api/autopilot/start", "/api/autopilot/stop",
+                      "sendBeacon", "POST", "document.cookie"):
+        assert forbidden not in block
+    if not shutil.which("node"):
+        return
+    functions = "function renderRobotEasyDiagnosis(status)" + block
+    runtime = r"""
+const elements=new Map();
+const $=id=>{
+ if(!elements.has(id))elements.set(id,{textContent:'',dataset:{}});
+ return elements.get(id);
+};
+function scenario(status,title,kind){
+ renderRobotEasyDiagnosis(status);
+ if($('robotEasyDiagnosisTitle').textContent!==title)
+  throw Error(title+' but got '+$('robotEasyDiagnosisTitle').textContent);
+ if($('robotEasyDiagnosis').dataset.state!==kind)
+  throw Error('Wrong state '+$('robotEasyDiagnosis').dataset.state);
+}
+const now=new Date().toISOString();
+const old=new Date(Date.now()-15*60*1000).toISOString();
+scenario({running:false,scan_progress:{}},'Análises não estão em andamento','paused');
+scenario({running:false,interrupted_after_restart:true,scan_progress:{}},
+ 'Análises interrompidas','unknown');
+scenario({running:true,scan_progress:{}},'Sem análise recente','stale');
+scenario({running:true,scan_progress:{last_checked_at:now}},
+ 'Verificação sem conclusão recente','stale');
+scenario({running:true,scan_progress:{last_scan_at:old}},
+ 'Sem análise recente','stale');
+scenario({running:true,scan_progress:{last_scan_at:now,last_checked_at:now,stage:'scanning'}},
+ 'Verificando informações','checking');
+const base={running:true,scan_progress:{last_scan_at:now,stage:'complete'}};
+scenario({...base,scan_progress:{...base.scan_progress,reason_counts:{dados_indisponiveis:2}}},
+ 'Alguns dados não foram recebidos','checked');
+scenario({...base,scan_progress:{...base.scan_progress,reason_counts:{velas_incompletas:1}}},
+ 'Histórico insuficiente para analisar','checked');
+scenario({...base,scan_progress:{...base.scan_progress,reason_counts:{aguardando_fechamento_m1:1}}},
+ 'Aguardando novos dados','checked');
+scenario({...base,scan_progress:{...base.scan_progress,reason_counts:{indicadores_nao_confirmados:3}}},
+ 'Critérios não confirmados','checked');
+scenario({...base,scan_progress:{...base.scan_progress,reason_counts:{sinal_confirmado:1}}},
+ 'Critérios identificados na análise','checked');
+scenario(base,'Verificação registrada','checked');
+reportRobotEasyDiagnosisUncertain();
+if($('robotEasyDiagnosis').dataset.state!=='unknown')throw Error('Uncertainty not marked');
+if($('robotEasyDiagnosisTitle').textContent!=='Não foi possível confirmar')
+ throw Error('Stale diagnosis still presented as verified');
+if(!$('robotEasyDiagnosisExplanation').textContent.includes('desatualizadas'))
+ throw Error('Missing stale-data warning');
+"""
+    result = subprocess.run(
+        ["node", "-e", runtime + functions],
+        text=True, capture_output=True, timeout=20, check=False,
+    )
+    assert result.returncode == 0, result.stderr
