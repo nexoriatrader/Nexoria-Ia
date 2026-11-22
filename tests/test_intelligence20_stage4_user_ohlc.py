@@ -165,3 +165,91 @@ def test_exported_research_evidence_is_authenticated_and_read_only(isolated_db):
     assert client.get(path, headers=HEADERS).json() == exported
     assert client.get("/api/homologation/research/runs",
                       headers=HEADERS).json()["total"] == before
+
+
+def test_historical_comparison_is_authenticated_descriptive_and_read_only(isolated_db):
+    client = TestClient(core.app)
+    page = client.get("/")
+    assert page.status_code == 200
+    assert 'id="research-compare"' in page.text
+    assert 'id="compare-research"' in page.text
+    assert "renderCompareOptions(data.runs)" in page.text
+    assert "comparisonRequest" in page.text
+
+    uploaded = client.post("/api/homologation/assets", json=sample(),
+                           headers=HEADERS)
+    assert uploaded.status_code == 200, uploaded.text
+    dataset_id = uploaded.json()["id"]
+    research_path = "/api/homologation/research/runs/uploaded/" + dataset_id
+    first = client.post(research_path, headers=HEADERS)
+    second = client.post(research_path, headers=HEADERS)
+    assert first.status_code == second.status_code == 200
+    left, right = first.json()["id"], second.json()["id"]
+    path = f"/api/homologation/research/compare?left={left}&right={right}"
+
+    assert client.get(path).status_code == 401
+    assert client.get(path, headers={"X-NEXORA-STAGE4-KEY": "wrong"}).status_code == 401
+    assert client.get(f"/api/homologation/research/compare?left={left}&right={left}",
+                      headers=HEADERS).status_code == 422
+    assert client.get(f"/api/homologation/research/compare?left=invalid&right={right}",
+                      headers=HEADERS).status_code == 422
+    assert client.get(f"/api/homologation/research/compare?left={'0' * 32}&right={right}",
+                      headers=HEADERS).status_code == 404
+
+    total_before = client.get("/api/homologation/research/runs",
+                              headers=HEADERS).json()["total"]
+    comparison = client.get(path, headers=HEADERS)
+    assert comparison.status_code == 200, comparison.text
+    data = comparison.json()
+    assert data["format_version"] == "nexora-descriptive-comparison-v1"
+    assert data["descriptive_only"] is True
+    assert data["provenance_verified"] is False
+    assert data["financial_execution_allowed"] is False
+    assert data["performance_ranking"] is None
+    assert data["same_source_and_dataset"] is True
+    assert data["shared_timeframes_seconds"] == [300]
+    assert data["left"]["id"] == left
+    assert data["right"]["id"] == right
+    assert data["left"]["result_sha256"] == first.json()["result_sha256"]
+    assert data["right"]["result_sha256"] == second.json()["result_sha256"]
+    assert data["left"]["dataset_identity"] == data["right"]["dataset_identity"]
+    assert data["left"]["timeframes"][0]["observations"] == 96
+    assert data["left"]["provenance_verified"] is False
+    assert data["right"]["provenance_verified"] is False
+    assert KEY not in comparison.text
+    assert client.get(path, headers=HEADERS).json() == data
+    assert client.get("/api/homologation/research/runs",
+                      headers=HEADERS).json()["total"] == total_before
+    assert not any("/buy" in route.path or "/orders" in route.path
+                   for route in core.app.routes)
+
+
+def test_historical_comparison_never_ranks_mixed_provenance(isolated_db):
+    client = TestClient(core.app)
+    upload = sample("DECLARED_REAL_UNVERIFIED")
+    created = client.post("/api/homologation/assets", json=upload,
+                          headers=HEADERS)
+    assert created.status_code == 200
+    uploaded = client.post(
+        "/api/homologation/research/runs/uploaded/" + created.json()["id"],
+        headers=HEADERS,
+    )
+    assert uploaded.status_code == 200
+    synthetic = client.post("/api/homologation/research/runs",
+                            headers=HEADERS)
+    assert synthetic.status_code == 200, synthetic.text
+    path = (
+        "/api/homologation/research/compare?left="
+        + uploaded.json()["id"] + "&right=" + synthetic.json()["id"]
+    )
+    compared = client.get(path, headers=HEADERS)
+    assert compared.status_code == 200, compared.text
+    result = compared.json()
+    assert result["same_source_and_dataset"] is False
+    assert result["performance_ranking"] is None
+    assert "not equivalent" in result["context_note"]
+    assert result["left"]["synthetic"] is False
+    assert result["right"]["synthetic"] is True
+    assert result["left"]["origin_type"] == "DECLARED_REAL_UNVERIFIED"
+    assert result["left"]["provenance_verified"] is False
+    assert result["financial_execution_allowed"] is False
