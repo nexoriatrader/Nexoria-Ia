@@ -161,6 +161,10 @@ def build_report(payload: dict, *, clock: int | None = None) -> dict:
         context = analyze_context(window, market="user_supplied",
                                   symbol=symbol, timeframe_seconds=seconds,
                                   observed_at=role_asof if role_asof is not None else observed_at)
+        # I03 defaults to its original I01 public-feed provenance. Here the
+        # *same deterministic calculations* run on USER-UPLOADED OHLC; never
+        # mislabel that evidence as a verified public data source.
+        context = {**context, "source": SOURCE}
         contexts[role] = context
         diagnostics.append({
             "module": "CONTEXT_" + role.upper(),
