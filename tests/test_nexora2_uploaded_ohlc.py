@@ -456,3 +456,13 @@ def test_tampered_report_labels_are_covered_by_result_digest(
         assert "Resultado histórico alterado" in response.json()["detail"]
     finally:
         engine.dispose()
+
+
+def test_research_store_utc_dates_are_explicit_across_sqlite_and_postgres():
+    from datetime import datetime, timedelta, timezone
+    from app.intelligence2.research_store import _utc_iso
+    naive=datetime(2026,11,21,14,30,0)
+    assert _utc_iso(naive)=="2026-11-21T14:30:00+00:00"
+    brazil=datetime(2026,11,21,11,30,0,
+                    tzinfo=timezone(timedelta(hours=-3)))
+    assert _utc_iso(brazil)=="2026-11-21T14:30:00+00:00"
