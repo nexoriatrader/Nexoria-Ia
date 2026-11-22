@@ -852,6 +852,100 @@ async def export_historical_research(
     )
 
 
+def _descriptive_comparison_snapshot(run: dict) -> dict:
+    """Whitelisted persisted measurements, never a model score or trade signal."""
+    report = run.get("report")
+    if run["state"] != "COMPLETE" or not isinstance(report, dict):
+        raise ValueError("COMPARISON_REQUIRES_COMPLETED_RESEARCH")
+    frames = report.get("timeframe_summaries", [])
+    if not isinstance(frames, list):
+        raise RuntimeError("Research comparison metadata invalid")
+    columns = (
+        "granularity_seconds", "observations", "first_closed_epoch",
+        "last_closed_epoch", "median_close", "mean_relative_bar_range",
+        "dispersion_of_close_changes", "mean_abs_relative_change",
+    )
+    summaries = [
+        {key: frame[key] for key in columns if key in frame}
+        for frame in frames if isinstance(frame, dict)
+    ]
+    identity = report.get("dataset_id") or report.get("dataset") or run["id"]
+    return {
+        "id": run["id"], "state": run["state"],
+        "finished_at": run["finished_at"],
+        "version": run["version"], "source": run["source"],
+        "symbol_or_dataset": report.get("symbol") or report.get("dataset")
+            or "UNSPECIFIED",
+        "dataset_identity": identity,
+        "origin_type": report.get("origin_type")
+            or ("SYNTHETIC_TEST" if run["synthetic"]
+                else "DECLARED_UNVERIFIED"),
+        "synthetic": run["synthetic"], "provenance_verified": False,
+        "result_sha256": run["result_sha256"],
+        "step_count": run["step_count"], "timeframes": summaries,
+    }
+
+
+@app.get("/api/homologation/research/compare")
+async def compare_historical_research(
+    left: str = Query(..., min_length=32, max_length=32),
+    right: str = Query(..., min_length=32, max_length=32),
+    x_nexora_stage4_key: str | None = Header(default=None),
+):
+    """Read-only, source-aware comparison of two persisted historical reports."""
+    _auth(x_nexora_stage4_key)
+    if left == right:
+        raise HTTPException(422, "Select two different research runs")
+    try:
+        before = await asyncio.to_thread(research.get_research, left)
+        after = await asyncio.to_thread(research.get_research, right)
+        if before is None or after is None:
+            raise HTTPException(404, "Research run not found")
+        a = _descriptive_comparison_snapshot(before)
+        b = _descriptive_comparison_snapshot(after)
+    except ValueError:
+        raise HTTPException(422, "Invalid or incomplete research run") from None
+    except HTTPException:
+        raise
+    except Exception:
+        log.exception("stage4_research_comparison_unavailable")
+        raise HTTPException(503, "Research comparison unavailable") from None
+
+    shared = sorted({
+        f["granularity_seconds"] for f in a["timeframes"]
+        if isinstance(f.get("granularity_seconds"), int)
+    }.intersection({
+        f["granularity_seconds"] for f in b["timeframes"]
+        if isinstance(f.get("granularity_seconds"), int)
+    }))
+    same_context = (
+        a["source"] == b["source"]
+        and a["dataset_identity"] == b["dataset_identity"]
+        and a["origin_type"] == b["origin_type"]
+    )
+    return {
+        "format_version": "nexora-descriptive-comparison-v1",
+        "descriptive_only": True,
+        "provenance_verified": False,
+        "financial_execution_allowed": False,
+        "performance_ranking": None,
+        "same_source_and_dataset": same_context,
+        "shared_timeframes_seconds": shared,
+        "limitations": (
+            "These are independent historical descriptions, not model "
+            "performance, predictive accuracy, or a trading recommendation."
+        ),
+        "context_note": (
+            "Same declared source and dataset; descriptions may be viewed "
+            "side by side, without predictive conclusions."
+            if same_context else
+            "Different datasets or sources; values are not equivalent "
+            "and must not be ranked against each other."
+        ),
+        "left": a, "right": b,
+    }
+
+
 @app.get("/api/homologation/monitor/modules")
 async def monitoring_modules(x_nexora_stage4_key: str | None = Header(default=None)):
     _auth(x_nexora_stage4_key)
