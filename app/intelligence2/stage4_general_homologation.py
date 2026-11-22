@@ -18,6 +18,7 @@ import time
 import logging
 
 from fastapi import FastAPI, Header, HTTPException, Query, Body
+from fastapi.encoders import jsonable_encoder
 from fastapi.responses import HTMLResponse, JSONResponse, FileResponse
 from pathlib import Path
 from sqlalchemy import (
@@ -819,6 +820,36 @@ async def historical_research_detail(
     if found is None:
         raise HTTPException(404, "Research not found")
     return found
+
+
+@app.get("/api/homologation/research/runs/{run_id}/export")
+async def export_historical_research(
+    run_id: str,
+    x_nexora_stage4_key: str | None = Header(default=None),
+):
+    """Download already-persisted research evidence; no external calls or orders."""
+    _auth(x_nexora_stage4_key)
+    try:
+        found = await asyncio.to_thread(research.get_research, run_id)
+    except ValueError:
+        raise HTTPException(422, "Invalid research identifier") from None
+    except Exception:
+        log.exception("stage4_research_export_unavailable")
+        raise HTTPException(503, "Research export unavailable") from None
+    if found is None:
+        raise HTTPException(404, "Research not found")
+    return JSONResponse(
+        content=jsonable_encoder({
+            "format_version": "nexora-historical-research-evidence-v1",
+            "provenance_verified": False,
+            "financial_execution_allowed": False,
+            "research": found,
+        }),
+        headers={
+            "Content-Disposition":
+                f'attachment; filename="nexora-research-{found["id"]}.json"',
+        },
+    )
 
 
 @app.get("/api/homologation/monitor/modules")
