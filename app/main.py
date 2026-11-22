@@ -36,6 +36,7 @@ from .single_asset_study import run_single_asset_study
 from .research_persistence import (research_loop, latest_study, latest_multitimeframe_study,
     latest_pullback_study, HistoricalResearchReport, RESEARCH_KEY,
     MULTI_RESEARCH_KEY, PULLBACK_KEY)  # read-only research
+from .intelligence2.research_compare import compare_saved_reports
 from .intelligence2.historical_research import (
     ResearchInputError, build_report as build_uploaded_ohlc_report,
     summary as uploaded_ohlc_summary,
@@ -2724,6 +2725,28 @@ async def nexora2_list_ohlc_research(request:Request,
         items=list_uploaded_ohlc(session,user.id)
     return {"items":items,"scope":"OWN_UNVERIFIED_HISTORICAL_RESEARCH",
             "execution_allowed":False,"orders_sent":0}
+
+
+@app.get("/api/nexora2/ohlc/research/compare")
+async def nexora2_compare_saved_ohlc(request:Request,left_id:int,right_id:int,
+                nexora_sid:str|None=Cookie(default=None)):
+    """Read-only comparison of two integrity-checked studies from this user."""
+    user=active_user(request,nexora_sid)
+    if left_id==right_id or left_id<1 or right_id<1:
+        raise HTTPException(422,"Selecione duas pesquisas válidas e diferentes")
+    with db.SessionLocal() as session:
+        try:
+            left=get_uploaded_ohlc(session,user.id,left_id)
+            right=get_uploaded_ohlc(session,user.id,right_id)
+        except ValueError as exc:
+            raise HTTPException(409,str(exc)) from None
+    if left is None or right is None:
+        raise HTTPException(404,"Uma ou mais pesquisas não foram encontradas")
+    try:
+        comparison=compare_saved_reports(left,right)
+    except (ValueError,KeyError,TypeError):
+        raise HTTPException(409,"Pesquisas inválidas ou incompatíveis") from None
+    return {"ids":{"left":left_id,"right":right_id},**comparison}
 
 
 @app.get("/api/nexora2/ohlc/research/{report_id}")
