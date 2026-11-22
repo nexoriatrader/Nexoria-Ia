@@ -8,6 +8,8 @@ from sqlalchemy import create_engine, event
 from sqlalchemy.orm import sessionmaker
 
 from app import db, main
+from app.intelligence2.research_export import export_report, verify_export_checksums
+from app.intelligence2.historical_research import build_report
 from app.research_persistence import HistoricalResearchReport
 from app.security import encrypt, hashsecret
 
@@ -94,6 +96,19 @@ def test_export_owner_only_no_ddl_and_no_financial_data(tmp_path, monkeypatch):
         assert len(exported_json["input"]["candles"]) == 1140
         assert len(exported_json["report"]["evidence"]["input_sha256"]) == 64
         assert len(exported_json["report"]["evidence"]["result_sha256"]) == 64
+        assert set(exported_json["report"]["contexts"]) == {"higher", "intermediate", "lower"}
+        assert exported_json["report"]["contexts"]["lower"]["evidence"]["closed_bars_used"] == 72
+        assert "ema20" in exported_json["report"]["contexts"]["lower"]["evidence"]
+        assert "rsi14" in exported_json["report"]["contexts"]["lower"]["evidence"]
+        assert "contexts" in exported_json["report"]["timeframe_alignment"]
+        assert len(exported_json["report"]["orchestrator"]["stages"]) == 8
+        assert verify_export_checksums(exported_json) == {
+            "internal_checksums_match": True,
+            "market_source_verified": False,
+            "source": "USER_SUPPLIED_UNVERIFIED_OHLC",
+            "version": "nexora2_uploaded_ohlc_v1",
+            "input_count": 1140,
+        }
         assert "token_encrypted" not in exported.text
         assert "deriv_account_id" not in exported.text
         assert "dummy-test-token" not in exported.text
@@ -132,3 +147,64 @@ def test_saved_history_has_per_report_export_link_and_no_broker_routes():
     assert "ohlc-export-link" in page
     for forbidden in ("/api/real/buy", "/api/demo/buy", "/api/autopilot/start"):
         assert forbidden not in page
+
+
+def test_export_is_full_versioned_analytics_and_validatable_without_db():
+    report = build_report(_fixture("OFFLINE_CHECK"))
+    bundle = export_report(report, 93)
+    assert bundle["study_id"] == 93
+    assert "input" not in bundle["report"]
+    assert bundle["input"] == report["input"]
+    assert bundle["report"] == {
+        name: value for name, value in report.items() if name != "input"
+    }
+    assert verify_export_checksums(bundle)["internal_checksums_match"] is True
+    # A JSON roundtrip is the format used for downloads.
+    replayed = json.loads(json.dumps(bundle, allow_nan=False))
+    assert verify_export_checksums(replayed)["internal_checksums_match"] is True
+    assert replayed["report"]["models"]["status"] == "NO_VALIDATED_MODEL_AVAILABLE"
+    assert replayed["report"]["contexts"]["higher"]["source"] == (
+        "USER_SUPPLIED_UNVERIFIED_OHLC"
+    )
+    assert replayed["report"]["timeframe_alignment"]["approved_for_trading"] is False
+
+
+def test_export_verifier_rejects_input_and_statistical_tampering():
+    import copy
+    import pytest
+    original = export_report(build_report(_fixture("TAMPER_CHECK")), 99)
+    bad_input = copy.deepcopy(original)
+    bad_input["input"]["candles"][0]["close"] += .01
+    with pytest.raises(ValueError, match="entrada histórica"):
+        verify_export_checksums(bad_input)
+    bad_result = copy.deepcopy(original)
+    bad_result["report"]["statistics"]["up_intervals"] += 1
+    with pytest.raises(ValueError, match="resultado histórico"):
+        verify_export_checksums(bad_result)
+    bad_context = copy.deepcopy(original)
+    bad_context["report"]["contexts"]["higher"]["evidence"]["ema20"] = 999
+    with pytest.raises(ValueError, match="resultado histórico"):
+        verify_export_checksums(bad_context)
+    bad_source = copy.deepcopy(original)
+    bad_source["report"]["source"] = "VERIFIED_BROKER_DATA"
+    with pytest.raises(ValueError, match="Metadados"):
+        verify_export_checksums(bad_source)
+
+
+def test_export_verifier_rejects_missing_unsafe_or_non_integer_ids():
+    import copy
+    import pytest
+    original = export_report(build_report(_fixture("CHECK_META")), 77)
+    for invalid in (None, False, 0, -1, "77"):
+        bad = copy.deepcopy(original)
+        bad["study_id"] = invalid
+        with pytest.raises(ValueError):
+            verify_export_checksums(bad)
+    bad = copy.deepcopy(original)
+    bad["scope"] = "GLOBAL"
+    with pytest.raises(ValueError, match="escopo"):
+        verify_export_checksums(bad)
+    bad = copy.deepcopy(original)
+    bad["report"]["orders_sent"] = 1
+    with pytest.raises(ValueError, match="Metadados"):
+        verify_export_checksums(bad)
