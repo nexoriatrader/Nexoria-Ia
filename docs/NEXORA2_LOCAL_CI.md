@@ -1,0 +1,46 @@
+# NEXORA 2.0 — validação sem franquia do GitHub Actions
+
+A conta atingiu os minutos gratuitos do GitHub Actions. Isso **não é um resultado de teste de código**: workflows sem executor e sem etapas não validam nem reprovam a PR.
+
+O executor `scripts/run_nexora2_offline_ci.py` permite executar verificações em um checkout isolado da branch de integração, **sem contratar minutos, fazer deploy ou acessar produção**.
+
+## Pré-requisitos
+
+- Um computador ou ambiente isolado com Python 3.12 ou versão compatível;
+- checkout autenticado do repositório privado na branch `feature/nexora2-integrated-workspace-20261121`;
+- dependências instaladas com `python -m pip install -r requirements.txt`.
+
+Não configure nem copie tokens de corretora, senhas de banco de produção ou chaves reais.
+
+## Execução
+
+Da raiz da cópia do repositório:
+
+```bash
+python scripts/run_nexora2_offline_ci.py --mode focused
+python scripts/run_nexora2_offline_ci.py --mode full --report /tmp/nexora2-local-ci.json
+```
+
+O modo `focused` testa o painel NEXORA 2.0, o histórico pessoal, a pesquisa OHLC, a comparação e o Context Engine. O modo `full` inclui toda a suíte Python. Ambos incluem compilação, guarda de diffs e scanner de segredos.
+
+Para inspecionar os comandos sem executar testes:
+
+```bash
+python scripts/run_nexora2_offline_ci.py --mode full --dry-run
+```
+
+**Não execute isso no serviço público.** Use apenas um checkout local isolado. O executor cria uma base SQLite temporária, uma chave Fernet descartável, descarta as credenciais e os parâmetros de banco/execução herdados do host, e força os flags financeiros a `false`.
+
+## Interpretação dos resultados
+
+O relatório JSON opcional registra as verificações, os códigos de saída e a duração. `passed=true` só é emitido após todas as etapas selecionadas retornarem sucesso. Uma falha interrompe o fluxo.
+
+Os testes do próprio executor foram verificados em ambiente isolado, mas **a suíte completa deste repositório ainda não foi executada fora do GitHub Actions**.
+
+Uma execução local aprovada **não substitui**:
+
+1. Testes de compatibilidade, migração formal e zero DDL com PostgreSQL descartável;
+2. Regressões completas de autenticação, isolamento entre usuários e concorrência;
+3. Revisão de código e liberação independente de produção.
+
+A `main` deve permanecer preservada até essas etapas terminarem. O módulo DEMO existente continua separado, sem mudanças operacionais; as proteções REAL continuam vigentes.
