@@ -27,6 +27,10 @@ MAX_TEXT_AUDIT_BYTES = 80_000_000
 # a reserved example domain. Ignore ONLY this historical fixture, never a
 # real PostgreSQL URL or a different file containing the same pattern.
 # Keep the generic HEAD scanner unchanged.
+_STAGED_SELFTEST_FILE = "tests/test_repository_history_security.py"
+_STAGED_SELFTEST_RE = re.compile(
+    r'''postgres(?:ql)?://dummy:placeholder@prod\.example/db'''
+)
 _STAGED_FIXTURE_FILE = "tests/test_stage4_general_homologation.py"
 _STAGED_FIXTURE_RE = re.compile(
     r'''\bmonkeypatch\.setenv\(\s*["']DATABASE_URL["']\s*,\s*["']'''
@@ -36,14 +40,21 @@ _STAGED_FIXTURE_RE = re.compile(
 
 def audit_historical_text(path: str, content: str) -> list[tuple[int, str]]:
     hits = scan_text(content)
-    if path != _STAGED_FIXTURE_FILE:
+    if path not in (_STAGED_FIXTURE_FILE, _STAGED_SELFTEST_FILE):
         return hits
     lines = content.splitlines()
     return [
         (line_no, category)
         for line_no, category in hits
-        if not (category == "postgres_password_url"
-                and _STAGED_FIXTURE_RE.search(lines[line_no - 1]))
+        if not (
+            category == "postgres_password_url"
+            and (
+                (path == _STAGED_FIXTURE_FILE
+                 and _STAGED_FIXTURE_RE.search(lines[line_no - 1]))
+                or (path == _STAGED_SELFTEST_FILE
+                    and _STAGED_SELFTEST_RE.search(lines[line_no - 1]))
+            )
+        )
     ]
 
 
