@@ -20,5 +20,8 @@ jobs:
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           persist-credentials: false
+          fetch-depth: 0
       - name: Scan tracked files (without printing secrets)
         run: python3 scripts/check_repository_security.py
+      - name: Scan reachable Git history for credential signatures
+        run: python3 scripts/check_repository_history.py
