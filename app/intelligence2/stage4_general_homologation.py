@@ -796,6 +796,25 @@ async def historical_asset_detail(
             "provenance_verified":False, "execution_allowed":False}
 
 
+@app.get("/api/homologation/assets/{dataset_id}/quality")
+async def historical_asset_quality_report(
+    dataset_id: str,
+    x_nexora_stage4_key: str | None = Header(default=None),
+):
+    """Independent read-only archive audit, never price-provenance verification."""
+    _auth(x_nexora_stage4_key)
+    try:
+        report = await asyncio.to_thread(user_ohlc.inspect_asset_quality, dataset_id)
+    except ValueError:
+        raise HTTPException(422, "Invalid dataset identifier") from None
+    except Exception:
+        log.exception("stage4_ohlc_archive_quality_unavailable")
+        raise HTTPException(503, "OHLC quality report unavailable") from None
+    if report is None:
+        raise HTTPException(404, "Dataset not found")
+    return report
+
+
 @app.get("/api/homologation/assets/{dataset_id}/csv")
 async def export_historical_asset_csv(
     dataset_id: str,
