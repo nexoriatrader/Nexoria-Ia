@@ -23,6 +23,7 @@ def test_local_test_env_replaces_production_configuration(tmp_path):
         "PATH": "/usr/bin",
         "DATABASE_URL": "production_database_should_never_be_inherited",
         "DERIV_TOKEN": "production_token_should_never_be_inherited",
+        "PYTHONPATH": "/untrusted/host/modules",
         "NEXORA_FERNET_KEY": "production_key_should_never_be_inherited",
         "NEXORA_REAL_RELEASE_APPROVED": "true",
         "NEXORA_REAL_AUTOPILOT_ENABLED": "true",
@@ -37,6 +38,7 @@ def test_local_test_env_replaces_production_configuration(tmp_path):
     assert env["NEXORA_INTELLIGENCE_READONLY_ENABLED"] == "false"
     assert env["NEXORA_FERNET_KEY"] != inherited["NEXORA_FERNET_KEY"]
     assert "DERIV_TOKEN" not in env
+    assert "PYTHONPATH" not in env
     assert "production" not in str(env)
     assert env["PATH"] == "/usr/bin"
 
