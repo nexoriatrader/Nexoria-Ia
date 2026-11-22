@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import subprocess
 import sys
+import re
 from pathlib import Path
 
 from check_repository_security import (
@@ -22,6 +23,30 @@ from check_repository_security import (
 # Avoid loading arbitrary amounts of historical or binary data in memory.
 MAX_OBJECTS = 100_000
 MAX_TEXT_AUDIT_BYTES = 80_000_000
+# The documented Stage 4 negative test intentionally uses prod.example,
+# a reserved example domain. Ignore ONLY this historical fixture, never a
+# real PostgreSQL URL or a different file containing the same pattern.
+# Keep the generic HEAD scanner unchanged.
+_STAGED_FIXTURE_FILE = "tests/test_stage4_general_homologation.py"
+_STAGED_FIXTURE_RE = re.compile(
+    r'''\bmonkeypatch\.setenv\(\s*["']DATABASE_URL["']\s*,\s*["']'''
+    r'''postgres(?:ql)?://[^/@\s"']+@prod\.example/[^\s"']+["']\s*\)'''
+)
+
+
+def audit_historical_text(path: str, content: str) -> list[tuple[int, str]]:
+    hits = scan_text(content)
+    if path != _STAGED_FIXTURE_FILE:
+        return hits
+    lines = content.splitlines()
+    return [
+        (line_no, category)
+        for line_no, category in hits
+        if not (category == "postgres_password_url"
+                and _STAGED_FIXTURE_RE.search(lines[line_no - 1]))
+    ]
+
+
 SKIP_BINARY_EXTENSIONS = frozenset({
     ".png", ".jpg", ".jpeg", ".webp", ".gif", ".svgz",
     ".ico", ".pdf", ".woff", ".woff2", ".ttf", ".mp4", ".zip",
@@ -113,8 +138,8 @@ def audit_history(root: Path) -> dict:
             position = end + 1
             if b"\x00" in data[:1024]:
                 continue
-            for number, category in scan_text(
-                data.decode("utf-8", errors="replace")
+            for number, category in audit_historical_text(
+                path, data.decode("utf-8", errors="replace")
             ):
                 findings.add((path or expected_oid.decode(), number, category))
         if position != len(payload):
