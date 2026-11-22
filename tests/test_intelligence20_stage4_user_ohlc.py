@@ -400,3 +400,86 @@ def test_unverified_ohlc_export_preserves_origin_marker(isolated_db):
                       headers=HEADERS).json()["provenance_verified"] is False
     assert not any("/buy" in route.path or "/orders" in route.path
                    for route in core.app.routes)
+
+
+def test_ohlc_quality_diagnostic_read_only_auth_and_integrity(isolated_db):
+    client = TestClient(core.app)
+    panel = client.get("/")
+    assert panel.status_code == 200
+    assert "Diagnóstico de qualidade dos dados" in panel.text
+    assert "Baixar diagnóstico JSON" in panel.text
+    assert "/quality" in panel.text
+    assert "function renderAssetQuality(" in panel.text
+
+    uploaded = client.post("/api/homologation/assets", json=sample(),
+                           headers=HEADERS)
+    assert uploaded.status_code == 200, uploaded.text
+    asset_id = uploaded.json()["id"]
+    path = "/api/homologation/assets/" + asset_id + "/quality"
+    assert client.get(path).status_code == 401
+    assert client.get(path, headers={"X-NEXORA-STAGE4-KEY": "bad"}).status_code == 401
+    assert client.get("/api/homologation/assets/not-a-uuid/quality",
+                      headers=HEADERS).status_code == 422
+    assert client.get("/api/homologation/assets/" + "0" * 32 + "/quality",
+                      headers=HEADERS).status_code == 404
+
+    baseline = client.get("/api/homologation/assets", headers=HEADERS).json()
+    source = client.get("/api/homologation/assets/" + asset_id,
+                        headers=HEADERS).json()
+    check = client.get(path, headers=HEADERS)
+    assert check.status_code == 200, check.text
+    assert check.headers["cache-control"] == "no-store"
+    audit = check.json()
+    assert audit["audit_version"] == "nexora-ohlc-quality-v1"
+    assert audit["dataset_id"] == asset_id
+    assert audit["archive_digest_sha256"] == uploaded.json()["snapshot_sha256"]
+    assert audit["archive_integrity_verified"] is True
+    assert audit["provenance_verified"] is False
+    assert audit["external_market_feed_connected"] is False
+    assert audit["execution_allowed"] is False
+    assert audit["quality"] == "COMPLETE"
+    assert audit["synthetic"] is True
+    assert audit["observed_candles"] == audit["expected_candles"] == 96
+    assert audit["granularity_seconds"] == 300
+    assert audit["coverage_seconds"] == 96 * 300
+    assert audit["first_closed_epoch"] == source["bars"][0]["epoch"]
+    assert audit["last_closed_epoch"] == source["bars"][-1]["epoch"]
+    assert audit["first_close"] == source["bars"][0]["close"]
+    assert audit["last_close"] == source["bars"][-1]["close"]
+    assert audit["minimum_close"] <= audit["maximum_close"]
+    assert audit["missing_candles"] == 0
+    assert audit["duplicate_epochs"] == 0
+    assert audit["irregular_intervals"] == 0
+    assert audit["invalid_ohlc_rows"] == 0
+    assert KEY not in check.text
+    assert client.get(path, headers=HEADERS).json() == audit
+    assert client.get("/api/homologation/assets",
+                      headers=HEADERS).json() == baseline
+
+    with isolated_db.begin() as conn:
+        conn.execute(update(uploads.datasets).where(
+            uploads.datasets.c.id == asset_id).values(bars_json="[]"))
+    assert client.get(path, headers=HEADERS).status_code == 503
+
+
+def test_ohlc_quality_diagnostic_never_claims_unverified_market_source(isolated_db):
+    client = TestClient(core.app)
+    created = client.post(
+        "/api/homologation/assets",
+        json=sample("DECLARED_REAL_UNVERIFIED"), headers=HEADERS,
+    )
+    assert created.status_code == 200, created.text
+    reported = client.get(
+        "/api/homologation/assets/" + created.json()["id"] + "/quality",
+        headers=HEADERS,
+    )
+    assert reported.status_code == 200, reported.text
+    report = reported.json()
+    assert report["origin_type"] == "DECLARED_REAL_UNVERIFIED"
+    assert report["synthetic"] is False
+    assert report["archive_integrity_verified"] is True
+    assert report["provenance_verified"] is False
+    assert "not independently authenticated" in report["limitations"][1]
+    assert report["execution_allowed"] is False
+    assert not any("/buy" in route.path or "/orders" in route.path
+                   for route in core.app.routes)
