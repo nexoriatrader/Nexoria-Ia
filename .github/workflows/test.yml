@@ -125,4 +125,6 @@ jobs:
         run: python -m pytest -q -s tests/test_intelligence20_public_coordination_pg.py
       - name: Authenticated historical OHLC research and recovery on disposable PostgreSQL
         run: python -m pytest -q tests/test_intelligence20_stage4_user_ohlc_pg.py
+      - name: Formal NEXORA two-mode wizard migration and read-only PostgreSQL startup
+        run: python -m pytest -q tests/test_nexora20_wizard_formal_migration_pg.py
 
