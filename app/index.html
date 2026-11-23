@@ -1996,7 +1996,7 @@ body:has(#dashboard:not(.hidden)) .nexora-logo-only .brand img{
       <p class="helper">A verificação utiliza apenas a configuração já salva; não analisa preços, não simula resultados de mercado e não compra contratos.</p>
     </div>
     <p id="nxWizardFeedback" class="helper" role="status" aria-live="polite"></p>
-    <div class="nx-wizard-nav"><button id="nxBack" class="outline" type="button" hidden onclick="nxStepChange(-1)">← VOLTAR</button><button id="nxNext" class="gold" type="button" onclick="nxStepChange(1)">CONTINUAR →</button><button id="nxFinish" class="gold" type="button" hidden onclick="nxSaveConfiguration()">SALVAR E FINALIZAR</button></div>
+    <div class="nx-wizard-nav"><button id="nxBack" class="outline" type="button" hidden onclick="nxStepChange(-1)">← VOLTAR</button><button id="nxNext" class="gold" type="button" onclick="nxStepChange(1)">CONTINUAR →</button><button id="nxFinish" class="gold" type="button" hidden onclick="nxSaveConfiguration()">SALVAR E FINALIZAR</button><button id="nxAfterSaveToDashboard" class="outline" type="button" hidden onclick="go('dashboard')">IR PARA O PAINEL →</button></div>
   </div>
 <div class="card auto-config" id="automationConfigCard">
     <div class="surface-heading">Vamos conhecer as configurações?</div>
@@ -3984,7 +3984,7 @@ function nxCheckStep(step){
 }
 function nxStepChange(n){
  if(n>0){const error=nxCheckStep(nxWizardStep);if(error){nxGet('nxWizardFeedback').textContent=error;return}}
- nxGet('nxWizardFeedback').textContent='';nxSetWizardStep(nxWizardStep+n);
+ nxGet('nxWizardFeedback').textContent='';nxGet('nxAfterSaveToDashboard').hidden=true;nxSetWizardStep(nxWizardStep+n);
  nxGet('nxWizard2').scrollIntoView({behavior:'smooth',block:'start'});
 }
 function nxShowReview(){
@@ -4087,6 +4087,7 @@ async function nxOpenWizard(){
  nxSetMode('intelligent');
  nxWizardEdited=false;
  nxGet('nxWizardFeedback').textContent='Carregando preferências salvas...';
+ nxGet('nxSavedDraftPreview').hidden=true;nxGet('nxAfterSaveToDashboard').hidden=true;
  try{
   const saved=await req('/api/robot/wizard');
   if(token!==nxWizardLoadToken||activePage!=='robot-config')return;
@@ -4140,7 +4141,9 @@ async function nxSaveConfiguration(){
   nxWizardDraftPending=true;
   nxGet('robotButton').disabled=true;
   nxGet('robotButton').textContent='RASCUNHO · NÃO ATIVADO';
-  go('dashboard');
+  nxGet('nxWizardFeedback').textContent='Rascunho salvo. Confira a prévia abaixo antes de sair. O robô não foi ligado.';
+  nxGet('nxAfterSaveToDashboard').hidden=false;
+  await nxInspectSavedDraft();
  }catch(e){
   nxGet('nxWizardFeedback').textContent='Não foi possível salvar: '+e.message+
    '. Nenhum comando de ativação foi enviado.';
