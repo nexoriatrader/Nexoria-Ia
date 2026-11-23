@@ -1681,6 +1681,8 @@ async def save_robot_usage_mode(request: Request, payload: RobotModeSelection,
                 choice = db.RobotUsageMode(user_id=user.id, mode=payload.mode)
                 session.add(choice)
             else:
+                if choice.preferences_json and choice.mode != payload.mode:
+                    raise HTTPException(409, 'Há um rascunho salvo; altere o modo pelo assistente de cinco etapas')
                 choice.mode = payload.mode
             session.commit()
     return {'mode': payload.mode, 'saved': True, 'starts_robot': False,
@@ -2064,6 +2066,11 @@ async def autopilot_readiness(request:Request,nexora_sid:str|None=Cookie(default
         boundary=latest_risk_session(sess,user.id)
         reason=autopilot_start_blocker(user,orders,after_order_id=boundary.after_order_id if boundary else 0)
         access=access_status(sess,user.id)
+        selected=sess.get(db.RobotUsageMode,user.id)
+        if selected and selected.mode=='manual':
+            reason='Modo Manual: agenda de estudo, sem execução automática.'
+        elif selected and selected.preferences_json:
+            reason='O novo assistente contém um rascunho ainda não integrado ao executor.'
         if access['status']=='SUSPENDED' or (access['enforced'] and access['status']=='EXPIRED'):
             reason='Acesso do robô suspenso ou expirado. Conquiste horas por indicação ou consulte o suporte.'
     return {'ready':reason is None,'reason':reason,'access':access,
@@ -2442,6 +2449,11 @@ async def start_real_autopilot(request:Request,nexora_sid:str|None=None):
     with db.SessionLocal() as sess:
         profile=sess.get(db.AutomationProfile,user.id)
         plan=sess.get(db.RobotPlan,user.id)
+        # A new five-step wizard saves planning preferences only. Never run
+        # an older REAL profile while displaying different draft settings.
+        choice=sess.get(db.RobotUsageMode,user.id)
+        if choice and (choice.mode=='manual' or choice.preferences_json):
+            raise HTTPException(409, 'O novo assistente é apenas um rascunho; não autoriza execução REAL')
         if not profile or profile.account_mode!='real' or not profile.real_account_id:
             raise HTTPException(409,'Selecione e salve uma conta REAL nas configurações')
         if profile.news_filter:
@@ -2529,6 +2541,9 @@ async def autopilot_start(request:Request,payload:AutoPilotSwitch,
     with db.SessionLocal() as session:
         if robot_mode_for(session, user.id) == 'manual':
             raise HTTPException(409, 'Modo Manual: agenda registrada, mas execução automática de sinais ainda não está habilitada')
+        selected=session.get(db.RobotUsageMode, user.id)
+        if selected and selected.preferences_json:
+            raise HTTPException(409, 'Preferências do assistente são apenas um rascunho; não foram aplicadas ao executor DEMO')
     if payload.confirm!='START_DEMO_AUTOPILOT':
         raise HTTPException(403,'Confirme o modo automático de treinamento')
     if not autopilot_allowed():
@@ -2637,6 +2652,9 @@ async def status(request:Request,nexora_sid:str|None=Cookie(default=None)):
         interrupted=sess.get(db.RobotRun,user.id) is not None and user.id not in autopilot_enabled
         configured_profile=sess.get(db.AutomationProfile,user.id)
         configured_account_mode=configured_profile.account_mode if configured_profile else 'demo'
+        selected_usage=sess.get(db.RobotUsageMode,user.id)
+        robot_usage_mode=robot_mode_for(sess,user.id)
+        wizard_draft_pending=bool(selected_usage and selected_usage.preferences_json)
         batch=sess.get(db.PilotValidationBatch,user.id)
         selected_strategy='pulso_v2' if v2_enabled() else 'unavailable'
         mode='V2_PULSO' if v2_enabled() else 'V1_SINGLE_ASSET'
@@ -2649,6 +2667,8 @@ async def status(request:Request,nexora_sid:str|None=Cookie(default=None)):
                 'running':real_running or user.id in autopilot_enabled,'auto_buy_enabled':autopilot_allowed() or real_runtime.real_available(),
                 'real_orders_enabled':real_runtime.real_available(),
                 'configured_account_mode':configured_account_mode,
+                'robot_usage_mode':robot_usage_mode,
+                'wizard_draft_pending':wizard_draft_pending,
                 'interrupted_after_restart':interrupted,
                 'autopilot_version':mode,
                 'selected_strategy':selected_strategy,
