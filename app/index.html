@@ -2479,7 +2479,7 @@ function updateResultsPolling(){
    },activePage==='dashboard'?7000:3000);
  }
 }
-function go(v){page(v);updateResultsPolling();window.scrollTo({top:0,behavior:'smooth'});if(v==='setup')loadOnboarding();if(v==='dashboard'){refreshDashboard();loadDemoOrders().catch(()=>{});loadDailyResults().catch(()=>{});nxDashboardManualButton();}if(v==='robot-config'){nxOpenWizard();}if(v==='robot-manual-signals')nxOpenManualSignals();if(v==='results'){loadDemoOrders();}if(v==='account'){loadRobotAccess();loadBillingPlans()}if(v==='settings')loadSettings()}
+function go(v){page(v);updateResultsPolling();window.scrollTo({top:0,behavior:'smooth'});if(v==='setup')loadOnboarding();if(v==='dashboard'){refreshDashboard();loadDemoOrders().catch(()=>{});loadDailyResults().catch(()=>{});}if(v==='robot-config'){nxOpenWizard();}if(v==='robot-manual-signals')nxOpenManualSignals();if(v==='results'){loadDemoOrders();}if(v==='account'){loadRobotAccess();loadBillingPlans()}if(v==='settings')loadSettings()}
 function fail(msg){$('error').textContent=msg||''}
 async function req(path,opts={}){const r=await fetch(path,{credentials:'same-origin',...opts});let data;try{data=await r.json()}catch{throw Error('Resposta inválida do servidor')}if(!r.ok)throw Error(data.detail||'Falha na conexão');return data}
 async function refreshLandingOffer(){
@@ -2565,7 +2565,6 @@ async function init(){
     handleStripeCheckoutReturn(paymentResult,checkoutSessionId).catch(e=>fail(e.message));
   }else{
     page('dashboard');
-    nxDashboardManualButton();
     refreshDashboard();
     loadDemoOrders().catch(()=>{});
     loadDailyResults().catch(()=>{});
@@ -2934,6 +2933,7 @@ async function refreshDashboard(){
    if(sequence!==dashboardStatusSequence)return null;
    robotRunning=Boolean(status.running);
    robotConfiguredMode=status.configured_account_mode==='real'?'real':'demo';
+   nxDashboardManualButton(status);
    renderScanMonitor(status);
    renderRobotEasyOverview(status);
    renderNxNeoTopCommand(status);
@@ -2975,13 +2975,20 @@ async function refreshDashboard(){
      $('robotButton').disabled=true;
      $('robotButton').setAttribute('aria-disabled','true');
      $('robotButton').textContent='MANUAL · SOMENTE AGENDA';
-     $('robotMessage').textContent='Modo Manual: organize sinais para estudo, sem execução de compras.';
+     $('robotMessage').textContent='Modo Manual: agenda de estudo, sem execução de compras.';
      $('robotLiveCopy').textContent='Agenda manual · somente planejamento';
      $('autopilotVersion').textContent='NEXORA Manual · somente agenda';
      $('nxNeoActivationLabel').textContent='Agendar sinais';
+   }else if(nxWizardDraftPending&&!robotRunning){
+     $('robotButton').disabled=true;
+     $('robotButton').setAttribute('aria-disabled','true');
+     $('robotButton').textContent='RASCUNHO · NÃO ATIVADO';
+     $('robotMessage').textContent='A configuração em cinco etapas não está aplicada ao executor. Nenhuma operação será iniciada.';
+     $('robotLiveCopy').textContent='Rascunho salvo · somente estudo';
+     $('autopilotVersion').textContent='NEXORA Inteligente · rascunho';
    }
    if(robotRunning)showRobotNotice('');
-   if(pulsoSelected){
+   if(pulsoSelected&&!nxWizardDraftPending&&nxDashboardSavedMode!=='manual'){
      $('autopilotVersion').textContent='NEXORA IA · '+(automationRadio('autoStrategy')||'pulso_v2')+' · '+(automationRadio('autoMarket')||'derived').toUpperCase();
      $('v2ScannerHealth').textContent='Scanner NEXORA · estratégia selecionada · análise de velas fechadas';
      $('v2Opportunity').textContent='● Aguardando novo sinal no mercado selecionado';
@@ -3111,6 +3118,12 @@ function askRobotStartConfirmation(profile,risk,catalogue){
 async function toggleRobot(){
  const button=$('robotButton');
  if(button.dataset.commandPending==='true')return;
+ if(!robotRunning&&(nxDashboardSavedMode==='manual'||nxWizardDraftPending)){
+  showRobotNotice(nxDashboardSavedMode==='manual'
+   ?'Modo Manual é somente agenda de estudo; a ativação está indisponível.'
+   :'O assistente salvou apenas um rascunho. Os parâmetros ainda não foram aplicados ao executor.');
+  return;
+ }
  const wasRunning=robotRunning;
  let pendingAccountMode='demo';
  const buttonOriginalLabel=button.textContent;
@@ -3912,7 +3925,7 @@ window.addEventListener('focus',()=>{
 
 /* Guided NEXORA 2.0 UI. Manual agenda never dispatches broker orders. */
 document.querySelectorAll('#nxWizard2 input,#nxWizard2 select').forEach(el=>el.addEventListener('input',()=>nxTouchWizard()));
-let nxModeChoice='intelligent',nxWizardStep=1,nxDashboardSavedMode='intelligent';
+let nxModeChoice='intelligent',nxWizardStep=1,nxDashboardSavedMode='intelligent',nxWizardDraftPending=false;
 const nxGet=id=>document.getElementById(id);
 function nxSetMode(mode){
  if(!['intelligent','manual'].includes(mode))return;
@@ -4069,18 +4082,11 @@ async function nxSaveConfiguration(){
    '. Nenhum comando de ativação foi enviado.';
  }finally{button.disabled=false}
 }
-async function nxDashboardManualButton(){
- const btn=nxGet('nxManualScheduleButton');btn.hidden=true;
- try{const r=await req('/api/robot/mode');
-  nxDashboardSavedMode=r.mode==='manual'?'manual':'intelligent';btn.hidden=nxDashboardSavedMode!=='manual';
-  if(nxDashboardSavedMode==='manual'&&!robotRunning){
-   nxGet('robotButton').disabled=true;
-   nxGet('robotButton').setAttribute('aria-disabled','true');
-   nxGet('robotButton').textContent='MANUAL · SOMENTE AGENDA';
-   nxGet('robotMessage').textContent='Modo Manual: organize sinais para estudo, sem execução de compras.';
-   nxGet('nxNeoActivationLabel').textContent='Agendar sinais';
-  }
- }catch{btn.hidden=true}
+function nxDashboardManualButton(status){
+ const btn=nxGet('nxManualScheduleButton');
+ nxDashboardSavedMode=status?.robot_usage_mode==='manual'?'manual':'intelligent';
+ nxWizardDraftPending=Boolean(status?.wizard_draft_pending);
+ btn.hidden=nxDashboardSavedMode!=='manual';
 }
 async function nxOpenManualSignals(){
  const f=nxGet('nxSignalFeedback');f.textContent='Carregando...';
