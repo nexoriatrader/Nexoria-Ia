@@ -50,7 +50,7 @@ def test_five_steps_with_two_clear_modes_and_conditional_manual_button():
     dashboard = HTML.split('id="configureRobotButton"', 1)[1].split('id="robotStartNotice"', 1)[0]
     assert 'id="nxManualScheduleButton"' in dashboard
     assert 'hidden onclick="go(\'robot-manual-signals\')"' in dashboard
-    assert "btn.hidden=r.mode!=='manual'" in HTML
+    assert "btn.hidden=nxDashboardSavedMode!=='manual'" in HTML
 
 
 def test_manual_agenda_has_only_planning_actions_and_uses_real_catalog():
