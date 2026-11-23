@@ -1810,6 +1810,22 @@ async def save_robot_wizard(request: Request, payload: RobotWizardDraftRequest,
             'execution': 'PLANNING_ONLY_NO_ORDERS'}
 
 
+@app.get('/api/robot/wizard/preview')
+async def get_robot_wizard_preview(request: Request,
+                                   nexora_sid: str | None = Cookie(default=None)):
+    """Explain only a committed, validated draft. No broker or trading runtime."""
+    user = active_user(request, nexora_sid)
+    with db.SessionLocal() as session:
+        choice = session.get(db.RobotUsageMode, user.id)
+        if choice is None or not choice.preferences_json:
+            raise HTTPException(409, 'Salve um rascunho antes de conferir a simulação da configuração')
+        result = _robot_wizard_read(session, user)
+    if not result['saved']:
+        raise HTTPException(409, 'Nenhuma preferência salva disponível')
+    from .robot_draft_preview import preview_saved_wizard
+    return preview_saved_wizard(mode=result['mode'], draft=result['draft'])
+
+
 @app.get('/api/robot/manual-signals')
 async def list_robot_manual_signals(request: Request, nexora_sid: str | None = Cookie(default=None)):
     user = active_user(request, nexora_sid)
