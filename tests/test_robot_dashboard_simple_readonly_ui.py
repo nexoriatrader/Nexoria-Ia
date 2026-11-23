@@ -802,6 +802,7 @@ const notices=[],requests=[],modalCatalogues=[];
 const button={dataset:{},disabled:false,textContent:'LIGAR ROBÔ',setAttribute(){}};
 const $=id=>id==='robotButton'?button:{textContent:'',dataset:{}};
 let robotRunning=false,scenario='slow',abortSeen=false;
+let nxDashboardSavedMode='intelligent',nxWizardDraftPending=false;
 function showRobotNotice(msg){notices.push(msg);}
 async function refreshDashboard(){throw Error('Unexpected POST path');}
 async function req(path,opts={}){
@@ -846,7 +847,18 @@ async function askRobotStartConfirmation(profile,risk,catalogue){
   throw Error('Missing REAL safety notice');
  if(requests.some(p=>p.includes('/api/autopilot/')))
   throw Error('Unexpected transaction request');
-})().catch(e=>{console.error(e);process.exitCode=1;});
+ const before=modalCatalogues.length,requestCount=requests.length;
+ scenario='fast';nxWizardDraftPending=true;
+ await toggleRobot();
+ if(modalCatalogues.length!==before||requests.length!==requestCount)
+  throw Error('Draft guard allowed network calls');
+ if(!notices.some(s=>s.includes('rascunho')))throw Error('Missing draft warning');
+ nxWizardDraftPending=false;nxDashboardSavedMode='manual';
+ await toggleRobot();
+ if(modalCatalogues.length!==before||requests.length!==requestCount)
+  throw Error('Manual guard allowed network calls');
+ if(!notices.some(s=>s.includes('Modo Manual')))throw Error('Missing manual warning');
+ })().catch(e=>{console.error(e);process.exitCode=1;});
 """
     result = subprocess.run(
         ["node", "-e", runtime + test_code + checks],
