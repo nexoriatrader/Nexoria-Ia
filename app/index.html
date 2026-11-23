@@ -801,6 +801,57 @@ html,body{max-width:100%;overflow-x:clip}
 @media(max-width:620px){.lp-plan-grid{grid-template-columns:1fr;max-width:430px}.lp-plan{padding:16px}.lp-faq-list summary{padding:15px;font-size:13px}.lp-faq-list details p{padding:0 15px 16px}}
 </style>
 <style>
+/* Calm hotfix: remove fake start button, prevent mobile grid stretching and overflow. */
+#dashboard.nx-calm-dashboard .nx-neo-start-display{
+ display:inline-flex;align-items:center;min-height:36px;padding:6px 4px;border:0;
+ background:transparent;color:#a3c1d1;font-size:12px;font-weight:700;cursor:default;opacity:1;
+}
+#dashboard.nx-calm-dashboard .nx-neo-controls .dash-control-card{width:100%;max-width:100%;min-width:0;overflow-wrap:anywhere}
+#dashboard.nx-calm-dashboard .nx-neo-controls .dash-control-grid{display:grid;grid-template-columns:minmax(0,1fr)!important;gap:10px}
+#dashboard.nx-calm-dashboard .nx-neo-controls .dash-control-main{
+ display:flex!important;flex-direction:column;gap:10px;align-items:stretch;min-width:0
+}
+#dashboard.nx-calm-dashboard .nx-neo-controls .dash-control-main .hero-action{
+ display:inline-flex!important;align-self:flex-start;align-items:center;justify-content:center;
+ flex:0 0 auto!important;width:auto!important;height:auto!important;min-width:130px;
+ max-width:200px;min-height:44px!important;padding:10px 16px!important;font-size:12px!important
+}
+#dashboard.nx-calm-dashboard .nx-neo-controls .dash-control-actions{
+ display:flex!important;flex-wrap:wrap;align-items:flex-start;gap:10px;min-width:0;flex:0 0 auto
+}
+#dashboard.nx-calm-dashboard .nx-neo-controls .dash-configure-button{
+ display:inline-flex;align-items:center;justify-content:center;align-self:flex-start;
+ width:auto!important;max-width:195px;min-width:120px;min-height:44px;height:auto;padding:10px 12px
+}
+#dashboard.nx-calm-dashboard .nx-neo-controls .dash-access{
+ display:flex;flex:1 1 210px;flex-direction:row;flex-wrap:wrap;align-items:center;
+ justify-content:space-between;text-align:left;gap:8px;min-width:0;
+ width:auto;max-width:420px;min-height:50px;padding:10px
+}
+#dashboard.nx-calm-dashboard .nx-neo-controls .dash-add-time{width:auto;max-width:175px;margin:0;min-height:38px}
+#dashboard.nx-calm-dashboard .nx-neo-account{min-width:0;max-width:100%;padding:5px 0}
+#dashboard.nx-calm-dashboard .nx-neo-account>summary{
+ display:flex;justify-content:space-between;align-items:center;gap:12px;min-height:44px;
+ padding:9px 12px;cursor:pointer;border:1px solid #38566a;background:#142f43;color:#acc9d9;
+ border-radius:11px;font-size:12px;font-weight:800;list-style:none
+}
+#dashboard.nx-calm-dashboard .nx-neo-account>summary::-webkit-details-marker{display:none}
+#dashboard.nx-calm-dashboard .nx-neo-account>summary:focus-visible{outline:3px solid #a8eaff;outline-offset:2px}
+#dashboard.nx-calm-dashboard .nx-neo-account .dash-balance-grid{margin-top:10px;min-width:0}
+#dashboard.nx-calm-dashboard .nx-neo-account .dash-balance-tile{min-width:0;min-height:unset;padding:13px}
+#dashboard.nx-calm-dashboard .nx-neo-account .dash-balance-action{align-self:flex-start;max-width:100%;width:auto;word-break:normal}
+@media(max-width:640px){
+ #dashboard.nx-calm-dashboard .nx-neo-command>.nx-neo-controls{min-width:0;max-width:100%}
+ #dashboard.nx-calm-dashboard .nx-neo-controls .dash-control-card{padding:11px!important}
+ #dashboard.nx-calm-dashboard .nx-neo-controls .dash-control-head{flex-wrap:wrap;gap:8px}
+ #dashboard.nx-calm-dashboard .nx-neo-controls .dash-control-main .hero-action{min-height:44px!important;height:auto!important;max-width:185px}
+ #dashboard.nx-calm-dashboard .nx-neo-controls .dash-control-actions{flex-direction:column;align-items:stretch;width:100%}
+ #dashboard.nx-calm-dashboard .nx-neo-controls .dash-access{flex:0 1 auto;max-width:100%;width:100%}
+ #dashboard.nx-calm-dashboard .nx-neo-account .dash-balance-grid{grid-template-columns:minmax(0,1fr)!important}
+ #dashboard.nx-calm-dashboard .nx-neo-account .dash-balance-tile{max-width:100%}
+ #dashboard.nx-calm-dashboard .nx-neo-compact-actions{align-items:center;gap:6px}
+ #dashboard.nx-calm-dashboard .nx-neo-compact-actions button{flex:0 0 auto;max-width:145px}
+}
 /* Compact status buttons always visible; activation stays disabled here. */
 #dashboard.nx-calm-dashboard .nx-neo-command-actions{gap:10px;flex:1 0 auto}
 #dashboard.nx-calm-dashboard .nx-neo-compact-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
@@ -1204,7 +1255,7 @@ html,body{max-width:100%;overflow-x:clip}
     <div class="nx-neo-command-actions">
       <span id="nxNeoRunStatus" class="nx-neo-command-pill" data-state="unknown" role="status" aria-live="polite"><span class="nx-neo-command-dot" aria-hidden="true"></span>Consultando</span>
       <div class="nx-neo-compact-actions" role="group" aria-label="Estado dos controles">
-        <button id="nxNeoStartDisplay" type="button" class="nx-neo-start-display" disabled aria-disabled="true" title="Ativação exige revisão e confirmação nos controles" aria-label="Ligar robô: requer revisão e confirmação">○ Ligar</button>
+        <span id="nxNeoStartDisplay" class="nx-neo-start-display" role="note" aria-label="Ativação exige revisão e confirmação">Ligar: confirmar</span>
         <button id="nxNeoQuickStop" type="button" class="nx-neo-stop" onclick="nxNeoStopRunningRobot()" disabled aria-label="Desligar robô em funcionamento"><span aria-hidden="true">■</span> Desligar</button>
       </div>
     </div>
@@ -1227,6 +1278,8 @@ html,body{max-width:100%;overflow-x:clip}
           </div>
         </div>
       </div>
+      <details class="nx-neo-account" id="nxNeoAccountDetails">
+        <summary>Informações de saldo <span aria-hidden="true">⌄</span></summary>
       <div class="dash-balance-grid">
         <div class="dash-balance-tile">
           <span class="dash-balance-label">Saldo conta DEMO</span>
@@ -1241,6 +1294,7 @@ html,body{max-width:100%;overflow-x:clip}
           <a class="dash-balance-action dash-real-action" href="https://home.deriv.com/dashboard/deposit?from=portfolio&amp;depositSheet=1&amp;returnTo=%2Fportfolio&amp;currency=USD" target="_blank" rel="noopener noreferrer" title="Abrir a página de depósito da Deriv">＋ RECARREGAR SALDO <span aria-hidden="true">↗</span></a>
         </div>
       </div>
+      </details>
     </div>
     <div id="robotStartNotice" class="robot-notice" role="alert" aria-live="polite" hidden>
       <strong id="robotNoticeTitle"></strong>
