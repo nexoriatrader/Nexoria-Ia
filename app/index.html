@@ -1515,6 +1515,9 @@ body:has(#dashboard:not(.hidden)) .nexora-logo-only .brand img{
 #nxWizard2 .nx-summary{white-space:pre-line;line-height:1.8;padding:14px;border:1px solid #45677b;border-radius:12px}
 #robot-manual-signals .nx-signal-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
 #robot-manual-signals .nx-signal-item{display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #45677b;gap:12px;padding:10px 0}
+#robot-manual-signals .nx-signal-item{flex-wrap:wrap;min-width:0;overflow-wrap:anywhere}
+#robot-manual-signals .nx-signal-item span{flex:1 1 190px;min-width:0}
+#robot-manual-signals .nx-signal-item button{flex:0 0 auto}
 @media(max-width:600px){#nxWizard2 .nx-modes,#nxWizard2 .nx-fields,#robot-manual-signals .nx-signal-grid{grid-template-columns:1fr}}
 </style>
 </head>
@@ -4076,6 +4079,9 @@ async function nxSaveConfiguration(){
    headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
   if(!result.saved||result.applied_to_executor!==false)throw Error('Gravação não confirmada');
   nxDashboardSavedMode=result.mode;
+  nxWizardDraftPending=true;
+  nxGet('robotButton').disabled=true;
+  nxGet('robotButton').textContent='RASCUNHO · NÃO ATIVADO';
   go('dashboard');
  }catch(e){
   nxGet('nxWizardFeedback').textContent='Não foi possível salvar: '+e.message+
