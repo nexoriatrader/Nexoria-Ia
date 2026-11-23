@@ -277,6 +277,11 @@ def verify_postgresql_schema_read_only(connection):
             "PostgreSQL schema incomplete: formal migration required: "
             + ", ".join(missing[:20])
         )
+    # New draft-only wizard data must be formally migrated, never repaired on startup.
+    wizard_columns = {column["name"] for column in inspector.get_columns("robot_usage_modes")}
+    if "preferences_json" not in wizard_columns:
+        raise RuntimeError("NEXORA wizard formal draft migration missing")
+
     if connection.execute(text(
         "SELECT revision FROM nexora_schema_revisions WHERE revision=:revision"
     ), {"revision": "f01_global_fencing_v1"}).scalar_one_or_none() is None:
