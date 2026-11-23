@@ -375,7 +375,7 @@ def test_command_bar_prioritizes_stop_only_and_preserves_existing_controls():
     assert 'onclick="nxNeoStopRunningRobot()"' in section
     assert 'id="nxNeoQuickStop"' in section
     assert 'disabled aria-label="Desligar robô em funcionamento"' in section
-    assert '<details class="nx-neo-controls" id="nxNeoControls">' in section
+    assert '<details class="nx-neo-controls" id="nxNeoControls" open>' in section
     assert section.index('<details class="nx-neo-controls"') < section.index(
         '<div class="card dash-control-card">'
     )
@@ -482,11 +482,11 @@ def test_minimal_robot_home_keeps_only_two_visible_surfaces():
     # The activation panel is one clear disclosure in the top control banner,
     # not hidden inside another disclosure. Existing safeguards are unchanged.
     before_activity = panel.split('<section class="nx-calm-activity"', 1)[0]
-    assert '<details class="nx-neo-controls" id="nxNeoControls">' in before_activity
+    assert '<details class="nx-neo-controls" id="nxNeoControls" open>' in before_activity
     assert 'id="nxNeoActivationLabel"' in before_activity
     assert 'id="robotButton"' in before_activity
     assert 'id="robotStartNotice"' in before_activity
-    assert '<details class="nx-neo-controls" id="nxNeoControls" open' not in panel
+    assert '<details class="nx-neo-controls" id="nxNeoControls" open>' in panel
     assert 'Revisar e confirmar' in before_activity
     assert 'onclick="toggleRobot()"' in before_activity
     # All secondary read-only cards stay in the separate "More information" area.
@@ -646,7 +646,7 @@ def test_mobile_controls_no_fake_start_and_no_overflow():
     assert controls.index('class="nx-neo-account"') < controls.index(
         'id="balanceMetric"'
     )
-    assert '<details class="nx-neo-account" id="nxNeoAccountDetails" open' not in panel
+    assert '<details class="nx-neo-account" id="nxNeoAccountDetails" open>' in panel
     assert 'id="robotButton"' in controls
     assert "if(!await askRobotStartConfirmation(profile,risk,catalogue))return;" in HTML
     assert "if(!health.real_orders_enabled)" in HTML
@@ -658,6 +658,55 @@ def test_mobile_controls_no_fake_start_and_no_overflow():
     assert "grid-template-columns:minmax(0,1fr)!important" in css
     assert ".nx-neo-account .dash-balance-grid" in css
     assert css.count("<style>") == css.count("</style>")
+    parser = _IndexTags()
+    parser.feed(HTML)
+    assert len(parser.ids) == len(set(parser.ids))
+
+
+
+def test_only_reference_control_card_is_visible_at_dashboard_entry():
+    """User reference: one original NEXORA control card, no extra dashboard sections."""
+    panel = HTML.split(
+        '<section id="dashboard" class="hidden nx-neo-dashboard nx-calm-dashboard">', 1
+    )[1].split('<section id="robot-config" class="hidden">', 1)[0]
+    assert '<details class="nx-neo-controls" id="nxNeoControls" open>' in panel
+    assert '<details class="nx-neo-account" id="nxNeoAccountDetails" open>' in panel
+    assert panel.count('class="card dash-control-card"') == 1
+    card = panel.split('<div class="card dash-control-card">', 1)[1].split(
+        '<section class="nx-calm-activity"', 1
+    )[0]
+    for element_id in ("robotState", "robotButton", "configureRobotButton",
+                       "dashboardAccessCountdown", "balanceMetric", "realBalanceMetric",
+                       "robotStartNotice", "robotNoticeTitle", "robotNoticeText"):
+        assert 'id="' + element_id + '"' in card
+    for caption in ("NEXORA IA", "LIGAR ROBÔ", "CONFIGURAR ROBÔ",
+                    "Tempo disponível Robô", "Saldo conta DEMO", "Saldo conta REAL"):
+        assert caption in card
+    assert panel.count('id="robotButton"') == 1
+    assert panel.count('id="nxNeoQuickStop"') == 1
+    assert "onclick=\"toggleRobot()\"" in card
+    assert "if(!await askRobotStartConfirmation(profile,risk,catalogue))return;" in HTML
+    assert "if(!health.real_orders_enabled)" in HTML
+
+    styles = HTML.split("</head>", 1)[0]
+    marker = "/* NEXORA single-card dashboard: the existing control card"
+    assert styles.count(marker) == 1
+    # Explicitly hide all superfluous cards, descriptions and navigation.
+    for part in ("#dashboard.nx-calm-dashboard .nx-neo-command-brand,",
+                 "#dashboard.nx-calm-dashboard .nx-neo-command-actions,",
+                 "#dashboard.nx-calm-dashboard .nx-neo-controls>summary,",
+                 "#dashboard.nx-calm-dashboard .nx-calm-activity,",
+                 "#dashboard.nx-calm-dashboard .nx-calm-extra{",
+                 "display:none!important"):
+        assert part in styles
+    # The sole card stays visible; existing JS state-binding nodes remain mounted.
+    assert "#dashboard.nx-calm-dashboard .nx-neo-controls>.dash-control-card{" in styles
+    assert "display:block!important" in styles
+    assert "display:contents!important" in styles
+    assert "height:52px!important" in styles
+    assert "grid-template-columns:repeat(2,minmax(0,1fr))!important" in styles
+    assert "@media(max-width:640px)" in styles
+    assert styles.count("<style>") == styles.count("</style>")
     parser = _IndexTags()
     parser.feed(HTML)
     assert len(parser.ids) == len(set(parser.ids))
