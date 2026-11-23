@@ -1700,12 +1700,13 @@ class RobotWizardDraftRequest(BaseModel):
     martingale_attempts: int = 0
 
 
-def _draft_decimal(value: str, label: str, minimum: Decimal) -> str:
+def _draft_decimal(value: str, label: str, minimum: Decimal,
+                   maximum: Decimal = Decimal('1000000')) -> str:
     try:
         amount = Decimal(str(value).strip().replace(',', '.'))
     except (InvalidOperation, ValueError, TypeError):
         raise HTTPException(422, label + ' inválido') from None
-    if not amount.is_finite() or amount < minimum or amount > 1000000:
+    if not amount.is_finite() or amount < minimum or amount > maximum:
         raise HTTPException(422, label + ' fora do intervalo permitido')
     if amount.as_tuple().exponent < -2:
         raise HTTPException(422, label + ': use até duas casas decimais')
@@ -1733,7 +1734,8 @@ def validate_robot_wizard_draft(payload: RobotWizardDraftRequest) -> dict:
         'stop_loss': _draft_decimal(payload.stop_loss, 'Stop Loss', Decimal('0')),
         'recovery': payload.recovery,
         'cycles': payload.cycles,
-        'multiplier': _draft_decimal(payload.multiplier, 'Multiplicador', Decimal('1')),
+        'multiplier': _draft_decimal(payload.multiplier, 'Multiplicador',
+                                     Decimal('1'), Decimal('100')),
         'martingale_attempts': payload.martingale_attempts,
     }
 
