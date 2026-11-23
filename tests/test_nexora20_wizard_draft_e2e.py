@@ -114,6 +114,10 @@ def test_manual_schedule_is_private_and_elapsed_is_never_executed(tmp_path, monk
     monkeypatch.setattr(main, "demo_buy", buy)
     when = (datetime.now(timezone.utc) + timedelta(minutes=3)).isoformat()
     try:
+        # A new manual-only user should not need to set up the automatic executor.
+        with factory() as sess:
+            sess.delete(sess.get(db.AutomationProfile, a))
+            sess.commit()
         assert client.post("/api/robot/wizard", json=BASE).status_code == 200
         post = client.post("/api/robot/manual-signals", json={
             "symbol": "1HZ100V", "direction": "CALL",
