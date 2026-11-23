@@ -710,3 +710,64 @@ def test_only_reference_control_card_is_visible_at_dashboard_entry():
     parser = _IndexTags()
     parser.feed(HTML)
     assert len(parser.ids) == len(set(parser.ids))
+
+
+
+def test_premium_reference_skin_preserves_existing_controls():
+    """Approved premium reference changes visual presentation, not execution."""
+    panel = HTML.split(
+        '<section id="dashboard" class="hidden nx-neo-dashboard nx-calm-dashboard">', 1
+    )[1].split('<section id="robot-config" class="hidden">', 1)[0]
+    header = HTML.split("</head>", 1)[0]
+    assert "NEXORA Glass Signature" in header
+    assert "body:has(#dashboard:not(.hidden)) .nexora-logo-only" in header
+    assert 'src="/brand/logo-nexora-v21.svg"' in HTML
+    assert 'alt="NEXORA IA"' in HTML
+    assert "radial-gradient" in header
+    assert "backdrop-filter" not in header.split("NEXORA Glass Signature", 1)[1]
+    assert 'class="nx-premium-footer">NEXORA IA' in panel
+    assert 'id="robotButton"' in panel
+    assert 'id="configureRobotButton"' in panel
+    assert 'id="robotState"' in panel
+    assert 'id="balanceMetric"' in panel
+    assert 'id="realBalanceMetric"' in panel
+    assert 'id="dashboardAccessCountdown"' in panel
+    assert 'id="nxNeoControls" open' in panel
+    assert 'id="nxNeoAccountDetails" open' in panel
+    # Do not show the legacy duplicate dashboards underneath the reference card.
+    assert "#dashboard.nx-calm-dashboard .nx-calm-activity," in header
+    assert "#dashboard.nx-calm-dashboard .nx-calm-extra{" in header
+    assert 'onclick="toggleRobot()"' in panel
+    assert "if(!await askRobotStartConfirmation(profile,risk,catalogue))return;" in HTML
+    assert "if(!health.real_orders_enabled)" in HTML
+    # Status colour is derived from the authoritative boolean; "ready" != "active".
+    assert "dataset.visualState=robotRunning?'active'" in HTML
+    assert "available?'ready':'unavailable'" in HTML
+    assert '.hero-state[data-visual-state="ready"]' in header
+    assert '.hero-state[data-visual-state="active"]' in header
+    assert '.hero-state[data-visual-state="interrupted"]' in header
+    assert ".dash-balance-tile:first-child" in header
+    assert ".dash-balance-tile:nth-child(2)" in header
+    assert "max-width:640px" in header
+    assert "max-width:360px" in header
+    assert "prefers-reduced-motion:reduce" in header
+    assert header.count("<style>") == header.count("</style>")
+    parser = _IndexTags()
+    parser.feed(HTML)
+    assert len(parser.ids) == len(set(parser.ids))
+
+
+def test_premium_skin_only_adds_css_and_nonoperational_status_state():
+    """Broker route guards must stay in the preexisting JS; CSS has no action handlers."""
+    skin = HTML.split("/* NEXORA Glass Signature", 1)[1].split(
+        "</style>", 1
+    )[0]
+    for forbidden in ("fetch(", "onclick=", "script", "data:application",
+                      "/api/autopilot/start", "/api/autopilot/stop"):
+        assert forbidden not in skin
+    assert "LIGAR ROBÔ" in HTML and "DESLIGAR ROBÔ" in HTML
+    assert "robotRunning?'DESLIGAR ROBÔ':'LIGAR ROBÔ'" in HTML
+    assert "$('robotButton').disabled=(!robotRunning&&!available)" in HTML
+    assert "if(!health.real_orders_enabled)" in HTML
+    assert "if(!await askRobotStartConfirmation(profile,risk,catalogue))return;" in HTML
+    assert "wasRunning?'/api/autopilot/stop':'/api/autopilot/start'" in HTML
