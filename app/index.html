@@ -1496,7 +1496,7 @@ body:has(#dashboard:not(.hidden)) .nexora-logo-only .brand img{
  #robot-config .auto-wizard-actions{background:#0b1f31f5;padding:12px 0}
  #robot-config .auto-wizard-actions button{min-width:0;font-size:11px}
 }
-@media(max-width:350px){#robot-config .nx-guide-path li{font-size:0}#robot-config .nx-guide-path li::first-letter{font-size:10px}}
+@media(max-width:350px){#robot-config .nx-guide-path li{font-size:8px;line-height:1.3}}
 @media(prefers-reduced-motion:reduce){#robot-config .auto-wizard-track span{transition:none!important}}
 </style>
 </head>
@@ -3386,6 +3386,15 @@ function initAutomationWizard(){
  autoWizardReady=true;
  setAutomationWizardStep(1);
 }
+const automationGuideDescriptions=[
+ ['Por onde começar?','Você pode conhecer os perfis existentes. A opção Personalizada permite entender cada campo, sem aplicar um modelo automaticamente.'],
+ ['Entenda os tipos de conta','Treinamento utiliza valores fictícios. Operações reais envolvem risco de perda de dinheiro e não fazem parte da experiência introdutória.'],
+ ['Conheça os mercados','Os mercados são grupos de instrumentos. A etapa apenas organiza o que será exibido na seleção seguinte.'],
+ ['Veja os ativos disponíveis','Um ativo é um instrumento do mercado. Os nomes são obtidos no catálogo; uma lista vazia significa que os dados não foram confirmados.'],
+ ['Aprenda sobre análise','Uma estratégia define critérios de análise e indicadores acrescentam informações. Nenhuma opção garante resultado.'],
+ ['Conheça os limites','Veja o significado dos parâmetros e dos limites. Martingale e ciclos ficam separados como opções avançadas de risco elevado.'],
+ ['Revise o que está salvo','Confira as preferências antes de salvar. Salvar não liga o robô e não substitui as confirmações posteriores.']
+];
 function setAutomationWizardStep(step){
  autoWizardStep=Math.min(7,Math.max(1,step));
  for(const element of document.querySelectorAll('.auto-wizard-step')){
@@ -3393,8 +3402,19 @@ function setAutomationWizardStep(step){
  }
  $('autoWizardProgress').textContent='Etapa '+autoWizardStep+' de 7';
  $('autoWizardFill').style.width=(autoWizardStep/7*100)+'%';
+ $('autoWizardTrack').setAttribute('aria-valuenow',String(autoWizardStep));
+ const [title,description]=automationGuideDescriptions[autoWizardStep-1];
+ $('autoWizardTitle').textContent=title;
+ $('autoWizardHint').textContent=description;
+ document.querySelectorAll('[data-nx-wizard]').forEach(marker=>{
+  const number=Number(marker.dataset.nxWizard),current=number===autoWizardStep;
+  if(current)marker.setAttribute('aria-current','step');
+  else marker.removeAttribute('aria-current');
+  marker.dataset.past=String(number<autoWizardStep);
+ });
  $('autoWizardBack').hidden=autoWizardStep===1;
  $('autoWizardNext').hidden=autoWizardStep===7;
+ $('autoWizardNext').textContent=autoWizardStep===6?'VER REVISÃO →':'CONTINUAR →';
 }
 function changeAutomationWizardStep(delta){
  if(delta>0){
@@ -3643,6 +3663,9 @@ function toggleAutomationProgressions(changed=''){
  if(changed==='cycles'&&$('autoCycles').value!=='0')$('autoMg').checked=false;
  $('autoMgSettings').classList.toggle('hidden',!$('autoMg').checked);
  $('autoCycleSettings').classList.toggle('hidden',$('autoCycles').value==='0');
+ // Reveal existing advanced values during review; never silently conceal saved settings.
+ const advanced=$('autoAdvancedOptions');
+ if(advanced&&($('autoMg').checked||$('autoCycles').value!=='0'))advanced.open=true;
  renderAutomationSummary();
 }
 function selectAutomationAssets(all){
@@ -3671,10 +3694,24 @@ function renderAutomationAssets(){
 }
 function renderAutomationSummary(){
  const node=$('autoConfigSummary');if(!node)return;
- node.textContent=automationRadio('autoMode')?.toUpperCase()+' · '+automationRadio('autoMarket')?.toUpperCase()+
-  ' · '+automationRadio('autoStrategy')+' · Expiração AUTO M1/M3/M5/M15 · '+automationSelected.size+
-  ' ativo(s) · '+$('autoDirection').value+' · entrada US$ '+$('autoStake').value+
-  ' · stop win US$ '+$('autoWin').value+' · stop loss US$ '+$('autoLoss').value;
+ const marketNames={forex:'Forex',derived:'Derivados',stocks_indices:'Ações e índices',commodities:'Matérias-primas'};
+ const strategyNames={pulso_v2:'PULSO V2',trend:'Tendência e pullback',rsi:'Reversão RSI'};
+ const market=automationRadio('autoMarket'),mode=automationRadio('autoMode');
+ const count=document.querySelectorAll('#autoIndicators input:checked').length;
+ const advanced=$('autoMg').checked?'Martingale selecionado':
+   $('autoCycles').value!=='0'?'Ciclos selecionados':'Nenhuma progressão selecionada';
+ node.textContent=[
+  'Conta: '+(mode==='real'?'REAL · envolve dinheiro e risco':'Treinamento · saldo fictício'),
+  'Mercado: '+(marketNames[market]||'Não confirmado'),
+  'Ativos: '+automationSelected.size+' selecionado(s)',
+  'Análise: '+(strategyNames[automationRadio('autoStrategy')]||'Não confirmada'),
+  'Indicadores complementares: '+count,
+  'Direção: '+$('autoDirection').value+' · duração: automática (M1, M3, M5 ou M15)',
+  'Valor por entrada: US$ '+$('autoStake').value,
+  'Limites registrados: Stop Win US$ '+$('autoWin').value+' · Stop Loss US$ '+$('autoLoss').value,
+  'Payout mínimo informado: '+$('autoPayout').value+'%',
+  'Opções avançadas: '+advanced
+ ].join('\n');
 }
 async function loadAutomationProfile(){
  const feedback=$('autoConfigFeedback');
