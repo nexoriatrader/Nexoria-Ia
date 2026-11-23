@@ -92,6 +92,7 @@ def test_invalid_drafts_leave_valid_record_unchanged(tmp_path, monkeypatch):
             {"stake": "0.10"},
             {"stop_loss": "-2"},
             {"multiplier": "0.5"},
+            {"multiplier": "101"},
             {"multiplier": "2.1234"},
             {"mode": "unknown"},
         ]
