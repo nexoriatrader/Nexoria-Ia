@@ -53,6 +53,7 @@ def test_atomic_wizard_draft_is_per_user_and_does_not_apply_to_engine(tmp_path, 
         assert response.json()["starts_robot"] is False
         assert response.json()["applied_to_executor"] is False
         assert response.json()["mode"] == "manual"
+        assert client.post('/api/autopilot/start', json={'confirm': 'START_DEMO_AUTOPILOT'}).status_code == 409
         again = client.get("/api/robot/wizard").json()
         assert again["saved"] is True
         assert again["draft"]["cycles"] == 2
@@ -127,6 +128,19 @@ def test_manual_schedule_is_private_and_elapsed_is_never_executed(tmp_path, monk
         })
         assert duplicate.status_code == 409
         assert len(client.get("/api/robot/manual-signals").json()["items"]) == 1
+        # DB uniqueness is required even when separate workers race past the API check.
+        from sqlalchemy.exc import IntegrityError
+        import pytest
+        with factory() as sess:
+            stored = sess.get(db.RobotManualSignal, signal_id)
+            sess.add(db.RobotManualSignal(
+                user_id=a, symbol=stored.symbol, direction=stored.direction,
+                expiry_minutes=stored.expiry_minutes, scheduled_for=stored.scheduled_for,
+            ))
+            with pytest.raises(IntegrityError):
+                sess.commit()
+            sess.rollback()
+
         client.cookies.set("nexora_sid", "draft_b")
         assert client.get("/api/robot/manual-signals").status_code == 409
         assert client.delete(f"/api/robot/manual-signals/{signal_id}").status_code == 404
@@ -140,6 +154,17 @@ def test_manual_schedule_is_private_and_elapsed_is_never_executed(tmp_path, monk
         buy.assert_not_awaited()
         assert client.delete(f"/api/robot/manual-signals/{signal_id}").status_code == 200
         assert client.get("/api/robot/manual-signals").json()["items"] == []
+    finally:
+        engine.dispose()
+
+
+def test_quick_wizard_read_is_independent_from_catalogue_and_broker(tmp_path, monkeypatch):
+    client, _, engine, _ = planning_client(tmp_path, monkeypatch)
+    try:
+        unavailable = AsyncMock(side_effect=AssertionError("No broker call allowed in the wizard"))
+        monkeypatch.setattr(main, "featured_instruments_by_group", unavailable)
+        assert client.get("/api/robot/wizard").status_code == 200
+        unavailable.assert_not_awaited()
     finally:
         engine.dispose()
 
