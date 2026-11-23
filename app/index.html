@@ -1444,6 +1444,61 @@ body:has(#dashboard:not(.hidden)) .nexora-logo-only .brand img{
  #dashboard.nx-calm-dashboard .nx-neo-controls .dash-control-main .hero-action{transition:none!important}
 }
 </style>
+
+<style>
+/* Guided settings information layer; all existing form controls and route guards remain intact. */
+#robot-config{max-width:800px;margin-inline:auto}
+#robot-config .robot-config-page-heading{margin:14px 0 23px;align-items:flex-start}
+#robot-config .robot-config-page-heading h1{font-size:clamp(25px,4vw,38px);letter-spacing:-.035em}
+#robot-config .robot-config-page-heading p{max-width:560px;line-height:1.6;color:#abc6d9}
+#robot-config .auto-config{border-radius:24px;border:1px solid #41667f;background:linear-gradient(153deg,#173346,#0b2033 86%);padding:24px;box-shadow:0 14px 42px #02131e75}
+#robot-config .auto-config>.surface-heading{font-size:21px;color:#f4faff;letter-spacing:-.025em}
+#robot-config .nx-guide-lead{margin-top:7px;line-height:1.7;font-size:13px;max-width:670px}
+#robot-config .auto-wizard-header{margin:22px 0 15px}
+#robot-config .auto-wizard-header>span{font-variant-numeric:tabular-nums;font-size:12px}
+#robot-config .nx-guide-current{display:flex;flex-direction:column;gap:5px;padding:15px 17px;margin:0 0 15px;border:1px solid #43718b;border-radius:16px;background:radial-gradient(ellipse at 100% 10%,#31b9d51b,transparent 55%),#112b3f}
+#robot-config .nx-guide-kicker{font-size:10px;font-weight:900;color:#7fdce8;letter-spacing:.11em}
+#robot-config .nx-guide-current strong{font-size:17px;color:#edfaff}
+#robot-config .nx-guide-current p{color:#bad1df;font-size:12px;line-height:1.65}
+#robot-config .nx-guide-path{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:5px;padding:0;margin:0 0 19px;list-style:none}
+#robot-config .nx-guide-path li{display:flex;align-items:center;justify-content:center;min-width:0;padding:8px 2px;border-radius:9px;border:1px solid #33556c;background:#0f2638;color:#9eb8c8;text-align:center;font-size:10px;font-weight:750}
+#robot-config .nx-guide-path li[aria-current="step"]{background:#194b61;color:#edfdff;border-color:#60d0dd;box-shadow:0 0 10px #37c2de2d}
+#robot-config .nx-guide-path li[data-past="true"]{color:#9ce7d0;border-color:#388f80}
+#robot-config .auto-wizard-step{gap:14px}
+#robot-config .auto-wizard-step>.auto-step{padding:4px 0 2px}
+#robot-config .auto-step strong{font-size:clamp(15px,2.8vw,19px);line-height:1.4;color:#e9f6ff}
+#robot-config .auto-step span{width:34px;height:34px;flex:0 0 34px;border-radius:11px}
+#robot-config .auto-step-help{font-size:13px;line-height:1.65;color:#b4cad9}
+#robot-config .auto-choice{border-radius:14px;min-height:64px;line-height:1.5;background:#112d40;border-color:#385f76}
+#robot-config .auto-choice:has(input:checked){border-color:#63b8cf;background:#173d50;box-shadow:inset 0 0 0 1px #84d2e319}
+#robot-config .auto-choice small{display:block;margin:5px 0 0 20px;color:#a9c5d6;line-height:1.5}
+#robot-config .auto-preset-button{min-width:0;min-height:133px;border-radius:15px}
+#robot-config .auto-preset-button small{font-size:11px;line-height:1.55}
+#robot-config .nx-guide-advanced,#robot-config .nx-guide-explainer{border:1px solid #46667a;background:#0d2637;border-radius:14px;padding:0 14px}
+#robot-config .nx-guide-advanced>summary,#robot-config .nx-guide-explainer>summary{cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:14px;min-height:49px;line-height:1.5;font-weight:800;color:#d4e6ef;list-style:none}
+#robot-config .nx-guide-advanced>summary::-webkit-details-marker,#robot-config .nx-guide-explainer>summary::-webkit-details-marker{display:none}
+#robot-config .nx-guide-advanced[open],#robot-config .nx-guide-explainer[open]{padding-bottom:15px}
+#robot-config .nx-guide-advanced>p,#robot-config .nx-guide-explainer>p{font-size:12px;color:#b7cad7;line-height:1.7;margin-bottom:10px}
+#robot-config .nx-guide-advanced .auto-choice{margin:10px 0}
+#robot-config .auto-summary{white-space:pre-line;line-height:1.9;font-size:13px;border-radius:15px;padding:15px 17px}
+#robot-config .nx-guide-save-note{font-size:12px;color:#bcdacb;background:#163b37;border:1px solid #3f8c78;padding:10px 13px;border-radius:11px;line-height:1.6}
+#robot-config .auto-wizard-actions{gap:11px}
+#robot-config .auto-wizard-actions button{border-radius:12px;font-size:12px;font-weight:850}
+#robot-config :is(.nx-guide-advanced,.nx-guide-explainer)>summary:focus-visible{outline:2px solid #9ce7fc;outline-offset:3px}
+@media(max-width:600px){
+ #robot-config .robot-config-page-heading .robot-back-button{width:auto;align-self:flex-start;padding:10px 13px}
+ #robot-config .auto-config{padding:15px}
+ #robot-config .nx-guide-current{padding:13px}
+ #robot-config .nx-guide-path{grid-template-columns:repeat(7,minmax(0,1fr));gap:3px}
+ #robot-config .nx-guide-path li{font-size:9px;padding:7px 0;letter-spacing:-.03em}
+ #robot-config .auto-preset-layout{grid-template-columns:minmax(0,1fr)}
+ #robot-config .auto-preset-button{min-height:80px}
+ #robot-config .auto-wizard-actions{background:#0b1f31f5;padding:12px 0}
+ #robot-config .auto-wizard-actions button{min-width:0;font-size:11px}
+}
+@media(max-width:350px){#robot-config .nx-guide-path li{font-size:0}#robot-config .nx-guide-path li::first-letter{font-size:10px}}
+@media(prefers-reduced-motion:reduce){#robot-config .auto-wizard-track span{transition:none!important}}
+</style>
 </head>
 <body>
 <div class="shell">
@@ -1868,55 +1923,70 @@ body:has(#dashboard:not(.hidden)) .nexora-logo-only .brand img{
 </section>
 <section id="robot-config" class="hidden">
   <div class="section-heading robot-config-page-heading">
-    <div><div class="eyebrow">PERSONALIZAÇÃO DO ROBÔ</div><h1>Configurar Robô</h1><p>Escolha o modo de operação, mercado, ativos, estratégias e regras de automação.</p></div>
+    <div><div class="eyebrow">NEXORA · CONFIGURAÇÃO GUIADA</div><h1>Configurar Robô</h1><p>Um passo de cada vez. Entenda suas escolhas antes de salvar qualquer preferência.</p></div>
     <button class="outline robot-back-button" type="button" onclick="go('dashboard')">← VOLTAR AO PAINEL</button>
   </div>
   <div class="card auto-config" id="automationConfigCard">
-    <div class="surface-heading">CONFIGURE SUA AUTOMAÇÃO</div>
-    <p class="helper">Comece por um perfil pronto ou monte sua própria configuração. Todas as opções podem ser revisadas antes de salvar.</p>
+    <div class="surface-heading">Vamos conhecer as configurações?</div>
+    <p class="helper nx-guide-lead">Você não precisa entender termos técnicos para acompanhar as etapas. Este guia organiza as opções existentes e começa pelo treinamento com saldo fictício. Navegar ou salvar preferências não liga o robô.</p>
     <div class="auto-wizard-header">
-      <span id="autoWizardProgress">Etapa 1 de 7</span>
-      <div class="auto-wizard-track" aria-hidden="true"><span id="autoWizardFill"></span></div>
+      <span id="autoWizardProgress" role="status" aria-live="polite">Etapa 1 de 7</span>
+      <div class="auto-wizard-track" id="autoWizardTrack" role="progressbar" aria-label="Progresso da configuração" aria-valuemin="1" aria-valuemax="7" aria-valuenow="1"><span id="autoWizardFill"></span></div>
     </div>
+    <div class="nx-guide-current" role="note">
+      <span class="nx-guide-kicker">SEU PASSO ATUAL</span>
+      <strong id="autoWizardTitle">Por onde começar?</strong>
+      <p id="autoWizardHint">Conheça as possibilidades. A escolha é sua e pode ser revisada nas próximas etapas.</p>
+    </div>
+    <ol class="nx-guide-path" aria-label="As sete etapas do guia">
+      <li data-nx-wizard="1" aria-current="step">Começo</li>
+      <li data-nx-wizard="2">Conta</li>
+      <li data-nx-wizard="3">Mercado</li>
+      <li data-nx-wizard="4">Ativos</li>
+      <li data-nx-wizard="5">Análise</li>
+      <li data-nx-wizard="6">Limites</li>
+      <li data-nx-wizard="7">Revisão</li>
+    </ol>
     <div class="auto-steps">
-      <div class="auto-step"><span>01</span><strong>Escolha seu perfil de configuração</strong></div>
-      <p class="helper auto-step-help">Selecione um perfil pronto ou monte sua própria configuração. Você poderá ajustar as opções nas próximas etapas.</p>
+      <div class="auto-step"><span>01</span><strong>Escolha como prefere conhecer as opções</strong></div>
+      <p class="helper auto-step-help">Os perfis são exemplos de conjuntos de preferências, não previsões de resultado. Para estudar cada campo, use “Personalizada”.</p>
       <div class="auto-preset-layout" role="group" aria-label="Escolha o perfil de automação">
         <button type="button" class="auto-preset-button" data-preset="conservative" aria-pressed="false" onclick="applyAutomationPreset('conservative')">
           <span class="auto-preset-icon">◈</span><strong>Conservadora</strong><small>Entradas menores, limites de ganho/perda e filtros mais criteriosos.</small>
         </button>
         <button type="button" class="auto-preset-button" data-preset="aggressive" aria-pressed="false" onclick="applyAutomationPreset('aggressive')">
-          <span class="auto-preset-icon">↗</span><strong>Arriscada</strong><small>Martingale sem ciclos, com stops desligados no modelo inicial.</small>
+          <span class="auto-preset-icon">!</span><strong>Arriscada · avançada</strong><small>Exemplo de risco elevado: inclui progressão e desativa limites iniciais. Não é indicado para iniciantes.</small>
         </button>
         <button type="button" class="auto-preset-button active" data-preset="custom" aria-pressed="true" onclick="applyAutomationPreset('custom')">
           <span class="auto-preset-icon">⚙</span><strong>Personalizada</strong><small>Monte sua própria estratégia e defina cada parâmetro.</small>
         </button>
       </div>
       <div id="autoPresetStatus" class="auto-preset-status" role="status">Personalizada · configure os parâmetros do seu jeito.</div>
-      <div class="auto-step"><span>02</span><strong>Selecione o modo de operação</strong></div>
-      <p class="helper auto-step-help">Escolha qual conta da corretora o robô deverá utilizar.</p>
+      <div class="auto-step"><span>02</span><strong>Entenda os dois tipos de conta</strong></div>
+      <p class="helper auto-step-help">Treinamento usa saldo fictício e é a opção apropriada para conhecer a interface. Conta REAL envolve dinheiro e risco de perdas.</p>
       <div class="auto-options auto-account-options">
         <label class="auto-choice"><input type="radio" name="autoMode" value="demo" checked> Treinamento <small>Saldo fictício na corretora</small></label>
         <label class="auto-choice"><input type="radio" name="autoMode" value="real"> Conta Real <small>Saldo em dinheiro na corretora</small></label>
       </div>
       <div class="field hidden" id="autoRealAccountWrapper"><label for="autoRealAccount">Selecione sua conta real na Deriv</label><select id="autoRealAccount"><option value="">Consultando contas vinculadas...</option></select></div>
-      <div class="auto-step"><span>03</span><strong>Seleção de Mercado</strong></div>
-      <p class="helper auto-step-help">Selecione qual mercado o robô vai operar.</p>
+      <div class="auto-step"><span>03</span><strong>Conheça os mercados disponíveis</strong></div>
+      <p class="helper auto-step-help">Mercado é o conjunto de ativos que você deseja acompanhar. Cada grupo tem características diferentes.</p>
       <div class="auto-options auto-market-options">
         <label class="auto-choice"><input type="radio" name="autoMarket" value="forex"> Forex <small>Pares de moedas</small></label>
         <label class="auto-choice"><input type="radio" name="autoMarket" value="derived" checked> Derivados <small>Volatility, Step, Crash/Boom e outros</small></label>
         <label class="auto-choice"><input type="radio" name="autoMarket" value="stocks_indices"> Ações e Índices <small>Empresas e índices de bolsas</small></label>
         <label class="auto-choice"><input type="radio" name="autoMarket" value="commodities"> Matérias-primas <small>Ouro, prata, petróleo e outros</small></label>
       </div>
-      <div class="auto-step"><span>04</span><strong>Ativos autorizados pelo usuário</strong></div>
-      <p class="helper">Escolha entre os cinco ativos destacados deste mercado, com disponibilidade consultada na Deriv.</p>
+      <div class="auto-step"><span>04</span><strong>Quais ativos deseja acompanhar?</strong></div>
+      <p class="helper">Ativo é um instrumento do mercado. A lista contém até cinco opções consultadas na Deriv; os nomes podem demorar a carregar.</p>
       <p class="helper auto-assets-tip">Exibimos até cinco ativos por mercado para simplificar a seleção e reduzir análises repetidas. Marque somente os que deseja operar.</p>
       <div class="actions" style="margin:4px 0 10px">
         <button type="button" class="outline" onclick="selectAutomationAssets(false)">LIMPAR SELEÇÃO</button>
       </div>
       <div class="field hidden"><label for="autoAssetSearch">Buscar ativo</label><input id="autoAssetSearch" type="search" placeholder="Nome ou código do ativo" oninput="renderAutomationAssets()"></div>
       <div id="automationSymbols" class="auto-symbols"><p class="helper">Carregando ativos...</p></div>
-      <div class="auto-step"><span>05</span><strong>Estratégia de análise</strong></div>
+      <div class="auto-step"><span>05</span><strong>Como os dados serão analisados?</strong></div>
+      <p class="helper auto-step-help">Estratégias são métodos de interpretação de dados. Indicadores são medidas auxiliares; nenhum deles prevê resultados com certeza.</p>
       <div class="auto-options">
         <label class="auto-choice"><input type="radio" name="autoStrategy" value="pulso_v2" checked> PULSO V2 <small>Pressão direcional + volatilidade estável · CALL · M5</small></label>
         <label class="auto-choice"><input type="radio" name="autoStrategy" value="trend"> Tendência e pullback <small>EMA 20/50 + confirmação de preço</small></label>
@@ -1924,6 +1994,10 @@ body:has(#dashboard:not(.hidden)) .nexora-logo-only .brand img{
       </div>
       <div class="field"><label for="autoDirection">Direção das entradas</label><select id="autoDirection"><option value="AUTO">Automática conforme estratégia</option><option value="CALL">Somente CALL / Alta</option><option value="PUT">Somente PUT / Baixa</option></select></div>
       <div class="field"><label>Indicadores selecionados</label><p class="helper">Escolha livremente nenhum, um ou vários indicadores de confirmação. Cada filtro adicional precisa concordar com o sinal; filtros demais podem reduzir a frequência de operações.</p><p id="autoIndicatorRecommendation" class="auto-indicator-recommendation" role="status"></p></div>
+      <details class="nx-guide-explainer">
+        <summary>O que significam os indicadores? <span aria-hidden="true">⌄</span></summary>
+        <p>Médias móveis (EMA/SMA) acompanham tendências. RSI e Estocástico comparam movimentos recentes. ATR observa variação; Bandas de Bollinger acompanham dispersão. MACD, ADX, suporte/resistência e padrões de velas são outras formas de analisar dados. Nenhum indicador elimina riscos.</p>
+      </details>
       <div class="auto-symbols" id="autoIndicators">
         <label><input type="checkbox" value="EMA"> Média móvel exponencial (EMA)</label>
         <label><input type="checkbox" value="SMA"> Média móvel simples (SMA)</label>
@@ -1936,7 +2010,8 @@ body:has(#dashboard:not(.hidden)) .nexora-logo-only .brand img{
         <label><input type="checkbox" value="SUPPORT_RESISTANCE"> Suporte e resistência</label>
         <label><input type="checkbox" value="CANDLE_PATTERNS"> Padrões de velas</label>
       </div>
-      <div class="auto-step"><span>06</span><strong>Entradas e gerenciamento de risco</strong></div>
+      <div class="auto-step"><span>06</span><strong>Entenda os valores e os limites</strong></div>
+      <p class="helper auto-step-help">Este grupo reúne parâmetros financeiros e limites de segurança. Em treinamento, os valores são fictícios. Valores e estratégias não eliminam riscos em contas reais.</p>
       <div class="settings-grid">
         <div class="field"><label for="autoStake">Entrada (USD)</label><input id="autoStake" type="number" min="0.50" step="0.01" value="0.50"></div>
         <div class="field"><label>Expiração automática inteligente</label><p class="helper">O NEXORA compara M1, M3, M5 e M15 disponíveis na Deriv após confirmar um sinal e escolhe a proposta que atende ao payout mínimo. Sem proposta válida, não opera.</p></div>
@@ -1944,6 +2019,9 @@ body:has(#dashboard:not(.hidden)) .nexora-logo-only .brand img{
         <div class="field"><label for="autoLoss">Stop Loss (USD)</label><input id="autoLoss" type="number" min="0" step="0.01" value="0"></div>
         <div class="field"><label for="autoPayout">Payout mínimo (%)</label><input id="autoPayout" type="number" min="0" max="200" step="1" value="88"></div>
       </div>
+      <details class="nx-guide-advanced" id="autoAdvancedOptions">
+        <summary>Opções avançadas e de alto risco <span aria-hidden="true">⌄</span></summary>
+        <p class="helper">Martingale e ciclos podem aumentar valores e perdas. Estas opções não são necessárias para compreender o funcionamento básico e não são recomendadas para iniciantes.</p>
       <label class="auto-choice"><input id="autoMg" type="checkbox" onchange="toggleAutomationProgressions('martingale')"> Configurar Martingale <small>Quantidade de tentativas e multiplicador</small></label>
       <div id="autoMgSettings" class="settings-grid hidden">
         <div class="field"><label for="autoGales">Tentativas após LOSS</label><select id="autoGales"><option value="1">1 tentativa</option><option value="2">2 tentativas</option><option value="3">3 tentativas</option><option value="4">4 tentativas</option><option value="5">5 tentativas</option></select></div>
@@ -1953,10 +2031,12 @@ body:has(#dashboard:not(.hidden)) .nexora-logo-only .brand img{
       <p class="helper">Selecione apenas uma progressão: Martingale na próxima vela OU ciclos no próximo sinal confirmado. Ao ativar uma, a outra será desligada.</p>
       <div class="field"><label for="autoCycles">Ciclos adicionais (não exigem Martingale)</label><select id="autoCycles" onchange="toggleAutomationProgressions('cycles')"><option value="0">Desativados</option><option value="1">1 ciclo</option><option value="2">2 ciclos</option><option value="3">3 ciclos</option><option value="4">4 ciclos</option><option value="5">5 ciclos</option></select></div>
       <div id="autoCycleSettings" class="field hidden"><label for="autoCycleMultiplier">Multiplicador dos ciclos</label><input id="autoCycleMultiplier" type="number" min="1" step=".1" value="2.00"></div>
-      <div class="auto-step"><span>07</span><strong>Proteções e limites</strong></div>
-      <p class="helper">Defina seus limites para personalizar sua automação.</p>
+      </details>
+      <div class="auto-step"><span>07</span><strong>Confira antes de guardar suas preferências</strong></div>
+      <p class="helper">Veja o resumo do que foi selecionado. Salvar não inicia nenhuma operação; a ativação tem verificações e confirmação separadas.</p>
       <div id="autoConfigSummary" class="auto-summary">Selecione os ativos para configurar o robô.</div>
-      <button type="button" class="gold" id="autoSaveButton" onclick="saveAutomationProfile()">SALVAR CONFIGURAÇÃO E IR AO PAINEL</button>
+      <p class="nx-guide-save-note" role="note">As preferências serão registradas, mas o robô permanecerá no estado atual.</p>
+      <button type="button" class="gold" id="autoSaveButton" onclick="saveAutomationProfile()">SALVAR E VOLTAR AO PAINEL</button>
       <p class="helper" id="autoConfigFeedback" role="status"></p>
     </div>
     <div class="auto-wizard-actions">
