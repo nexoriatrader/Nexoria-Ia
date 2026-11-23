@@ -39,3 +39,20 @@ Arquivo: `migrations/20261123_robot_modes_manual_signals_homologation.sql`.
 2. Executar migração formal somente no banco de homologação aprovado.
 3. Testar com duas contas (A/B), horários em fusos distintos, duplicações, troca de modo com robô ligado, falhas de rede, reinício e exclusão de sinais.
 4. Sem aprovação explícita e CI verde, não fazer merge nem deploy.
+
+
+## Complemento — desempenho, rascunho atômico e consulta Intelligence (23/11/2026)
+
+Esta etapa foi aprimorada sem alterar execução financeira:
+
+- **Abertura da configuração:** `go('robot-config')` exibe imediatamente o assistente de cinco etapas e chama apenas `GET /api/robot/wizard`, consulta ao PostgreSQL local da aplicação. Não inicia o assistente antigo, não consulta o catálogo Deriv e não aguarda APIs externas. O carregamento utiliza um identificador de requisição para ignorar respostas obsoletas e não sobrescrever edições do usuário.
+- **Gravação atômica e honesta:** `POST /api/robot/wizard` valida modo, texto decimal, limites e exclusão mútua entre ciclos/Martingale; grava modo + `preferences_json` em uma única transação. O campo é **rascunho educacional**, não aplicado ao executor DEMO/REAL, não concede consentimento e não inicia nenhuma operação. Não há gravação parcial entre três endpoints legados.
+- **Agenda manual segura:** os registros continuam isolados por usuário; horário vencido aparece como `HORARIO_PASSOU_SEM_EXECUCAO` (não é um resultado de contrato). A tabela impõe unicidade de usuário, ativo, direção e horário; o servidor usa bloqueio do registro do usuário ao validar limite e duplicatas, verifica novamente a validade do horário após consulta ao catálogo e devolve conflito quando concorrentes tentam criar o mesmo item. Uma atualização manual da lista não realiza compras.
+- **Intelligence 2.0:** um botão opcional, visível apenas quando o modo Inteligente está selecionado, consulta a visão pública `/api/homologation/robot/research?view=autonomous`. Exige `read_only=true`, `execution_allowed=false` e `orders_sent=0` antes de exibir informações. O retorno reflete **somente disponibilidade/integridade da pesquisa**, nunca recomendações de CALL/PUT, previsões ou operações; a indisponibilidade é mostrada explicitamente.
+- **Banco e implantação:** migração formal inclui `robot_usage_modes.preferences_json`, integridade de agenda e índices. O preflight de PostgreSQL falha quando a coluna obrigatória está ausente; não gera DDL no startup. Não houve nenhuma migração de produção, merge nem deploy.
+- **Testes novos:** `tests/test_nexora20_wizard_draft_e2e.py` cobre requisições autenticadas com SQLite descartável, gravação atômica, ausência de compras, isolamento A/B, tentativas inválidas, duplicidade DB/API, dados após nova sessão, horários expirados, bloqueio de start manual e consulta sem dependência do catálogo. Todos os testes devem ser aprovados no SHA final antes de qualquer homologação.
+
+### O que permanece pendente
+
+O **robô Inteligente existente** segue utilizando o motor de execução DEMO anterior: o motor completo Intelligence 2.0 é apenas pesquisa de qualidade e não pode ser apresentado como decisão de ordens. O **modo Manual** guarda agendamentos e nunca executa ordens automaticamente. Os valores desse novo assistente são rascunhos e não parâmetros ativos do executor. Não foram implementados compra de contratos, martingale em uma mesma vela, rearmamento automático, ativação REAL, migrations produtivas ou deploy. Homologação operacional e testes end-to-end de navegador/infraestrutura real precisam ser executados antes de declarar o produto em produção.
+
