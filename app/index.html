@@ -2975,6 +2975,10 @@ async function refreshDashboard(){
      $('robotButton').disabled=true;
      $('robotButton').setAttribute('aria-disabled','true');
      $('robotButton').textContent='MANUAL · SOMENTE AGENDA';
+     $('robotMessage').textContent='Modo Manual: organize sinais para estudo, sem execução de compras.';
+     $('robotLiveCopy').textContent='Agenda manual · somente planejamento';
+     $('autopilotVersion').textContent='NEXORA Manual · somente agenda';
+     $('nxNeoActivationLabel').textContent='Agendar sinais';
    }
    if(robotRunning)showRobotNotice('');
    if(pulsoSelected){
@@ -4073,6 +4077,8 @@ async function nxDashboardManualButton(){
    nxGet('robotButton').disabled=true;
    nxGet('robotButton').setAttribute('aria-disabled','true');
    nxGet('robotButton').textContent='MANUAL · SOMENTE AGENDA';
+   nxGet('robotMessage').textContent='Modo Manual: organize sinais para estudo, sem execução de compras.';
+   nxGet('nxNeoActivationLabel').textContent='Agendar sinais';
   }
  }catch{btn.hidden=true}
 }
