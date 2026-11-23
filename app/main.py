@@ -1685,6 +1685,125 @@ async def save_robot_usage_mode(request: Request, payload: RobotModeSelection,
             'note': 'Modo salvo. Nenhuma operação foi iniciada.'}
 
 
+
+class RobotWizardDraftRequest(BaseModel):
+    """Single-transaction educational draft; no trading-engine parameter writes."""
+    mode: str
+    stake: str
+    stop_win: str
+    stop_loss: str
+    recovery: str = 'none'
+    cycles: int = 0
+    multiplier: str = '2'
+    martingale_attempts: int = 0
+
+
+def _draft_decimal(value: str, label: str, minimum: Decimal) -> str:
+    try:
+        amount = Decimal(str(value).strip().replace(',', '.'))
+    except (InvalidOperation, ValueError, TypeError):
+        raise HTTPException(422, label + ' inválido') from None
+    if not amount.is_finite() or amount < minimum or amount > 1000000:
+        raise HTTPException(422, label + ' fora do intervalo permitido')
+    if amount.as_tuple().exponent < -2:
+        raise HTTPException(422, label + ': use até duas casas decimais')
+    return format(amount.quantize(Decimal('0.01')), '.2f')
+
+
+def validate_robot_wizard_draft(payload: RobotWizardDraftRequest) -> dict:
+    if payload.mode not in ('intelligent', 'manual'):
+        raise HTTPException(422, 'Modo inválido')
+    if payload.recovery not in ('none', 'cycles', 'martingale'):
+        raise HTTPException(422, 'Tipo de recuperação inválido')
+    if payload.mode == 'intelligent' and payload.recovery == 'martingale':
+        raise HTTPException(422, 'Martingale não faz parte do modo Inteligente')
+    if not 0 <= payload.cycles <= 5 or not 0 <= payload.martingale_attempts <= 5:
+        raise HTTPException(422, 'Número de ciclos/tentativas inválido')
+    if payload.recovery == 'none' and (payload.cycles or payload.martingale_attempts):
+        raise HTTPException(422, 'Sem recuperação não pode ter tentativas')
+    if payload.recovery == 'cycles' and (not payload.cycles or payload.martingale_attempts):
+        raise HTTPException(422, 'Ciclos e Martingale não podem ser combinados')
+    if payload.recovery == 'martingale' and (not payload.martingale_attempts or payload.cycles):
+        raise HTTPException(422, 'Escolha apenas Martingale OU ciclos')
+    return {
+        'stake': _draft_decimal(payload.stake, 'Entrada', Decimal('0.50')),
+        'stop_win': _draft_decimal(payload.stop_win, 'Stop Win', Decimal('0')),
+        'stop_loss': _draft_decimal(payload.stop_loss, 'Stop Loss', Decimal('0')),
+        'recovery': payload.recovery,
+        'cycles': payload.cycles,
+        'multiplier': _draft_decimal(payload.multiplier, 'Multiplicador', Decimal('1')),
+        'martingale_attempts': payload.martingale_attempts,
+    }
+
+
+def _robot_wizard_read(session, user):
+    stored = session.get(db.RobotUsageMode, user.id)
+    plan = session.get(db.RobotPlan, user.id)
+    cp = session.get(db.RobotCycleParams, user.id)
+    defaults = {
+        'stake': user.stake,
+        'stop_win': user.stop_win,
+        'stop_loss': user.stop_loss,
+        'recovery': ('martingale' if plan and plan.requested_martingale else
+                     'cycles' if plan and plan.cycles_limit else 'none'),
+        'cycles': plan.cycles_limit if plan and plan.cycles_limit else 0,
+        'multiplier': (
+            str(plan.requested_multiplier if plan else '2.00')
+            if plan and plan.requested_martingale else
+            str(cp.multiplier if cp else '2.00')),
+        'martingale_attempts': plan.gale_count if plan and plan.requested_martingale else 0,
+    }
+    if stored is not None and stored.preferences_json:
+        try:
+            raw = json.loads(stored.preferences_json)
+            if not isinstance(raw, dict):
+                raise ValueError()
+            parsed = validate_robot_wizard_draft(
+                RobotWizardDraftRequest(mode=stored.mode, **raw))
+            return {'mode': robot_mode_for(session, user.id), 'draft': parsed,
+                    'saved': True, 'applied_to_executor': False,
+                    'execution': 'PLANNING_ONLY_NO_ORDERS'}
+        except (ValueError, TypeError, HTTPException):
+            raise HTTPException(409, 'Preferências salvas inconsistentes; solicite revisão')
+    return {'mode': robot_mode_for(session, user.id), 'draft': defaults,
+            'saved': False, 'applied_to_executor': False,
+            'execution': 'PLANNING_ONLY_NO_ORDERS'}
+
+
+@app.get('/api/robot/wizard')
+async def get_robot_wizard(request: Request, nexora_sid: str | None = Cookie(default=None)):
+    """Quick DB-only read. No broker catalogue, no external accounts and no buys."""
+    user = active_user(request, nexora_sid)
+    with db.SessionLocal() as session:
+        return _robot_wizard_read(session, user)
+
+
+@app.post('/api/robot/wizard')
+async def save_robot_wizard(request: Request, payload: RobotWizardDraftRequest,
+                            nexora_sid: str | None = Cookie(default=None)):
+    """Atomic draft save: the mode and visible settings either both persist or neither."""
+    user = active_user(request, nexora_sid)
+    preferences = validate_robot_wizard_draft(payload)
+    async with autopilot_lock:
+        if user.id in autopilot_enabled or user.id in real_runtime.running:
+            raise HTTPException(409, 'Desligue o robô antes de trocar o modo')
+        with db.SessionLocal() as session:
+            if (session.get(db.RobotRun, user.id) is not None or
+                session.get(db.AutoPilotResumeConsent, user.id) is not None):
+                raise HTTPException(409, 'Ativação anterior ainda pendente; desative antes de editar')
+            # No movement in investment settings, broker access, or automation state.
+            current = session.get(db.RobotUsageMode, user.id)
+            if current is None:
+                current = db.RobotUsageMode(user_id=user.id)
+                session.add(current)
+            current.mode = payload.mode
+            current.preferences_json = json.dumps(preferences, sort_keys=True, separators=(',', ':'))
+            session.commit()
+    return {'mode': payload.mode, 'draft': preferences, 'saved': True,
+            'applied_to_executor': False, 'starts_robot': False,
+            'execution': 'PLANNING_ONLY_NO_ORDERS'}
+
+
 @app.get('/api/robot/manual-signals')
 async def list_robot_manual_signals(request: Request, nexora_sid: str | None = Cookie(default=None)):
     user = active_user(request, nexora_sid)
