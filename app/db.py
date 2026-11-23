@@ -208,7 +208,11 @@ class RobotManualSignal(Base):
     expiry_minutes = Column(Integer, nullable=False)
     scheduled_for = Column(DateTime(timezone=True), nullable=False)
     created_at = Column(DateTime(timezone=True), default=utcnow, nullable=False)
-    __table_args__ = (Index('ix_robot_manual_signals_user_schedule', 'user_id', 'scheduled_for'),)
+    __table_args__ = (
+        UniqueConstraint('user_id', 'symbol', 'direction', 'scheduled_for',
+                         name='uq_robot_manual_signals_user_slot'),
+        Index('ix_robot_manual_signals_user_schedule', 'user_id', 'scheduled_for'),
+    )
 
 
 
