@@ -1838,10 +1838,10 @@ async def add_robot_manual_signal(request: Request, payload: ManualSignalDraft,
     with db.SessionLocal() as session:
         if robot_mode_for(session, user.id) != 'manual':
             raise HTTPException(409, 'Escolha e salve o modo Manual primeiro')
+        # The manual planning diary is not a trading profile and needs no executor setup.
         profile = session.get(db.AutomationProfile, user.id)
-        if not profile or profile.account_mode != 'demo':
-            raise HTTPException(409, 'A agenda exige configuração DEMO válida')
-        market = 'derived' if profile.market == 'volatility' else profile.market
+        market = ('derived' if profile is None or profile.account_mode != 'demo'
+                  or profile.market == 'volatility' else profile.market)
     try:
         items = await featured_instruments_by_group(market)
     except (MarketError, TimeoutError, OSError):
