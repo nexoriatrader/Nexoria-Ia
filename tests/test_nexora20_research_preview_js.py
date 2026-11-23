@@ -81,7 +81,7 @@ async function req(path){
   throw Error('Saved draft result missing');
  serverResponse={...serverResponse,market_data_used:true};
  await nxInspectSavedDraft();
- if(!nxGet('nxSavedDraftPreview').textContent.includes('não foi confirmado'))
+ if(!nxGet('nxSavedDraftPreview').textContent.includes('não confirmou uma prévia isolada'))
   throw Error('Preview accepted untrusted execution claim');
  if(requests.length!==4||requests.some(p=>p.includes('/buy')))
   throw Error('Unexpected request from preview');
