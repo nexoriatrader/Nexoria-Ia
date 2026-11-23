@@ -802,6 +802,22 @@ html,body{max-width:100%;overflow-x:clip}
 </style>
 <style>
 
+/* Top-level activation disclosure, preserving the full pre-existing confirmation flow. */
+#dashboard.nx-calm-dashboard .nx-neo-command>.nx-neo-controls{
+ flex:1 0 100%;margin:3px 0 0;padding:0;border:0;border-top:1px solid #4c748485;border-radius:0;background:transparent;
+}
+#dashboard.nx-calm-dashboard .nx-neo-command>.nx-neo-controls>summary{
+ display:flex;justify-content:space-between;align-items:center;gap:12px;padding:14px 2px 0;min-height:56px;cursor:pointer;
+}
+#dashboard.nx-calm-dashboard .nx-neo-command>.nx-neo-controls>summary strong{color:#e7faf8;font-size:16px;letter-spacing:-.015em}
+#dashboard.nx-calm-dashboard .nx-neo-command>.nx-neo-controls .nx-neo-controls-expand{border-radius:11px;padding:10px 12px;background:#1f536b;border:1px solid #527f94;color:#d6f4ff;font-size:11px}
+#dashboard.nx-calm-dashboard .nx-neo-command>.nx-neo-controls[open]>summary{padding-bottom:11px;border-bottom:1px solid #4c748485}
+#dashboard.nx-calm-dashboard .nx-neo-command>.nx-neo-controls .dash-control-card{margin-top:12px;max-width:100%;background:#10293a}
+@media(max-width:640px){
+ #dashboard.nx-calm-dashboard .nx-neo-command>.nx-neo-controls>summary{gap:7px;min-height:53px}
+ #dashboard.nx-calm-dashboard .nx-neo-command>.nx-neo-controls>summary strong{font-size:15px}
+ #dashboard.nx-calm-dashboard .nx-neo-command>.nx-neo-controls .nx-neo-controls-expand{font-size:10px;padding:10px}
+}
 /* Minimal, monitoring-first robot panel: two visible surfaces only. */
 #dashboard.nx-calm-dashboard{max-width:800px;padding-top:8px}
 #dashboard.nx-calm-dashboard .nx-neo-command{margin:0 0 13px;border-radius:22px;padding:23px;background:linear-gradient(130deg,#12384b,#0c2437);box-shadow:0 10px 30px #0003}
@@ -1170,6 +1186,67 @@ html,body{max-width:100%;overflow-x:clip}
       <span id="nxNeoRunStatus" class="nx-neo-command-pill" data-state="unknown" role="status" aria-live="polite"><span class="nx-neo-command-dot" aria-hidden="true"></span>Consultando</span>
       <button id="nxNeoQuickStop" type="button" class="nx-neo-stop" onclick="nxNeoStopRunningRobot()" disabled hidden aria-label="Desligar robô em funcionamento"><span aria-hidden="true">■</span> Desligar robô</button>
     </div>
+  <details class="nx-neo-controls" id="nxNeoControls">
+    <summary aria-label="Mostrar controles de ativação e configurações"><span><span class="nx-neo-section-caption">CONTROLES</span><strong id="nxNeoActivationLabel">Ligar robô</strong></span><span class="nx-neo-controls-expand">Revisar e confirmar <span aria-hidden="true">⌄</span></span></summary>
+  <div class="card dash-control-card">
+    <div class="dash-control-head">
+      <div class="dash-robot-name"><span class="dash-robot-icon" aria-hidden="true">◈</span><div><strong>NEXORA IA</strong><span>Automatizador de operações</span></div></div>
+      <span id="robotState" class="hero-state">DESLIGADO</span>
+    </div>
+    <div class="dash-control-grid">
+      <div class="dash-control-main">
+        <button id="robotButton" class="hero-action" disabled aria-disabled="true" onclick="toggleRobot()">LIGAR ROBÔ</button>
+        <div class="dash-control-actions">
+          <button id="configureRobotButton" class="dash-configure-button" type="button" onclick="go('robot-config')">⚙ CONFIGURAR ROBÔ</button>
+          <div class="dash-access">
+            <span>Tempo disponível Robô</span>
+            <strong id="dashboardAccessCountdown">Consultando...</strong>
+            <button class="dash-add-time" type="button" onclick="go('account')" title="Acessar indicações e planos na Minha Conta">＋ ADICIONAR TEMPO</button>
+          </div>
+        </div>
+      </div>
+      <div class="dash-balance-grid">
+        <div class="dash-balance-tile">
+          <span class="dash-balance-label">Saldo conta DEMO</span>
+          <strong id="balanceMetric">—</strong>
+          <small>Saldo de treinamento · Deriv</small>
+          <a class="dash-balance-action dash-demo-action" href="https://home.deriv.com/dashboard" target="_blank" rel="noopener noreferrer" title="Abrir a Deriv, selecionar conta DEMO e repor o saldo virtual">↻ ATUALIZAR SALDO FICTÍCIO <span aria-hidden="true">↗</span></a>
+        </div>
+        <div class="dash-balance-tile">
+          <span class="dash-balance-label">Saldo conta REAL</span>
+          <strong id="realBalanceMetric">—</strong>
+          <small id="realBalanceReason">Consultando saldo...</small>
+          <a class="dash-balance-action dash-real-action" href="https://home.deriv.com/dashboard/deposit?from=portfolio&amp;depositSheet=1&amp;returnTo=%2Fportfolio&amp;currency=USD" target="_blank" rel="noopener noreferrer" title="Abrir a página de depósito da Deriv">＋ RECARREGAR SALDO <span aria-hidden="true">↗</span></a>
+        </div>
+      </div>
+    </div>
+    <div id="robotStartNotice" class="robot-notice" role="alert" aria-live="polite" hidden>
+      <strong id="robotNoticeTitle"></strong>
+      <p id="robotNoticeText"></p>
+      <div id="robotNoticeOptions" hidden>
+        <p>Para continuar, você pode ajustar seu Stop Loss nas configurações ou desativar esse limite (não recomendado: aumenta o risco). Você também pode iniciar uma nova sessão de risco DEMO. Isso reinicia o cálculo dos stops da sessão, mas NÃO apaga perdas, resultados nem altera o saldo da Deriv.</p>
+        <div class="actions"><button class="outline" type="button" onclick="go('settings')">AJUSTAR STOP LOSS</button><button class="outline" type="button" onclick="resetRiskSession()">REINICIAR SESSÃO</button></div>
+        <p class="helper">O histórico oficial e o saldo Deriv não podem ser apagados pelo painel. Os limites de segurança permanecem ativos.</p>
+      </div>
+    </div>
+    
+    <div class="dash-hidden-runtime hidden">
+      <div id="robotLiveCard" class="robot-live-card offline"><span id="robotLiveLabel">ROBÔ OFFLINE</span><span id="robotLiveCopy">Aguardando ativação</span></div>
+      <div class="robot-details-content hidden" aria-label="Análise do Robô Trader IA">
+      <p id="autopilotVersion" class="helper"><strong>Automatizador NEXORA IA</strong></p>
+      <div class="market-schedule" aria-label="Cronograma automático de mercados" role="status">
+        <div class="market-schedule-row"><span class="market-schedule-dot active" id="forexScheduleDot"></span><span>Forex</span><strong id="forexScheduleStatus">Verificando horário</strong></div>
+        <div class="market-schedule-row"><span class="market-schedule-dot" id="volScheduleDot"></span><span>Deriv (Volatility)</span><strong id="volScheduleStatus">Verificando horário</strong></div>
+        <span class="market-schedule-note">Troca automática · Brasília: Forex 05h–14h (dias úteis)</span>
+      </div>
+      <p id="v2ScannerHealth" class="helper" role="status">Scanner: verificando condições · última análise —</p>
+      <p id="v2Opportunity" class="helper" role="status">● Oportunidade encontrada: Nenhuma no momento</p>
+    </div>
+      <span id="robotMessage"></span><span id="riskSessionMetric"></span><span id="feedState"></span>
+      <span id="lastOrder"></span>
+    </div>
+  </div>
+  </details>
   </section>
 
   <section class="nx-calm-activity" aria-labelledby="nxCalmActivityHeading">
@@ -1294,67 +1371,7 @@ html,body{max-width:100%;overflow-x:clip}
     </div>
   </section>
 
-  <details class="nx-neo-controls" id="nxNeoControls">
-    <summary><span><span class="nx-neo-section-caption">OPÇÕES COMPLEMENTARES</span><strong>Configurações e contas</strong></span><span class="nx-neo-controls-expand">Ver detalhes <span aria-hidden="true">⌄</span></span></summary>
-  <div class="card dash-control-card">
-    <div class="dash-control-head">
-      <div class="dash-robot-name"><span class="dash-robot-icon" aria-hidden="true">◈</span><div><strong>NEXORA IA</strong><span>Automatizador de operações</span></div></div>
-      <span id="robotState" class="hero-state">DESLIGADO</span>
-    </div>
-    <div class="dash-control-grid">
-      <div class="dash-control-main">
-        <button id="robotButton" class="hero-action" disabled aria-disabled="true" onclick="toggleRobot()">LIGAR ROBÔ</button>
-        <div class="dash-control-actions">
-          <button id="configureRobotButton" class="dash-configure-button" type="button" onclick="go('robot-config')">⚙ CONFIGURAR ROBÔ</button>
-          <div class="dash-access">
-            <span>Tempo disponível Robô</span>
-            <strong id="dashboardAccessCountdown">Consultando...</strong>
-            <button class="dash-add-time" type="button" onclick="go('account')" title="Acessar indicações e planos na Minha Conta">＋ ADICIONAR TEMPO</button>
-          </div>
-        </div>
-      </div>
-      <div class="dash-balance-grid">
-        <div class="dash-balance-tile">
-          <span class="dash-balance-label">Saldo conta DEMO</span>
-          <strong id="balanceMetric">—</strong>
-          <small>Saldo de treinamento · Deriv</small>
-          <a class="dash-balance-action dash-demo-action" href="https://home.deriv.com/dashboard" target="_blank" rel="noopener noreferrer" title="Abrir a Deriv, selecionar conta DEMO e repor o saldo virtual">↻ ATUALIZAR SALDO FICTÍCIO <span aria-hidden="true">↗</span></a>
-        </div>
-        <div class="dash-balance-tile">
-          <span class="dash-balance-label">Saldo conta REAL</span>
-          <strong id="realBalanceMetric">—</strong>
-          <small id="realBalanceReason">Consultando saldo...</small>
-          <a class="dash-balance-action dash-real-action" href="https://home.deriv.com/dashboard/deposit?from=portfolio&amp;depositSheet=1&amp;returnTo=%2Fportfolio&amp;currency=USD" target="_blank" rel="noopener noreferrer" title="Abrir a página de depósito da Deriv">＋ RECARREGAR SALDO <span aria-hidden="true">↗</span></a>
-        </div>
-      </div>
-    </div>
-    <div id="robotStartNotice" class="robot-notice" role="alert" aria-live="polite" hidden>
-      <strong id="robotNoticeTitle"></strong>
-      <p id="robotNoticeText"></p>
-      <div id="robotNoticeOptions" hidden>
-        <p>Para continuar, você pode ajustar seu Stop Loss nas configurações ou desativar esse limite (não recomendado: aumenta o risco). Você também pode iniciar uma nova sessão de risco DEMO. Isso reinicia o cálculo dos stops da sessão, mas NÃO apaga perdas, resultados nem altera o saldo da Deriv.</p>
-        <div class="actions"><button class="outline" type="button" onclick="go('settings')">AJUSTAR STOP LOSS</button><button class="outline" type="button" onclick="resetRiskSession()">REINICIAR SESSÃO</button></div>
-        <p class="helper">O histórico oficial e o saldo Deriv não podem ser apagados pelo painel. Os limites de segurança permanecem ativos.</p>
-      </div>
-    </div>
-    
-    <div class="dash-hidden-runtime hidden">
-      <div id="robotLiveCard" class="robot-live-card offline"><span id="robotLiveLabel">ROBÔ OFFLINE</span><span id="robotLiveCopy">Aguardando ativação</span></div>
-      <div class="robot-details-content hidden" aria-label="Análise do Robô Trader IA">
-      <p id="autopilotVersion" class="helper"><strong>Automatizador NEXORA IA</strong></p>
-      <div class="market-schedule" aria-label="Cronograma automático de mercados" role="status">
-        <div class="market-schedule-row"><span class="market-schedule-dot active" id="forexScheduleDot"></span><span>Forex</span><strong id="forexScheduleStatus">Verificando horário</strong></div>
-        <div class="market-schedule-row"><span class="market-schedule-dot" id="volScheduleDot"></span><span>Deriv (Volatility)</span><strong id="volScheduleStatus">Verificando horário</strong></div>
-        <span class="market-schedule-note">Troca automática · Brasília: Forex 05h–14h (dias úteis)</span>
-      </div>
-      <p id="v2ScannerHealth" class="helper" role="status">Scanner: verificando condições · última análise —</p>
-      <p id="v2Opportunity" class="helper" role="status">● Oportunidade encontrada: Nenhuma no momento</p>
-    </div>
-      <span id="robotMessage"></span><span id="riskSessionMetric"></span><span id="feedState"></span>
-      <span id="lastOrder"></span>
-    </div>
-  </div>
-  </details>
+
 
   <details class="nx-neo-more" id="nxNeoMore">
     <summary><span>Detalhes e resultados</span><span class="nx-neo-more-action">Ver informações <span aria-hidden="true">⌄</span></span></summary>
@@ -2129,6 +2146,7 @@ function renderNxNeoTopCommand(status){
  pill.dataset.state=state;
  pill.textContent=running?'● Em funcionamento':interrupted?'● Interrompido':status.auto_buy_enabled?'● Pausado':'● Indisponível';
  $('nxNeoRunHelp').textContent=running?'Processo ativo · estado confirmado':interrupted?'Interrupção informada pelo servidor':'Monitoramento e informações do sistema';
+ $('nxNeoActivationLabel').textContent=running?'Configurações':'Ligar robô';
  stop.hidden=!running;
  stop.disabled=!running||$('robotButton').dataset.commandPending==='true'||stop.dataset.commandPending==='true';
 }
@@ -2136,6 +2154,7 @@ function markNxNeoTopUncertain(){
  $('nxNeoRunStatus').dataset.state='unknown';
  $('nxNeoRunStatus').textContent='● Sem confirmação';
  $('nxNeoRunHelp').textContent='Falha na consulta · último estado pode estar desatualizado';
+ $('nxNeoActivationLabel').textContent='Verificar controles';
  // A last-known active process may still be stopped; never assume shutdown.
  const stop=$('nxNeoQuickStop');
  stop.hidden=!robotRunning;
