@@ -194,6 +194,7 @@ class RobotUsageMode(Base):
     __tablename__ = 'robot_usage_modes'
     user_id = Column(Integer, ForeignKey('users.id'), primary_key=True)
     mode = Column(String(16), nullable=False, default='intelligent')
+    preferences_json = Column(Text, nullable=True)  # Draft only; never arms the executor.
     updated_at = Column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
 
 
