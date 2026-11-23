@@ -47,7 +47,7 @@ def test_guided_configuration_preserves_seven_real_steps():
     assert 'aria-valuemax="7" aria-valuenow="1"' in panel
     assert "Um passo de cada vez" in panel
     assert "Navegar ou salvar preferências não liga o robô" in panel
-    assert "Treinamento utiliza saldo fictício" in SOURCE
+    assert "Treinamento usa saldo fictício" in SOURCE
     assert 'id="autoWizardBack"' in panel
     assert 'id="autoWizardNext"' in panel
     assert 'class="nx-guide-save-note"' in panel
