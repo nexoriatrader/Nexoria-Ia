@@ -1648,7 +1648,8 @@ def manual_signal_public(item):
         'id': item.id, 'symbol': item.symbol, 'direction': item.direction,
         'expiry_minutes': item.expiry_minutes,
         'scheduled_for': dt.astimezone(timezone.utc).isoformat(),
-        'status': 'PLANEJADO_SEM_EXECUCAO',
+        'status': ('HORARIO_PASSOU_SEM_EXECUCAO' if dt <= datetime.now(timezone.utc)
+                   else 'PLANEJADO_SEM_EXECUCAO'),
     }
 
 
