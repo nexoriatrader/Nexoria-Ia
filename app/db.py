@@ -187,6 +187,30 @@ class AutomationProfile(Base):
     updated_at=Column(DateTime(timezone=True),default=utcnow,onupdate=utcnow,nullable=False)
 
 
+
+
+class RobotUsageMode(Base):
+    """Per-user interface mode. Never authorizes operations or changes DEMO/REAL guards."""
+    __tablename__ = 'robot_usage_modes'
+    user_id = Column(Integer, ForeignKey('users.id'), primary_key=True)
+    mode = Column(String(16), nullable=False, default='intelligent')
+    updated_at = Column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
+
+
+class RobotManualSignal(Base):
+    """A user-owned schedule for review; no automatic purchase or order dispatch."""
+    __tablename__ = 'robot_manual_signals'
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey('users.id'), nullable=False, index=True)
+    symbol = Column(String(30), nullable=False)
+    direction = Column(String(4), nullable=False)
+    expiry_minutes = Column(Integer, nullable=False)
+    scheduled_for = Column(DateTime(timezone=True), nullable=False)
+    created_at = Column(DateTime(timezone=True), default=utcnow, nullable=False)
+    __table_args__ = (Index('ix_robot_manual_signals_user_schedule', 'user_id', 'scheduled_for'),)
+
+
+
 class RiskSession(Base):
     """Auditable manual DEMO risk reset boundary; historical orders stay untouched."""
     __tablename__ = 'risk_sessions'
