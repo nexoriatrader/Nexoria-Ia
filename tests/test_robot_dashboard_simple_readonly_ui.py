@@ -479,13 +479,20 @@ def test_minimal_robot_home_keeps_only_two_visible_surfaces():
     assert panel.index('class="nx-calm-activity"') < panel.index(
         '<details class="nx-calm-extra"'
     )
-    # Cards and the original broker controls remain mounted for existing
-    # state renders, but are no longer directly visible on the initial screen.
+    # The activation panel is one clear disclosure in the top control banner,
+    # not hidden inside another disclosure. Existing safeguards are unchanged.
+    before_activity = panel.split('<section class="nx-calm-activity"', 1)[0]
+    assert '<details class="nx-neo-controls" id="nxNeoControls">' in before_activity
+    assert 'id="nxNeoActivationLabel"' in before_activity
+    assert 'id="robotButton"' in before_activity
+    assert 'id="robotStartNotice"' in before_activity
+    assert '<details class="nx-neo-controls" id="nxNeoControls" open' not in panel
+    assert 'Revisar e confirmar' in before_activity
+    assert 'onclick="toggleRobot()"' in before_activity
+    # All secondary read-only cards stay in the separate "More information" area.
     advanced = panel.split('<details class="nx-calm-extra" id="nxCalmExtra">', 1)[1]
-    for element_id in ("robotEasyOverview", "nxNeoChartBars", "nxNeoControls",
-                       "robotButton", "robotStartNotice", "profitMetric",
-                       "realProfitMetric", "dashScanMonitor", "nxNeoMore",
-                       "nxNeoChartBars"):
+    for element_id in ("robotEasyOverview", "nxNeoChartBars", "profitMetric",
+                       "realProfitMetric", "dashScanMonitor", "nxNeoMore"):
         assert 'id="' + element_id + '"' in advanced
         assert 'id="' + element_id + '"' not in panel.split(
             '<details class="nx-calm-extra" id="nxCalmExtra">', 1
@@ -551,3 +558,32 @@ if(!$('nxCalmActivityDescription').textContent.includes('desatualizada'))
         capture_output=True, text=True, check=False, timeout=20
     )
     assert result.returncode == 0, result.stderr
+
+
+
+def test_activation_link_is_top_level_and_requires_existing_confirmation():
+    """A visible top shortcut only expands the original safeguarded controls."""
+    panel = HTML.split(
+        '<section id="dashboard" class="hidden nx-neo-dashboard nx-calm-dashboard">', 1
+    )[1].split('<section id="robot-config" class="hidden">', 1)[0]
+    top = panel.split('<section class="nx-calm-activity"', 1)[0]
+    assert top.index('id="nxNeoQuickStop"') < top.index('id="nxNeoControls"')
+    assert top.index('id="nxNeoControls"') < top.index('id="robotButton"')
+    assert 'aria-label="Mostrar controles de ativação e configurações"' in top
+    assert 'id="nxNeoActivationLabel">Ligar robô</strong>' in top
+    assert 'Revisar e confirmar' in top
+    assert 'id="robotButton" class="hero-action" disabled aria-disabled="true"' in top
+    assert 'onclick="nxNeoStopRunningRobot()"' in top
+    assert 'onclick="toggleRobot()"' in top
+    assert "if(!await askRobotStartConfirmation(profile,risk,catalogue))return;" in HTML
+    assert "if(!health.real_orders_enabled)" in HTML
+    assert "if(robotRunning)await toggleRobot();" in HTML
+    assert "'nxNeoActivationLabel'" in HTML
+    assert "running?'Configurações':'Ligar robô'" in HTML
+    assert "textContent='Verificar controles';" in HTML
+    # The visual shortcut does not invent an unguarded start path.
+    between = HTML.split('function renderNxNeoTopCommand(status){', 1)[1].split(
+        'function renderRobotEasyOverview(status){', 1
+    )[0]
+    for text in ("fetch(", "/api/autopilot/start", "POST", "sendBeacon"):
+        assert text not in between
