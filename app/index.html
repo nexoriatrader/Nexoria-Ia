@@ -2992,7 +2992,7 @@ async function refreshDashboard(){
      $('autopilotVersion').textContent='NEXORA IA · '+(automationRadio('autoStrategy')||'pulso_v2')+' · '+(automationRadio('autoMarket')||'derived').toUpperCase();
      $('v2ScannerHealth').textContent='Scanner NEXORA · estratégia selecionada · análise de velas fechadas';
      $('v2Opportunity').textContent='● Aguardando novo sinal no mercado selecionado';
-   }else if(status.v2_available){
+   }else if(status.v2_available&&!nxWizardDraftPending&&nxDashboardSavedMode!=='manual'){
      req('/api/autopilot/v2/scanner-status').then(data=>{
        if(sequence!==dashboardStatusSequence)return;
        const scan=data.scan||{};
@@ -4089,20 +4089,39 @@ function nxDashboardManualButton(status){
  btn.hidden=nxDashboardSavedMode!=='manual';
 }
 async function nxOpenManualSignals(){
- const f=nxGet('nxSignalFeedback');f.textContent='Carregando...';
+ const f=nxGet('nxSignalFeedback'),send=nxGet('nxSignalSubmit');
+ const select=nxGet('nxSignalAsset');
+ send.disabled=true;select.disabled=true;select.replaceChildren();
+ f.textContent='Abrindo agenda de estudo...';
  try{
-  const [mode,profile]=await Promise.all([req('/api/robot/mode'),req('/api/automation/profile')]);
-  if(mode.mode!=='manual')throw Error('Configure o modo Manual primeiro.');
-  const market=profile.market==='volatility'?'derived':profile.market||'derived';
+  const mode=await req('/api/robot/mode');
+  if(mode.mode!=='manual')throw Error('Selecione o modo Manual no assistente.');
+ }catch(e){
+  f.textContent=e.message;nxGet('nxSignalList').textContent='Agenda indisponível.';
+  return;
+ }
+ // Saved annotations are independent of the live broker catalogue.
+ // Display and allow removal even when the catalogue request times out.
+ try{
+  await nxRefreshManualSignals();
+  f.textContent='Agenda carregada. Horários são somente registros, sem compra automática.';
+ }catch(e){
+  f.textContent='Não foi possível consultar a agenda salva: '+e.message;
+ }
+ try{
+  const profile=await req('/api/automation/profile').catch(()=>({market:'derived'}));
+  const market=profile?.market==='volatility'?'derived':profile?.market||'derived';
   const cat=await req('/api/automation/catalogue?market='+encodeURIComponent(market));
-  const select=nxGet('nxSignalAsset');select.replaceChildren();
+  if(activePage!=='robot-manual-signals')return;
   for(const item of cat.items||[]){
    const opt=document.createElement('option');opt.value=item.symbol;
    opt.textContent=(item.name||item.symbol)+' · '+item.symbol;select.append(opt);
   }
-  if(!select.options.length)throw Error('Catálogo da Deriv indisponível.');
-  await nxRefreshManualSignals();f.textContent='Agenda de planejamento; nenhuma compra automática.';
- }catch(e){f.textContent=e.message;nxGet('nxSignalList').textContent='Agenda indisponível.'}
+  if(!select.options.length)throw Error('Catálogo sem ativos disponíveis');
+  select.disabled=false;send.disabled=false;
+ }catch(e){
+  f.textContent='Agenda salva disponível; não é possível criar novos sinais sem o catálogo da Deriv. '+e.message;
+ }
 }
 async function nxRefreshManualSignals(){
  const r=await req('/api/robot/manual-signals'),list=nxGet('nxSignalList');list.replaceChildren();
