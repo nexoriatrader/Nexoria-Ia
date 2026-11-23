@@ -5,6 +5,7 @@ BEGIN;
 CREATE TABLE IF NOT EXISTS robot_usage_modes (
     user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
     mode VARCHAR(16) NOT NULL DEFAULT 'intelligent',
+    preferences_json TEXT NULL,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     CONSTRAINT robot_usage_modes_valid_mode CHECK (mode IN ('intelligent','manual'))
 );
@@ -23,6 +24,8 @@ CREATE INDEX IF NOT EXISTS ix_robot_manual_signals_user_schedule
     ON robot_manual_signals (user_id, scheduled_for);
 COMMIT;
 
+-- Apenas para o layout inicial: o campo preferences_json registra um rascunho de
+-- treinamento, não é interpretado pelo executor DEMO/REAL.
 -- Verificação após aplicação:
 -- SELECT tablename FROM pg_tables WHERE schemaname = 'public'
 -- AND tablename IN ('robot_usage_modes','robot_manual_signals');
