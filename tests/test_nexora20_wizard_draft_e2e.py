@@ -189,3 +189,71 @@ def test_no_session_cannot_read_or_save_wizard(tmp_path, monkeypatch):
         assert client.post("/api/robot/wizard", json=BASE).status_code == 401
     finally:
         engine.dispose()
+
+def test_pending_wizard_draft_is_never_an_activation_permission(tmp_path, monkeypatch):
+    """Both modes fail closed even if a legacy DEMO/REAL executor exists."""
+    client, factory, engine, (a, _) = planning_client(tmp_path, monkeypatch)
+    order = AsyncMock(side_effect=AssertionError("No broker endpoint should be called"))
+    monkeypatch.setattr(main, "demo_buy", order)
+    monkeypatch.setattr(main.real_runtime, "real_available", lambda: True)
+    try:
+        intelligent = {**BASE, "mode": "intelligent"}
+        response = client.post("/api/robot/wizard", json=intelligent)
+        assert response.status_code == 200, response.text
+        status = client.get("/api/status").json()
+        assert status["robot_usage_mode"] == "intelligent"
+        assert status["wizard_draft_pending"] is True
+        readiness = client.get("/api/autopilot/readiness")
+        assert readiness.status_code == 200
+        assert readiness.json()["ready"] is False
+        assert "rascunho" in readiness.json()["reason"].lower()
+        demo_start = client.post("/api/autopilot/start",
+                                 json={"confirm": "START_DEMO_AUTOPILOT"})
+        assert demo_start.status_code == 409
+        assert "rascunho" in demo_start.json()["detail"].lower()
+        real_start = client.post("/api/autopilot/start",
+                                 json={"confirm": "START_REAL_AUTOPILOT"})
+        assert real_start.status_code == 409
+        assert "rascunho" in real_start.json()["detail"].lower()
+        # The legacy endpoint may not silently retain a draft for the wrong mode.
+        assert client.post("/api/robot/mode", json={"mode": "manual"}).status_code == 409
+        with factory() as sess:
+            assert sess.get(db.RobotUsageMode, a).mode == "intelligent"
+            assert sess.get(db.RobotRun, a) is None
+            assert sess.get(db.AutoPilotResumeConsent, a) is None
+        order.assert_not_awaited()
+    finally:
+        engine.dispose()
+
+
+def test_mode_and_draft_remain_private_in_status(tmp_path, monkeypatch):
+    client, _, engine, _ = planning_client(tmp_path, monkeypatch)
+    try:
+        assert client.post("/api/robot/wizard", json=BASE).status_code == 200
+        info = client.get("/api/status").json()
+        assert info["robot_usage_mode"] == "manual"
+        assert info["wizard_draft_pending"] is True
+        client.cookies.set("nexora_sid", "draft_b")
+        info = client.get("/api/status").json()
+        assert info["robot_usage_mode"] == "intelligent"
+        assert info["wizard_draft_pending"] is False
+    finally:
+        engine.dispose()
+
+
+def test_dashboard_single_status_source_and_broker_offline_schedule():
+    from pathlib import Path
+    html = (Path(__file__).resolve().parents[1] / "app/index.html").read_text()
+    refresh = html.split("async function refreshDashboard(){", 1)[1].split(
+        "let robotStartDialogResolver", 1)[0]
+    assert "nxDashboardManualButton(status);" in refresh
+    assert "nxWizardDraftPending&&!robotRunning" in refresh
+    assert "RASCUNHO · NÃO ATIVADO" in refresh
+    # The dashboard does not need to fetch a separate mode after /api/status.
+    navigation = html.split("function go(v){", 1)[1].split("function fail(msg)", 1)[0]
+    assert "nxDashboardManualButton();" not in navigation
+    open_schedule = html.split("async function nxOpenManualSignals(){", 1)[1].split(
+        "async function nxRefreshManualSignals(){", 1)[0]
+    assert open_schedule.index("await nxRefreshManualSignals()") < open_schedule.index(
+        "req('/api/automation/catalogue?market='")
+    assert "Agenda salva disponível" in open_schedule
