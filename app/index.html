@@ -801,6 +801,47 @@ html,body{max-width:100%;overflow-x:clip}
 @media(max-width:620px){.lp-plan-grid{grid-template-columns:1fr;max-width:430px}.lp-plan{padding:16px}.lp-faq-list summary{padding:15px;font-size:13px}.lp-faq-list details p{padding:0 15px 16px}}
 </style>
 <style>
+/* Minimal, monitoring-first robot panel: two visible surfaces only. */
+#dashboard.nx-calm-dashboard{max-width:800px;padding-top:8px}
+#dashboard.nx-calm-dashboard .nx-neo-command{margin:0 0 13px;border-radius:22px;padding:23px;background:linear-gradient(130deg,#12384b,#0c2437);box-shadow:0 10px 30px #0003}
+#dashboard.nx-calm-dashboard .nx-neo-command-symbol{width:50px;height:50px;flex-basis:50px;border-radius:16px}
+#dashboard.nx-calm-dashboard .nx-neo-command-subtext{font-size:11px}
+#dashboard .nx-calm-activity{background:linear-gradient(145deg,#112d42,#0b1d2e);border:1px solid #34566d;border-radius:21px;padding:22px;box-shadow:0 7px 27px #0003}
+#dashboard .nx-calm-heading{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+#dashboard .nx-calm-heading-icon{display:grid;place-items:center;width:38px;height:38px;border-radius:12px;background:#214c64;color:#a9e8f3;font-size:23px}
+#dashboard .nx-calm-heading h2{font-size:16px;line-height:1.3;font-weight:850;letter-spacing:-.025em;margin:4px 0 0;color:#eaf8ff}
+#dashboard .nx-calm-connection{margin-left:auto;padding:7px 10px;border-radius:20px;border:1px solid #56788b;color:#c1d7e7;background:#132d3f;font-size:10px;font-weight:800}
+#dashboard .nx-calm-connection[data-state="ok"]{color:#a6ebd2;background:#15392f;border-color:#347e69}
+#dashboard .nx-calm-connection[data-state="uncertain"]{color:#ffdea5;background:#39291c;border-color:#967149}
+#dashboard .nx-calm-action{margin-top:23px;padding:0 2px;min-height:70px}
+#dashboard .nx-calm-action strong{display:block;color:#e9f9ff;font-size:clamp(25px,4.5vw,32px);line-height:1.18;letter-spacing:-.04em;font-weight:920}
+#dashboard .nx-calm-action p{font-size:13px;color:#a6bfd0;margin:10px 0 0;line-height:1.5}
+#dashboard .nx-calm-updated{display:flex;align-items:center;gap:8px;border-top:1px solid #355569;padding-top:13px;margin-top:19px;font-size:11px;color:#8aafc5}
+#dashboard .nx-calm-live-dot{width:7px;height:7px;flex:0 0 7px;background:#68c8bb;border-radius:50%}
+#dashboard .nx-calm-extra{margin:15px 0 24px;border:1px solid #2c4558;border-radius:13px;background:#0e2131;padding:0 12px}
+#dashboard .nx-calm-extra>summary{display:flex;align-items:center;justify-content:space-between;gap:14px;cursor:pointer;list-style:none;color:#9fbfd0;font-size:12px;font-weight:800;min-height:46px;padding:0 3px}
+#dashboard .nx-calm-extra>summary::-webkit-details-marker{display:none}
+#dashboard .nx-calm-extra>summary:focus-visible{outline:3px solid #9de6fa;outline-offset:1px;border-radius:7px}
+#dashboard .nx-calm-extra[open]>summary{border-bottom:1px solid #355569;margin-bottom:14px}
+#dashboard .nx-calm-extra .nx-neo-top{margin-top:9px}
+#dashboard .nx-calm-extra .nx-neo-mobile-nav{position:static;margin:16px 0}
+@media(max-width:640px){
+ #dashboard.nx-calm-dashboard{padding-bottom:30px;max-width:100%}
+ #dashboard.nx-calm-dashboard .nx-neo-command{padding:16px;margin-bottom:11px;border-radius:18px;gap:11px}
+ #dashboard.nx-calm-dashboard .nx-neo-command-actions{width:100%;justify-content:space-between}
+ #dashboard.nx-calm-dashboard .nx-neo-command-symbol{width:44px;height:44px;flex-basis:44px;font-size:24px;border-radius:13px}
+ #dashboard.nx-calm-dashboard .nx-neo-command-identity h2{font-size:22px}
+ #dashboard.nx-calm-dashboard .nx-neo-stop{min-height:46px;flex:1}
+ #dashboard .nx-calm-activity{border-radius:18px;padding:17px}
+ #dashboard .nx-calm-heading{gap:9px}
+ #dashboard .nx-calm-heading-icon{width:32px;height:32px;font-size:20px}
+ #dashboard .nx-calm-heading h2{font-size:15px}
+ #dashboard .nx-calm-connection{margin-left:0}
+ #dashboard .nx-calm-action{margin-top:20px}
+ #dashboard .nx-calm-action strong{font-size:25px}
+ #dashboard .nx-calm-action p{font-size:12px}
+ #dashboard .nx-calm-extra .nx-neo-mobile-nav{display:grid;left:auto;right:auto;bottom:auto;transform:none}
+}
 /* V2 command surface: status and stop-only safety control at the top. */
 #dashboard .nx-neo-command{position:relative;display:flex;align-items:center;justify-content:space-between;gap:18px;flex-wrap:wrap;margin:0 0 15px;padding:21px 23px;border:1px solid #377b83;border-radius:23px;background:radial-gradient(ellipse at 100% 0%,#2da9ae31,transparent 60%),linear-gradient(120deg,#163e4e 0%,#10283c 53%,#0c2034 100%);box-shadow:inset 0 1px #d0fff31e,0 18px 40px #02091235}
 #dashboard .nx-neo-command-brand{display:flex;align-items:center;gap:14px;min-width:0}
@@ -1115,19 +1156,7 @@ html,body{max-width:100%;overflow-x:clip}
     <button class="setup-submit" id="setupSubmit" type="submit">FINALIZAR CONFIGURAÇÃO E IR PARA O PAINEL <span aria-hidden="true">→</span></button>
   </form>
 </section>
-<section id="dashboard" class="hidden nx-neo-dashboard">
-  <header class="nx-neo-top">
-    <div class="nx-neo-title-block">
-      <span class="nx-neo-kicker"><span class="nx-neo-kicker-dot" aria-hidden="true"></span> NEXORA · PAINEL</span>
-      <h1>Visão geral<span class="nx-neo-title-dot">.</span></h1>
-      <p>Acompanhe o sistema com clareza.</p>
-    </div>
-    <div class="nx-neo-top-actions">
-      <button id="robotEasyRefresh" class="nx-neo-refresh" type="button" onclick="refreshRobotEasyOverview()" aria-label="Atualizar dados do painel">↻ <span>Atualizar</span></button>
-      <button class="nx-neo-quick-link" type="button" onclick="go('results')">Histórico <span aria-hidden="true">↗</span></button>
-    </div>
-  </header>
-
+<section id="dashboard" class="hidden nx-neo-dashboard nx-calm-dashboard">
   <section class="nx-neo-command" aria-labelledby="nxNeoCommandTitle">
     <div class="nx-neo-command-brand">
       <div class="nx-neo-command-symbol" aria-hidden="true">✦</div>
@@ -1142,6 +1171,39 @@ html,body{max-width:100%;overflow-x:clip}
       <button id="nxNeoQuickStop" type="button" class="nx-neo-stop" onclick="nxNeoStopRunningRobot()" disabled hidden aria-label="Desligar robô em funcionamento"><span aria-hidden="true">■</span> Desligar robô</button>
     </div>
   </section>
+
+  <section class="nx-calm-activity" aria-labelledby="nxCalmActivityHeading">
+    <div class="nx-calm-heading">
+      <div class="nx-calm-heading-icon" aria-hidden="true">◷</div>
+      <div>
+        <span class="nx-neo-section-caption">AGORA</span>
+        <h2 id="nxCalmActivityHeading">O que está acontecendo?</h2>
+      </div>
+      <span id="nxCalmConnection" data-state="unknown" class="nx-calm-connection">Sem confirmação</span>
+    </div>
+    <div class="nx-calm-action" role="status" aria-live="polite">
+      <strong id="nxCalmActivityText">Consultando o sistema…</strong>
+      <p id="nxCalmActivityDescription">Aguardando informações do servidor.</p>
+    </div>
+    <div class="nx-calm-updated"><span class="nx-calm-live-dot" aria-hidden="true"></span><span id="nxCalmUpdated">Aguardando consulta</span></div>
+  </section>
+
+  <details class="nx-calm-extra" id="nxCalmExtra">
+    <summary><span>Mais informações</span><span aria-hidden="true">⌄</span></summary>
+
+  <header class="nx-neo-top">
+    <div class="nx-neo-title-block">
+      <span class="nx-neo-kicker"><span class="nx-neo-kicker-dot" aria-hidden="true"></span> NEXORA · PAINEL</span>
+      <h1>Visão geral<span class="nx-neo-title-dot">.</span></h1>
+      <p>Acompanhe o sistema com clareza.</p>
+    </div>
+    <div class="nx-neo-top-actions">
+      <button id="robotEasyRefresh" class="nx-neo-refresh" type="button" onclick="refreshRobotEasyOverview()" aria-label="Atualizar dados do painel">↻ <span>Atualizar</span></button>
+      <button class="nx-neo-quick-link" type="button" onclick="go('results')">Histórico <span aria-hidden="true">↗</span></button>
+    </div>
+  </header>
+
+
 
   <section id="robotEasyOverview" class="nx-neo-overview" aria-labelledby="robotEasyTitle">
     <div class="nx-neo-status-head">
@@ -1346,6 +1408,8 @@ html,body{max-width:100%;overflow-x:clip}
     <button type="button" onclick="go('results')"><span aria-hidden="true">▥</span><small>Histórico</small></button>
     <button type="button" onclick="go('account')"><span aria-hidden="true">◉</span><small>Conta</small></button>
   </nav>
+
+  </details>
 </section>
 <section id="robot-config" class="hidden">
   <div class="section-heading robot-config-page-heading">
@@ -2018,6 +2082,46 @@ function reportRobotEasyDiagnosisUncertain(){
  $('robotEasyDiagnosisExplanation').textContent=
   'A consulta falhou. Informações anteriores podem estar desatualizadas; nenhuma conclusão atual está confirmada.';
 }
+function renderNxCalmActivity(status){
+ // Authenticated read-only status display. Never initiate broker actions.
+ const scan=status.scan_progress||{},running=Boolean(status.running);
+ const interrupted=Boolean(status.interrupted_after_restart);
+ const raw=scan.last_checked_at||scan.last_scan_at;
+ const date=raw?new Date(raw):null;
+ const age=date&&!Number.isNaN(date.getTime())?Date.now()-date.getTime():NaN;
+ const recent=Number.isFinite(age)&&age>=-5000&&age<=120000;
+ let title='Sem atividade',detail='O sistema está pausado.';
+ if(interrupted){
+  title='Atividade interrompida';
+  detail='O servidor registrou uma interrupção.';
+ }else if(running&&!recent){
+  title='Aguardando dados';
+  detail='Nenhuma análise recente foi confirmada.';
+ }else if(running&&scan.stage==='scanning'){
+  title='Analisando informações';
+  detail='Verificando dados dos ativos selecionados.';
+ }else if(running&&recent){
+  title='Aguardando nova análise';
+  detail='Última verificação registrada pelo servidor.';
+ }else if(!running&&!status.auto_buy_enabled){
+  title='Sem atividade';
+  detail='O servidor informa que o processo não está disponível.';
+ }
+ $('nxCalmActivityText').textContent=title;
+ $('nxCalmActivityDescription').textContent=detail;
+ $('nxCalmConnection').dataset.state='ok';
+ $('nxCalmConnection').textContent='Conectado';
+ $('nxCalmUpdated').textContent='Consulta confirmada às '+new Intl.DateTimeFormat('pt-BR',{
+  timeZone:'America/Sao_Paulo',hour:'2-digit',minute:'2-digit'
+ }).format(new Date());
+}
+function markNxCalmActivityUnknown(){
+ $('nxCalmActivityText').textContent='Estado não confirmado';
+ $('nxCalmActivityDescription').textContent='Sem conexão: a atividade anterior pode estar desatualizada.';
+ $('nxCalmConnection').dataset.state='uncertain';
+ $('nxCalmConnection').textContent='Sem confirmação';
+ $('nxCalmUpdated').textContent='Não foi possível atualizar';
+}
 function renderNxNeoTopCommand(status){
  const running=Boolean(status.running),interrupted=Boolean(status.interrupted_after_restart);
  const pill=$('nxNeoRunStatus'),stop=$('nxNeoQuickStop');
@@ -2213,6 +2317,7 @@ async function refreshDashboard(){
    renderScanMonitor(status);
    renderRobotEasyOverview(status);
    renderNxNeoTopCommand(status);
+   renderNxCalmActivity(status);
    renderNxNeoScannerChart(status);
    const available=Boolean(status.auto_buy_enabled);
    $('robotState').textContent=robotRunning?'ATIVO':status.interrupted_after_restart?'INTERROMPIDO':available?'PRONTO':'INDISPONÍVEL';
@@ -2291,6 +2396,7 @@ async function refreshDashboard(){
    $('feedState').textContent='○ Comunicação temporariamente indisponível. Último estado do robô preservado.';
    reportRobotEasyUncertainty();
    markNxNeoTopUncertain();
+   markNxCalmActivityUnknown();
    markNxNeoScannerUncertain();
    // Keep the last known status; do not imply that the server stopped trading.
    return null;
