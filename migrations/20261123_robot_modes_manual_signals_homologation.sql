@@ -16,8 +16,13 @@ CREATE TABLE IF NOT EXISTS robot_manual_signals (
     direction VARCHAR(4) NOT NULL CHECK (direction IN ('CALL','PUT')),
     expiry_minutes INTEGER NOT NULL CHECK (expiry_minutes IN (1,3,5,15)),
     scheduled_for TIMESTAMPTZ NOT NULL,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    CONSTRAINT uq_robot_manual_signals_user_slot UNIQUE (user_id, symbol, direction, scheduled_for)
 );
+ALTER TABLE robot_usage_modes ADD COLUMN IF NOT EXISTS preferences_json TEXT;
+-- Enforce identical schedule slot uniqueness on databases where tables already exist.
+CREATE UNIQUE INDEX IF NOT EXISTS uq_robot_manual_signals_user_slot
+    ON robot_manual_signals (user_id, symbol, direction, scheduled_for);
 CREATE INDEX IF NOT EXISTS ix_robot_manual_signals_user_id
     ON robot_manual_signals (user_id);
 CREATE INDEX IF NOT EXISTS ix_robot_manual_signals_user_schedule
