@@ -1064,8 +1064,21 @@ async def lifespan(app):
 
 app=FastAPI(title='NEXORA IA',version=VERSION,lifespan=lifespan)
 
+# Bounded, read-only performance diagnostics: no account IDs, payloads, cookies,
+# URL queries or financial values may be included in timing logs.
+_REVIEW_READ_PATHS=frozenset((
+    '/api/automation/profile',
+    '/api/onboarding/config',
+    '/api/automation/catalogue',
+))
+
 @app.middleware('http')
 async def headers(request:Request, call_next):
+    # Only the three read-only review endpoints are timed. Never log identities,
+    # request bodies or catalogue query parameters.
+    review_path=request.url.path
+    review_start=(time.perf_counter()
+                  if request.method=='GET' and review_path in _REVIEW_READ_PATHS else None)
     # Same-origin browser calls; origin check on mutating requests protects session cookies from CSRF.
     if request.method in ('POST','PUT','PATCH','DELETE'):
         origin=request.headers.get('origin')
@@ -1074,6 +1087,12 @@ async def headers(request:Request, call_next):
             if not expected or origin.rstrip('/')!=expected:
                 return JSONResponse({'detail':'Origem não autorizada'},403)
     response=await call_next(request)
+    if review_start is not None:
+        elapsed_ms=(time.perf_counter()-review_start)*1000
+        response.headers['Server-Timing']=f'review_read;dur={elapsed_ms:.1f}'
+        if elapsed_ms>=1000:
+            log.warning('slow review read path=%s elapsed_ms=%.1f status=%d',
+                        review_path,elapsed_ms,response.status_code)
     response.headers.update({'Cache-Control':'no-store','X-Content-Type-Options':'nosniff','Referrer-Policy':'no-referrer',
         'X-Frame-Options':'DENY','Content-Security-Policy':"default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; connect-src 'self'; frame-ancestors 'none'"})
     return response
