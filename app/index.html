@@ -1962,6 +1962,7 @@ body:has(#dashboard:not(.hidden)) .nexora-logo-only .brand img{
       <div id="nxResearchQuality" role="group" aria-label="Pesquisa Intelligence 2.0 em homologação">
         <button class="outline" type="button" onclick="nxCheckResearchQuality()">VER ESTADO DA INTELLIGENCE 2.0</button>
         <p class="helper" id="nxResearchQualityNote" role="status" aria-live="polite">Consulta opcional e somente leitura. Não fornece sinais nem recomendações financeiras.</p>
+        <div id="nxResearchQualityItems" role="list" aria-label="Verificações de integridade da pesquisa"></div>
       </div>
     </div>
     <div class="nx-step" data-nx-simple="2" hidden>
@@ -1990,6 +1991,9 @@ body:has(#dashboard:not(.hidden)) .nexora-logo-only .brand img{
     <div class="nx-step" data-nx-simple="5" hidden>
       <h2>Finalizar configuração</h2><p class="helper">Revise seu rascunho de treinamento. Ele não é aplicado ao executor. No modo Manual, a agenda é separada.</p>
       <div id="nxReview" class="nx-summary"></div>
+      <button type="button" class="outline" id="nxPreviewSavedButton" onclick="nxInspectSavedDraft()">VERIFICAR RASCUNHO SALVO</button>
+      <div id="nxSavedDraftPreview" class="nx-summary" role="status" aria-live="polite" hidden></div>
+      <p class="helper">A verificação utiliza apenas a configuração já salva; não analisa preços, não simula resultados de mercado e não compra contratos.</p>
     </div>
     <p id="nxWizardFeedback" class="helper" role="status" aria-live="polite"></p>
     <div class="nx-wizard-nav"><button id="nxBack" class="outline" type="button" hidden onclick="nxStepChange(-1)">← VOLTAR</button><button id="nxNext" class="gold" type="button" onclick="nxStepChange(1)">CONTINUAR →</button><button id="nxFinish" class="gold" type="button" hidden onclick="nxSaveConfiguration()">SALVAR E FINALIZAR</button></div>
@@ -4000,24 +4004,78 @@ function nxShowReview(){
 }
 
 async function nxCheckResearchQuality(){
- const note=nxGet('nxResearchQualityNote');
- note.textContent='Consultando a disponibilidade da pesquisa, sem operações...';
+ const note=nxGet('nxResearchQualityNote'),panel=nxGet('nxResearchQualityItems');
+ const button=nxGet('nxResearchQuality').querySelector('button');
+ panel.replaceChildren();button.disabled=true;
+ note.textContent='Verificando evidências da pesquisa compartilhada, sem operações...';
  try{
   const result=await req('/api/homologation/robot/research?view=autonomous');
-  if(result.read_only!==true||result.execution_allowed!==false||result.orders_sent!==0){
-   note.textContent='Isolamento da pesquisa não confirmado; resultado descartado.';return;
+  if(result.read_only!==true||result.execution_allowed!==false||result.orders_sent!==0||
+     result.modifies_robot_settings!==false||result.probability_validated!==false||
+     result.report_kind!=='PUBLIC_RESEARCH_CONTEXT_NOT_TRADING_SIGNALS'||
+     !Array.isArray(result.items)||result.items.length>8){
+   note.textContent='A origem ou o isolamento das evidências não foi confirmado; nenhum item exibido.';
+   return;
   }
   const labels={
-   CURRENT_PUBLIC_RESEARCH:'Existe contexto de pesquisa público disponível.',
-   NO_CURRENT_PUBLIC_ITEMS:'Não há itens atuais disponíveis.',
-   SNAPSHOT_DIGEST_MISMATCH:'A integridade do registro não foi confirmada.',
-   SNAPSHOT_EXPIRED:'O registro público está desatualizado.'
+   CURRENT_PUBLIC_RESEARCH:'Pesquisa pública disponível para conferir a integridade das evidências.',
+   NO_CURRENT_PUBLIC_ITEMS:'Nenhum registro público atual encontrado.',
+   NO_SHARED_RESEARCH:'Pesquisa pública ainda não publicada neste ambiente.',
+   SNAPSHOT_DIGEST_MISMATCH:'A integridade do registro da pesquisa não foi confirmada.',
+   SNAPSHOT_EXPIRED:'Pesquisa pública desatualizada; dados anteriores não são exibidos.',
+   SNAPSHOT_UNTRUSTED:'Dados de pesquisa não validados; nenhum item exibido.',
+   SNAPSHOT_DUPLICATED:'Registro de pesquisa duplicado; nenhum item exibido.'
   };
-  note.textContent=(labels[result.state]||'Pesquisa sem estado confirmado.')+
-   ' Somente informação histórica ou de qualidade, sem sinais e sem ordens.';
+  note.textContent=(labels[result.state]||'Estado de pesquisa não confirmado.')+
+   ' Pontos de completude são qualidade dos dados, nunca probabilidade de acerto.';
+  if(result.state!=='CURRENT_PUBLIC_RESEARCH')return;
+  for(const item of result.items){
+   if(!item||!['RESEARCH_READY','WAIT_RECHECK','EXCLUDED'].includes(item.review_state)||
+      !Number.isInteger(item.evidence_completeness_points)||
+      item.metric_kind!=='DATA_COMPLETENESS_NOT_PROBABILITY'||
+      !/^[A-Za-z0-9_]{2,30}$/.test(item.symbol||'')||
+      !/^[a-z][a-z0-9_]{1,31}$/.test(item.market||'')||
+      !/^[a-f0-9]{64}$/.test(item.observation_fingerprint||'')){
+    panel.replaceChildren();
+    note.textContent='Algumas evidências não passaram pela validação do cliente; dados descartados.';
+    return;
+   }
+   const el=document.createElement('p');el.setAttribute('role','listitem');
+   const state={RESEARCH_READY:'Dados completos',WAIT_RECHECK:'Verificação pendente',EXCLUDED:'Fora do conjunto de pesquisa'}[item.review_state];
+   el.textContent=item.market+' · '+item.symbol+' — '+state+
+    ' · Completude '+item.evidence_completeness_points+'/100 (não é previsão)';
+   panel.append(el);
+  }
  }catch{
-  note.textContent='Pesquisa Intelligence 2.0 indisponível nesta instalação. Nenhuma operação foi realizada.';
- }
+  note.textContent='Intelligence 2.0 indisponível nesta instalação. Nenhum resultado foi inventado.';
+ }finally{button.disabled=false}
+}
+
+async function nxInspectSavedDraft(){
+ const button=nxGet('nxPreviewSavedButton'),panel=nxGet('nxSavedDraftPreview');
+ button.disabled=true;panel.hidden=false;
+ panel.textContent='Consultando apenas as preferências já salvas...';
+ try{
+  const result=await req('/api/robot/wizard/preview');
+  if(result.kind!=='SAVED_DRAFT_EDUCATIONAL_PREVIEW'||
+     result.read_only!==true||result.applied_to_executor!==false||
+     result.broker_contacted!==false||result.market_data_used!==false||
+     result.results_simulated!==false||result.orders_sent!==0||
+     result.predicted_outcome!==null||!Array.isArray(result.stages)||
+     !Array.isArray(result.notices)||result.stages.length!==3){
+    throw Error('O servidor não confirmou uma prévia isolada de operações');
+  }
+  const lines=[
+   'RASCUNHO SALVO · '+(result.mode==='manual'?'MANUAL':'INTELIGENTE'),
+   ...result.stages.map(stage=>stage.label),
+   ...result.notices,
+   'Nenhum contato com a corretora. Nenhum resultado financeiro simulado.'
+  ];
+  panel.textContent=lines.join('\n');
+ }catch(e){
+  panel.textContent='Não foi possível verificar o rascunho: '+e.message+
+    '. Nenhuma operação foi iniciada.';
+ }finally{button.disabled=false}
 }
 
 let nxWizardLoadToken=0,nxWizardEdited=false;
