@@ -598,9 +598,9 @@ def test_compact_always_visible_controls_do_not_enable_unguarded_start():
     assert 'id="nxNeoStartDisplay"' in panel
     assert 'id="nxNeoQuickStop"' in panel
     assert panel.index('id="nxNeoStartDisplay"') < panel.index('id="nxNeoQuickStop"')
-    assert 'id="nxNeoStartDisplay" type="button" class="nx-neo-start-display" disabled aria-disabled="true"' in panel
-    assert 'aria-label="Ligar robô: requer revisão e confirmação"' in panel
-    assert 'title="Ativação exige revisão e confirmação nos controles"' in panel
+    assert 'id="nxNeoStartDisplay" class="nx-neo-start-display" role="note"' in panel
+    assert 'aria-label="Ativação exige revisão e confirmação"' in panel
+    assert 'Ligar: confirmar</span>' in panel
     assert 'id="nxNeoQuickStop" type="button" class="nx-neo-stop"' in panel
     assert 'id="nxNeoControls"' in panel
     assert '#dashboard.nx-calm-dashboard .nx-neo-compact-actions' in HTML
@@ -624,3 +624,40 @@ def test_compact_always_visible_controls_do_not_enable_unguarded_start():
     )[0]
     for forbidden in ("fetch(", "/api/autopilot/start", "POST"):
         assert forbidden not in js
+
+
+
+def test_mobile_controls_no_fake_start_and_no_overflow():
+    """Regression for the mobile screenshot: no duplicate fake button or stretched grid."""
+    panel = HTML.split(
+        '<section id="dashboard" class="hidden nx-neo-dashboard nx-calm-dashboard">', 1
+    )[1].split('<section class="nx-calm-activity"', 1)[0]
+    top = panel.split('<details class="nx-neo-controls"', 1)[0]
+    assert 'id="nxNeoStartDisplay"' in top
+    assert 'role="note"' in top
+    assert 'id="nxNeoStartDisplay" type="button"' not in top
+    assert 'id="nxNeoQuickStop"' in top
+    assert 'onclick="nxNeoStopRunningRobot()"' in top
+    assert panel.count('id="robotButton"') == 1
+    assert panel.count('id="nxNeoAccountDetails"') == 1
+    controls = panel.split('<details class="nx-neo-controls"', 1)[1]
+    assert 'class="nx-neo-account"' in controls
+    assert "Informações de saldo" in controls
+    assert controls.index('class="nx-neo-account"') < controls.index(
+        'id="balanceMetric"'
+    )
+    assert '<details class="nx-neo-account" id="nxNeoAccountDetails" open' not in panel
+    assert 'id="robotButton"' in controls
+    assert "if(!await askRobotStartConfirmation(profile,risk,catalogue))return;" in HTML
+    assert "if(!health.real_orders_enabled)" in HTML
+    css = HTML.split("</head>", 1)[0]
+    assert "/* Calm hotfix: remove fake start button" in css
+    assert "display:flex!important;flex-direction:column" in css
+    assert "width:auto!important;height:auto!important" in css
+    assert "display:flex!important;flex-wrap:wrap" in css
+    assert "grid-template-columns:minmax(0,1fr)!important" in css
+    assert ".nx-neo-account .dash-balance-grid" in css
+    assert css.count("<style>") == css.count("</style>")
+    parser = _IndexTags()
+    parser.feed(HTML)
+    assert len(parser.ids) == len(set(parser.ids))
