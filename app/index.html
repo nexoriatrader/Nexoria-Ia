@@ -1225,6 +1225,219 @@ html,body{max-width:100%;overflow-x:clip}
  #dashboard.nx-calm-dashboard .nx-neo-controls .nx-neo-account .dash-balance-grid{grid-template-columns:minmax(0,1fr)!important}
 }
 </style>
+
+<style>
+/* NEXORA Glass Signature — scoped premium skin for the existing single control card.
+   UI only: no new trading commands, balance sources, or backend calls. */
+body:has(#dashboard:not(.hidden)){background:
+ radial-gradient(ellipse 46% 21% at 52% 20%,#1742646b 0%,transparent 100%),
+ radial-gradient(ellipse 28% 25% at 92% 50%,#95762e15 0%,transparent 95%),
+ linear-gradient(180deg,#071524 0%,#06111f 64%,#050d19 100%)!important}
+body:has(#dashboard:not(.hidden)) .shell{max-width:890px!important;padding-top:15px!important}
+body:has(#dashboard:not(.hidden)) .nexora-logo-only{
+ justify-content:center!important;padding:24px 0 30px!important;
+ border:0!important;position:relative;isolation:isolate
+}
+body:has(#dashboard:not(.hidden)) .nexora-logo-only::before{
+ content:"";position:absolute;inset:-30px 10% -25px;z-index:-1;pointer-events:none;
+ background:radial-gradient(ellipse at center,#1c8dca26,transparent 66%);filter:blur(16px)
+}
+body:has(#dashboard:not(.hidden)) .nexora-logo-only .brand img{
+ width:clamp(216px,42vw,328px)!important;max-width:90vw!important;height:auto!important;
+ filter:drop-shadow(0 0 11px #29d5f245) drop-shadow(0 9px 26px #004a7658)
+}
+#dashboard.nx-calm-dashboard{max-width:735px!important;position:relative;isolation:isolate}
+#dashboard.nx-calm-dashboard::before{
+ content:"";position:absolute;z-index:-1;pointer-events:none;
+ width:73%;height:155px;top:57%;left:-16%;
+ background:radial-gradient(ellipse,#13bde93b,transparent 68%);filter:blur(36px)
+}
+#dashboard.nx-calm-dashboard::after{
+ content:"";position:absolute;z-index:-1;pointer-events:none;
+ width:62%;height:170px;right:-20%;bottom:2%;
+ background:radial-gradient(ellipse,#d7a52f22,transparent 71%);filter:blur(38px)
+}
+#dashboard.nx-calm-dashboard .nx-neo-controls>.dash-control-card{
+ position:relative;isolation:isolate;
+ background:linear-gradient(148deg,#253b4ae9 0%,#172b40ef 32%,#0b2235f5 75%,#142636f8 100%)!important;
+ border:1px solid #6c91a8a3!important;border-radius:26px!important;
+ box-shadow:0 0 0 1px #d2f3ff12 inset,0 2px 5px #c8efff12 inset,0 23px 60px #010a16a1,
+  -11px 14px 41px #08aadd20,9px 18px 42px #e5ac2220!important;
+ padding:24px!important;overflow:hidden!important
+}
+#dashboard.nx-calm-dashboard .nx-neo-controls>.dash-control-card::before{
+ content:"";position:absolute;inset:0;z-index:-1;pointer-events:none;border-radius:inherit;
+ background:radial-gradient(circle at 0% 0%,#c4f1ff1a,transparent 38%),
+ linear-gradient(110deg,transparent 55%,#e4ae2d0a 100%)
+}
+#dashboard.nx-calm-dashboard .nx-neo-controls .dash-control-head{margin-bottom:23px!important;gap:13px!important}
+#dashboard.nx-calm-dashboard .nx-neo-controls .dash-robot-icon{
+ width:56px!important;height:56px!important;flex:0 0 56px!important;
+ border-radius:16px!important;border:1px solid #91b8d2a3!important;
+ background:linear-gradient(135deg,#50677a,#233749 70%)!important;
+ color:#b6e9ff!important;box-shadow:inset 0 2px 4px #fff2,0 6px 17px #030d19a8!important;
+ font-size:25px!important
+}
+#dashboard.nx-calm-dashboard .nx-neo-controls .dash-robot-name strong{
+ font-size:clamp(17px,3.3vw,23px)!important;font-weight:900!important;letter-spacing:-.025em!important
+}
+#dashboard.nx-calm-dashboard .nx-neo-controls .dash-robot-name span:not(.dash-robot-icon){
+ color:#a6bbc9!important;font-size:12px!important;margin-top:5px
+}
+#dashboard.nx-calm-dashboard .nx-neo-controls .hero-state{
+ display:inline-flex!important;align-items:center!important;justify-content:center!important;
+ min-height:36px!important;font-size:12px!important;font-weight:900!important;letter-spacing:.025em!important;
+ padding:9px 16px!important;color:#d7e5f1!important;
+ background:#334357!important;border:1px solid #698397!important;
+ box-shadow:inset 0 1px #fff2!important;text-shadow:none!important
+}
+#dashboard.nx-calm-dashboard .nx-neo-controls .hero-state[data-visual-state="ready"]{
+ color:#b8ffd9!important;background:linear-gradient(130deg,#16583f,#1a463b)!important;
+ border:1px solid #36db7c!important;box-shadow:0 0 0 2px #12cb5d21,0 0 18px #2df5783d,inset 0 1px #baffd734!important
+}
+#dashboard.nx-calm-dashboard .nx-neo-controls .hero-state[data-visual-state="active"]{
+ color:#c1ffec!important;background:#15544e!important;border-color:#57e6cc!important;
+ box-shadow:0 0 14px #42d9b537!important
+}
+#dashboard.nx-calm-dashboard .nx-neo-controls .hero-state[data-visual-state="interrupted"]{
+ color:#ffe6b7!important;background:#604322!important;border-color:#d7a85b!important
+}
+#dashboard.nx-calm-dashboard .nx-neo-controls .dash-control-main{
+ gap:12px!important;grid-template-columns:repeat(2,minmax(0,1fr))!important
+}
+#dashboard.nx-calm-dashboard .nx-neo-controls .dash-control-main .hero-action{
+ position:relative;border-radius:15px!important;min-height:59px!important;height:59px!important;
+ background:linear-gradient(132deg,#128ee0,#12d7e8)!important;
+ border:1px solid #41e6fb!important;color:#f6ffff!important;font-size:14px!important;
+ box-shadow:0 0 0 1px #e8ffff23 inset,0 8px 28px #0daef653,0 0 15px #0be5f94c!important;
+ text-shadow:0 1px 3px #005480!important;letter-spacing:.025em!important;
+ transition:filter .16s ease,box-shadow .16s ease!important
+}
+#dashboard.nx-calm-dashboard .nx-neo-controls .dash-control-main .hero-action:not(:disabled):hover{filter:brightness(1.07)!important}
+#dashboard.nx-calm-dashboard .nx-neo-controls .dash-control-main .hero-action:disabled{
+ opacity:.58!important;box-shadow:none!important;filter:saturate(.62)!important
+}
+#dashboard.nx-calm-dashboard .nx-neo-controls .dash-configure-button{
+ border-radius:15px!important;min-height:59px!important;height:59px!important;
+ border:1px solid #68869a!important;
+ background:linear-gradient(138deg,#374959,#253746 78%)!important;
+ color:#e3eaf1!important;font-size:12px!important;
+ box-shadow:inset 0 2px 4px #d1f2ff12,0 8px 18px #04111d5c!important
+}
+#dashboard.nx-calm-dashboard .nx-neo-controls .dash-access{
+ grid-column:1/-1!important;min-height:80px!important;padding:16px 18px!important;
+ border-radius:17px!important;border:1px solid #6983968c!important;
+ background:linear-gradient(125deg,#0b1d30,#10283a)!important;
+ box-shadow:inset 0 1px #def5ff10!important;gap:9px 14px!important
+}
+#dashboard.nx-calm-dashboard .nx-neo-controls .dash-access span{
+ display:block!important;color:#adc2d0!important;font-size:12px!important
+}
+#dashboard.nx-calm-dashboard .nx-neo-controls .dash-access strong{
+ font-size:clamp(22px,5vw,32px)!important;font-weight:700!important;
+ color:#f4fbff!important;line-height:1.25!important;letter-spacing:.01em!important
+}
+#dashboard.nx-calm-dashboard .nx-neo-controls .dash-add-time{
+ display:inline-flex!important;min-height:41px!important;max-width:none!important;
+ padding:10px 13px!important;border-radius:11px!important;
+ border:1px solid #adc5d7!important;color:#eaf7ff!important;
+ background:linear-gradient(145deg,#253d50,#152c40)!important;font-size:11px!important;
+ box-shadow:0 0 11px #b2d9ff22!important
+}
+#dashboard.nx-calm-dashboard .nx-neo-controls .nx-neo-account .dash-balance-grid{gap:12px!important}
+#dashboard.nx-calm-dashboard .nx-neo-controls .nx-neo-account .dash-balance-tile{
+ position:relative;border-radius:20px!important;overflow:hidden!important;
+ min-height:187px!important;padding:17px!important;
+ background:linear-gradient(150deg,#263e51,#13283f 56%,#123e4b)!important;
+ border:1px solid #5d859db0!important;
+ box-shadow:inset 0 1px #daefff17,0 11px 25px #02131d86!important
+}
+#dashboard.nx-calm-dashboard .nx-neo-controls .nx-neo-account .dash-balance-tile:first-child{
+ background:radial-gradient(ellipse at 100% 100%,#08dbcb4b,transparent 65%),
+ linear-gradient(135deg,#263e51,#132c42 76%)!important;
+ border-color:#3fbec8a3!important;box-shadow:0 10px 28px #00c9d92c,inset 0 1px #ceffff14!important
+}
+#dashboard.nx-calm-dashboard .nx-neo-controls .nx-neo-account .dash-balance-tile:nth-child(2){
+ background:radial-gradient(ellipse at 96% 100%,#d4a43847,transparent 72%),
+ linear-gradient(145deg,#3b3935,#202b3a 72%)!important;
+ border-color:#a89367b3!important;box-shadow:0 10px 28px #d0a53e21,inset 0 1px #fff2!important
+}
+#dashboard.nx-calm-dashboard .nx-neo-controls .nx-neo-account .dash-balance-label{
+ font-size:12px!important;color:#b9cedb!important;font-weight:700!important
+}
+#dashboard.nx-calm-dashboard .nx-neo-controls .nx-neo-account .dash-balance-tile:nth-child(2) .dash-balance-label{color:#ebd4a7!important}
+#dashboard.nx-calm-dashboard .nx-neo-controls .nx-neo-account .dash-balance-tile strong{
+ font-size:clamp(17px,4vw,27px)!important;font-weight:900!important;
+ margin:10px 0 8px!important;letter-spacing:-.025em!important;color:#eafcff!important
+}
+#dashboard.nx-calm-dashboard .nx-neo-controls .nx-neo-account .dash-balance-tile:first-child strong{color:#91f9eb!important}
+#dashboard.nx-calm-dashboard .nx-neo-controls .nx-neo-account .dash-balance-tile:nth-child(2) strong{color:#ffe0a2!important}
+#dashboard.nx-calm-dashboard .nx-neo-controls .nx-neo-account .dash-balance-tile small{
+ font-size:10px!important;line-height:1.5!important;color:#afc0ce!important
+}
+#dashboard.nx-calm-dashboard .nx-neo-controls .nx-neo-account .dash-balance-action{
+ min-height:43px!important;margin-top:auto!important;
+ background:linear-gradient(135deg,#1d3348,#10283d)!important;
+ border:1px solid #79aac8!important;color:#edf9ff!important;
+ border-radius:13px!important;box-shadow:0 0 10px #76cce51b!important
+}
+#dashboard.nx-calm-dashboard .nx-neo-controls .nx-neo-account .dash-real-action{
+ color:#f7e7c2!important;border-color:#c19b5f!important;
+ background:linear-gradient(145deg,#625130,#382d24)!important;box-shadow:0 0 10px #cda24917!important
+}
+#dashboard.nx-calm-dashboard button:focus-visible,#dashboard.nx-calm-dashboard a:focus-visible{
+ outline:3px solid #afeaf7!important;outline-offset:3px!important
+}
+#dashboard.nx-calm-dashboard .nx-premium-footer{
+ display:block!important;text-align:center;margin:34px auto 5px;padding:5px;
+ color:#7c98ab;font-size:11px;font-weight:650;letter-spacing:.045em
+}
+#dashboard.nx-calm-dashboard .nx-premium-footer span{color:#4b728e;margin:0 5px}
+@media(max-width:640px){
+ body:has(#dashboard:not(.hidden)) .shell{padding:8px 12px 36px!important}
+ body:has(#dashboard:not(.hidden)) .nexora-logo-only{padding:18px 0 24px!important}
+ body:has(#dashboard:not(.hidden)) .nexora-logo-only .brand img{width:clamp(180px,62vw,270px)!important}
+ #dashboard.nx-calm-dashboard .nx-neo-controls>.dash-control-card{padding:17px!important;border-radius:22px!important}
+ #dashboard.nx-calm-dashboard .nx-neo-controls .dash-robot-icon{
+   width:45px!important;height:45px!important;flex-basis:45px!important;font-size:23px!important
+ }
+ #dashboard.nx-calm-dashboard .nx-neo-controls .dash-robot-name strong{font-size:16px!important}
+ #dashboard.nx-calm-dashboard .nx-neo-controls .dash-robot-name span:not(.dash-robot-icon){font-size:10px!important}
+ #dashboard.nx-calm-dashboard .nx-neo-controls .hero-state{font-size:10px!important;padding:7px 10px!important;min-height:33px!important}
+ #dashboard.nx-calm-dashboard .nx-neo-controls .dash-control-main{gap:9px!important}
+ #dashboard.nx-calm-dashboard .nx-neo-controls .dash-control-main .hero-action,
+ #dashboard.nx-calm-dashboard .nx-neo-controls .dash-configure-button{
+  min-height:52px!important;height:52px!important;font-size:11px!important;padding:8px!important
+ }
+ #dashboard.nx-calm-dashboard .nx-neo-controls .dash-access{padding:12px!important;min-height:72px!important}
+ #dashboard.nx-calm-dashboard .nx-neo-controls .dash-access strong{font-size:clamp(19px,5.1vw,27px)!important}
+ #dashboard.nx-calm-dashboard .nx-neo-controls .dash-add-time{min-height:38px!important;padding:8px 11px!important;font-size:10px!important}
+ #dashboard.nx-calm-dashboard .nx-neo-controls .nx-neo-account .dash-balance-grid{gap:9px!important}
+ #dashboard.nx-calm-dashboard .nx-neo-controls .nx-neo-account .dash-balance-tile{
+   min-height:166px!important;padding:12px!important;border-radius:15px!important
+ }
+ #dashboard.nx-calm-dashboard .nx-neo-controls .nx-neo-account .dash-balance-label{font-size:11px!important}
+ #dashboard.nx-calm-dashboard .nx-neo-controls .nx-neo-account .dash-balance-tile strong{
+   font-size:clamp(14px,3.8vw,21px)!important
+ }
+ #dashboard.nx-calm-dashboard .nx-neo-controls .nx-neo-account .dash-balance-action{
+   padding:8px 5px!important;font-size:9px!important;min-height:45px!important
+ }
+ #dashboard.nx-calm-dashboard .nx-premium-footer{margin-top:29px}
+}
+@media(max-width:360px){
+ #dashboard.nx-calm-dashboard .nx-neo-controls .dash-robot-name{gap:7px!important}
+ #dashboard.nx-calm-dashboard .nx-neo-controls .dash-robot-name strong{font-size:14px!important}
+ #dashboard.nx-calm-dashboard .nx-neo-controls .hero-state{font-size:9px!important;padding:6px 8px!important}
+ #dashboard.nx-calm-dashboard .nx-neo-controls .nx-neo-account .dash-balance-grid{
+   grid-template-columns:repeat(2,minmax(0,1fr))!important
+ }
+ #dashboard.nx-calm-dashboard .nx-neo-controls .nx-neo-account .dash-balance-tile{padding:9px!important}
+}
+@media(prefers-reduced-motion:reduce){
+ #dashboard.nx-calm-dashboard .nx-neo-controls .dash-control-main .hero-action{transition:none!important}
+}
+</style>
 </head>
 <body>
 <div class="shell">
@@ -1466,6 +1679,7 @@ html,body{max-width:100%;overflow-x:clip}
   </div>
   </details>
   </section>
+  <footer class="nx-premium-footer">NEXORA IA <span aria-hidden="true">·</span> Deriv</footer>
 
   <section class="nx-calm-activity" aria-labelledby="nxCalmActivityHeading">
     <div class="nx-calm-heading">
@@ -2558,6 +2772,7 @@ async function refreshDashboard(){
    renderNxNeoScannerChart(status);
    const available=Boolean(status.auto_buy_enabled);
    $('robotState').textContent=robotRunning?'ATIVO':status.interrupted_after_restart?'INTERROMPIDO':available?'PRONTO':'INDISPONÍVEL';
+   $('robotState').dataset.visualState=robotRunning?'active':status.interrupted_after_restart?'interrupted':available?'ready':'unavailable';
    $('robotMessage').textContent=status.reason||'Aguardando oportunidades no mercado DEMO';
    const liveCard=$('robotLiveCard');
    liveCard.classList.toggle('offline',!robotRunning);
