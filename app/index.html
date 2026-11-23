@@ -1498,6 +1498,24 @@ body:has(#dashboard:not(.hidden)) .nexora-logo-only .brand img{
 }
 @media(max-width:350px){#robot-config .nx-guide-path li{font-size:8px;line-height:1.3}}
 @media(prefers-reduced-motion:reduce){#robot-config .auto-wizard-track span{transition:none!important}}
+
+/* NEXORA 2.0 guided mode selection, non-executing manual agenda. */
+#robot-config #automationConfigCard{display:none!important}
+#nxWizard2{max-width:700px;margin:auto}
+#nxWizard2 [hidden],#robot-manual-signals [hidden],#nxManualScheduleButton[hidden]{display:none!important}
+#nxWizard2 .nx-modes{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin:18px 0}
+#nxWizard2 .nx-mode{padding:18px;background:#163143;border:1px solid #466e84;border-radius:15px;color:inherit;text-align:left;min-height:148px;cursor:pointer}
+#nxWizard2 .nx-mode strong,#nxWizard2 .nx-mode small{display:block;margin-bottom:9px}
+#nxWizard2 .nx-mode small{line-height:1.5}
+#nxWizard2 .nx-mode[aria-pressed="true"]{border:2px solid #46d4b1;background:#12473e}
+#nxWizard2 .nx-step{margin:25px 0}
+#nxWizard2 .nx-fields{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+#nxWizard2 .nx-wizard-nav{display:flex;justify-content:space-between;gap:12px;margin-top:18px}
+#nxWizard2 .nx-example{background:#173746;padding:13px;border-left:3px solid #46d4b1;white-space:pre-line}
+#nxWizard2 .nx-summary{white-space:pre-line;line-height:1.8;padding:14px;border:1px solid #45677b;border-radius:12px}
+#robot-manual-signals .nx-signal-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+#robot-manual-signals .nx-signal-item{display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #45677b;gap:12px;padding:10px 0}
+@media(max-width:600px){#nxWizard2 .nx-modes,#nxWizard2 .nx-fields,#robot-manual-signals .nx-signal-grid{grid-template-columns:1fr}}
 </style>
 </head>
 <body>
@@ -1687,6 +1705,7 @@ body:has(#dashboard:not(.hidden)) .nexora-logo-only .brand img{
         <button id="robotButton" class="hero-action" disabled aria-disabled="true" onclick="toggleRobot()">LIGAR ROBÔ</button>
         <div class="dash-control-actions">
           <button id="configureRobotButton" class="dash-configure-button" type="button" onclick="go('robot-config')">⚙ CONFIGURAR ROBÔ</button>
+          <button id="nxManualScheduleButton" class="dash-configure-button" type="button" hidden onclick="go('robot-manual-signals')">☷ AGENDAR SINAIS</button>
           <div class="dash-access">
             <span>Tempo disponível Robô</span>
             <strong id="dashboardAccessCountdown">Consultando...</strong>
@@ -1926,7 +1945,49 @@ body:has(#dashboard:not(.hidden)) .nexora-logo-only .brand img{
     <div><div class="eyebrow">NEXORA · CONFIGURAÇÃO GUIADA</div><h1>Configurar Robô</h1><p>Um passo de cada vez. Entenda suas escolhas antes de salvar qualquer preferência.</p></div>
     <button class="outline robot-back-button" type="button" onclick="go('dashboard')">← VOLTAR AO PAINEL</button>
   </div>
-  <div class="card auto-config" id="automationConfigCard">
+  
+  <div class="card" id="nxWizard2">
+    <div class="surface-heading">NEXORA 2.0 · Configuração simples</div>
+    <p id="nxWizardCount" role="status" aria-live="polite">Etapa 1 de 5</p>
+    <div class="nx-step" data-nx-simple="1">
+      <h2>Qual robô deseja usar?</h2>
+      <p class="helper">Escolha um modo. Salvar as preferências nunca inicia o robô.</p>
+      <div class="nx-modes" role="group" aria-label="Modo de utilização">
+        <button id="nxIntelligentMode" class="nx-mode" type="button" data-nx-mode="intelligent" aria-pressed="true" onclick="nxSetMode('intelligent')"><strong>✦ Robô NEXORA Inteligente</strong><small>Análises automáticas no motor DEMO atual. Você informa entrada, ciclos e limites. A integração da Intelligence 2.0 continua em homologação.</small></button>
+        <button id="nxManualMode" class="nx-mode" type="button" data-nx-mode="manual" aria-pressed="false" onclick="nxSetMode('manual')"><strong>☷ Robô NEXORA Manual</strong><small>Você registra sinais próprios com ativo, horário, direção e expiração. Escolhe ciclos OU Martingale.</small></button>
+      </div>
+    </div>
+    <div class="nx-step" data-nx-simple="2" hidden>
+      <h2>Valor de entrada</h2><p class="helper">Valor inicial em USD, no ambiente DEMO com saldo fictício.</p>
+      <div class="field"><label for="nxAmount">Quanto deseja usar por entrada?</label><input id="nxAmount" type="number" min="0.5" step="0.01" value="0.50" oninput="nxProgressExample()"></div>
+    </div>
+    <div class="nx-step" data-nx-simple="3" hidden>
+      <h2>Recuperação e ciclos</h2>
+      <div id="nxIntelligentRecovery"><div class="field"><label for="nxIntelligentCycles">Quer usar ciclos no próximo sinal?</label><select id="nxIntelligentCycles" onchange="nxProgressExample()"><option value="none">Não</option><option value="cycles">Sim</option></select></div></div>
+      <div id="nxManualRecoveryGroup" hidden><div class="field"><label for="nxManualRecovery">Escolha uma única recuperação</label><select id="nxManualRecovery" onchange="nxProgressExample()"><option value="none">Não usar</option><option value="cycles">Ciclos no próximo sinal</option><option value="martingale">Martingale na próxima vela</option></select></div></div>
+      <div id="nxCyclesFields" class="nx-fields" hidden>
+        <div class="field"><label for="nxCyclesCount">Quantos ciclos?</label><select id="nxCyclesCount" onchange="nxProgressExample()"><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option><option value="5">5</option></select></div>
+        <div class="field"><label for="nxCyclesMultiplier">Multiplicador</label><input id="nxCyclesMultiplier" type="number" min="1" step="0.1" value="2" oninput="nxProgressExample()"></div>
+      </div>
+      <div id="nxMartingaleFields" class="nx-fields" hidden>
+        <div class="field"><label for="nxGaleCount">Quantas tentativas?</label><select id="nxGaleCount" onchange="nxProgressExample()"><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option><option value="5">5</option></select></div>
+        <div class="field"><label for="nxGaleMultiplier">Multiplicador</label><input id="nxGaleMultiplier" type="number" min="1" step="0.1" value="2" oninput="nxProgressExample()"></div>
+      </div>
+      <p id="nxExample" class="nx-example" role="note"></p>
+      <p class="helper">Progressões podem aumentar perdas. O exemplo apenas explica o cálculo, sem garantia de recuperação.</p>
+    </div>
+    <div class="nx-step" data-nx-simple="4" hidden>
+      <h2>Stop Win e Stop Loss</h2><p class="helper">São limites que bloqueiam novas entradas; contratos já abertos podem encerrar depois. Zero significa sem limite.</p>
+      <div class="nx-fields"><div class="field"><label for="nxWin">Stop Win (USD)</label><input id="nxWin" type="number" min="0" step="0.01" value="0"></div><div class="field"><label for="nxLoss">Stop Loss (USD)</label><input id="nxLoss" type="number" min="0" step="0.01" value="0"></div></div>
+    </div>
+    <div class="nx-step" data-nx-simple="5" hidden>
+      <h2>Finalizar configuração</h2><p class="helper">Revise as opções antes de salvar. O modo Manual terá uma página separada para a agenda.</p>
+      <div id="nxReview" class="nx-summary"></div>
+    </div>
+    <p id="nxWizardFeedback" class="helper" role="status" aria-live="polite"></p>
+    <div class="nx-wizard-nav"><button id="nxBack" class="outline" type="button" hidden onclick="nxStepChange(-1)">← VOLTAR</button><button id="nxNext" class="gold" type="button" onclick="nxStepChange(1)">CONTINUAR →</button><button id="nxFinish" class="gold" type="button" hidden onclick="nxSaveConfiguration()">SALVAR E FINALIZAR</button></div>
+  </div>
+<div class="card auto-config" id="automationConfigCard">
     <div class="surface-heading">Vamos conhecer as configurações?</div>
     <p class="helper nx-guide-lead">Você não precisa entender termos técnicos para acompanhar as etapas. Este guia organiza as opções existentes e começa pelo treinamento com saldo fictício. Navegar ou salvar preferências não liga o robô.</p>
     <div class="auto-wizard-header">
@@ -2044,6 +2105,23 @@ body:has(#dashboard:not(.hidden)) .nexora-logo-only .brand img{
       <button id="autoWizardNext" class="gold" type="button" onclick="changeAutomationWizardStep(1)">AVANÇAR →</button>
     </div>
   </div>
+</section>
+
+<section id="robot-manual-signals" class="hidden">
+  <div class="section-heading"><div><div class="eyebrow">NEXORA MANUAL</div><h1>Agendar lista de sinais</h1><p>Organize os sinais da sua conta. Esta etapa guarda agendamentos, mas ainda NÃO executa operações.</p></div><button class="outline" type="button" onclick="go('dashboard')">← PAINEL</button></div>
+  <div class="card">
+    <div class="surface-heading">Adicionar sinal</div>
+    <form id="nxManualForm" onsubmit="nxSignalAdd(event)">
+      <div class="nx-signal-grid">
+        <div class="field"><label for="nxSignalAsset">Ativo disponível</label><select id="nxSignalAsset" required></select></div>
+        <div class="field"><label for="nxSignalDate">Data e hora (local)</label><input id="nxSignalDate" type="datetime-local" required></div>
+        <div class="field"><label for="nxSignalSide">Direção</label><select id="nxSignalSide"><option value="CALL">CALL · Alta</option><option value="PUT">PUT · Baixa</option></select></div>
+        <div class="field"><label for="nxSignalDuration">Expiração</label><select id="nxSignalDuration"><option value="1">1 minuto</option><option value="3">3 minutos</option><option value="5">5 minutos</option><option value="15">15 minutos</option></select></div>
+      </div>
+      <button type="submit" id="nxSignalSubmit" class="gold">ADICIONAR SINAL</button>
+    </form><p id="nxSignalFeedback" class="helper" role="status" aria-live="polite"></p>
+  </div>
+  <div class="card"><div class="surface-heading">Sinais agendados</div><div id="nxSignalList" aria-live="polite">Carregando...</div></div>
 </section>
 <section id="results" class="hidden">
   <div class="section-heading"><div><h1>Resultados</h1><p>Somente contratos confirmados pela Deriv DEMO entram no placar. Horários sem confirmação da corretora aparecem como —.</p></div></div>
@@ -2348,7 +2426,7 @@ async function saveOnboarding(event){
  }catch(e){$('setupFeedback').textContent='Não foi possível salvar: '+e.message;fail('')}
  finally{btn.disabled=false}
 }
-function page(v){document.body.classList.toggle('marketing-mode',v==='welcome');$('primaryNavigation').classList.toggle('hidden',v==='welcome'||v==='setup');for(const name of ['welcome','setup','dashboard','robot-config','results','settings','account','features','strategies'])$(name).classList.toggle('hidden',name!==v);activePage=v;document.querySelectorAll('.nav-link[data-view]').forEach(b=>b.classList.toggle('active',b.dataset.view===v))}
+function page(v){document.body.classList.toggle('marketing-mode',v==='welcome');$('primaryNavigation').classList.toggle('hidden',v==='welcome'||v==='setup');for(const name of ['welcome','setup','dashboard','robot-config','robot-manual-signals','results','settings','account','features','strategies'])$(name).classList.toggle('hidden',name!==v);activePage=v;document.querySelectorAll('.nav-link[data-view]').forEach(b=>b.classList.toggle('active',b.dataset.view===v))}
 
 let dailyResultsLoading=false;
 async function loadDailyResults(){
@@ -2397,7 +2475,7 @@ function updateResultsPolling(){
    },activePage==='dashboard'?7000:3000);
  }
 }
-function go(v){page(v);updateResultsPolling();window.scrollTo({top:0,behavior:'smooth'});if(v==='setup')loadOnboarding();if(v==='dashboard'){refreshDashboard();loadDemoOrders().catch(()=>{});loadDailyResults().catch(()=>{});}if(v==='robot-config'){initAutomationWizard();setAutomationWizardStep(1);loadAutomationProfile();}if(v==='results'){loadDemoOrders();}if(v==='account'){loadRobotAccess();loadBillingPlans()}if(v==='settings')loadSettings()}
+function go(v){page(v);updateResultsPolling();window.scrollTo({top:0,behavior:'smooth'});if(v==='setup')loadOnboarding();if(v==='dashboard'){refreshDashboard();loadDemoOrders().catch(()=>{});loadDailyResults().catch(()=>{});nxDashboardManualButton();}if(v==='robot-config'){initAutomationWizard();setAutomationWizardStep(1);loadAutomationProfile();nxOpenWizard();}if(v==='robot-manual-signals')nxOpenManualSignals();if(v==='results'){loadDemoOrders();}if(v==='account'){loadRobotAccess();loadBillingPlans()}if(v==='settings')loadSettings()}
 function fail(msg){$('error').textContent=msg||''}
 async function req(path,opts={}){const r=await fetch(path,{credentials:'same-origin',...opts});let data;try{data=await r.json()}catch{throw Error('Resposta inválida do servidor')}if(!r.ok)throw Error(data.detail||'Falha na conexão');return data}
 async function refreshLandingOffer(){
@@ -2483,6 +2561,7 @@ async function init(){
     handleStripeCheckoutReturn(paymentResult,checkoutSessionId).catch(e=>fail(e.message));
   }else{
     page('dashboard');
+    nxDashboardManualButton();
     refreshDashboard();
     loadDemoOrders().catch(()=>{});
     loadDailyResults().catch(()=>{});
@@ -3817,6 +3896,174 @@ window.addEventListener('focus',()=>{
  derivReturnRefreshAt=Date.now();
  Promise.allSettled([loadDemoBalance(),loadRealBalance()]);
 });
+
+/* Guided NEXORA 2.0 UI. Manual agenda never dispatches broker orders. */
+let nxModeChoice='intelligent',nxWizardStep=1;
+const nxGet=id=>document.getElementById(id);
+function nxSetMode(mode){
+ if(!['intelligent','manual'].includes(mode))return;
+ nxModeChoice=mode;
+ document.querySelectorAll('#nxWizard2 [data-nx-mode]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.nxMode===mode)));
+ nxGet('nxIntelligentRecovery').hidden=mode!=='intelligent';
+ nxGet('nxManualRecoveryGroup').hidden=mode!=='manual';
+ nxProgressExample();
+}
+function nxRecovery(){return nxModeChoice==='intelligent'?nxGet('nxIntelligentCycles').value:nxGet('nxManualRecovery').value}
+function nxProgressExample(){
+ const type=nxRecovery();
+ nxGet('nxCyclesFields').hidden=type!=='cycles';
+ nxGet('nxMartingaleFields').hidden=type!=='martingale';
+ const factor=Number(nxGet(type==='martingale'?'nxGaleMultiplier':'nxCyclesMultiplier').value);
+ const count=nxGet(type==='martingale'?'nxGaleCount':'nxCyclesCount').value;
+ const stake=Number(nxGet('nxAmount').value);
+ nxGet('nxExample').textContent=type==='none'?'Sem progressão: a entrada inicial não é multiplicada.':
+  Number.isFinite(stake)&&Number.isFinite(factor)&&factor>=1?
+  'Exemplo: US$ '+stake.toFixed(2)+' → '+(type==='cycles'?'próximo sinal':'próxima vela')+
+  ' US$ '+(stake*factor).toFixed(2)+' · '+count+' tentativa(s) adicionais no máximo.':
+  'Informe valores válidos para visualizar o exemplo.';
+}
+function nxSetWizardStep(step){
+ nxWizardStep=Math.max(1,Math.min(5,step));
+ document.querySelectorAll('#nxWizard2 [data-nx-simple]').forEach(el=>el.hidden=Number(el.dataset.nxSimple)!==nxWizardStep);
+ nxGet('nxWizardCount').textContent='Etapa '+nxWizardStep+' de 5';
+ nxGet('nxBack').hidden=nxWizardStep===1;
+ nxGet('nxNext').hidden=nxWizardStep===5;
+ nxGet('nxFinish').hidden=nxWizardStep!==5;
+ if(nxWizardStep===5)nxShowReview();
+}
+function nxValidAmount(id,min){
+ const raw=nxGet(id).value,n=Number(raw);
+ return raw!==''&&Number.isFinite(n)&&n>=min&&n<=1000000&&Math.abs(n*100-Math.round(n*100))<0.00001;
+}
+function nxCheckStep(step){
+ if(step===2&&!nxValidAmount('nxAmount',0.5))return 'Informe um valor de entrada a partir de US$ 0,50.';
+ if(step===3&&nxRecovery()!=='none'){
+  const isGale=nxRecovery()==='martingale';
+  const factor=Number(nxGet(isGale?'nxGaleMultiplier':'nxCyclesMultiplier').value);
+  const count=Number(nxGet(isGale?'nxGaleCount':'nxCyclesCount').value);
+  if(!Number.isFinite(factor)||factor<1||factor>100||!Number.isInteger(count)||count<1||count>5)return 'Confira multiplicador e número de tentativas (1 a 5).';
+ }
+ if(step===4&&(!nxValidAmount('nxWin',0)||!nxValidAmount('nxLoss',0)))return 'Preencha Stop Win e Stop Loss com valores válidos.';
+ return '';
+}
+function nxStepChange(n){
+ if(n>0){const error=nxCheckStep(nxWizardStep);if(error){nxGet('nxWizardFeedback').textContent=error;return}}
+ nxGet('nxWizardFeedback').textContent='';nxSetWizardStep(nxWizardStep+n);
+ nxGet('nxWizard2').scrollIntoView({behavior:'smooth',block:'start'});
+}
+function nxShowReview(){
+ const recovery=nxRecovery();
+ nxGet('nxReview').textContent=[
+  'Modo: '+(nxModeChoice==='manual'?'NEXORA Manual':'NEXORA Inteligente'),
+  'Ambiente: DEMO (saldo fictício)',
+  'Entrada: US$ '+nxGet('nxAmount').value,
+  'Recuperação: '+(recovery==='none'?'Nenhuma':recovery==='cycles'?
+   nxGet('nxCyclesCount').value+' ciclos × '+nxGet('nxCyclesMultiplier').value:
+   nxGet('nxGaleCount').value+' Martingales × '+nxGet('nxGaleMultiplier').value),
+  'Stop Win: US$ '+nxGet('nxWin').value,
+  'Stop Loss: US$ '+nxGet('nxLoss').value,
+  'Salvar não liga o robô nem realiza compras.',
+  nxModeChoice==='manual'?'Agenda manual salva sem execução automática nesta etapa.':'Análise DEMO atual; Intelligence 2.0 em homologação.'
+ ].join('\n');
+}
+async function nxOpenWizard(){
+ nxSetWizardStep(1);nxSetMode('intelligent');
+ nxGet('nxWizardFeedback').textContent='Carregando suas preferências...';
+ try{
+  const [mode,risk]=await Promise.all([req('/api/robot/mode'),req('/api/onboarding/config')]);
+  nxSetMode(mode.mode||'intelligent');nxGet('nxAmount').value=risk.stake;
+  nxGet('nxWin').value=risk.stop_win;nxGet('nxLoss').value=risk.stop_loss;
+  nxGet('nxIntelligentCycles').value=Number(risk.cycles)>0?'cycles':'none';
+  nxGet('nxManualRecovery').value=risk.martingale?'martingale':Number(risk.cycles)>0?'cycles':'none';
+  nxGet('nxCyclesCount').value=Number(risk.cycles)>0?String(risk.cycles):'1';
+  nxGet('nxCyclesMultiplier').value=risk.cycle_multiplier||'2';
+  nxGet('nxGaleCount').value=String(risk.gale_count||1);
+  nxGet('nxGaleMultiplier').value=risk.multiplier||'2';
+  nxProgressExample();nxGet('nxWizardFeedback').textContent='';
+ }catch(e){nxGet('nxWizardFeedback').textContent='Não foi possível carregar as preferências: '+e.message}
+}
+async function nxSaveConfiguration(){
+ for(const n of [2,3,4]){const error=nxCheckStep(n);if(error){nxSetWizardStep(n);nxGet('nxWizardFeedback').textContent=error;return}}
+ if(robotRunning){nxGet('nxWizardFeedback').textContent='Desligue o robô antes de salvar.';return}
+ const button=nxGet('nxFinish');button.disabled=true;
+ nxGet('nxWizardFeedback').textContent='Validando suas preferências...';
+ const recovery=nxRecovery();
+ try{
+  const old=await req('/api/automation/profile');
+  const market=old.market==='volatility'?'derived':old.market||'derived';
+  const catalogue=await req('/api/automation/catalogue?market='+encodeURIComponent(market));
+  const valid=new Set((catalogue.items||[]).map(x=>x.symbol));
+  const saved=(old.symbols||[]).filter(x=>valid.has(x)).slice(0,5);
+  const symbols=saved.length?saved:(catalogue.items||[]).slice(0,3).map(x=>x.symbol);
+  if(!symbols.length)throw Error('Catálogo de ativos indisponível; configuração não salva.');
+  await req('/api/automation/profile',{method:'POST',headers:{'Content-Type':'application/json'},
+   body:JSON.stringify({account_mode:'demo',market,symbols,strategy:'pulso_v2',
+    expiry_minutes:0,news_filter:false,news_minutes_before:30,news_minutes_after:30,
+    max_daily_orders:0,indicators:['ATR'],direction:'AUTO',min_payout_pct:88,
+    real_account_id:null,preset_mode:'custom'})});
+  await req('/api/onboarding/config',{method:'POST',headers:{'Content-Type':'application/json'},
+   body:JSON.stringify({stake:nxGet('nxAmount').value,stop_win:nxGet('nxWin').value,
+    stop_loss:nxGet('nxLoss').value,martingale:recovery==='martingale',
+    gale_count:recovery==='martingale'?Number(nxGet('nxGaleCount').value):0,
+    multiplier:recovery==='martingale'?nxGet('nxGaleMultiplier').value:'2.00',
+    cycles:recovery==='cycles'?nxGet('nxCyclesCount').value:'0',
+    cycle_multiplier:recovery==='cycles'?nxGet('nxCyclesMultiplier').value:'2.00'})});
+  await req('/api/robot/mode',{method:'POST',headers:{'Content-Type':'application/json'},
+   body:JSON.stringify({mode:nxModeChoice})});
+  go('dashboard');
+ }catch(e){nxGet('nxWizardFeedback').textContent='Não foi possível completar a gravação: '+e.message+'. Confira as configurações antes de ligar o robô.'}
+ finally{button.disabled=false}
+}
+async function nxDashboardManualButton(){
+ const btn=nxGet('nxManualScheduleButton');btn.hidden=true;
+ try{const r=await req('/api/robot/mode');btn.hidden=r.mode!=='manual'}catch{btn.hidden=true}
+}
+async function nxOpenManualSignals(){
+ const f=nxGet('nxSignalFeedback');f.textContent='Carregando...';
+ try{
+  const [mode,profile]=await Promise.all([req('/api/robot/mode'),req('/api/automation/profile')]);
+  if(mode.mode!=='manual')throw Error('Configure o modo Manual primeiro.');
+  const market=profile.market==='volatility'?'derived':profile.market||'derived';
+  const cat=await req('/api/automation/catalogue?market='+encodeURIComponent(market));
+  const select=nxGet('nxSignalAsset');select.replaceChildren();
+  for(const item of cat.items||[]){
+   const opt=document.createElement('option');opt.value=item.symbol;
+   opt.textContent=(item.name||item.symbol)+' · '+item.symbol;select.append(opt);
+  }
+  if(!select.options.length)throw Error('Catálogo da Deriv indisponível.');
+  await nxRefreshManualSignals();f.textContent='Agenda de planejamento; nenhuma compra automática.';
+ }catch(e){f.textContent=e.message;nxGet('nxSignalList').textContent='Agenda indisponível.'}
+}
+async function nxRefreshManualSignals(){
+ const r=await req('/api/robot/manual-signals'),list=nxGet('nxSignalList');list.replaceChildren();
+ if(!r.items.length){list.textContent='Nenhum sinal agendado.';return}
+ for(const item of r.items){
+  const row=document.createElement('div'),title=document.createElement('span'),del=document.createElement('button');
+  row.className='nx-signal-item';title.textContent=new Date(item.scheduled_for).toLocaleString('pt-BR')+' · '+item.symbol+
+   ' · '+item.direction+' · '+item.expiry_minutes+' min · Planejamento';
+  del.type='button';del.className='outline';del.textContent='REMOVER';
+  del.addEventListener('click',()=>nxRemoveSignal(item.id));row.append(title,del);list.append(row);
+ }
+}
+async function nxSignalAdd(event){
+ event.preventDefault();
+ const dt=new Date(nxGet('nxSignalDate').value),f=nxGet('nxSignalFeedback');
+ if(Number.isNaN(dt.getTime())){f.textContent='Data inválida.';return}
+ const btn=nxGet('nxSignalSubmit');btn.disabled=true;
+ try{
+  await req('/api/robot/manual-signals',{method:'POST',headers:{'Content-Type':'application/json'},
+   body:JSON.stringify({symbol:nxGet('nxSignalAsset').value,direction:nxGet('nxSignalSide').value,
+    expiry_minutes:Number(nxGet('nxSignalDuration').value),scheduled_for:dt.toISOString()})});
+  await nxRefreshManualSignals();f.textContent='Sinal registrado. Nenhuma ordem foi enviada.';
+ }catch(e){f.textContent='Erro ao agendar: '+e.message}
+ finally{btn.disabled=false}
+}
+async function nxRemoveSignal(id){
+ try{await req('/api/robot/manual-signals/'+encodeURIComponent(id),{method:'DELETE'});
+  await nxRefreshManualSignals();nxGet('nxSignalFeedback').textContent='Sinal removido.'}
+ catch(e){nxGet('nxSignalFeedback').textContent='Erro ao remover: '+e.message}
+}
+
 init();
 </script>
 </body></html>
