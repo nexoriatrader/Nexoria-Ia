@@ -374,7 +374,7 @@ def test_command_bar_prioritizes_stop_only_and_preserves_existing_controls():
     )
     assert 'onclick="nxNeoStopRunningRobot()"' in section
     assert 'id="nxNeoQuickStop"' in section
-    assert 'disabled hidden aria-label="Desligar robô em funcionamento"' in section
+    assert 'disabled aria-label="Desligar robô em funcionamento"' in section
     assert '<details class="nx-neo-controls" id="nxNeoControls">' in section
     assert section.index('<details class="nx-neo-controls"') < section.index(
         '<div class="card dash-control-card">'
@@ -425,7 +425,7 @@ async function refreshDashboard(){refreshed++;}
     checks = r"""
 (async()=>{
   renderNxNeoTopCommand({running:false,auto_buy_enabled:true});
-  if(!$('nxNeoQuickStop').hidden)throw Error('Stop button visible while stopped');
+  if(!$('nxNeoQuickStop').disabled)throw Error('Stop button enabled while stopped');
   await nxNeoStopRunningRobot();
   if(stopped!==0)throw Error('Stop shortcut called with stopped process');
   robotRunning=true;
@@ -454,7 +454,7 @@ async function refreshDashboard(){refreshed++;}
    throw Error('Missing status uncertainty warning');
   robotRunning=false;
   renderNxNeoTopCommand({running:false,auto_buy_enabled:true});
-  if(!$('nxNeoQuickStop').hidden)throw Error('Inactive stop button became visible');
+  if(!$('nxNeoQuickStop').disabled)throw Error('Inactive stop became enabled');
 })().catch(e=>{console.error(e);process.exitCode=1;});
 """
     result = subprocess.run(
@@ -587,3 +587,40 @@ def test_activation_link_is_top_level_and_requires_existing_confirmation():
     )[0]
     for text in ("fetch(", "/api/autopilot/start", "POST", "sendBeacon"):
         assert text not in between
+
+
+
+def test_compact_always_visible_controls_do_not_enable_unguarded_start():
+    """User sees the two states on mobile; only stopping an active process is actionable."""
+    panel = HTML.split(
+        '<section id="dashboard" class="hidden nx-neo-dashboard nx-calm-dashboard">', 1
+    )[1].split('<section class="nx-calm-activity"', 1)[0]
+    assert 'id="nxNeoStartDisplay"' in panel
+    assert 'id="nxNeoQuickStop"' in panel
+    assert panel.index('id="nxNeoStartDisplay"') < panel.index('id="nxNeoQuickStop"')
+    assert 'id="nxNeoStartDisplay" type="button" class="nx-neo-start-display" disabled aria-disabled="true"' in panel
+    assert 'aria-label="Ligar robô: requer revisão e confirmação"' in panel
+    assert 'title="Ativação exige revisão e confirmação nos controles"' in panel
+    assert 'id="nxNeoQuickStop" type="button" class="nx-neo-stop"' in panel
+    assert 'id="nxNeoControls"' in panel
+    assert '#dashboard.nx-calm-dashboard .nx-neo-compact-actions' in HTML
+    assert '#dashboard.nx-calm-dashboard .nx-neo-stop:disabled' in HTML
+    # The existing activation button is not cloned into the top row.
+    assert panel.count('id="robotButton"') == 1
+    assert 'onclick="toggleRobot()"' in panel
+    top_actions = panel.split('class="nx-neo-compact-actions"', 1)[1].split('</div>', 1)[0]
+    assert 'onclick="toggleRobot()"' not in top_actions
+    assert 'onclick="nxNeoStopRunningRobot()"' in top_actions
+    assert '#dashboard.nx-calm-dashboard .nx-neo-controls .dash-add-time' in HTML
+    assert '#dashboard.nx-calm-dashboard .nx-neo-controls .dash-balance-action' in HTML
+    assert "stop.hidden=false;" in HTML
+    assert "stop.disabled=!running" in HTML
+    assert "stop.disabled=!robotRunning" in HTML
+    assert "if(!robotRunning||stop.hidden||stop.disabled" in HTML
+    assert "if(!health.real_orders_enabled)" in HTML
+    # No new request path, no broker execution changes.
+    js = HTML.split('function renderNxNeoTopCommand(status){', 1)[1].split(
+        'function renderRobotEasyOverview(status){', 1
+    )[0]
+    for forbidden in ("fetch(", "/api/autopilot/start", "POST"):
+        assert forbidden not in js
