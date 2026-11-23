@@ -36,7 +36,7 @@ def test_robot_dashboard_plain_language_overview_is_accessible_and_read_only():
         assert parsed.ids.count(element_id) == 1, element_id
 
     summary = HTML.split('id="robotEasyOverview"', 1)[1].split(
-        'class="card dash-control-card"', 1
+        '<details class="nx-neo-more" id="nxNeoMore">', 1
     )[0]
     assert "Como está o robô agora?" in summary
     assert "Em funcionamento:" in summary
