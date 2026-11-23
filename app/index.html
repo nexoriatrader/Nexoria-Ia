@@ -1313,6 +1313,12 @@ body:has(#dashboard:not(.hidden)) .nexora-logo-only .brand img{
  text-shadow:0 1px 3px #005480!important;letter-spacing:.025em!important;
  transition:filter .16s ease,box-shadow .16s ease!important
 }
+#dashboard.nx-calm-dashboard .nx-neo-controls .dash-control-main .hero-action[data-visual-state="active"]{
+ background:linear-gradient(130deg,#e26d7e,#b84858)!important;
+ border-color:#ff9aa7!important;color:#fff8f9!important;
+ box-shadow:0 0 0 1px #ffd5db1e inset,0 7px 22px #b62b4e32!important;
+ text-shadow:none!important
+}
 #dashboard.nx-calm-dashboard .nx-neo-controls .dash-control-main .hero-action:not(:disabled):hover{filter:brightness(1.07)!important}
 #dashboard.nx-calm-dashboard .nx-neo-controls .dash-control-main .hero-action:disabled{
  opacity:.58!important;box-shadow:none!important;filter:saturate(.62)!important
@@ -2798,6 +2804,7 @@ async function refreshDashboard(){
    $('forexScheduleDot').classList.toggle('active',forexSelected);
    $('volScheduleDot').classList.toggle('active',!forexSelected);
    $('robotButton').textContent=robotRunning?'DESLIGAR ROBÔ':'LIGAR ROBÔ';
+   $('robotButton').dataset.visualState=robotRunning?'active':'inactive';
    $('robotButton').disabled=(!robotRunning&&!available)||$('robotButton').dataset.commandPending==='true';
    $('robotButton').setAttribute('aria-disabled',String($('robotButton').disabled));
    $('robotButton').style.background=robotRunning?'linear-gradient(135deg,#fa9b9d,#dc5269)':'';
