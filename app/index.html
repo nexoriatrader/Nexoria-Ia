@@ -1947,7 +1947,7 @@ body:has(#dashboard:not(.hidden)) .nexora-logo-only .brand img{
   </div>
   
   <div class="card" id="nxWizard2">
-    <div class="surface-heading">NEXORA 2.0 · Configuração simples</div>
+    <div class="surface-heading">NEXORA 2.0 · Simulação de configuração em 5 etapas</div>
     <p id="nxWizardCount" role="status" aria-live="polite">Etapa 1 de 5</p>
     <div class="nx-step" data-nx-simple="1">
       <h2>Qual robô deseja usar?</h2>
@@ -3917,6 +3917,7 @@ function nxSetMode(mode){
  document.querySelectorAll('#nxWizard2 [data-nx-mode]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.nxMode===mode)));
  nxGet('nxIntelligentRecovery').hidden=mode!=='intelligent';
  nxGet('nxManualRecoveryGroup').hidden=mode!=='manual';
+ nxGet('nxResearchQuality').hidden=mode!=='intelligent';
  nxProgressExample();
 }
 function nxRecovery(){return nxModeChoice==='intelligent'?nxGet('nxIntelligentCycles').value:nxGet('nxManualRecovery').value}
