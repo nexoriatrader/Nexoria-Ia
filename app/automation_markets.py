@@ -9,8 +9,11 @@ from __future__ import annotations
 import re
 import time
 import asyncio
+import logging
 
 from .market import MarketError, public_request
+
+log=logging.getLogger('nexora.catalogue')
 
 GROUPS = {
     "forex": "Forex",
@@ -88,11 +91,26 @@ async def market_instruments(force=False):
     now = time.monotonic()
     if not force and _catalog_cache["items"] and now - _catalog_cache["at"] < 300:
         return list(_catalog_cache["items"])
+    lock_started=time.monotonic()
     async with _catalog_lock:
+        lock_wait_ms=(time.monotonic()-lock_started)*1000
         now = time.monotonic()
         if not force and _catalog_cache["items"] and now - _catalog_cache["at"] < 300:
             return list(_catalog_cache["items"])
-        raw = await public_request({"active_symbols": "full"}, expected="active_symbols", timeout=15)
+        broker_started=time.monotonic()
+        try:
+            raw = await public_request({"active_symbols": "full"}, expected="active_symbols", timeout=15)
+        except Exception:
+            log.warning('public catalogue refresh failed lock_wait_ms=%.1f broker_ms=%.1f',
+                        lock_wait_ms,(time.monotonic()-broker_started)*1000)
+            raise
+        broker_ms=(time.monotonic()-broker_started)*1000
+        if broker_ms>=1000 or lock_wait_ms>=1000:
+            log.warning('public catalogue refresh slow lock_wait_ms=%.1f broker_ms=%.1f',
+                        lock_wait_ms,broker_ms)
+        else:
+            log.info('public catalogue refresh lock_wait_ms=%.1f broker_ms=%.1f',
+                     lock_wait_ms,broker_ms)
         source = raw.get("active_symbols")
         if not isinstance(source, list):
             raise MarketError("Catálogo de instrumentos inválido")
