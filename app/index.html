@@ -1956,6 +1956,10 @@ body:has(#dashboard:not(.hidden)) .nexora-logo-only .brand img{
         <button id="nxIntelligentMode" class="nx-mode" type="button" data-nx-mode="intelligent" aria-pressed="true" onclick="nxSetMode('intelligent')"><strong>✦ Robô NEXORA Inteligente</strong><small>Análises automáticas no motor DEMO atual. Você informa entrada, ciclos e limites. A integração da Intelligence 2.0 continua em homologação.</small></button>
         <button id="nxManualMode" class="nx-mode" type="button" data-nx-mode="manual" aria-pressed="false" onclick="nxSetMode('manual')"><strong>☷ Robô NEXORA Manual</strong><small>Você registra sinais próprios com ativo, horário, direção e expiração. Escolhe ciclos OU Martingale.</small></button>
       </div>
+      <div id="nxResearchQuality" role="group" aria-label="Pesquisa Intelligence 2.0 em homologação">
+        <button class="outline" type="button" onclick="nxCheckResearchQuality()">VER ESTADO DA INTELLIGENCE 2.0</button>
+        <p class="helper" id="nxResearchQualityNote" role="status" aria-live="polite">Consulta opcional e somente leitura. Não fornece sinais nem recomendações financeiras.</p>
+      </div>
     </div>
     <div class="nx-step" data-nx-simple="2" hidden>
       <h2>Valor de entrada</h2><p class="helper">Valor ilustrativo em USD para estudar preferências no ambiente fictício.</p>
@@ -2121,7 +2125,7 @@ body:has(#dashboard:not(.hidden)) .nexora-logo-only .brand img{
       <button type="submit" id="nxSignalSubmit" class="gold">ADICIONAR SINAL</button>
     </form><p id="nxSignalFeedback" class="helper" role="status" aria-live="polite"></p>
   </div>
-  <div class="card"><div class="surface-heading">Sinais agendados</div><div id="nxSignalList" aria-live="polite">Carregando...</div></div>
+  <div class="card"><div class="surface-heading">Sinais agendados</div><p class="helper">Horários são planejados. Se passar da hora, nenhuma operação será executada.</p><button class="outline" type="button" onclick="nxRefreshManualSignals()">ATUALIZAR LISTA</button><div id="nxSignalList" aria-live="polite">Carregando...</div></div>
 </section>
 <section id="results" class="hidden">
   <div class="section-heading"><div><h1>Resultados</h1><p>Somente contratos confirmados pela Deriv DEMO entram no placar. Horários sem confirmação da corretora aparecem como —.</p></div></div>
@@ -3974,6 +3978,27 @@ function nxShowReview(){
  ].join('\n');
 }
 
+async function nxCheckResearchQuality(){
+ const note=nxGet('nxResearchQualityNote');
+ note.textContent='Consultando a disponibilidade da pesquisa, sem operações...';
+ try{
+  const result=await req('/api/homologation/robot/research?view=autonomous');
+  if(result.read_only!==true||result.execution_allowed!==false||result.orders_sent!==0){
+   note.textContent='Isolamento da pesquisa não confirmado; resultado descartado.';return;
+  }
+  const labels={
+   CURRENT_PUBLIC_RESEARCH:'Existe contexto de pesquisa público disponível.',
+   NO_CURRENT_PUBLIC_ITEMS:'Não há itens atuais disponíveis.',
+   SNAPSHOT_DIGEST_MISMATCH:'A integridade do registro não foi confirmada.',
+   SNAPSHOT_EXPIRED:'O registro público está desatualizado.'
+  };
+  note.textContent=(labels[result.state]||'Pesquisa sem estado confirmado.')+
+   ' Somente informação histórica ou de qualidade, sem sinais e sem ordens.';
+ }catch{
+  note.textContent='Pesquisa Intelligence 2.0 indisponível nesta instalação. Nenhuma operação foi realizada.';
+ }
+}
+
 let nxWizardLoadToken=0,nxWizardEdited=false;
 function nxTouchWizard(){nxWizardEdited=true}
 async function nxOpenWizard(){
@@ -4072,7 +4097,8 @@ async function nxRefreshManualSignals(){
  for(const item of r.items){
   const row=document.createElement('div'),title=document.createElement('span'),del=document.createElement('button');
   row.className='nx-signal-item';title.textContent=new Date(item.scheduled_for).toLocaleString('pt-BR')+' · '+item.symbol+
-   ' · '+item.direction+' · '+item.expiry_minutes+' min · Planejamento';
+   ' · '+item.direction+' · '+item.expiry_minutes+' min · '+
+   (item.status==='HORARIO_PASSOU_SEM_EXECUCAO'?'Horário passou, sem execução':'Planejado, sem execução');
   del.type='button';del.className='outline';del.textContent='REMOVER';
   del.addEventListener('click',()=>nxRemoveSignal(item.id));row.append(title,del);list.append(row);
  }
