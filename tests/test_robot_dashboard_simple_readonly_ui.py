@@ -767,6 +767,8 @@ def test_premium_skin_only_adds_css_and_nonoperational_status_state():
         assert forbidden not in skin
     assert "LIGAR ROBÔ" in HTML and "DESLIGAR ROBÔ" in HTML
     assert "robotRunning?'DESLIGAR ROBÔ':'LIGAR ROBÔ'" in HTML
+    assert "$('robotButton').dataset.visualState=robotRunning?'active':'inactive';" in HTML
+    assert '.hero-action[data-visual-state="active"]' in HTML
     assert "$('robotButton').disabled=(!robotRunning&&!available)" in HTML
     assert "if(!health.real_orders_enabled)" in HTML
     assert "if(!await askRobotStartConfirmation(profile,risk,catalogue))return;" in HTML
