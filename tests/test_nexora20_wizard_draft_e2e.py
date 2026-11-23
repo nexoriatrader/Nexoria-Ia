@@ -57,6 +57,13 @@ def test_atomic_wizard_draft_is_per_user_and_does_not_apply_to_engine(tmp_path, 
         again = client.get("/api/robot/wizard").json()
         assert again["saved"] is True
         assert again["draft"]["cycles"] == 2
+        # A separate browser client reads the identical durable preference record.
+        later_client = TestClient(main.app)
+        later_client.cookies.set("nexora_sid", "draft_a")
+        recovered = later_client.get("/api/robot/wizard").json()
+        assert recovered["saved"] is True
+        assert recovered["draft"] == again["draft"]
+        later_client.close()
         assert again["draft"]["multiplier"] == "1.50"
         with factory() as sess:
             assert sess.get(db.User, a).stake == "0.50"
