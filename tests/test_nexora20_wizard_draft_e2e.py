@@ -257,3 +257,77 @@ def test_dashboard_single_status_source_and_broker_offline_schedule():
     assert open_schedule.index("await nxRefreshManualSignals()") < open_schedule.index(
         "req('/api/automation/catalogue?market='")
     assert "Agenda salva disponível" in open_schedule
+
+
+def test_saved_wizard_preview_requires_saved_draft_and_never_contacts_broker(tmp_path, monkeypatch):
+    client, factory, engine, (a, b) = planning_client(tmp_path, monkeypatch)
+    catalogue = AsyncMock(side_effect=AssertionError("No Deriv call during preview"))
+    buy = AsyncMock(side_effect=AssertionError("No DEMO buy during preview"))
+    monkeypatch.setattr(main, "featured_instruments_by_group", catalogue)
+    monkeypatch.setattr(main, "demo_buy", buy)
+    try:
+        assert client.get("/api/robot/wizard/preview").status_code == 409
+        assert client.post("/api/robot/wizard", json=BASE).status_code == 200
+        response = client.get("/api/robot/wizard/preview")
+        assert response.status_code == 200, response.text
+        info = response.json()
+        assert info["kind"] == "SAVED_DRAFT_EDUCATIONAL_PREVIEW"
+        assert info["validation"] == "VALID_SAVED_DRAFT"
+        assert info["mode"] == "manual"
+        assert [x["status"] for x in info["stages"]] == [
+            "SAVED_DRAFT", "SCHEDULE_ONLY", "NOT_CONNECTED"]
+        for flag in ("broker_contacted", "market_data_used",
+                     "results_simulated", "applied_to_executor"):
+            assert info[flag] is False
+        assert info["read_only"] is True
+        assert info["orders_sent"] == 0
+        assert info["predicted_outcome"] is None
+        assert any("perdas" in note for note in info["notices"])
+        with factory() as session:
+            assert session.get(db.RobotPlan, a) is None
+            assert session.get(db.RobotRun, a) is None
+            assert session.get(db.AutoPilotResumeConsent, a) is None
+        client.cookies.set("nexora_sid", "draft_b")
+        assert client.get("/api/robot/wizard/preview").status_code == 409
+        client.cookies.clear()
+        assert client.get("/api/robot/wizard/preview").status_code == 401
+        catalogue.assert_not_awaited()
+        buy.assert_not_awaited()
+    finally:
+        engine.dispose()
+
+
+def test_intelligent_preview_and_zero_stop_warning(tmp_path, monkeypatch):
+    client, factory, engine, _ = planning_client(tmp_path, monkeypatch)
+    try:
+        payload = {**BASE, "mode": "intelligent", "recovery": "none",
+                   "cycles": 0, "stop_loss": "0.00", "stop_win": "0.00"}
+        assert client.post("/api/robot/wizard", json=payload).status_code == 200
+        info = client.get("/api/robot/wizard/preview").json()
+        assert info["mode"] == "intelligent"
+        assert info["stages"][1]["status"] == "READ_ONLY_SEPARATE"
+        assert len(info["notices"]) == 3
+        assert any("Stop Loss" in note for note in info["notices"])
+        assert any("Stop Win" in note for note in info["notices"])
+        assert not any("Progressão" in note for note in info["notices"])
+    finally:
+        engine.dispose()
+
+
+def test_read_only_intelligence_evidence_and_saved_draft_ui():
+    from pathlib import Path
+    html = (Path(__file__).resolve().parents[1] / "app/index.html").read_text(
+        encoding="utf-8")
+    block = html.split("async function nxCheckResearchQuality(){", 1)[1].split(
+        "let nxWizardLoadToken=", 1)[0]
+    assert "PUBLIC_RESEARCH_CONTEXT_NOT_TRADING_SIGNALS" in block
+    assert "DATA_COMPLETENESS_NOT_PROBABILITY" in block
+    assert "item.observation_fingerprint" in block
+    assert "panel.replaceChildren()" in block
+    assert "panel.textContent" in block
+    assert "/api/robot/wizard/preview" in block
+    assert "results_simulated!==false" in block
+    assert "orders_sent!==0" in block
+    assert 'id="nxResearchQualityItems"' in html
+    assert 'id="nxSavedDraftPreview"' in html
+    assert "VERIFICAR RASCUNHO SALVO" in html
