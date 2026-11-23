@@ -13,6 +13,7 @@ from fastapi import FastAPI, HTTPException, Cookie, Request
 from fastapi.responses import FileResponse, RedirectResponse, JSONResponse, Response
 from pydantic import BaseModel
 from sqlalchemy import select, delete, func
+from sqlalchemy.exc import IntegrityError
 
 from . import db
 from .public_urls import origin_for_request, checkout_return_origin, nexora_referral_origin, canonical_origin
@@ -1847,7 +1848,13 @@ async def add_robot_manual_signal(request: Request, payload: ManualSignalDraft,
         raise HTTPException(503, 'Ativos da Deriv temporariamente indisponíveis') from None
     if payload.symbol not in {item['symbol'] for item in items}:
         raise HTTPException(422, 'Selecione um ativo do catálogo confirmado')
+    # Recheck the time after the asynchronous catalogue lookup.
+    now = datetime.now(timezone.utc)
+    if not now + timedelta(seconds=1) < scheduled_for <= now + timedelta(days=30):
+        raise HTTPException(422, 'Horário expirou durante o agendamento; atualize a data')
     with db.SessionLocal() as session:
+        # Row lock serializes per-user counting across PostgreSQL workers.
+        session.get(db.User, user.id, with_for_update=True)
         if robot_mode_for(session, user.id) != 'manual':
             raise HTTPException(409, 'O modo foi alterado durante o agendamento')
         active_count = session.scalar(select(func.count()).select_from(db.RobotManualSignal).where(
@@ -1869,7 +1876,11 @@ async def add_robot_manual_signal(request: Request, payload: ManualSignalDraft,
             expiry_minutes=payload.expiry_minutes, scheduled_for=scheduled_for
         )
         session.add(item)
-        session.commit()
+        try:
+            session.commit()
+        except IntegrityError:
+            session.rollback()
+            raise HTTPException(409, 'Sinal duplicado; nenhuma entrada foi executada') from None
         session.refresh(item)
         return {'signal': manual_signal_public(item), 'execution': 'SCHEDULE_ONLY_NO_ORDERS'}
 
