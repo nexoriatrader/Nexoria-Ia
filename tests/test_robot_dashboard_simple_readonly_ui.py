@@ -252,7 +252,7 @@ def test_new_studio_dashboard_is_a_real_visual_template():
                        "nxNeoChecked", "nxNeoChartTitle", "nxNeoChartNote",
                        "nxNeoMore"):
         assert parsed.ids.count(element_id) == 1, element_id
-    panel = HTML.split('<section id="dashboard" class="hidden nx-neo-dashboard">', 1)[1].split(
+    panel = HTML.split('<section id="dashboard" class="hidden nx-neo-dashboard nx-calm-dashboard">', 1)[1].split(
         '<section id="robot-config" class="hidden">', 1
     )[0]
     assert '<h1>Visão geral' in panel
@@ -364,7 +364,7 @@ def test_command_bar_prioritizes_stop_only_and_preserves_existing_controls():
                 "nxNeoQuickStop", "nxNeoControls"):
         assert parsed.ids.count(key) == 1, key
     section = HTML.split(
-        '<section id="dashboard" class="hidden nx-neo-dashboard">', 1
+        '<section id="dashboard" class="hidden nx-neo-dashboard nx-calm-dashboard">', 1
     )[1].split('<section id="robot-config" class="hidden">', 1)[0]
     assert section.index('class="nx-neo-command"') < section.index(
         'id="robotEasyOverview"'
