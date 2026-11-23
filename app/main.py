@@ -1623,6 +1623,151 @@ async def save_automation_profile(request:Request,payload:AutomationProfileReque
         'note':'Preferências registradas. A ativação é um comando separado.'}
 
 
+
+class RobotModeSelection(BaseModel):
+    mode: str
+
+
+class ManualSignalDraft(BaseModel):
+    symbol: str
+    direction: str
+    expiry_minutes: int
+    scheduled_for: datetime
+
+
+def robot_mode_for(session, user_id: int) -> str:
+    saved = session.get(db.RobotUsageMode, user_id)
+    return saved.mode if saved and saved.mode in ('intelligent', 'manual') else 'intelligent'
+
+
+def manual_signal_public(item):
+    dt = item.scheduled_for
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return {
+        'id': item.id, 'symbol': item.symbol, 'direction': item.direction,
+        'expiry_minutes': item.expiry_minutes,
+        'scheduled_for': dt.astimezone(timezone.utc).isoformat(),
+        'status': 'PLANEJADO_SEM_EXECUCAO',
+    }
+
+
+@app.get('/api/robot/mode')
+async def get_robot_usage_mode(request: Request, nexora_sid: str | None = Cookie(default=None)):
+    user = active_user(request, nexora_sid)
+    with db.SessionLocal() as session:
+        return {'mode': robot_mode_for(session, user.id), 'execution': 'DERIV_DEMO_ONLY'}
+
+
+@app.post('/api/robot/mode')
+async def save_robot_usage_mode(request: Request, payload: RobotModeSelection,
+                                nexora_sid: str | None = Cookie(default=None)):
+    user = active_user(request, nexora_sid)
+    if payload.mode not in ('intelligent', 'manual'):
+        raise HTTPException(422, 'Escolha NEXORA Inteligente ou NEXORA Manual')
+    if user.id in autopilot_enabled or user.id in real_runtime.running:
+        raise HTTPException(409, 'Desligue o robô antes de trocar o modo')
+    async with autopilot_lock:
+        with db.SessionLocal() as session:
+            if session.get(db.AutoPilotResumeConsent, user.id):
+                raise HTTPException(409, 'Revogue a ativação anterior antes de trocar o modo')
+            profile = session.get(db.AutomationProfile, user.id)
+            if not profile or profile.account_mode != 'demo':
+                raise HTTPException(409, 'Configure e salve o perfil de treinamento antes de escolher o modo')
+            choice = session.get(db.RobotUsageMode, user.id)
+            if choice is None:
+                choice = db.RobotUsageMode(user_id=user.id, mode=payload.mode)
+                session.add(choice)
+            else:
+                choice.mode = payload.mode
+            session.commit()
+    return {'mode': payload.mode, 'saved': True, 'starts_robot': False,
+            'note': 'Modo salvo. Nenhuma operação foi iniciada.'}
+
+
+@app.get('/api/robot/manual-signals')
+async def list_robot_manual_signals(request: Request, nexora_sid: str | None = Cookie(default=None)):
+    user = active_user(request, nexora_sid)
+    with db.SessionLocal() as session:
+        if robot_mode_for(session, user.id) != 'manual':
+            raise HTTPException(409, 'A agenda fica disponível somente no modo Manual')
+        items = session.scalars(select(db.RobotManualSignal).where(
+            db.RobotManualSignal.user_id == user.id
+        ).order_by(db.RobotManualSignal.scheduled_for.desc(),
+                   db.RobotManualSignal.id.desc()).limit(100)).all()
+        return {'items': [manual_signal_public(item) for item in items],
+                'execution': 'SCHEDULE_ONLY_NO_ORDERS',
+                'note': 'Agendamento de estudo. Não envia ordens para a corretora.'}
+
+
+@app.post('/api/robot/manual-signals')
+async def add_robot_manual_signal(request: Request, payload: ManualSignalDraft,
+                                  nexora_sid: str | None = Cookie(default=None)):
+    user = active_user(request, nexora_sid)
+    if payload.direction not in ('CALL', 'PUT') or payload.expiry_minutes not in (1, 3, 5, 15):
+        raise HTTPException(422, 'Direção ou expiração inválida')
+    if not re.fullmatch(r'[A-Za-z0-9_]{2,30}', payload.symbol):
+        raise HTTPException(422, 'Ativo inválido')
+    if payload.scheduled_for.tzinfo is None:
+        raise HTTPException(422, 'Informe data e hora com fuso horário')
+    scheduled_for = payload.scheduled_for.astimezone(timezone.utc)
+    now = datetime.now(timezone.utc)
+    if not now + timedelta(minutes=1) <= scheduled_for <= now + timedelta(days=30):
+        raise HTTPException(422, 'Agende entre 1 minuto e 30 dias no futuro')
+    with db.SessionLocal() as session:
+        if robot_mode_for(session, user.id) != 'manual':
+            raise HTTPException(409, 'Escolha e salve o modo Manual primeiro')
+        profile = session.get(db.AutomationProfile, user.id)
+        if not profile or profile.account_mode != 'demo':
+            raise HTTPException(409, 'A agenda exige configuração DEMO válida')
+        market = 'derived' if profile.market == 'volatility' else profile.market
+    try:
+        items = await featured_instruments_by_group(market)
+    except (MarketError, TimeoutError, OSError):
+        raise HTTPException(503, 'Ativos da Deriv temporariamente indisponíveis') from None
+    if payload.symbol not in {item['symbol'] for item in items}:
+        raise HTTPException(422, 'Selecione um ativo do catálogo confirmado')
+    with db.SessionLocal() as session:
+        if robot_mode_for(session, user.id) != 'manual':
+            raise HTTPException(409, 'O modo foi alterado durante o agendamento')
+        active_count = session.scalar(select(func.count()).select_from(db.RobotManualSignal).where(
+            db.RobotManualSignal.user_id == user.id,
+            db.RobotManualSignal.scheduled_for >= now
+        )) or 0
+        if active_count >= 50:
+            raise HTTPException(409, 'Limite de 50 sinais futuros; remova algum primeiro')
+        duplicate = session.scalar(select(db.RobotManualSignal.id).where(
+            db.RobotManualSignal.user_id == user.id,
+            db.RobotManualSignal.symbol == payload.symbol,
+            db.RobotManualSignal.direction == payload.direction,
+            db.RobotManualSignal.scheduled_for == scheduled_for
+        ).limit(1))
+        if duplicate:
+            raise HTTPException(409, 'Este sinal já está agendado')
+        item = db.RobotManualSignal(
+            user_id=user.id, symbol=payload.symbol, direction=payload.direction,
+            expiry_minutes=payload.expiry_minutes, scheduled_for=scheduled_for
+        )
+        session.add(item)
+        session.commit()
+        session.refresh(item)
+        return {'signal': manual_signal_public(item), 'execution': 'SCHEDULE_ONLY_NO_ORDERS'}
+
+
+@app.delete('/api/robot/manual-signals/{signal_id}')
+async def delete_robot_manual_signal(signal_id: int, request: Request,
+                                     nexora_sid: str | None = Cookie(default=None)):
+    user = active_user(request, nexora_sid)
+    with db.SessionLocal() as session:
+        item = session.get(db.RobotManualSignal, signal_id)
+        if item is None or item.user_id != user.id:
+            raise HTTPException(404, 'Sinal não encontrado')
+        session.delete(item)
+        session.commit()
+    return {'removed': True, 'execution': 'SCHEDULE_ONLY_NO_ORDERS'}
+
+
+
 @app.get('/api/automation/catalogue')
 async def automation_catalogue(request:Request,market:str='volatility',
                                nexora_sid:str|None=Cookie(default=None)):
@@ -2247,6 +2392,10 @@ async def autopilot_start(request:Request,payload:AutoPilotSwitch,
     if payload.confirm=='START_REAL_AUTOPILOT':
         return await start_real_autopilot(request,nexora_sid)
     user,_=active_session(request,nexora_sid)
+    # A mode choice is never permission to run the wrong execution engine.
+    with db.SessionLocal() as session:
+        if robot_mode_for(session, user.id) == 'manual':
+            raise HTTPException(409, 'Modo Manual: agenda registrada, mas execução automática de sinais ainda não está habilitada')
     if payload.confirm!='START_DEMO_AUTOPILOT':
         raise HTTPException(403,'Confirme o modo automático de treinamento')
     if not autopilot_allowed():
