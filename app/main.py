@@ -2586,6 +2586,11 @@ async def autopilot_start(request:Request,payload:AutoPilotSwitch,
     # orders still apply to cumulative stop checks but not the new progression.
     async with autopilot_lock:
         with db.SessionLocal() as sess:
+            # The mode may have changed while catalogues, access or risks were
+            # checked. The final consent mutation must recheck the same guard.
+            selected=sess.get(db.RobotUsageMode,user.id)
+            if selected and (selected.mode=='manual' or selected.preferences_json):
+                raise HTTPException(409,'A configuração exibida não foi aplicada ao executor DEMO')
             access=start_trial_on_first_robot_start(sess,user.id)
             if access['enforced'] and not access['allowed']:
                 raise HTTPException(403,'Acesso do robô expirado. Renove antes de ligar.')
