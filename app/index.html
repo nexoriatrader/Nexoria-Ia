@@ -2941,8 +2941,10 @@ async function toggleRobot(){
  if(button.dataset.commandPending==='true')return;
  const wasRunning=robotRunning;
  let pendingAccountMode='demo';
+ const buttonOriginalLabel=button.textContent;
  button.dataset.commandPending='true';
  button.disabled=true;
+ if(!wasRunning)button.textContent='CONFERINDO CONFIGURAÇÕES…';
  if(!wasRunning){
   try{
    const [profile,risk]=await Promise.all([
@@ -2965,11 +2967,20 @@ async function toggleRobot(){
     }
    }
    let catalogue=[];
+   // Optional read-only broker labels must not make the saved-configuration
+   // review wait for websocket retries; codes in the saved profile are enough
+   // to display an accurate review while all mandatory checks stay unchanged.
+   const catalogueController=new AbortController();
+   const catalogueTimeout=setTimeout(()=>catalogueController.abort(),1800);
    try{
-    const response=await req('/api/automation/catalogue?market='+encodeURIComponent(profile.market));
-    catalogue=response.items||[];
+    const response=await req('/api/automation/catalogue?market='+encodeURIComponent(profile.market),
+      {signal:catalogueController.signal});
+    catalogue=Array.isArray(response.items)?response.items:[];
    }catch(e){
-    // The saved symbols are still shown verbatim when broker labels cannot be loaded.
+    // Public names are optional. Saved symbols stay visible verbatim.
+    // No consent, risk check, or authorization is skipped.
+   }finally{
+    clearTimeout(catalogueTimeout);
    }
    if(!await askRobotStartConfirmation(profile,risk,catalogue))return;
   }catch(e){
@@ -2980,6 +2991,7 @@ async function toggleRobot(){
    if(button.dataset.startRequestSent!=='true'){
     button.dataset.commandPending='false';
     button.disabled=false;
+    button.textContent=buttonOriginalLabel;
    }
   }
  }

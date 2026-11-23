@@ -773,3 +773,105 @@ def test_premium_skin_only_adds_css_and_nonoperational_status_state():
     assert "if(!health.real_orders_enabled)" in HTML
     assert "if(!await askRobotStartConfirmation(profile,risk,catalogue))return;" in HTML
     assert "wasRunning?'/api/autopilot/stop':'/api/autopilot/start'" in HTML
+
+
+def test_review_optional_catalogue_timeout_prevents_long_wait():
+    """Optional broker descriptions cannot hold up a configuration review."""
+    html = HTML
+    code = "async function toggleRobot(){" + html.split(
+        "async function toggleRobot(){", 1
+    )[1].split("async function loadRealBalance(){", 1)[0]
+    assert "const [profile,risk]=await Promise.all([" in code
+    assert "req('/api/automation/profile'),req('/api/onboarding/config')" in code
+    assert "if(!profile.configured)" in code
+    assert "if(!health.real_orders_enabled)" in code
+    assert "if(!await askRobotStartConfirmation(profile,risk,catalogue))return;" in code
+    assert "setTimeout(()=>catalogueController.abort(),1800)" in code
+    assert "{signal:catalogueController.signal}" in code
+    assert "clearTimeout(catalogueTimeout)" in code
+    assert "if(!wasRunning)button.textContent='CONFERINDO CONFIGURAÇÕES…';" in code
+    assert "button.textContent=buttonOriginalLabel;" in code
+    if not shutil.which("node"):
+        return
+    # Shorten only the sandbox test, not the deployed UI.
+    test_code = code.replace("catalogueController.abort(),1800",
+                             "catalogueController.abort(),25")
+    runtime = r"""
+const notices=[],requests=[],modalCatalogues=[];
+const button={dataset:{},disabled:false,textContent:'LIGAR ROBÔ',setAttribute(){}};
+const $=id=>id==='robotButton'?button:{textContent:'',dataset:{}};
+let robotRunning=false,scenario='slow',abortSeen=false;
+function showRobotNotice(msg){notices.push(msg);}
+async function refreshDashboard(){throw Error('Unexpected POST path');}
+async function req(path,opts={}){
+ requests.push(path);
+ if(path==='/api/automation/profile')
+  return {configured:true,account_mode:scenario==='real'?'real':'demo',market:'derived'};
+ if(path==='/api/onboarding/config'){
+  if(scenario==='bad_risk')throw Error('Unavailable');
+  return {stake:1,stop_loss:2,cycles:0,martingale:false};
+ }
+ if(path==='/healthz')return {real_orders_enabled:false};
+ if(path.startsWith('/api/automation/catalogue?')){
+  if(scenario==='fast')return {items:[{symbol:'TEST',name:'Label'}]};
+  return new Promise((resolve,reject)=>{
+   opts.signal.addEventListener('abort',()=>{
+    abortSeen=true;reject(new Error('Cancelled'));
+   },{once:true});
+  });
+ }
+ throw Error('Unexpected request: '+path);
+}
+async function askRobotStartConfirmation(profile,risk,catalogue){
+ modalCatalogues.push(catalogue);return false;
+}
+"""
+    checks = r"""
+(async()=>{
+ const started=Date.now();await toggleRobot();
+ if(Date.now()-started>450||!abortSeen)throw Error('Optional labels delayed review');
+ if(modalCatalogues.length!==1||modalCatalogues[0].length)
+  throw Error('Saved-symbol fallback failed');
+ if(button.disabled||button.dataset.commandPending!=='false'
+    ||button.textContent!=='LIGAR ROBÔ')throw Error('Loading button not restored');
+ scenario='fast';await toggleRobot();
+ if(modalCatalogues.length!==2||modalCatalogues[1][0].name!=='Label')
+  throw Error('Fast catalogue not used');
+ scenario='bad_risk';await toggleRobot();
+ if(modalCatalogues.length!==2)throw Error('Review opened on invalid configuration');
+ scenario='real';await toggleRobot();
+ if(modalCatalogues.length!==2)throw Error('REAL guard bypassed');
+ if(!notices.some(s=>s.includes('Conta REAL ainda não habilitada')))
+  throw Error('Missing REAL safety notice');
+ if(requests.some(p=>p.includes('/api/autopilot/')))
+  throw Error('Unexpected transaction request');
+})().catch(e=>{console.error(e);process.exitCode=1;});
+"""
+    result = subprocess.run(
+        ["node", "-e", runtime + test_code + checks],
+        capture_output=True, text=True, timeout=15, check=False,
+    )
+    assert result.returncode == 0, result.stderr
+
+
+def test_review_performance_logs_are_readonly_and_do_not_log_secrets():
+    from pathlib import Path
+    import ast
+    root = Path(__file__).resolve().parents[1]
+    main = (root / "app/main.py").read_text(encoding="utf-8")
+    markets = (root / "app/automation_markets.py").read_text(encoding="utf-8")
+    ast.parse(main)
+    ast.parse(markets)
+    assert "_REVIEW_READ_PATHS=frozenset((" in main
+    assert "request.method=='GET'" in main
+    assert "response.headers['Server-Timing']" in main
+    assert "review_path,elapsed_ms,response.status_code" in main
+    assert "request.headers.get('origin')" in main
+    assert "'Cache-Control':'no-store'" in main
+    assert "request.query_params" not in main.split(
+        "if review_start is not None:", 1
+    )[1].split("response.headers.update(", 1)[0]
+    assert "lock_wait_ms" in markets and "broker_ms" in markets
+    assert "public catalogue refresh slow" in markets
+    assert 'timeout=15' in markets
+    assert '_catalog_cache["at"] < 300' in markets
