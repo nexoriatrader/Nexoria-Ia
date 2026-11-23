@@ -462,3 +462,92 @@ async function refreshDashboard(){refreshed++;}
         capture_output=True, text=True, timeout=20, check=False
     )
     assert result.returncode == 0, result.stderr
+
+
+
+def test_minimal_robot_home_keeps_only_two_visible_surfaces():
+    """The initial dashboard must be easy to scan without losing legacy DOM bindings."""
+    panel = HTML.split(
+        '<section id="dashboard" class="hidden nx-neo-dashboard nx-calm-dashboard">', 1
+    )[1].split('<section id="robot-config" class="hidden">', 1)[0]
+    assert '<section class="nx-neo-command"' in panel
+    assert 'id="nxNeoQuickStop"' in panel
+    assert 'class="nx-calm-activity"' in panel
+    assert 'id="nxCalmActivityText"' in panel
+    assert '<details class="nx-calm-extra" id="nxCalmExtra">' in panel
+    assert panel.index('class="nx-neo-command"') < panel.index('class="nx-calm-activity"')
+    assert panel.index('class="nx-calm-activity"') < panel.index(
+        '<details class="nx-calm-extra"'
+    )
+    # Cards and the original broker controls remain mounted for existing
+    # state renders, but are no longer directly visible on the initial screen.
+    advanced = panel.split('<details class="nx-calm-extra" id="nxCalmExtra">', 1)[1]
+    for element_id in ("robotEasyOverview", "nxNeoChartBars", "nxNeoControls",
+                       "robotButton", "robotStartNotice", "profitMetric",
+                       "realProfitMetric", "dashScanMonitor", "nxNeoMore",
+                       "nxNeoChartBars"):
+        assert 'id="' + element_id + '"' in advanced
+        assert 'id="' + element_id + '"' not in panel.split(
+            '<details class="nx-calm-extra" id="nxCalmExtra">', 1
+        )[0]
+    assert 'aria-label="Desligar robô em funcionamento"' in panel
+    assert 'onclick="nxNeoStopRunningRobot()"' in panel
+    assert "function renderNxCalmActivity(status)" in HTML
+    assert "function markNxCalmActivityUnknown()" in HTML
+    assert "renderNxCalmActivity(status);" in HTML
+    assert "markNxCalmActivityUnknown();" in HTML
+    assert "if(!health.real_orders_enabled)" in HTML
+    assert "wasRunning?'/api/autopilot/stop':'/api/autopilot/start'" in HTML
+    html_head = HTML.split("</head>", 1)[0]
+    assert html_head.count("<style>") == html_head.count("</style>")
+
+
+def test_minimal_robot_activity_reports_only_confirmed_status_without_actions():
+    start = HTML.index("function renderNxCalmActivity(status){")
+    end = HTML.index("function renderNxNeoTopCommand(status){", start)
+    block = HTML[start:end]
+    for forbidden in ("fetch(", "POST", "localStorage", "sessionStorage",
+                      "sendBeacon", "document.cookie", "/api/autopilot/start",
+                      "/api/autopilot/stop", "toggleRobot("):
+        assert forbidden not in block
+    if not shutil.which("node"):
+        return
+    runtime = r"""
+const elements=new Map();
+const $=id=>{
+ if(!elements.has(id))elements.set(id,{textContent:'',dataset:{}});
+ return elements.get(id);
+};
+"""
+    checks = r"""
+const iso=new Date().toISOString();
+function check(status,title,detail){
+ renderNxCalmActivity(status);
+ if($('nxCalmActivityText').textContent!==title)
+  throw Error('Expected '+title+'; found '+$('nxCalmActivityText').textContent);
+ if(detail&&!$('nxCalmActivityDescription').textContent.includes(detail))
+  throw Error('Incorrect explanation for '+title);
+ if($('nxCalmConnection').dataset.state!=='ok')
+  throw Error('Confirmed status not marked');
+}
+check({running:false,auto_buy_enabled:true},'Sem atividade','pausado');
+check({running:false,interrupted_after_restart:true},'Atividade interrompida','interrupção');
+check({running:true,scan_progress:{}},'Aguardando dados','Nenhuma análise');
+check({running:true,scan_progress:{last_checked_at:iso,stage:'scanning'}},
+ 'Analisando informações','Verificando dados');
+check({running:true,scan_progress:{last_scan_at:iso,stage:'signal'}},
+ 'Aguardando nova análise','Última verificação');
+check({running:false,auto_buy_enabled:false},'Sem atividade','não está disponível');
+markNxCalmActivityUnknown();
+if($('nxCalmActivityText').textContent!=='Estado não confirmado')
+ throw Error('Failed request left a stale activity visible');
+if($('nxCalmConnection').dataset.state!=='uncertain')
+ throw Error('Failed request was presented as confirmed');
+if(!$('nxCalmActivityDescription').textContent.includes('desatualizada'))
+ throw Error('Missing stale-status warning');
+"""
+    result = subprocess.run(
+        ["node", "-e", runtime + block + checks],
+        capture_output=True, text=True, check=False, timeout=20
+    )
+    assert result.returncode == 0, result.stderr
