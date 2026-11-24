@@ -2419,6 +2419,21 @@ async function loadDailyResults(){
 }
 setInterval(()=>{if(activePage==='dashboard')loadDailyResults().catch(()=>{})},120000);
 
+async function refreshPanelStatusDisplay(){
+ const sequence=dashboardStatusSequence;
+ const controller=new AbortController();
+ const timeout=setTimeout(()=>controller.abort(),10000);
+ try{
+  const status=await req('/api/status',{signal:controller.signal});
+  if(activePage!=='dashboard'||sequence!==dashboardStatusSequence)return;
+  renderScanMonitor(status);
+  const state=status.running?'active':status.interrupted_after_restart?'interrupted':status.auto_buy_enabled?'paused':'unavailable';
+  renderPanelHistoryState(state,status.scan_progress);
+ }catch(error){
+  if(activePage==='dashboard'&&sequence===dashboardStatusSequence)renderPanelHistoryState('unknown');
+  throw error;
+ }finally{clearTimeout(timeout);}
+}
 function updateResultsPolling(){
  if(resultsRefreshTimer){clearInterval(resultsRefreshTimer);resultsRefreshTimer=null;}
  if(activePage==='results'||activePage==='dashboard'){
@@ -2426,23 +2441,11 @@ function updateResultsPolling(){
      if(resultsRequestBusy)return;
      resultsRequestBusy=true;
      try{
-       let historyError=null;
-       try{await loadDemoOrders();}catch(error){historyError=error;}
-       if(activePage==='dashboard'){
-         const historyStatusSequence=dashboardStatusSequence;
-         let scanStatus;
-         try{scanStatus=await req('/api/status');}
-         catch(error){
-           if(activePage==='dashboard'&&historyStatusSequence===dashboardStatusSequence)renderPanelHistoryState('unknown');
-           throw error;
-         }
-         renderScanMonitor(scanStatus);
-         if(activePage==='dashboard'&&historyStatusSequence===dashboardStatusSequence){
-           const state=scanStatus.running?'active':scanStatus.interrupted_after_restart?'interrupted':scanStatus.auto_buy_enabled?'paused':'unavailable';
-           renderPanelHistoryState(state,scanStatus.scan_progress);
-         }
-       }
-       if(historyError)throw historyError;
+       // Status display must not be blocked by a slow history request.
+       const statusTask=activePage==='dashboard'?refreshPanelStatusDisplay():Promise.resolve();
+       const [historyResult,statusResult]=await Promise.allSettled([loadDemoOrders(),statusTask]);
+       if(historyResult.status==='rejected')throw historyResult.reason;
+       if(statusResult.status==='rejected')throw statusResult.reason;
        if(activePage==='results')$('resultsLiveStatus').textContent='Atualização automática 🟢';
      }catch(e){
        if(activePage==='results')$('resultsLiveStatus').textContent='○ Tentando sincronizar com a Deriv...';
@@ -3393,11 +3396,12 @@ function renderPanelHistoryState(state,scan){
    message=time?'Robô em execução: sem leitura recente · última leitura '+time:'Robô em execução: aguardando dados de atividade do servidor';
   }
  }
+ if(safeState==='unknown'&&typeof navigator!=='undefined'&&navigator.onLine===false)message='Sem conexão com a internet · estado do robô não confirmado';
  node.dataset.activity=activity;
  if(node.textContent!==message)node.textContent=message;
  // Stop the visual pulse if new status confirmations stop arriving.
  clearTimeout(node.nxActivityTimer);
- if(safeState==='active')node.nxActivityTimer=setTimeout(()=>{
+ if(safeState!=='unknown')node.nxActivityTimer=setTimeout(()=>{
   node.dataset.state='unknown';
   node.dataset.activity='idle';
   node.textContent='Sem atualização recente do estado · aguardando resposta do servidor';
