@@ -1510,6 +1510,9 @@ body:has(#dashboard:not(.hidden)) .nexora-logo-only .brand img{
 #dashboard .nx-history-state::before{content:"";width:8px;height:8px;flex:0 0 8px;border-radius:50%;background:#a6bbc9;margin-top:6px}
 #dashboard .nx-history-state[data-state="active"]{color:#9ce7c6}
 #dashboard .nx-history-state[data-state="active"]::before{background:#70d6a9;box-shadow:0 0 0 3px #70d6a91c}
+#dashboard .nx-history-state[data-state="active"][data-activity="checking"]::before{animation:nxHistoryActivityPulse 1.65s ease-out infinite}
+@keyframes nxHistoryActivityPulse{0%,100%{box-shadow:0 0 0 2px #70d6a940}65%{box-shadow:0 0 0 7px #70d6a900}}
+@media(prefers-reduced-motion:reduce){#dashboard .nx-history-state[data-activity="checking"]::before{animation:none}}
 #dashboard .nx-history-state[data-state="unknown"],#dashboard .nx-history-state[data-state="interrupted"]{color:#e2caa8}
 #dashboard .nx-history-state[data-state="unknown"]::before,#dashboard .nx-history-state[data-state="interrupted"]::before{background:#d0ab76}
 #dashboard .nx-history-label{font-size:12px;font-weight:850;letter-spacing:.035em;margin:18px 0 8px;color:#b9d7e7}
@@ -3360,6 +3363,7 @@ function renderPanelHistoryState(state,scan){
  const labels={active:'Robô em execução: aguardando nova leitura',paused:'Robô pausado',interrupted:'Execução interrompida',unavailable:'Robô indisponível',unknown:'Estado do robô não confirmado · conexão indisponível'};
  const safeState=Object.prototype.hasOwnProperty.call(labels,state)?state:'unknown';
  node.dataset.state=safeState;
+ let activity='idle';
  let message=labels[safeState];
  if(safeState==='active'){
   const raw=scan?.last_checked_at||scan?.last_scan_at;
@@ -3369,6 +3373,7 @@ function renderPanelHistoryState(state,scan){
   const validTimestamp=Number.isFinite(timestamp)&&age>=-5000;
   const time=validTimestamp?new Intl.DateTimeFormat('pt-BR',{timeZone:'America/Sao_Paulo',hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false}).format(new Date(timestamp)):'';
   if(fresh){
+   if(scan?.stage==='scanning')activity='checking';
    const checked=scan?.checked,total=scan?.total;
    const validCount=checked!==null&&checked!==undefined&&total!==null&&total!==undefined&&Number.isInteger(Number(checked))&&Number.isInteger(Number(total))&&Number(total)>0&&Number(checked)>=0&&Number(checked)<=Number(total);
    const progress=validCount?' · '+Number(checked)+' de '+Number(total)+' verificações concluídas':'';
@@ -3377,7 +3382,14 @@ function renderPanelHistoryState(state,scan){
    message=time?'Robô em execução: sem nova leitura confirmada · última leitura '+time:'Robô em execução: primeira leitura ainda não confirmada';
   }
  }
+ node.dataset.activity=activity;
  if(node.textContent!==message)node.textContent=message;
+ // Stop the visual pulse if new status confirmations stop arriving.
+ clearTimeout(node.nxActivityTimer);
+ if(activity==='checking')node.nxActivityTimer=setTimeout(()=>{
+  node.dataset.activity='idle';
+  node.textContent='Robô em execução: aguardando nova confirmação de atividade';
+ },15000);
 }
 function renderPanelHistory(items,mode){
  const latest=$('nxPanelHistoryLatest'),previous=$('nxPanelHistoryPrevious'),note=$('nxPanelHistoryNote');
