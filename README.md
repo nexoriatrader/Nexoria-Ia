@@ -1,4 +1,20 @@
-# NEXORA IA v0.5.2 — validação supervisionada Deriv Demo
+# NEXORA IA — organização do projeto
+
+Este repositório contém a aplicação web Nexora IA. O código principal declara a versão 0.8.0; a documentação de v0.5.2 abaixo é um registro histórico, não uma descrição verificada da versão publicada.
+
+## Referências de manutenção
+
+- Interface principal: `app/index.html`; administração: `app/admin.html`.
+- Backend: `app/main.py`; persistência: `app/db.py`.
+- Segurança: [docs/GITHUB_SECURITY.md](docs/GITHUB_SECURITY.md) e [docs/RELEASE_SECURITY_RLS.md](docs/RELEASE_SECURITY_RLS.md).
+- Restauração: [docs/RESTORE.md](docs/RESTORE.md).
+- Dependências: `requirements.txt`; infraestrutura: `render.yaml`.
+
+Os documentos antigos de instruções aos agentes foram retirados para reduzir ambiguidades. Os registros históricos de versões, os testes existentes e os documentos de segurança foram preservados. Não interpretar documentação histórica como autorização para modificar configurações, realizar operações financeiras ou publicar alterações. Qualquer mudança exige revisão e validação isolada.
+
+---
+
+## Histórico: NEXORA IA v0.5.2 — validação supervisionada Deriv Demo
 
 NEXORA IA é um protótipo de teste com dois fluxos separados: simulação local baseada em cotações públicas e contratos supervisionados exclusivamente na conta Deriv Demo. Não há compra, rota WebSocket ou credencial de conta real no executor.
 
