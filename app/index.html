@@ -2398,7 +2398,7 @@ function updateResultsPolling(){
    },activePage==='dashboard'?7000:3000);
  }
 }
-function go(v){if(v==='robot-config'){window.location.assign('/configuracao-educativa');return;}page(v);updateResultsPolling();window.scrollTo({top:0,behavior:'smooth'});if(v==='setup')loadOnboarding();if(v==='dashboard'){refreshDashboard();loadDemoOrders().catch(()=>{});loadDailyResults().catch(()=>{});}if(v==='results'){loadDemoOrders();}if(v==='account'){loadRobotAccess();loadBillingPlans()}if(v==='settings')loadSettings()}
+function go(v){page(v);updateResultsPolling();window.scrollTo({top:0,behavior:'smooth'});if(v==='setup')loadOnboarding();if(v==='dashboard'){refreshDashboard();loadDemoOrders().catch(()=>{});loadDailyResults().catch(()=>{});}if(v==='robot-config'){initAutomationWizard();setAutomationWizardStep(1);loadAutomationProfile();}if(v==='results'){loadDemoOrders();}if(v==='account'){loadRobotAccess();loadBillingPlans()}if(v==='settings')loadSettings()}
 function fail(msg){$('error').textContent=msg||''}
 async function req(path,opts={}){const r=await fetch(path,{credentials:'same-origin',...opts});let data;try{data=await r.json()}catch{throw Error('Resposta inválida do servidor')}if(!r.ok)throw Error(data.detail||'Falha na conexão');return data}
 async function refreshLandingOffer(){
@@ -2477,7 +2477,7 @@ async function init(){
   clearStripeCheckoutQuery();
   showLandingLoginNotice(null);
   if(loginResult==='ok'){
-    // Open the educational six-step navigation demonstration.
+    // The former one-page setup is legacy. Only open the seven-step wizard.
     go('robot-config');
   }else if(paymentResult==='success'||paymentResult==='cancelled'){
     go('account');
