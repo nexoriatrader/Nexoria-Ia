@@ -1,6 +1,5 @@
 """NEXORA IA. Official Deriv DEMO orders and read-only AutoPilot research."""
 import asyncio, json, logging, os, secrets, re, time
-from math import isfinite
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation
 from zoneinfo import ZoneInfo
@@ -34,10 +33,9 @@ from .market import MarketError, discover_symbols, discover_contracts, indicativ
 from .strategy_lab import run_lab
 from .single_asset_study import run_single_asset_study
 from .research_persistence import (research_loop, latest_study, latest_multitimeframe_study,
-    latest_pullback_study, HistoricalResearchReport, RESEARCH_KEY,
-    MULTI_RESEARCH_KEY, PULLBACK_KEY)  # read-only research
+    latest_pullback_study)  # read-only research
 from .m1_history import m1_collect_loop, history_status
-from .asset_scanner import scan_assets, scan_intelligence_markets, scan_intelligence_context
+from .asset_scanner import scan_assets
 from .trade_selector_v2 import (select_demo_signal, last_scan_report, has_pending_signals,
                                 active_market, catalogue, supported, fetch_closed_timeframe,
                                 SIGNAL_PROFILE)
@@ -1937,14 +1935,6 @@ class AdminCredentials(BaseModel):
     password:str
 
 
-@app.get('/nexora2')
-async def nexora2_workspace(request:Request,nexora_sid:str|None=Cookie(default=None)):
-    """Authenticated research workspace; no order execution or mutation."""
-    active_user(request,nexora_sid)
-    return FileResponse(Path(__file__).parent/'nexora2.html',media_type='text/html',
-                        headers={'Cache-Control':'no-store'})
-
-
 @app.get('/admin')
 async def admin_home():
     return FileResponse(Path(__file__).parent/'admin.html')
@@ -2608,91 +2598,6 @@ async def single_asset_research_route(request:Request):
 
 
 
-# Existing shared PostgreSQL research snapshots. This is deliberately NOT the
-# current user's query history; no table, migration, order or execution update.
-NEXORA2_LIBRARY_LABELS={
-    RESEARCH_KEY:'Histórico M5 · 30 dias',
-    MULTI_RESEARCH_KEY:'Estudo M1 e M15 · 30 dias',
-    PULLBACK_KEY:'Estudo de pullback M1/M3',
-}
-
-
-def nexora2_library_meta(record):
-    return {
-        'id':record.id,
-        'title':NEXORA2_LIBRARY_LABELS[record.research_key],
-        'created_at':utc(record.created_at).isoformat(),
-        'period_from':utc(record.period_from).isoformat(),
-        'period_to':utc(record.period_to).isoformat(),
-        'scope':'SHARED_SYSTEM_RESEARCH',
-    }
-
-
-@app.get('/api/nexora2/research/library')
-async def nexora2_research_library(request:Request,nexora_sid:str|None=Cookie(default=None)):
-    """Authenticated, bounded, read-only persisted studies; never broker orders."""
-    active_user(request,nexora_sid)
-    with db.SessionLocal() as sess:
-        # Metadata projection: do not pull large JSON payloads just to list rows.
-        reports=sess.execute(select(
-            HistoricalResearchReport.id,HistoricalResearchReport.research_key,
-            HistoricalResearchReport.created_at,HistoricalResearchReport.period_from,
-            HistoricalResearchReport.period_to
-        ).where(
-            HistoricalResearchReport.research_key.in_(tuple(NEXORA2_LIBRARY_LABELS))
-        ).order_by(HistoricalResearchReport.created_at.desc(),
-                   HistoricalResearchReport.id.desc()).limit(12)).all()
-        return {
-            'items':[nexora2_library_meta(item) for item in reports],
-            'source':'EXISTING_POSTGRES_RESEARCH_REPORTS',
-            'scope':'SHARED_SYSTEM_RESEARCH','orders_sent':0,
-            'note':'Pesquisas globais persistidas, não o histórico individual de consultas. '
-                   'A retenção de pesquisas pode remover registros antigos.',
-        }
-
-
-@app.get('/api/nexora2/research/library/{report_id}')
-async def nexora2_research_library_detail(request:Request,report_id:int,
-                nexora_sid:str|None=Cookie(default=None)):
-    """Curated metadata only; do not expose large unreviewed report payloads."""
-    active_user(request,nexora_sid)
-    with db.SessionLocal() as sess:
-        item=sess.scalar(select(HistoricalResearchReport).where(
-            HistoricalResearchReport.id==report_id,
-            HistoricalResearchReport.research_key.in_(tuple(NEXORA2_LIBRARY_LABELS))
-        ))
-        if not item:
-            raise HTTPException(404,'Pesquisa histórica não encontrada')
-        metadata=nexora2_library_meta(item)
-        # Reports can include huge research arrays; parse only within a safe bound.
-        if len(item.payload_json)>2_000_000:
-            raise HTTPException(413,'Relatório grande demais para apresentar neste painel')
-        try:
-            data=json.loads(item.payload_json)
-        except (ValueError,TypeError):
-            raise HTTPException(503,'Relatório salvo inválido') from None
-        if not isinstance(data,dict):
-            raise HTTPException(503,'Formato de relatório não reconhecido')
-        results=data.get('results')
-        candles=data.get('candles',data.get('m1_candles'))
-        coverage=data.get('coverage_pct')
-        model_count=len(results) if isinstance(results,list) else None
-        # Do not present directional outcomes as financial performance.
-        return {**metadata,
-            'summary':{
-                'candles':candles if isinstance(candles,int) and
-                           not isinstance(candles,bool) and 0<=candles<=100_000_000 else None,
-                'model_count':model_count if model_count is not None and model_count<=5000 else None,
-                'coverage_pct':coverage if isinstance(coverage,(int,float)) and
-                     not isinstance(coverage,bool) and isfinite(coverage) and 0<=coverage<=100 else None,
-                'source':'PERSISTED_HISTORICAL_RESEARCH',
-            },
-            'execution_allowed':False,'orders_sent':0,
-            'note':'Resumo de pesquisa histórica compartilhada. Não equivale a sinais, '
-                   'ordens, lucro realizado ou validação de operações financeiras.',
-        }
-
-
 # Explicit, read-only research endpoint; never touches AutoPilot execution settings.
 _strategy_lab_lock=asyncio.Lock()
 _strategy_lab_cache=None
@@ -2719,26 +2624,18 @@ async def strategy_lab_route(request:Request,nexora_sid:str|None=Cookie(default=
 _asset_scanner_lock=asyncio.Lock()
 _asset_scanner_cache=None
 _asset_scanner_cache_time=0.0
-# Existing single scanner + bounded public versioned entries; no new broker
-# websocket, process, database, financial executor, or shared user data.
-_asset_scanner_research_cache={}
-_asset_scanner_last_v2=None
 
 
 @app.get('/api/research/asset-scanner')
 async def asset_scanner_route(request:Request,nexora_sid:str|None=Cookie(default=None),
                               version:int=1,expiry_minutes:int=5):
-    """Opt-in I02/I03 public research, with unchanged legacy scanner v1."""
+    """Existing read-only research endpoint; experimental versions retired."""
     user=active_user(request,nexora_sid)
     if version not in (1,2,3):
         raise HTTPException(422,'Versão de pesquisa inválida')
-    if version==3 and expiry_minutes not in (1,3,5,15):
-        raise HTTPException(422,'Expiração de pesquisa inválida')
-    if version in (2,3) and os.getenv(
-        'NEXORA_INTELLIGENCE_READONLY_ENABLED','false'
-    ).strip().lower()!='true':
-        raise HTTPException(503,'Intelligence I01-I03 ainda não habilitada')
-    global _asset_scanner_cache,_asset_scanner_cache_time,_asset_scanner_last_v2
+    if version in (2,3):
+        raise HTTPException(410,'Versão de pesquisa descontinuada')
+    global _asset_scanner_cache,_asset_scanner_cache_time
     async with _asset_scanner_lock:
         now=asyncio.get_running_loop().time()
         if version==1:
@@ -2751,38 +2648,6 @@ async def asset_scanner_route(request:Request,nexora_sid:str|None=Cookie(default
             _asset_scanner_cache=report
             _asset_scanner_cache_time=asyncio.get_running_loop().time()
             return {**report,'cached':False}
-        key=(version,expiry_minutes if version==3 else 0)
-        bucket=int(time.time()//60)
-        entry=_asset_scanner_research_cache.get(key)
-        cached=bool(entry and now-entry[0]<60
-                    and (version!=3 or entry[1]==bucket))
-        if cached:
-            report=entry[2]
-        else:
-            try:
-                if version==2:
-                    report=await scan_intelligence_markets(previous=_asset_scanner_last_v2)
-                else:
-                    report=await scan_intelligence_context(
-                        previous=_asset_scanner_last_v2,expiry_minutes=expiry_minutes)
-            except MarketError as exc:
-                raise HTTPException(502,str(exc)) from None
-            _asset_scanner_research_cache[key]=(
-                asyncio.get_running_loop().time(),bucket,report)
-            _asset_scanner_last_v2=report
-            # At most five version/expiry keys; no tenant data in cache.
-            if len(_asset_scanner_research_cache)>5:
-                for stale_key in list(_asset_scanner_research_cache):
-                    if (stale_key!=key and
-                        now-_asset_scanner_research_cache[stale_key][0]>=60):
-                        _asset_scanner_research_cache.pop(stale_key,None)
-    # Read-only tenant overlay after shared cache; never feeds any trade path.
-    from .intelligence2.market_scanner import open_contracts_for_user
-    with db.SessionLocal() as sess:
-        continuity=open_contracts_for_user(sess,user.id)
-    return {**report,'cached':cached,'preserved_open_contracts':continuity,
-            'contract_continuity':'READ_ONLY_INDEPENDENT_OF_SELECTION',
-            'execution_allowed':False}
 
 
 @app.get('/api/market/symbols')
