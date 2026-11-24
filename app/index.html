@@ -1498,6 +1498,29 @@ body:has(#dashboard:not(.hidden)) .nexora-logo-only .brand img{
 @media(max-width:350px){#robot-config .nx-guide-path li{font-size:8px;line-height:1.3}}
 @media(prefers-reduced-motion:reduce){#robot-config .auto-wizard-track span{transition:none!important}}
 </style>
+<style>
+/* NEXORA read-only historical summary — same glass palette as the control card. */
+#dashboard.nx-calm-dashboard .nx-panel-history{position:relative;isolation:isolate;width:100%;min-width:0;margin:16px 0 0;padding:24px;border:1px solid #6c91a8a3;border-radius:26px;color:#e5f0f8;background:linear-gradient(148deg,#253b4ae9 0%,#172b40ef 32%,#0b2235f5 75%,#142636f8 100%);box-shadow:0 0 0 1px #d2f3ff12 inset,0 2px 5px #c8efff12 inset,0 23px 60px #010a16a1,-11px 14px 41px #08aadd20,9px 18px 42px #e5ac2220;overflow:hidden}
+#dashboard .nx-panel-history::before{content:"";position:absolute;inset:0;z-index:-1;pointer-events:none;border-radius:inherit;background:radial-gradient(circle at 0% 0%,#c4f1ff1a,transparent 38%),linear-gradient(110deg,transparent 55%,#e4ae2d0a)}
+#dashboard .nx-history-head{display:flex;align-items:center;gap:12px;margin:0 0 18px}
+#dashboard .nx-history-icon{display:grid;place-items:center;width:44px;height:44px;flex:0 0 44px;border:1px solid #91b8d2a3;border-radius:13px;background:linear-gradient(135deg,#50677a,#233749 70%);color:#b6e9ff;font-size:23px}
+#dashboard .nx-history-head h2{font-size:clamp(18px,3.3vw,23px);margin:3px 0;color:#f0f7fc}
+#dashboard .nx-history-head p,#dashboard .nx-history-note{font-size:12px;color:#a6bbc9;line-height:1.5;margin:0}
+#dashboard .nx-history-state{display:flex;align-items:center;gap:9px;padding:12px;border:1px solid #476b82;border-radius:13px;background:#10273b;font-size:13px;color:#d4e5f1;overflow-wrap:anywhere}
+#dashboard .nx-history-state::before{content:"";width:8px;height:8px;flex:0 0 8px;border-radius:50%;background:#a6bbc9}
+#dashboard .nx-history-state[data-state="active"]::before{background:#a6ded2}
+#dashboard .nx-history-label{font-size:12px;font-weight:850;letter-spacing:.035em;margin:18px 0 8px;color:#b9d7e7}
+#dashboard .nx-history-list{display:grid;gap:7px}
+#dashboard .nx-history-row{display:flex;justify-content:space-between;align-items:center;gap:10px;min-width:0;padding:11px 13px;border:1px solid #3e6077;border-radius:12px;background:#10283b}
+#dashboard .nx-history-latest .nx-history-row{border-color:#7892a6;background:#20384b}
+#dashboard .nx-history-row strong,#dashboard .nx-history-row small{display:block;overflow-wrap:anywhere}
+#dashboard .nx-history-row strong{font-size:14px;color:#e0edf6}
+#dashboard .nx-history-row small{font-size:11px;color:#a6bbc9;margin-top:3px}
+#dashboard .nx-history-outcome{text-align:right;flex:0 0 auto;max-width:45%;font-size:12px;color:#d7e5f1}
+#dashboard .nx-history-more{display:block;width:100%;min-height:44px;margin-top:17px;padding:10px;border:1px solid #668da4;border-radius:12px;background:#1a3b52;color:#e5f4ff;font-weight:850;font-size:12px}
+#dashboard .nx-history-note{margin-top:10px}
+@media(max-width:640px){#dashboard.nx-calm-dashboard .nx-panel-history{padding:15px;border-radius:19px;margin-top:12px}#dashboard .nx-history-row{padding:10px}}
+</style>
 </head>
 <body>
 <div class="shell">
@@ -1740,6 +1763,16 @@ body:has(#dashboard:not(.hidden)) .nexora-logo-only .brand img{
     </div>
   </div>
   </details>
+  </section>
+  <section class="nx-panel-history" aria-labelledby="nxPanelHistoryTitle">
+    <div class="nx-history-head"><span class="nx-history-icon" aria-hidden="true">▤</span><div><span class="nx-neo-section-caption">HISTÓRICO</span><h2 id="nxPanelHistoryTitle">Resultados do robô</h2><p>Registros de operações encerradas</p></div></div>
+    <div id="nxPanelHistoryState" class="nx-history-state" data-state="unknown" role="status">Consultando o estado do robô…</div>
+    <h3 class="nx-history-label">Última operação</h3>
+    <div id="nxPanelHistoryLatest" class="nx-history-list nx-history-latest"><p class="nx-history-note">Consultando histórico…</p></div>
+    <h3 class="nx-history-label">Operações anteriores</h3>
+    <div id="nxPanelHistoryPrevious" class="nx-history-list"><p class="nx-history-note">Consultando histórico…</p></div>
+    <p id="nxPanelHistoryNote" class="nx-history-note">Aguardando dados confirmados.</p>
+    <button class="nx-history-more" type="button" onclick="go('results')">VER MAIS RESULTADOS <span aria-hidden="true">→</span></button>
   </section>
   <footer class="nx-premium-footer">NEXORA IA <span aria-hidden="true">·</span> Deriv</footer>
 
@@ -2661,6 +2694,7 @@ function renderNxNeoTopCommand(status){
  const pill=$('nxNeoRunStatus'),stop=$('nxNeoQuickStop');
  const state=running?'active':interrupted?'interrupted':status.auto_buy_enabled?'paused':'unavailable';
  pill.dataset.state=state;
+ renderPanelHistoryState(state);
  pill.textContent=running?'● Em funcionamento':interrupted?'● Interrompido':status.auto_buy_enabled?'● Pausado':'● Indisponível';
  $('nxNeoRunHelp').textContent=running?'Processo ativo · estado confirmado':interrupted?'Interrupção informada pelo servidor':'Monitoramento e informações do sistema';
  $('nxNeoActivationLabel').textContent=running?'Configurações':'Ligar robô';
@@ -2668,6 +2702,7 @@ function renderNxNeoTopCommand(status){
  stop.disabled=!running||$('robotButton').dataset.commandPending==='true'||stop.dataset.commandPending==='true';
 }
 function markNxNeoTopUncertain(){
+ renderPanelHistoryState('unknown');
  $('nxNeoRunStatus').dataset.state='unknown';
  $('nxNeoRunStatus').textContent='● Sem confirmação';
  $('nxNeoRunHelp').textContent='Falha na consulta · último estado pode estar desatualizado';
@@ -2849,7 +2884,10 @@ async function refreshDashboard(){
    // Ignore an older response that arrived after a newer status request.
    if(sequence!==dashboardStatusSequence)return null;
    robotRunning=Boolean(status.running);
+   const previousHistoryMode=robotConfiguredMode;
    robotConfiguredMode=status.configured_account_mode==='real'?'real':'demo';
+   if(previousHistoryMode!==robotConfiguredMode)renderPanelHistory(null);
+
    renderScanMonitor(status);
    renderRobotEasyOverview(status);
    renderNxNeoTopCommand(status);
@@ -3303,7 +3341,44 @@ function renderRealtimeOrders(){
   timeZone:'America/Sao_Paulo',hour:'2-digit',minute:'2-digit',second:'2-digit'
  }).format(new Date())+' · Brasília';
 }
-async function loadDemoOrders(){try{const data=await req(robotConfiguredMode==='real'?'/api/real/orders':'/api/demo/orders');demoOrders=data.items||[];const last=demoOrders[0];$('lastOrder').textContent=last?last.symbol+' · '+last.direction+' · M'+last.duration_minutes+' · '+money(last.stake)+(last.pnl===null?' · Aguardando resultado':' · Resultado '+money(last.pnl)):'Nenhum contrato oficial ainda.';renderOrders();renderRealtimeOrders();return data}catch(e){$('ordersBody').innerHTML='<tr><td colspan="11" class="empty">Não foi possível carregar o histórico.</td></tr>';throw e}}
+function renderPanelHistoryState(state){
+ const node=$('nxPanelHistoryState');
+ if(!node)return;
+ const labels={active:'Robô em execução · estado confirmado pelo servidor',paused:'Robô pausado',interrupted:'Execução interrompida',unavailable:'Robô indisponível',unknown:'Estado do robô não confirmado'};
+ node.dataset.state=Object.prototype.hasOwnProperty.call(labels,state)?state:'unknown';
+ node.textContent=labels[node.dataset.state];
+}
+function renderPanelHistory(items,mode){
+ const latest=$('nxPanelHistoryLatest'),previous=$('nxPanelHistoryPrevious'),note=$('nxPanelHistoryNote');
+ if(!latest||!previous||!note)return;
+ latest.replaceChildren();previous.replaceChildren();
+ const empty=(target,message)=>{const p=document.createElement('p');p.className='nx-history-note';p.textContent=message;target.append(p);};
+ if(!Array.isArray(items)||mode!==robotConfiguredMode){
+  empty(latest,'Histórico não confirmado.');empty(previous,'Sem registros confirmados.');
+  note.textContent='Aguardando sincronização do histórico.';return;
+ }
+ const dateOf=o=>o.started_at_brasilia||o.broker_purchase_at||'';
+ const stamp=o=>{const value=Date.parse(dateOf(o));return Number.isFinite(value)?value:-Infinity;};
+ const rows=items.filter(o=>o&&o.state==='SETTLED'&&o.progression?.source==='autopilot').sort((a,b)=>stamp(b)-stamp(a)).slice(0,4);
+ function tile(order){
+  const row=document.createElement('div');row.className='nx-history-row';
+  const main=document.createElement('div'),title=document.createElement('strong'),sub=document.createElement('small');
+  title.textContent=String(order.symbol||'Ativo não informado');
+  const date=brasilDateTime(dateOf(order));sub.textContent=date[0]+' · '+date[1]+' (Brasília)';
+  main.append(title,sub);
+  const outcome=document.createElement('div');outcome.className='nx-history-outcome';
+  const state=String(order.outcome||'').toUpperCase();
+  const label=document.createElement('strong');label.textContent=state==='WIN'?'Ganho':state==='LOSS'?'Perda':'Encerrada';
+  const value=document.createElement('small');
+  value.textContent=order.pnl!==null&&order.pnl!==undefined&&Number.isFinite(Number(order.pnl))?money(order.pnl):'Valor não informado';
+  outcome.append(label,value);row.append(main,outcome);return row;
+ }
+ if(rows.length)latest.append(tile(rows[0]));else empty(latest,'Nenhuma operação encerrada do robô neste histórico.');
+ rows.slice(1,4).forEach(o=>previous.append(tile(o)));
+ if(rows.length<2)empty(previous,'Nenhuma operação anterior registrada.');
+ note.textContent=(mode==='real'?'Conta real':'Treinamento · saldo fictício')+' · histórico confirmado · resultados passados não garantem resultados futuros.';
+}
+async function loadDemoOrders(){const historyMode=robotConfiguredMode;try{const data=await req(historyMode==='real'?'/api/real/orders':'/api/demo/orders');demoOrders=data.items||[];const last=demoOrders[0];$('lastOrder').textContent=last?last.symbol+' · '+last.direction+' · M'+last.duration_minutes+' · '+money(last.stake)+(last.pnl===null?' · Aguardando resultado':' · Resultado '+money(last.pnl)):'Nenhum contrato oficial ainda.';renderOrders();renderRealtimeOrders();if(historyMode===robotConfiguredMode)renderPanelHistory(data.items||[],historyMode);return data}catch(e){if(historyMode===robotConfiguredMode)renderPanelHistory(null);$('ordersBody').innerHTML='<tr><td colspan="11" class="empty">Não foi possível carregar o histórico.</td></tr>';throw e}}
 const brasilDateTime=(iso)=>{
  if(!iso)return ['—','—'];
  const d=new Date(iso);
