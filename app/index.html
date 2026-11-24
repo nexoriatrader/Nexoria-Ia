@@ -1508,7 +1508,10 @@ body:has(#dashboard:not(.hidden)) .nexora-logo-only .brand img{
 #dashboard .nx-history-head p,#dashboard .nx-history-note{font-size:12px;color:#a6bbc9;line-height:1.5;margin:0}
 #dashboard .nx-history-state{display:flex;align-items:center;gap:9px;padding:12px;border:1px solid #476b82;border-radius:13px;background:#10273b;font-size:13px;color:#d4e5f1;overflow-wrap:anywhere}
 #dashboard .nx-history-state::before{content:"";width:8px;height:8px;flex:0 0 8px;border-radius:50%;background:#a6bbc9}
-#dashboard .nx-history-state[data-state="active"]::before{background:#a6ded2}
+#dashboard .nx-history-state[data-state="active"]{border-color:#429e81;background:linear-gradient(120deg,#153d35,#102b30);color:#b5e9d4}
+#dashboard .nx-history-state[data-state="active"]::before{background:#70d6a9;box-shadow:0 0 0 3px #70d6a91c}
+#dashboard .nx-history-state[data-state="unknown"],#dashboard .nx-history-state[data-state="interrupted"]{border-color:#967c5b;background:#302b29;color:#e2caa8}
+#dashboard .nx-history-state[data-state="unknown"]::before,#dashboard .nx-history-state[data-state="interrupted"]::before{background:#d0ab76}
 #dashboard .nx-history-label{font-size:12px;font-weight:850;letter-spacing:.035em;margin:18px 0 8px;color:#b9d7e7}
 #dashboard .nx-history-list{display:grid;gap:7px}
 #dashboard .nx-history-row{display:flex;justify-content:space-between;align-items:center;gap:10px;min-width:0;padding:11px 13px;border:1px solid #3e6077;border-radius:12px;background:#10283b}
@@ -2418,8 +2421,18 @@ function updateResultsPolling(){
      try{
        await loadDemoOrders();
        if(activePage==='dashboard'){
-         const scanStatus=await req('/api/status');
+         const historyStatusSequence=dashboardStatusSequence;
+         let scanStatus;
+         try{scanStatus=await req('/api/status');}
+         catch(error){
+           if(activePage==='dashboard'&&historyStatusSequence===dashboardStatusSequence)renderPanelHistoryState('unknown');
+           throw error;
+         }
          renderScanMonitor(scanStatus);
+         if(activePage==='dashboard'&&historyStatusSequence===dashboardStatusSequence){
+           const state=scanStatus.running?'active':scanStatus.interrupted_after_restart?'interrupted':scanStatus.auto_buy_enabled?'paused':'unavailable';
+           renderPanelHistoryState(state,scanStatus.scan_progress);
+         }
        }
        if(activePage==='results')$('resultsLiveStatus').textContent='Atualização automática 🟢';
      }catch(e){
@@ -2694,7 +2707,7 @@ function renderNxNeoTopCommand(status){
  const pill=$('nxNeoRunStatus'),stop=$('nxNeoQuickStop');
  const state=running?'active':interrupted?'interrupted':status.auto_buy_enabled?'paused':'unavailable';
  pill.dataset.state=state;
- renderPanelHistoryState(state);
+ renderPanelHistoryState(state,status.scan_progress);
  pill.textContent=running?'● Em funcionamento':interrupted?'● Interrompido':status.auto_buy_enabled?'● Pausado':'● Indisponível';
  $('nxNeoRunHelp').textContent=running?'Processo ativo · estado confirmado':interrupted?'Interrupção informada pelo servidor':'Monitoramento e informações do sistema';
  $('nxNeoActivationLabel').textContent=running?'Configurações':'Ligar robô';
@@ -3341,12 +3354,24 @@ function renderRealtimeOrders(){
   timeZone:'America/Sao_Paulo',hour:'2-digit',minute:'2-digit',second:'2-digit'
  }).format(new Date())+' · Brasília';
 }
-function renderPanelHistoryState(state){
+function renderPanelHistoryState(state,scan){
  const node=$('nxPanelHistoryState');
  if(!node)return;
- const labels={active:'Robô em execução · estado confirmado pelo servidor',paused:'Robô pausado',interrupted:'Execução interrompida',unavailable:'Robô indisponível',unknown:'Estado do robô não confirmado'};
- node.dataset.state=Object.prototype.hasOwnProperty.call(labels,state)?state:'unknown';
- node.textContent=labels[node.dataset.state];
+ const labels={active:'Robô em execução: aguardando nova leitura',paused:'Robô pausado',interrupted:'Execução interrompida',unavailable:'Robô indisponível',unknown:'Estado do robô não confirmado · conexão indisponível'};
+ const safeState=Object.prototype.hasOwnProperty.call(labels,state)?state:'unknown';
+ node.dataset.state=safeState;
+ let message=labels[safeState];
+ if(safeState==='active'){
+  const raw=scan?.last_checked_at||scan?.last_scan_at;
+  const timestamp=raw?Date.parse(raw):NaN;
+  const age=Date.now()-timestamp;
+  const fresh=Number.isFinite(age)&&age>=-5000&&age<=120000;
+  if(fresh){
+   const time=new Intl.DateTimeFormat('pt-BR',{timeZone:'America/Sao_Paulo',hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false}).format(new Date(timestamp));
+   message=scan?.stage==='scanning'?'Robô em execução: verificando dados · última leitura '+time:'Robô em execução: aguardando próxima verificação · última leitura '+time;
+  }else{message='Robô em execução: aguardando dados atualizados';}
+ }
+ if(node.textContent!==message)node.textContent=message;
 }
 function renderPanelHistory(items,mode){
  const latest=$('nxPanelHistoryLatest'),previous=$('nxPanelHistoryPrevious'),note=$('nxPanelHistoryNote');
