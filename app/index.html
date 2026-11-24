@@ -1506,11 +1506,11 @@ body:has(#dashboard:not(.hidden)) .nexora-logo-only .brand img{
 #dashboard .nx-history-icon{display:grid;place-items:center;width:44px;height:44px;flex:0 0 44px;border:1px solid #91b8d2a3;border-radius:13px;background:linear-gradient(135deg,#50677a,#233749 70%);color:#b6e9ff;font-size:23px}
 #dashboard .nx-history-head h2{font-size:clamp(18px,3.3vw,23px);margin:3px 0;color:#f0f7fc}
 #dashboard .nx-history-head p,#dashboard .nx-history-note{font-size:12px;color:#a6bbc9;line-height:1.5;margin:0}
-#dashboard .nx-history-state{display:flex;align-items:center;gap:9px;padding:12px;border:1px solid #476b82;border-radius:13px;background:#10273b;font-size:13px;color:#d4e5f1;overflow-wrap:anywhere}
-#dashboard .nx-history-state::before{content:"";width:8px;height:8px;flex:0 0 8px;border-radius:50%;background:#a6bbc9}
-#dashboard .nx-history-state[data-state="active"]{border-color:#429e81;background:linear-gradient(120deg,#153d35,#102b30);color:#b5e9d4}
+#dashboard .nx-history-state{display:flex;align-items:flex-start;gap:9px;margin:14px 4px 0;padding:4px 5px;background:transparent;border:0;font-size:13px;font-weight:650;line-height:1.5;color:#b7c9d6;overflow-wrap:anywhere;min-width:0}
+#dashboard .nx-history-state::before{content:"";width:8px;height:8px;flex:0 0 8px;border-radius:50%;background:#a6bbc9;margin-top:6px}
+#dashboard .nx-history-state[data-state="active"]{color:#9ce7c6}
 #dashboard .nx-history-state[data-state="active"]::before{background:#70d6a9;box-shadow:0 0 0 3px #70d6a91c}
-#dashboard .nx-history-state[data-state="unknown"],#dashboard .nx-history-state[data-state="interrupted"]{border-color:#967c5b;background:#302b29;color:#e2caa8}
+#dashboard .nx-history-state[data-state="unknown"],#dashboard .nx-history-state[data-state="interrupted"]{color:#e2caa8}
 #dashboard .nx-history-state[data-state="unknown"]::before,#dashboard .nx-history-state[data-state="interrupted"]::before{background:#d0ab76}
 #dashboard .nx-history-label{font-size:12px;font-weight:850;letter-spacing:.035em;margin:18px 0 8px;color:#b9d7e7}
 #dashboard .nx-history-list{display:grid;gap:7px}
@@ -1767,9 +1767,9 @@ body:has(#dashboard:not(.hidden)) .nexora-logo-only .brand img{
   </div>
   </details>
   </section>
+  <div id="nxPanelHistoryState" class="nx-history-state" data-state="unknown" role="status">Consultando o estado do robô…</div>
   <section class="nx-panel-history" aria-labelledby="nxPanelHistoryTitle">
     <div class="nx-history-head"><span class="nx-history-icon" aria-hidden="true">▤</span><div><span class="nx-neo-section-caption">HISTÓRICO</span><h2 id="nxPanelHistoryTitle">Resultados do robô</h2><p>Registros de operações encerradas</p></div></div>
-    <div id="nxPanelHistoryState" class="nx-history-state" data-state="unknown" role="status">Consultando o estado do robô…</div>
     <h3 class="nx-history-label">Última operação</h3>
     <div id="nxPanelHistoryLatest" class="nx-history-list nx-history-latest"><p class="nx-history-note">Consultando histórico…</p></div>
     <h3 class="nx-history-label">Operações anteriores</h3>
@@ -3366,10 +3366,16 @@ function renderPanelHistoryState(state,scan){
   const timestamp=raw?Date.parse(raw):NaN;
   const age=Date.now()-timestamp;
   const fresh=Number.isFinite(age)&&age>=-5000&&age<=120000;
+  const validTimestamp=Number.isFinite(timestamp)&&age>=-5000;
+  const time=validTimestamp?new Intl.DateTimeFormat('pt-BR',{timeZone:'America/Sao_Paulo',hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false}).format(new Date(timestamp)):'';
   if(fresh){
-   const time=new Intl.DateTimeFormat('pt-BR',{timeZone:'America/Sao_Paulo',hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false}).format(new Date(timestamp));
-   message=scan?.stage==='scanning'?'Robô em execução: verificando dados · última leitura '+time:'Robô em execução: aguardando próxima verificação · última leitura '+time;
-  }else{message='Robô em execução: aguardando dados atualizados';}
+   const checked=scan?.checked,total=scan?.total;
+   const validCount=checked!==null&&checked!==undefined&&total!==null&&total!==undefined&&Number.isInteger(Number(checked))&&Number.isInteger(Number(total))&&Number(total)>0&&Number(checked)>=0&&Number(checked)<=Number(total);
+   const progress=validCount?' · '+Number(checked)+' de '+Number(total)+' verificações concluídas':'';
+   message=scan?.stage==='scanning'?'Robô em execução: verificando dados'+progress+' · leitura '+time:'Robô em execução: aguardando próxima verificação · última leitura '+time;
+  }else{
+   message=time?'Robô em execução: sem nova leitura confirmada · última leitura '+time:'Robô em execução: primeira leitura ainda não confirmada';
+  }
  }
  if(node.textContent!==message)node.textContent=message;
 }
