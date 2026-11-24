@@ -1459,7 +1459,7 @@ body:has(#dashboard:not(.hidden)) .nexora-logo-only .brand img{
 #robot-config .nx-guide-kicker{font-size:10px;font-weight:900;color:#7fdce8;letter-spacing:.11em}
 #robot-config .nx-guide-current strong{font-size:17px;color:#edfaff}
 #robot-config .nx-guide-current p{color:#bad1df;font-size:12px;line-height:1.65}
-#robot-config .nx-guide-path{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:5px;padding:0;margin:0 0 19px;list-style:none}
+#robot-config .nx-guide-path{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:5px;padding:0;margin:0 0 19px;list-style:none}
 #robot-config .nx-guide-path li{display:flex;align-items:center;justify-content:center;min-width:0;padding:8px 2px;border-radius:9px;border:1px solid #33556c;background:#0f2638;color:#9eb8c8;text-align:center;font-size:10px;font-weight:750}
 #robot-config .nx-guide-path li[aria-current="step"]{background:#194b61;color:#edfdff;border-color:#60d0dd;box-shadow:0 0 10px #37c2de2d}
 #robot-config .nx-guide-path li[data-past="true"]{color:#9ce7d0;border-color:#388f80}
@@ -1488,7 +1488,7 @@ body:has(#dashboard:not(.hidden)) .nexora-logo-only .brand img{
  #robot-config .robot-config-page-heading .robot-back-button{width:auto;align-self:flex-start;padding:10px 13px}
  #robot-config .auto-config{padding:15px}
  #robot-config .nx-guide-current{padding:13px}
- #robot-config .nx-guide-path{grid-template-columns:repeat(7,minmax(0,1fr));gap:3px}
+ #robot-config .nx-guide-path{grid-template-columns:repeat(6,minmax(0,1fr));gap:3px}
  #robot-config .nx-guide-path li{font-size:9px;padding:7px 0;letter-spacing:-.03em}
  #robot-config .auto-preset-layout{grid-template-columns:minmax(0,1fr)}
  #robot-config .auto-preset-button{min-height:80px}
@@ -1928,20 +1928,18 @@ body:has(#dashboard:not(.hidden)) .nexora-logo-only .brand img{
     <button class="outline robot-back-button" type="button" onclick="go('dashboard')">← VOLTAR AO PAINEL</button>
   </div>
   <div class="card auto-config" id="automationConfigCard">
-    <div class="surface-heading">Vamos conhecer as configurações?</div>
-    <p class="helper nx-guide-lead">Você não precisa entender termos técnicos para acompanhar as etapas. Este guia organiza as opções existentes e começa pelo treinamento com saldo fictício. Navegar ou salvar preferências não liga o robô.</p>
+    <p class="helper nx-guide-lead">Treinamento usa saldo fictício. Navegar ou salvar preferências não liga o robô.</p>
     <div class="auto-wizard-header">
-      <span id="autoWizardProgress" role="status" aria-live="polite">Etapa 1 de 7</span>
-      <div class="auto-wizard-track" id="autoWizardTrack" role="progressbar" aria-label="Progresso da configuração" aria-valuemin="1" aria-valuemax="7" aria-valuenow="1"><span id="autoWizardFill"></span></div>
+      <span id="autoWizardProgress" role="status" aria-live="polite">Etapa 1 de 6</span>
+      <div class="auto-wizard-track" id="autoWizardTrack" role="progressbar" aria-label="Progresso da configuração" aria-valuemin="1" aria-valuemax="6" aria-valuenow="1"><span id="autoWizardFill"></span></div>
     </div>
     <div class="nx-guide-current" role="note">
       <span class="nx-guide-kicker">SEU PASSO ATUAL</span>
-      <strong id="autoWizardTitle">Por onde começar?</strong>
-      <p id="autoWizardHint">Conheça as possibilidades. A escolha é sua e pode ser revisada nas próximas etapas.</p>
+      <strong id="autoWizardTitle">Entenda os tipos de conta</strong>
+      <p id="autoWizardHint">Treinamento utiliza valores fictícios. Operações reais envolvem risco de perda de dinheiro e não fazem parte da experiência introdutória.</p>
     </div>
-    <ol class="nx-guide-path" aria-label="As sete etapas do guia">
-      <li data-nx-wizard="1" aria-current="step">Começo</li>
-      <li data-nx-wizard="2">Conta</li>
+    <ol class="nx-guide-path" aria-label="As seis etapas do guia">
+      <li data-nx-wizard="2" aria-current="step">Conta</li>
       <li data-nx-wizard="3">Mercado</li>
       <li data-nx-wizard="4">Ativos</li>
       <li data-nx-wizard="5">Análise</li>
@@ -1963,14 +1961,14 @@ body:has(#dashboard:not(.hidden)) .nexora-logo-only .brand img{
         </button>
       </div>
       <div id="autoPresetStatus" class="auto-preset-status" role="status">Personalizada · configure os parâmetros do seu jeito.</div>
-      <div class="auto-step"><span>02</span><strong>Entenda os dois tipos de conta</strong></div>
+      <div class="auto-step"><span>01</span><strong>Entenda os dois tipos de conta</strong></div>
       <p class="helper auto-step-help">Treinamento usa saldo fictício e é a opção apropriada para conhecer a interface. Conta REAL envolve dinheiro e risco de perdas.</p>
       <div class="auto-options auto-account-options">
         <label class="auto-choice"><input type="radio" name="autoMode" value="demo" checked> Treinamento <small>Saldo fictício na corretora</small></label>
         <label class="auto-choice"><input type="radio" name="autoMode" value="real"> Conta Real <small>Saldo em dinheiro na corretora</small></label>
       </div>
       <div class="field hidden" id="autoRealAccountWrapper"><label for="autoRealAccount">Selecione sua conta real na Deriv</label><select id="autoRealAccount"><option value="">Consultando contas vinculadas...</option></select></div>
-      <div class="auto-step"><span>03</span><strong>Conheça os mercados disponíveis</strong></div>
+      <div class="auto-step"><span>02</span><strong>Conheça os mercados disponíveis</strong></div>
       <p class="helper auto-step-help">Mercado é o conjunto de ativos que você deseja acompanhar. Cada grupo tem características diferentes.</p>
       <div class="auto-options auto-market-options">
         <label class="auto-choice"><input type="radio" name="autoMarket" value="forex"> Forex <small>Pares de moedas</small></label>
@@ -1978,7 +1976,7 @@ body:has(#dashboard:not(.hidden)) .nexora-logo-only .brand img{
         <label class="auto-choice"><input type="radio" name="autoMarket" value="stocks_indices"> Ações e Índices <small>Empresas e índices de bolsas</small></label>
         <label class="auto-choice"><input type="radio" name="autoMarket" value="commodities"> Matérias-primas <small>Ouro, prata, petróleo e outros</small></label>
       </div>
-      <div class="auto-step"><span>04</span><strong>Quais ativos deseja acompanhar?</strong></div>
+      <div class="auto-step"><span>03</span><strong>Quais ativos deseja acompanhar?</strong></div>
       <p class="helper">Ativo é um instrumento do mercado. A lista contém até cinco opções consultadas na Deriv; os nomes podem demorar a carregar.</p>
       <p class="helper auto-assets-tip">Exibimos até cinco ativos por mercado para simplificar a seleção e reduzir análises repetidas. Marque somente os que deseja operar.</p>
       <div class="actions" style="margin:4px 0 10px">
@@ -1986,7 +1984,7 @@ body:has(#dashboard:not(.hidden)) .nexora-logo-only .brand img{
       </div>
       <div class="field hidden"><label for="autoAssetSearch">Buscar ativo</label><input id="autoAssetSearch" type="search" placeholder="Nome ou código do ativo" oninput="renderAutomationAssets()"></div>
       <div id="automationSymbols" class="auto-symbols"><p class="helper">Carregando ativos...</p></div>
-      <div class="auto-step"><span>05</span><strong>Como os dados serão analisados?</strong></div>
+      <div class="auto-step"><span>04</span><strong>Como os dados serão analisados?</strong></div>
       <p class="helper auto-step-help">Estratégias são métodos de interpretação de dados. Indicadores são medidas auxiliares; nenhum deles prevê resultados com certeza.</p>
       <div class="auto-options">
         <label class="auto-choice"><input type="radio" name="autoStrategy" value="pulso_v2" checked> PULSO V2 <small>Pressão direcional + volatilidade estável · CALL · M5</small></label>
@@ -2011,7 +2009,7 @@ body:has(#dashboard:not(.hidden)) .nexora-logo-only .brand img{
         <label><input type="checkbox" value="SUPPORT_RESISTANCE"> Suporte e resistência</label>
         <label><input type="checkbox" value="CANDLE_PATTERNS"> Padrões de velas</label>
       </div>
-      <div class="auto-step"><span>06</span><strong>Entenda os valores e os limites</strong></div>
+      <div class="auto-step"><span>05</span><strong>Entenda os valores e os limites</strong></div>
       <p class="helper auto-step-help">Este grupo reúne parâmetros financeiros e limites de segurança. Em treinamento, os valores são fictícios. Valores e estratégias não eliminam riscos em contas reais.</p>
       <div class="settings-grid">
         <div class="field"><label for="autoStake">Entrada (USD)</label><input id="autoStake" type="number" min="0.50" step="0.01" value="0.50"></div>
@@ -2033,7 +2031,7 @@ body:has(#dashboard:not(.hidden)) .nexora-logo-only .brand img{
       <div class="field"><label for="autoCycles">Ciclos adicionais (não exigem Martingale)</label><select id="autoCycles" onchange="toggleAutomationProgressions('cycles')"><option value="0">Desativados</option><option value="1">1 ciclo</option><option value="2">2 ciclos</option><option value="3">3 ciclos</option><option value="4">4 ciclos</option><option value="5">5 ciclos</option></select></div>
       <div id="autoCycleSettings" class="field hidden"><label for="autoCycleMultiplier">Multiplicador dos ciclos</label><input id="autoCycleMultiplier" type="number" min="1" step=".1" value="2.00"></div>
       </details>
-      <div class="auto-step"><span>07</span><strong>Confira antes de guardar suas preferências</strong></div>
+      <div class="auto-step"><span>06</span><strong>Confira antes de guardar suas preferências</strong></div>
       <p class="helper">Veja o resumo do que foi selecionado. Salvar não inicia nenhuma operação; a ativação tem verificações e confirmação separadas.</p>
       <div id="autoConfigSummary" class="auto-summary">Selecione os ativos para configurar o robô.</div>
       <p class="nx-guide-save-note" role="note">As preferências serão registradas, mas o robô permanecerá no estado atual.</p>
@@ -2398,7 +2396,7 @@ function updateResultsPolling(){
    },activePage==='dashboard'?7000:3000);
  }
 }
-function go(v){page(v);updateResultsPolling();window.scrollTo({top:0,behavior:'smooth'});if(v==='setup')loadOnboarding();if(v==='dashboard'){refreshDashboard();loadDemoOrders().catch(()=>{});loadDailyResults().catch(()=>{});}if(v==='robot-config'){initAutomationWizard();setAutomationWizardStep(1);loadAutomationProfile();}if(v==='results'){loadDemoOrders();}if(v==='account'){loadRobotAccess();loadBillingPlans()}if(v==='settings')loadSettings()}
+function go(v){page(v);updateResultsPolling();window.scrollTo({top:0,behavior:'smooth'});if(v==='setup')loadOnboarding();if(v==='dashboard'){refreshDashboard();loadDemoOrders().catch(()=>{});loadDailyResults().catch(()=>{});}if(v==='robot-config'){initAutomationWizard();setAutomationWizardStep(2);loadAutomationProfile();}if(v==='results'){loadDemoOrders();}if(v==='account'){loadRobotAccess();loadBillingPlans()}if(v==='settings')loadSettings()}
 function fail(msg){$('error').textContent=msg||''}
 async function req(path,opts={}){const r=await fetch(path,{credentials:'same-origin',...opts});let data;try{data=await r.json()}catch{throw Error('Resposta inválida do servidor')}if(!r.ok)throw Error(data.detail||'Falha na conexão');return data}
 async function refreshLandingOffer(){
@@ -2477,7 +2475,7 @@ async function init(){
   clearStripeCheckoutQuery();
   showLandingLoginNotice(null);
   if(loginResult==='ok'){
-    // The former one-page setup is legacy. Only open the seven-step wizard.
+    // Open the existing wizard at its first visible step.
     go('robot-config');
   }else if(paymentResult==='success'||paymentResult==='cancelled'){
     go('account');
@@ -3350,7 +3348,7 @@ function renderOrders(){
 }
 let automationAssets=[],automationSelected=new Set(),automationProfileSaved=false,automationMarketRequest=0;
 
-let autoWizardStep=1,autoWizardReady=false,autoPresetMode='custom',autoPresetApplying=false;
+let autoWizardStep=2,autoWizardReady=false,autoPresetMode='custom',autoPresetApplying=false;
 function setAutomationPresetMode(mode,notice){
  autoPresetMode=mode;
  document.querySelectorAll('.auto-preset-button').forEach(button=>{
@@ -3380,12 +3378,14 @@ function initAutomationWizard(){
    number++;
    group=document.createElement('div');group.className='auto-wizard-step';
    group.dataset.wizardStep=String(number);
+   // Keep the legacy preset group hidden for existing code references.
+   if(number===1){group.hidden=true;group.inert=true;}
    container.insertBefore(group,child);
   }
   if(group)group.appendChild(child);
  }
  autoWizardReady=true;
- setAutomationWizardStep(1);
+ setAutomationWizardStep(2);
 }
 const automationGuideDescriptions=[
  ['Por onde começar?','Você pode conhecer os perfis existentes. A opção Personalizada permite entender cada campo, sem aplicar um modelo automaticamente.'],
@@ -3397,13 +3397,15 @@ const automationGuideDescriptions=[
  ['Revise o que está salvo','Confira as preferências antes de salvar. Salvar não liga o robô e não substitui as confirmações posteriores.']
 ];
 function setAutomationWizardStep(step){
- autoWizardStep=Math.min(7,Math.max(1,step));
+ // Preserve internal step IDs and their existing validation rules.
+ autoWizardStep=Math.min(7,Math.max(2,step));
+ const visibleStep=autoWizardStep-1;
  for(const element of document.querySelectorAll('.auto-wizard-step')){
   element.hidden=Number(element.dataset.wizardStep)!==autoWizardStep;
  }
- $('autoWizardProgress').textContent='Etapa '+autoWizardStep+' de 7';
- $('autoWizardFill').style.width=(autoWizardStep/7*100)+'%';
- $('autoWizardTrack').setAttribute('aria-valuenow',String(autoWizardStep));
+ $('autoWizardProgress').textContent='Etapa '+visibleStep+' de 6';
+ $('autoWizardFill').style.width=(visibleStep/6*100)+'%';
+ $('autoWizardTrack').setAttribute('aria-valuenow',String(visibleStep));
  const [title,description]=automationGuideDescriptions[autoWizardStep-1];
  $('autoWizardTitle').textContent=title;
  $('autoWizardHint').textContent=description;
@@ -3413,7 +3415,7 @@ function setAutomationWizardStep(step){
   else marker.removeAttribute('aria-current');
   marker.dataset.past=String(number<autoWizardStep);
  });
- $('autoWizardBack').hidden=autoWizardStep===1;
+ $('autoWizardBack').hidden=autoWizardStep===2;
  $('autoWizardNext').hidden=autoWizardStep===7;
  $('autoWizardNext').textContent=autoWizardStep===6?'VER REVISÃO →':'CONTINUAR →';
 }
