@@ -40,10 +40,13 @@ async def inspect_public_candles(*, symbol: str,
         for a, b in zip(bars, bars[1:])
     )
     quality = window["quality"]
-    if len(bars) < closed_candles:
-        quality = "INSUFFICIENT"
-    elif missing > 0 and quality != "STALE":
+    if quality == "STALE":
+        # A delayed final candle must never appear current.
+        quality = "STALE"
+    elif missing > 0:
         quality = "GAPPED"
+    elif len(bars) < closed_candles:
+        quality = "INSUFFICIENT"
     elif quality == "INSUFFICIENT":
         # The requested N+1 upstream bars included an open candle, leaving
         # exactly N strictly closed bars. That is an adequate research window.
