@@ -1963,6 +1963,15 @@ body:has(#dashboard:not(.hidden)) .nexora-logo-only .brand img{
         <button class="outline" type="button" onclick="nxCheckResearchQuality()">VER ESTADO DA INTELLIGENCE 2.0</button>
         <p class="helper" id="nxResearchQualityNote" role="status" aria-live="polite">Consulta opcional e somente leitura. Não fornece sinais nem recomendações financeiras.</p>
         <div id="nxResearchQualityItems" role="list" aria-label="Verificações de integridade da pesquisa"></div>
+        <div class="field" id="nxDerivPublicQuality">
+          <label for="nxPublicCandleSymbol">Código do ativo na Deriv (consulta pública)</label>
+          <input id="nxPublicCandleSymbol" type="text" maxlength="30" value="R_100" autocomplete="off" spellcheck="false" aria-describedby="nxPublicCandleHint">
+          <p class="helper" id="nxPublicCandleHint">Exemplo de código: R_100. A consulta só confirma a disponibilidade quando a Deriv responde; nenhuma ordem é enviada.</p>
+          <label for="nxPublicCandleFrame">Intervalo das velas</label>
+          <select id="nxPublicCandleFrame"><option value="60">1 minuto</option><option value="300">5 minutos</option><option value="900">15 minutos</option><option value="3600">1 hora</option></select>
+          <button type="button" class="outline" id="nxPublicCandleCheck" onclick="nxCheckMarketData()">VERIFICAR VELAS DA DERIV</button>
+          <p class="helper" id="nxPublicCandleResult" role="status" aria-live="polite">Ainda não consultado. Os números só serão exibidos após validação de velas fechadas.</p>
+        </div>
       </div>
     </div>
     <div class="nx-step" data-nx-simple="2" hidden>
@@ -4048,6 +4057,57 @@ async function nxCheckResearchQuality(){
   }
  }catch{
   note.textContent='Intelligence 2.0 indisponível nesta instalação. Nenhum resultado foi inventado.';
+ }finally{button.disabled=false}
+}
+
+
+async function nxCheckMarketData(){
+ const button=nxGet('nxPublicCandleCheck'),out=nxGet('nxPublicCandleResult');
+ const symbol=String(nxGet('nxPublicCandleSymbol').value||'').trim();
+ const frame=Number(nxGet('nxPublicCandleFrame').value);
+ if(!/^[A-Za-z0-9_]{2,30}$/.test(symbol)||![60,300,900,3600].includes(frame)){
+  out.textContent='Informe um código de ativo e intervalo válidos; nenhum dado foi consultado.';return;
+ }
+ button.disabled=true;out.textContent='Consultando velas públicas e verificando integridade...';
+ try{
+  const p='/api/intelligence20/market/quality?symbol='+encodeURIComponent(symbol)+
+   '&granularity_seconds='+frame+'&closed_candles=60';
+  const d=await req(p);
+  if(!d||d.read_only!==true||d.execution_allowed!==false||d.orders_sent!==0||
+     d.trade_recommendation!==null||d.predicted_outcome!==null||
+     d.report_kind!=='PUBLIC_OHLC_DESCRIPTIVE_QUALITY_NOT_TRADING_SIGNALS'||
+     d.origin_path!=='DERIV_PUBLIC_CLIENT_OR_SHARED_PUBLIC_CACHE'||
+     d.source_independently_certified!==false||d.symbol!==symbol||
+     d.granularity_seconds!==frame||d.requested_closed_candles!==60||
+     !['COMPLETE','GAPPED','STALE','INSUFFICIENT'].includes(d.quality)){
+   throw Error('A resposta não passou pelas verificações de segurança.');
+  }
+  const last=Number.isInteger(d.last_closed_epoch)?
+    new Date(d.last_closed_epoch*1000).toLocaleString('pt-BR',{timeZone:'UTC'})+' UTC':'indisponível';
+  if(!d.data_available||d.quality!=='COMPLETE'){
+   out.textContent='Dados indisponíveis para análise completa. Qualidade: '+d.quality+
+    ' · velas fechadas recebidas: '+d.received_closed_candles+'/60'+
+    ' · intervalos ausentes: '+d.missing_intervals+
+    ' · última vela: '+last+'. Nenhum valor foi preenchido artificialmente.';
+   return;
+  }
+  const st=d.descriptive_statistics;
+  if(!st||!Number.isFinite(st.first_close)||!Number.isFinite(st.last_close)||
+     !Number.isFinite(st.minimum_close)||!Number.isFinite(st.maximum_close)||
+     st.observed_candles!==60||d.received_closed_candles!==60||
+     d.missing_intervals!==0||!/^[a-f0-9]{64}$/.test(d.snapshot_sha256||'')){
+   throw Error('Estatísticas ou integridade incompletas.');
+  }
+  out.textContent='Dados públicos recebidos pelo conector Deriv · '+d.symbol+
+    ' · 60 velas fechadas · última vela: '+last+
+    ' · fechamento inicial: '+st.first_close+
+    ' · fechamento final: '+st.last_close+
+    ' · menor fechamento: '+st.minimum_close+
+    ' · maior fechamento: '+st.maximum_close+
+    '. Estatísticas descritivas, sem previsão. A origem não tem certificação independente.';
+ }catch(e){
+  out.textContent='Dados indisponíveis: '+e.message+
+   '. Não foram inventadas cotações nem enviadas ordens.';
  }finally{button.disabled=false}
 }
 
