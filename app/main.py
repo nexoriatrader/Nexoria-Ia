@@ -9,7 +9,7 @@ from urllib.parse import urlsplit
 
 import httpx
 import websockets
-from fastapi import FastAPI, HTTPException, Cookie, Request
+from fastapi import FastAPI, HTTPException, Cookie, Request, Query
 from fastapi.responses import FileResponse, RedirectResponse, JSONResponse, Response
 from pydantic import BaseModel
 from sqlalchemy import select, delete, func
@@ -3565,6 +3565,38 @@ async def demo_contract_route(request:Request, contract_id:str,
         return await demo_contract_status(token,user.deriv_account_id,contract_id)
     except DemoTradingError as e:
         raise HTTPException(502,str(e)) from None
+
+
+
+@app.get('/api/intelligence20/market/quality')
+async def intelligence20_public_market_quality(
+    request: Request,
+    symbol: str = Query(default='R_100', min_length=2, max_length=30),
+    granularity_seconds: int = Query(default=60),
+    closed_candles: int = Query(default=60),
+    nexora_sid: str | None = Cookie(default=None),
+):
+    """Read-only public Deriv candle quality in the existing app.
+
+    User session is required. Neither a DEMO/REAL token nor risk/automation
+    configuration is read; market quality never creates trade authorization.
+    """
+    active_user(request, nexora_sid)
+    from .intelligence2.public_candle_quality import inspect_public_candles
+    try:
+        return await asyncio.wait_for(inspect_public_candles(
+            symbol=symbol,
+            granularity_seconds=granularity_seconds,
+            closed_candles=closed_candles,
+        ), timeout=11)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from None
+    except (MarketError, asyncio.TimeoutError):
+        log.warning('Public Intelligence 2.0 OHLC quality unavailable')
+        raise HTTPException(503, 'Dados públicos da Deriv indisponíveis; nenhuma vela foi inventada') from None
+    except Exception:
+        log.exception('Public Intelligence 2.0 OHLC quality failed')
+        raise HTTPException(503, 'Verificação pública indisponível; tente novamente') from None
 
 
 @app.get('/api/homologation/robot/research')
