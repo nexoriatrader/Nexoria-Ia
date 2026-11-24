@@ -1104,6 +1104,10 @@ async def headers(request:Request, call_next):
 @app.get('/')
 async def index(): return FileResponse(Path(__file__).parent/'index.html')
 
+@app.get('/configuracao-educativa', include_in_schema=False)
+async def configuracao_educativa():
+    return FileResponse(Path(__file__).parent/'configuracao_educativa.html', media_type='text/html')
+
 @app.get('/i/{slug}')
 async def short_referral_redirect(slug:str):
     """First-party shortener preserves the original OAuth attribution path."""
