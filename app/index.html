@@ -1512,8 +1512,10 @@ body:has(#dashboard:not(.hidden)) .nexora-logo-only .brand img{
 #dashboard .nx-history-state[data-state="active"]::before{background:#70d6a9;box-shadow:0 0 0 3px #70d6a91c}
 #dashboard .nx-history-state[data-state="active"][data-activity="waiting"]{color:#eac16f}
 #dashboard .nx-history-state[data-state="active"][data-activity="waiting"]::before{background:#eac16f;box-shadow:none}
-#dashboard .nx-history-state[data-state="active"][data-activity="degraded"],#dashboard .nx-history-state[data-state="unknown"]{color:#f2abab}
-#dashboard .nx-history-state[data-state="active"][data-activity="degraded"]::before,#dashboard .nx-history-state[data-state="unknown"]::before{background:#f2abab;box-shadow:none}
+#dashboard .nx-history-state[data-state="active"][data-activity="degraded"],#dashboard .nx-history-state[data-state="unknown"]{color:#eac16f}
+#dashboard .nx-history-state[data-activity="error"]{color:#f2abab}
+#dashboard .nx-history-state[data-state="active"][data-activity="degraded"]::before,#dashboard .nx-history-state[data-state="unknown"]::before{background:#eac16f;box-shadow:none}
+#dashboard .nx-history-state[data-activity="error"]::before{background:#f2abab;box-shadow:none}
 #dashboard .nx-history-state[data-state="active"][data-activity="checking"]::before{animation:nxHistoryActivityPulse 1.65s ease-out infinite}
 @keyframes nxHistoryActivityPulse{0%,100%{box-shadow:0 0 0 2px #70d6a940}65%{box-shadow:0 0 0 7px #70d6a900}}
 @media(prefers-reduced-motion:reduce){#dashboard .nx-history-state[data-activity="checking"]::before{animation:none}}
@@ -2430,7 +2432,7 @@ async function refreshPanelStatusDisplay(){
   const state=status.running?'active':status.interrupted_after_restart?'interrupted':status.auto_buy_enabled?'paused':'unavailable';
   renderPanelHistoryState(state,status.scan_progress);
  }catch(error){
-  if(activePage==='dashboard'&&sequence===dashboardStatusSequence)renderPanelHistoryState('unknown');
+  if(activePage==='dashboard'&&sequence===dashboardStatusSequence)renderPanelHistoryState('unknown',null,error?.name!=='AbortError');
   throw error;
  }finally{clearTimeout(timeout);}
 }
@@ -3366,10 +3368,10 @@ function renderRealtimeOrders(){
   timeZone:'America/Sao_Paulo',hour:'2-digit',minute:'2-digit',second:'2-digit'
  }).format(new Date())+' · Brasília';
 }
-function renderPanelHistoryState(state,scan){
+function renderPanelHistoryState(state,scan,confirmedError=false){
  const node=$('nxPanelHistoryState');
  if(!node)return;
- const labels={active:'Robô em execução: aguardando nova leitura',paused:'Robô pausado',interrupted:'Execução interrompida',unavailable:'Robô indisponível',unknown:'Estado do robô não confirmado · conexão indisponível'};
+ const labels={active:'Robô em execução: aguardando nova leitura',paused:'Robô pausado',interrupted:'Execução interrompida',unavailable:'Robô indisponível',unknown:'Estado do robô não confirmado · aguardando atualização'};
  const safeState=Object.prototype.hasOwnProperty.call(labels,state)?state:'unknown';
  node.dataset.state=safeState;
  let activity=safeState==='active'?'waiting':'idle';
@@ -3396,7 +3398,13 @@ function renderPanelHistoryState(state,scan){
    message=time?'Robô em execução: sem leitura recente · última leitura '+time:'Robô em execução: aguardando dados de atividade do servidor';
   }
  }
- if(safeState==='unknown'&&typeof navigator!=='undefined'&&navigator.onLine===false)message='Sem conexão com a internet · estado do robô não confirmado';
+ if(safeState==='unknown'){
+  if(typeof navigator!=='undefined'&&navigator.onLine===false){
+   activity='error';message='Sem conexão com a internet · estado do robô não confirmado';
+  }else if(confirmedError){
+   activity='error';message='Falha na consulta de status · estado do robô não confirmado';
+  }
+ }
  node.dataset.activity=activity;
  if(node.textContent!==message)node.textContent=message;
  // Stop the visual pulse if new status confirmations stop arriving.
