@@ -44,6 +44,8 @@ from .asset_scanner import scan_assets, scan_intelligence_markets, scan_intellig
 from .trade_selector_v2 import (select_demo_signal, last_scan_report, has_pending_signals,
                                 active_market, catalogue, supported, fetch_closed_timeframe,
                                 SIGNAL_PROFILE)
+from .strategy_registry import (BASE_STRATEGIES, FOREX_DEMO_STRATEGIES,
+                                strategy_allowed)
 from .progression import next_entry, ProgressionHalt, NextEntry
 from .expiry_policy import proposal_durations
 from .security import CLIENT_ID, REDIRECT, TOKEN_URL, build_authorize_url, make_login, make_session_id, hashsecret, encrypt, decrypt, cookie_options
@@ -252,6 +254,21 @@ def v2_enabled():
 def autopilot_allowed():
     return (os.getenv('NEXORA_AUTOPILOT_DEMO_ENABLED','false').lower()=='true'
             and os.getenv('NEXORA_DEMO_BUY_ENABLED','false').lower()=='true')
+
+
+def candidate_entry_deadline(candidate):
+    """Fail closed on invalid candidates; otherwise honor their candle timeframe."""
+    if not isinstance(candidate,dict):
+        return 0
+    explicit=candidate.get('deadline_epoch')
+    if isinstance(explicit,(int,float)) and isfinite(explicit) and explicit>0:
+        return float(explicit)
+    bar=candidate.get('last_bar_epoch')
+    seconds=candidate.get('bar_seconds',60)
+    if (isinstance(bar,(int,float)) and isfinite(bar) and bar>0
+        and seconds in (60,300,900)):
+        return float(bar)+seconds+12
+    return 0
 
 
 def autopilot_entry_plan(sess, user, orders):
@@ -517,6 +534,12 @@ async def autopilot_once():
             if uid not in autopilot_enabled or not autopilot_allowed():
                 continue
             with db.SessionLocal() as sess:
+                if (sess.get(db.RobotRun,uid) is None
+                    or sess.get(db.AutoPilotResumeConsent,uid) is None):
+                    autopilot_enabled.discard(uid)
+                    automation_scan_progress.pop(uid,None)
+                    autopilot_reasons[uid]='Desligado em outro painel; novas entradas bloqueadas'
+                    continue
                 user=sess.get(db.User,uid)
                 if not user or user.selected_mode!='demo':
                     disarm_autopilot(uid,'Conta de treinamento indisponível; robô desligado')
@@ -680,7 +703,8 @@ async def autopilot_once():
                         if profile is not None:
                             if (profile.account_mode!='demo'
                                 or profile.market not in (*AUTOMATION_GROUPS,'volatility')
-                                or profile.strategy not in ('pulso_v2','trend','rsi')
+                                or not strategy_allowed(profile.strategy,profile.market,
+                                                        profile.account_mode)
                                 or profile.expiry_minutes not in (0,1,3,5,15)
                                 or profile.news_filter):
                                 autopilot_reasons[uid]='Configuração incompatível ou filtro de notícias indisponível; sem novas entradas'
@@ -800,7 +824,8 @@ async def autopilot_once():
                     # than picking a duration at random. No eligible offer means no buy.
                     selected_ratio=(Decimal('1')+Decimal(str(profile.min_payout))/Decimal('100')
                                     if pulso_active and profile is not None else Decimal('1.50'))
-                    auto_expiry=bool(pulso_active and profile is not None)
+                    auto_expiry=bool(pulso_active and profile is not None
+                                     and profile.strategy not in FOREX_DEMO_STRATEGIES)
                     durations=proposal_durations(
                         profile.market if auto_expiry else '',
                         candidate.get('expiry_options',(candidate['minutes'],)),
@@ -810,7 +835,7 @@ async def autopilot_once():
                         log_v2_gate(uid,'NO_CANDIDATE_EXPIRY',detail='symbol='+str(candidate['symbol']))
                         continue
                     best_offer=None
-                    cutoff=(candidate.get('last_bar_epoch',0)+60+12
+                    cutoff=(candidate_entry_deadline(candidate)
                             if pulso_active and not entry.retry else None)
                     checked_expiry=[]
                     rejected_expiry=[]
@@ -871,7 +896,14 @@ async def autopilot_once():
                              candidate['symbol'],best_offer[1],float(best_offer[0]))
             if uid not in autopilot_enabled:
                 continue
-            deadline_for_buy=(candidate['last_bar_epoch']+60+12
+            with db.SessionLocal() as state_session:
+                if (state_session.get(db.RobotRun,uid) is None
+                    or state_session.get(db.AutoPilotResumeConsent,uid) is None):
+                    autopilot_enabled.discard(uid)
+                    automation_scan_progress.pop(uid,None)
+                    autopilot_reasons[uid]='Desligado em outro painel; nenhuma nova compra enviada'
+                    continue
+            deadline_for_buy=(candidate_entry_deadline(candidate)
                               if pulso_active and not entry.retry else None)
             if pulso_active and entry.retry:
                 # This is a deadline for an existing confirmed candle only;
@@ -1562,8 +1594,12 @@ async def save_automation_profile(request:Request,payload:AutomationProfileReque
     user,token=active_session(request,nexora_sid)
     if payload.account_mode not in ('demo','real'):
         raise HTTPException(422,'Modo de conta inválido')
-    if payload.market not in (*AUTOMATION_GROUPS, 'volatility') or payload.strategy not in ('pulso_v2','trend','rsi'):
-        raise HTTPException(422,'Mercado ou estratégia inválidos')
+    if payload.market not in (*AUTOMATION_GROUPS, 'volatility'):
+        raise HTTPException(422,'Mercado inválido')
+    if not strategy_allowed(payload.strategy,payload.market,payload.account_mode):
+        if payload.strategy in FOREX_DEMO_STRATEGIES:
+            raise HTTPException(422,'As novas estratégias estão disponíveis apenas em Forex no Treinamento/DEMO')
+        raise HTTPException(422,'Estratégia inválida')
     if payload.expiry_minutes not in (0,1,3,5,15):
         raise HTTPException(422,'Expiração inválida')
     if not 1<=len(payload.symbols)<=5 or len(payload.symbols)!=len(set(payload.symbols)):
@@ -2210,7 +2246,9 @@ async def start_real_autopilot(request:Request,nexora_sid:str|None=None):
                 raise ValueError()
         except (InvalidOperation,ValueError):
             raise HTTPException(409,'Configure Stop Loss REAL de pelo menos uma entrada e valor válido') from None
-        if profile.strategy not in ('pulso_v2','trend','rsi'):
+        if profile.strategy in FOREX_DEMO_STRATEGIES:
+            raise HTTPException(409,'As estratégias Forex experimentais ainda não estão liberadas para conta REAL')
+        if profile.strategy not in BASE_STRATEGIES:
             raise HTTPException(409,'Estratégia REAL inválida')
         try:
             symbols=json.loads(profile.symbols_json)
@@ -2290,7 +2328,7 @@ async def autopilot_start(request:Request,payload:AutoPilotSwitch,
             raise HTTPException(409,'Configure e salve os ativos no novo painel antes de ligar o robô')
         if profile is not None:
             if (profile.account_mode!='demo' or profile.market not in (*AUTOMATION_GROUPS,'volatility')
-                or profile.strategy not in ('pulso_v2','trend','rsi')
+                or not strategy_allowed(profile.strategy,profile.market,profile.account_mode)
                 or profile.expiry_minutes not in (0,1,3,5,15)):
                 raise HTTPException(409,'Configuração de automação inválida')
             if profile.news_filter:
@@ -2318,10 +2356,16 @@ async def autopilot_start(request:Request,payload:AutoPilotSwitch,
     # orders still apply to cumulative stop checks but not the new progression.
     async with autopilot_lock:
         with db.SessionLocal() as sess:
+            sess.get(db.User,user.id,with_for_update=True)
+            if user.id in autopilot_enabled:
+                raise HTTPException(409,'O robô já está ativo. Atualize o estado do painel antes de tentar novamente.')
             access=start_trial_on_first_robot_start(sess,user.id)
             if access['enforced'] and not access['allowed']:
                 raise HTTPException(403,'Acesso do robô expirado. Renove antes de ligar.')
             existing=sess.get(db.RobotRun,user.id)
+            existing_consent=sess.get(db.AutoPilotResumeConsent,user.id)
+            if existing is not None and existing_consent is not None:
+                raise HTTPException(409,'Já existe uma execução DEMO armada na nuvem. Atualize o painel; não inicie outra sessão.')
             latest=sess.scalars(select(db.DemoOrder.id).where(
                 db.DemoOrder.user_id==user.id).order_by(db.DemoOrder.id.desc()).limit(1)).first()
             if not existing:
@@ -2381,9 +2425,16 @@ async def status(request:Request,nexora_sid:str|None=Cookie(default=None)):
     user=active_user(request,nexora_sid)
     real_running=user.id in real_runtime.running
     with db.SessionLocal() as sess:
-        interrupted=sess.get(db.RobotRun,user.id) is not None and user.id not in autopilot_enabled
         configured_profile=sess.get(db.AutomationProfile,user.id)
         configured_account_mode=configured_profile.account_mode if configured_profile else 'demo'
+        run=sess.get(db.RobotRun,user.id)
+        consent=sess.get(db.AutoPilotResumeConsent,user.id)
+        demo_run_intent=bool(
+            run is not None and consent is not None
+            and configured_account_mode=='demo'
+            and autopilot_allowed() and v2_enabled())
+        interrupted=(run is not None and user.id not in autopilot_enabled
+                     and not demo_run_intent)
         batch=sess.get(db.PilotValidationBatch,user.id)
         selected_strategy='pulso_v2' if v2_enabled() else 'unavailable'
         mode='V2_PULSO' if v2_enabled() else 'V1_SINGLE_ASSET'
@@ -2393,7 +2444,10 @@ async def status(request:Request,nexora_sid:str|None=Cookie(default=None)):
         return {'connected':engine.connected,'symbol':engine.symbol,
                 'latest_price':engine.prices[-1] if engine.prices else None,
                 'ticks':len(engine.prices),'execution':'DERIV_REAL' if real_running else 'DERIV_DEMO_ONLY',
-                'running':real_running or user.id in autopilot_enabled,'auto_buy_enabled':autopilot_allowed() or real_runtime.real_available(),
+                'running':real_running or user.id in autopilot_enabled or demo_run_intent,
+                'demo_run_intent':demo_run_intent,
+                'running_local':real_running or user.id in autopilot_enabled,
+                'auto_buy_enabled':autopilot_allowed() or real_runtime.real_available(),
                 'real_orders_enabled':real_runtime.real_available(),
                 'configured_account_mode':configured_account_mode,
                 'interrupted_after_restart':interrupted,
@@ -2403,8 +2457,11 @@ async def status(request:Request,nexora_sid:str|None=Cookie(default=None)):
                 'v2_upgrade_needed':upgrade_needed,
                 'analysis_symbol':SYMBOL,
                 'scan_progress':automation_scan_progress.get(user.id) if user.id in autopilot_enabled else None,
-                'reason':real_runtime.reasons.get(user.id,'Conta REAL ativa; buscando oportunidades') if real_running else autopilot_reasons.get(user.id,
-                   'Execução interrompida após reinício; reative manualmente no painel' if interrupted else 'Robô desligado')}
+                'reason':real_runtime.reasons.get(user.id,'Conta REAL ativa; buscando oportunidades') if real_running else
+                   ('AutoPilot DEMO armado na nuvem; estado sincronizado pelo consentimento salvo'
+                    if demo_run_intent and user.id not in autopilot_enabled else
+                    autopilot_reasons.get(user.id,
+                    'Execução interrompida após reinício; reative manualmente no painel' if interrupted else 'Robô desligado'))}
 
 @app.get('/api/autopilot/v2/scanner-status')
 async def autopilot_v2_scanner_status(request:Request,

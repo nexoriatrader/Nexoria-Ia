@@ -413,11 +413,12 @@ const $=id=>{
  });
  return elements.get(id);
 };
-let robotRunning=false;
-let stopped=0, refreshed=0;
-async function toggleRobot(){
- if(!robotRunning)throw Error('Shortcut called start path');
- stopped++;
+	let robotRunning=false;
+	let stopped=0, refreshed=0;
+	function renderPanelHistoryState(){}
+	async function toggleRobot(){
+	 if(!robotRunning)throw Error('Shortcut called start path');
+	 stopped++;
  robotRunning=false;
 }
 async function refreshDashboard(){refreshed++;}
@@ -679,7 +680,7 @@ def test_only_reference_control_card_is_visible_at_dashboard_entry():
                        "dashboardAccessCountdown", "balanceMetric", "realBalanceMetric",
                        "robotStartNotice", "robotNoticeTitle", "robotNoticeText"):
         assert 'id="' + element_id + '"' in card
-    for caption in ("NEXORA IA", "LIGAR ROBÔ", "CONFIGURAR ROBÔ",
+    for caption in ("NEXORA IA", "CONSULTANDO ESTADO DO ROBÔ…", "CONFIGURAR ROBÔ",
                     "Tempo disponível Robô", "Saldo conta DEMO", "Saldo conta REAL"):
         assert caption in card
     assert panel.count('id="robotButton"') == 1
@@ -804,9 +805,10 @@ let robotRunning=false,scenario='slow',abortSeen=false;
 function showRobotNotice(msg){notices.push(msg);}
 async function refreshDashboard(){throw Error('Unexpected POST path');}
 async function req(path,opts={}){
- requests.push(path);
- if(path==='/api/automation/profile')
-  return {configured:true,account_mode:scenario==='real'?'real':'demo',market:'derived'};
+	 requests.push(path);
+	 if(path==='/api/status')return {running:false};
+	 if(path==='/api/automation/profile')
+	  return {configured:true,account_mode:scenario==='real'?'real':'demo',market:'derived'};
  if(path==='/api/onboarding/config'){
   if(scenario==='bad_risk')throw Error('Unavailable');
   return {stake:1,stop_loss:2,cycles:0,martingale:false};

@@ -1720,7 +1720,7 @@ body:has(#dashboard:not(.hidden)) .nexora-logo-only .brand img{
     </div>
     <div class="dash-control-grid">
       <div class="dash-control-main">
-        <button id="robotButton" class="hero-action" disabled aria-disabled="true" onclick="toggleRobot()">LIGAR ROBÔ</button>
+        <button id="robotButton" class="hero-action" disabled aria-disabled="true" onclick="toggleRobot()">CONSULTANDO ESTADO DO ROBÔ…</button>
         <div class="dash-control-actions">
           <button id="configureRobotButton" class="dash-configure-button" type="button" onclick="go('robot-config')">⚙ CONFIGURAR ROBÔ</button>
           <div class="dash-access">
@@ -2040,13 +2040,16 @@ body:has(#dashboard:not(.hidden)) .nexora-logo-only .brand img{
         <label class="auto-choice"><input type="radio" name="autoStrategy" value="pulso_v2" checked> PULSO V2 <small>Pressão direcional + volatilidade estável · direção configurável · expiração automática</small></label>
         <label class="auto-choice"><input type="radio" name="autoStrategy" value="trend"> Tendência e pullback <small>EMA 20/50 + confirmação de preço</small></label>
         <label class="auto-choice"><input type="radio" name="autoStrategy" value="rsi"> Reversão RSI <small>RSI e confirmação de reversão</small></label>
+        <label class="auto-choice hidden" data-forex-demo-strategy><input type="radio" name="autoStrategy" value="fx_pullback_m15"> Forex · Tendência H1 + pullback M15 <small>Experimental · somente Forex em Treinamento/DEMO · expiração fixa M15</small></label>
+        <label class="auto-choice hidden" data-forex-demo-strategy><input type="radio" name="autoStrategy" value="fx_breakout_m15"> Forex · Tendência H1 + rompimento M15 <small>Experimental · somente Forex em Treinamento/DEMO · expiração fixa M15</small></label>
       </div>
+      <p class="helper" id="forexStrategyDisclosure" hidden>Estratégias experimentais ainda não validadas quanto ao desempenho. A análise não garante lucro; as opções ficam disponíveis somente em Forex na conta de Treinamento/DEMO.</p>
       <div class="field"><label for="autoDirection">Direção das entradas</label><select id="autoDirection"><option value="AUTO">Automática conforme estratégia</option><option value="CALL">Somente CALL / Alta</option><option value="PUT">Somente PUT / Baixa</option></select></div>
       <div class="auto-step"><span>05</span><strong>Entenda os valores e os limites</strong></div>
       <p class="helper auto-step-help">Este grupo reúne parâmetros financeiros e limites de segurança. Em treinamento, os valores são fictícios. Valores e estratégias não eliminam riscos em contas reais.</p>
       <div class="settings-grid">
         <div class="field"><label for="autoStake">Entrada (USD)</label><input id="autoStake" type="number" min="0.50" step="0.01" value="0.50"></div>
-        <div class="field"><label>Expiração automática inteligente</label><p class="helper">O NEXORA compara M1, M3, M5 e M15 disponíveis na Deriv após confirmar um sinal e escolhe a proposta que atende ao payout mínimo. Sem proposta válida, não opera.</p></div>
+        <div class="field"><label id="autoExpiryLabel">Expiração automática inteligente</label><p class="helper" id="autoExpiryHelp">O NEXORA compara M1, M3, M5 e M15 disponíveis na Deriv após confirmar um sinal e escolhe a proposta que atende ao payout mínimo. Sem proposta válida, não opera.</p></div>
         <div class="field"><label for="autoWin">Stop Win (USD)</label><input id="autoWin" type="number" min="0" step="0.01" value="0"></div>
         <div class="field"><label for="autoLoss">Stop Loss (USD)</label><input id="autoLoss" type="number" min="0" step="0.01" value="0"></div>
         <div class="field"><label for="autoPayout">Payout mínimo (%)</label><input id="autoPayout" type="number" min="0" max="200" step="1" value="88"></div>
@@ -2281,7 +2284,7 @@ body:has(#dashboard:not(.hidden)) .nexora-logo-only .brand img{
 </div>
 <script>
 const $=id=>document.getElementById(id);
-let activePage='welcome',demoOrders=[],demoBalance=null,refreshTimer=null,resultsRefreshTimer=null,resultsRequestBusy=false,lastRequestKey=null,robotRunning=false,robotConfiguredMode='demo';
+let activePage='welcome',demoOrders=[],demoBalance=null,refreshTimer=null,resultsRefreshTimer=null,resultsRequestBusy=false,lastRequestKey=null,robotRunning=false,robotStatusConfirmed=false,robotConfiguredMode='demo';
 let dashboardStatusSequence=0;
 let accessExpiresMs=null,accessServerDelta=0,accessMode='UNKNOWN',accessTrialSeconds=24*3600;
 const durationString=seconds=>{
@@ -2899,6 +2902,7 @@ async function refreshDashboard(){
    const status=await req('/api/status');
    // Ignore an older response that arrived after a newer status request.
    if(sequence!==dashboardStatusSequence)return null;
+   robotStatusConfirmed=true;
    robotRunning=Boolean(status.running);
    const previousHistoryMode=robotConfiguredMode;
    robotConfiguredMode=status.configured_account_mode==='real'?'real':'demo';
@@ -2985,6 +2989,11 @@ async function refreshDashboard(){
    return status;
  }catch(e){
    if(sequence!==dashboardStatusSequence)return null;
+   if(!robotStatusConfirmed){
+    $('robotButton').textContent='ESTADO NÃO CONFIRMADO';
+    $('robotButton').disabled=true;
+    $('robotButton').setAttribute('aria-disabled','true');
+   }
    $('feedState').textContent='○ Comunicação temporariamente indisponível. Último estado do robô preservado.';
    reportRobotEasyUncertainty();
    markNxNeoTopUncertain();
@@ -3032,7 +3041,9 @@ function askRobotStartConfirmation(profile,risk,catalogue){
   'A ativação autoriza novas operações na conta DEMO conforme os parâmetros salvos. Nenhuma estratégia garante resultados.';
  const marketNames={derived:'Índices derivados',volatility:'Índices derivados',
   forex:'Forex',stocks_indices:'Ações e índices',commodities:'Matérias-primas'};
- const strategyNames={pulso_v2:'PULSO V2',trend:'Tendência e Pullback',rsi:'Reversão RSI'};
+ const strategyNames={pulso_v2:'PULSO V2',trend:'Tendência e Pullback',rsi:'Reversão RSI',
+  fx_pullback_m15:'Forex H1 + pullback M15 (experimental)',
+  fx_breakout_m15:'Forex H1 + rompimento M15 (experimental)'};
  const presetNames={conservative:'Conservadora',aggressive:'Arriscada',custom:'Personalizada'};
  const symbols=Array.isArray(profile.symbols)?profile.symbols:[];
  const symbolNames=new Map(catalogue.map(item=>[item.symbol,item.name||item.symbol]));
@@ -3048,7 +3059,7 @@ function askRobotStartConfirmation(profile,risk,catalogue){
  addRobotReviewGroup(box,'Estratégia e análise',[
   ['Estratégia',strategyNames[profile.strategy]||profile.strategy],
   ['Direção',({AUTO:'Automática',CALL:'Somente alta (CALL)',PUT:'Somente baixa (PUT)'})[profile.direction]||profile.direction],
-  ['Expiração','AUTO · M1, M3, M5 ou M15 (payout válido)'],
+  ['Expiração',isForexDemoStrategy(profile.strategy)?'Fixa · 15 minutos (M15)':'AUTO · M1, M3, M5 ou M15 (payout válido)'],
   ['Payout mínimo',(profile.min_payout_pct??88)+'%']
  ]);
  addRobotReviewGroup(box,'Entradas e proteção',[
@@ -3066,11 +3077,33 @@ function askRobotStartConfirmation(profile,risk,catalogue){
 async function toggleRobot(){
  const button=$('robotButton');
  if(button.dataset.commandPending==='true')return;
- const wasRunning=robotRunning;
+ let wasRunning=robotRunning;
+ const displayedRunning=robotRunning;
  let pendingAccountMode='demo';
  const buttonOriginalLabel=button.textContent;
  button.dataset.commandPending='true';
  button.disabled=true;
+ button.textContent='CONFERINDO ESTADO DO ROBÔ…';
+ try{
+  const currentStatus=await req('/api/status');
+  robotStatusConfirmed=true;
+  wasRunning=Boolean(currentStatus.running);
+  robotRunning=wasRunning;
+  if(wasRunning!==displayedRunning){
+   button.dataset.commandPending='false';
+   await refreshDashboard();
+   showRobotNotice(wasRunning
+    ?'O robô já está ativo na nuvem. O painel foi atualizado e nenhuma segunda ativação foi enviada.'
+    :'O robô já estava desligado. O painel foi atualizado; nenhuma ativação foi enviada.');
+   return;
+  }
+ }catch(e){
+  button.dataset.commandPending='false';
+  button.textContent='ESTADO NÃO CONFIRMADO';
+  button.disabled=true;
+  showRobotNotice('Não foi possível confirmar o estado atual do robô. A alteração foi bloqueada para evitar uma ativação duplicada. Tente atualizar o painel.');
+  return;
+ }
  if(!wasRunning)button.textContent='CONFERINDO CONFIGURAÇÕES…';
  if(!wasRunning){
   try{
@@ -3776,6 +3809,25 @@ function setAutomationRadio(name,value){
  const field=document.querySelector('input[name="'+name+'"][value="'+value+'"]');
  if(field)field.checked=true;
 }
+function isForexDemoStrategy(strategy){
+ return strategy==='fx_pullback_m15'||strategy==='fx_breakout_m15';
+}
+function syncAutomationStrategyChoices(){
+ const eligible=automationRadio('autoMode')==='demo'&&automationRadio('autoMarket')==='forex';
+ document.querySelectorAll('[data-forex-demo-strategy]').forEach(label=>
+  label.classList.toggle('hidden',!eligible));
+ const selected=automationRadio('autoStrategy');
+ if(!eligible&&isForexDemoStrategy(selected)){
+  setAutomationRadio('autoStrategy','pulso_v2');
+  automationProfileSaved=false;
+ }
+ const fixed=isForexDemoStrategy(automationRadio('autoStrategy'));
+ $('forexStrategyDisclosure').hidden=!eligible;
+ $('autoExpiryLabel').textContent=fixed?'Expiração fixa da estratégia':'Expiração automática inteligente';
+ $('autoExpiryHelp').textContent=fixed
+  ?'Esta estratégia usa contrato de 15 minutos (M15). A Deriv ainda precisa aceitar a proposta; indisponibilidade ou payout abaixo do mínimo impedem a entrada.'
+  :'O NEXORA compara M1, M3, M5 e M15 disponíveis na Deriv após confirmar um sinal e escolhe a proposta que atende ao payout mínimo. Sem proposta válida, não opera.';
+}
 async function changeAutomationAccount(selectedAccount){
  const isReal=automationRadio('autoMode')==='real';
  $('autoRealAccountWrapper').classList.toggle('hidden',!isReal);
@@ -3797,6 +3849,7 @@ async function changeAutomationAccount(selectedAccount){
 }
 async function changeAutomationMarket(){
  const feedback=$('autoConfigFeedback'),market=automationRadio('autoMarket'),requestId=++automationMarketRequest;
+ syncAutomationStrategyChoices();
  clearAutomationInvalid('automationSymbols');
  feedback.textContent='Carregando ativos do mercado selecionado...';
  automationAssets=[];automationSelected.clear();$('autoAssetSearch').value='';renderAutomationAssets();
@@ -3814,10 +3867,10 @@ async function changeAutomationMarket(){
 }
 document.querySelectorAll('input[name="autoMarket"]').forEach(x=>x.addEventListener('change',changeAutomationMarket));
 document.querySelectorAll('input[name="autoMode"]').forEach(x=>x.addEventListener('change',()=>{
- changeAutomationAccount();renderAutomationSummary();
+ changeAutomationAccount();syncAutomationStrategyChoices();renderAutomationSummary();
 }));
 document.querySelectorAll('input[name="autoStrategy"]').forEach(x=>x.addEventListener('change',()=>{
- automationProfileSaved=false;renderAutomationSummary();
+ automationProfileSaved=false;syncAutomationStrategyChoices();renderAutomationSummary();
 }));
 ['autoStake','autoWin','autoLoss','autoDirection','autoPayout'].forEach(id=>$(id)?.addEventListener('change',renderAutomationSummary));
 
@@ -3858,7 +3911,9 @@ function renderAutomationAssets(){
 function renderAutomationSummary(){
  const node=$('autoConfigSummary');if(!node)return;
  const marketNames={forex:'Forex',derived:'Derivados',stocks_indices:'Ações e índices',commodities:'Matérias-primas'};
- const strategyNames={pulso_v2:'PULSO V2',trend:'Tendência e pullback',rsi:'Reversão RSI'};
+ const strategyNames={pulso_v2:'PULSO V2',trend:'Tendência e pullback',rsi:'Reversão RSI',
+  fx_pullback_m15:'Forex · tendência H1 + pullback M15 (experimental)',
+  fx_breakout_m15:'Forex · tendência H1 + rompimento M15 (experimental)'};
  const market=automationRadio('autoMarket'),mode=automationRadio('autoMode');
  const advanced=$('autoMg').checked?'Martingale selecionado':
    $('autoCycles').value!=='0'?'Ciclos selecionados':'Nenhuma progressão selecionada';
@@ -3867,7 +3922,7 @@ function renderAutomationSummary(){
   'Mercado: '+(marketNames[market]||'Não confirmado'),
   'Ativos: '+automationSelected.size+' selecionado(s)',
   'Análise: '+(strategyNames[automationRadio('autoStrategy')]||'Não confirmada'),
-  'Direção: '+$('autoDirection').value+' · duração: automática (M1, M3, M5 ou M15)',
+  'Direção: '+$('autoDirection').value+' · duração: '+(isForexDemoStrategy(automationRadio('autoStrategy'))?'fixa M15 (15 minutos)':'automática (M1, M3, M5 ou M15)'),
   'Valor por entrada: US$ '+$('autoStake').value,
   'Limites registrados: Stop Win US$ '+$('autoWin').value+' · Stop Loss US$ '+$('autoLoss').value,
   'Payout mínimo informado: '+$('autoPayout').value+'%',
@@ -3884,6 +3939,7 @@ async function loadAutomationProfile(){
   await changeAutomationAccount(profile.real_account_id);
   setAutomationRadio('autoMarket',profile.market==='volatility'?'derived':(profile.market||'derived'));
   setAutomationRadio('autoStrategy',profile.strategy||'pulso_v2');
+  syncAutomationStrategyChoices();
   const selectedMarket=profile.market==='volatility'?'derived':(profile.market||'derived');
   const requestId=++automationMarketRequest;
   const catalogue=await req('/api/automation/catalogue?market='+encodeURIComponent(selectedMarket));
