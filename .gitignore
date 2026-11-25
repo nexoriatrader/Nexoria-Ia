@@ -9,3 +9,16 @@ __pycache__/
 *.sqlite*
 coverage.xml
 .DS_Store
+
+# Sensitive local files and private database backups
+*.pem
+*.p12
+*.pfx
+*.key
+id_rsa
+id_ed25519
+credentials.json
+service-account.json
+*.sql.gz
+*.dump
+*.bak
