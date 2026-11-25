@@ -1257,10 +1257,12 @@ async def brand_reference_bg(): return FileResponse(Path(__file__).parent/'stati
 @app.get('/healthz')
 async def health():
     enabled=os.getenv('NEXORA_DEMO_BUY_ENABLED','false').lower()=='true'
+    real_enabled=real_runtime.real_available()
     return {'ok':True,'version':VERSION,'market_connected':market_connected,
-            'execution':'DERIV_DEMO_ONLY','automatic_demo_orders_enabled':autopilot_allowed(),
-            'manual_demo_purchase_enabled':enabled,'real_orders_enabled':real_runtime.real_available(),
-            'execution_modes':['demo']+(['real'] if real_runtime.real_available() else [])}
+            'execution':'DERIV_REAL_OPT_IN' if real_enabled else 'DERIV_DEMO_ONLY',
+            'automatic_demo_orders_enabled':autopilot_allowed(),
+            'manual_demo_purchase_enabled':enabled,'real_orders_enabled':real_enabled,
+            'execution_modes':['demo']+(['real'] if real_enabled else [])}
 
 @app.get('/api/public/offer')
 async def public_offer():

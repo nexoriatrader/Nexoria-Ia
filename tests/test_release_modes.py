@@ -36,16 +36,21 @@ def test_public_and_authenticated_real_flags_agree(tmp_path, monkeypatch):
     try:
         monkeypatch.delenv("NEXORA_REAL_AUTOPILOT_ENABLED", raising=False)
         monkeypatch.delenv("NEXORA_REAL_RELEASE_APPROVED", raising=False)
-        assert client.get("/healthz").json()["real_orders_enabled"] is False
+        health = client.get("/healthz").json()
+        assert health["real_orders_enabled"] is False
+        assert health["execution"] == "DERIV_DEMO_ONLY"
         assert client.get("/api/session").json()["real_enabled"] is False
         assert client.get("/api/onboarding/config").json()["real_enabled"] is False
         # The legacy flag alone cannot enable real-money purchases.
         monkeypatch.setenv("NEXORA_REAL_AUTOPILOT_ENABLED", "true")
-        assert client.get("/healthz").json()["real_orders_enabled"] is False
+        health = client.get("/healthz").json()
+        assert health["real_orders_enabled"] is False
+        assert health["execution"] == "DERIV_DEMO_ONLY"
         assert client.get("/api/session").json()["real_enabled"] is False
         monkeypatch.setenv("NEXORA_REAL_RELEASE_APPROVED", "true")
         health = client.get("/healthz").json()
         assert health["real_orders_enabled"] is True
+        assert health["execution"] == "DERIV_REAL_OPT_IN"
         assert "real" in health["execution_modes"]
         assert client.get("/api/session").json()["real_enabled"] is True
         assert client.get("/api/onboarding/config").json()["real_enabled"] is True
