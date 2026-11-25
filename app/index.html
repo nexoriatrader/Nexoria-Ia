@@ -708,13 +708,7 @@ html,body{max-width:100%;overflow-x:clip}
 #robot-config .auto-symbols.auto-invalid{border-radius:12px;min-height:55px;padding:9px}
 #robot-config input:focus-visible,#robot-config select:focus-visible{outline:2px solid #80dbff;outline-offset:2px}
 </style><style>
-#robot-config .auto-indicator-recommendation{margin-top:8px;padding:10px 12px;border:1px solid #386a83;border-radius:11px;background:#12364a;color:#c0e6f4;font-size:12px;line-height:1.6}
-#robot-config #autoIndicators label:has(input:checked){border-color:#56a4c2;background:#1a4056}
 </style><style>
-#robot-config #autoIndicators .auto-core-indicator{border-color:#4da9be;background:#153c4d}
-#robot-config #autoIndicators .auto-core-indicator input:disabled{opacity:1;cursor:default}
-#robot-config #autoIndicators .auto-indicator-note{display:block;margin:5px 0 0 26px;font-size:10px;color:#9ee4dc;font-weight:800}
-#robot-config #autoIndicators label[hidden]{display:none}
 </style><style>
 /* NEXORA automation quick profiles and six-step wizard */
 .auto-preset-layout{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin:17px 0 11px}
@@ -2041,30 +2035,13 @@ body:has(#dashboard:not(.hidden)) .nexora-logo-only .brand img{
       <div class="field hidden"><label for="autoAssetSearch">Buscar ativo</label><input id="autoAssetSearch" type="search" placeholder="Nome ou código do ativo" oninput="renderAutomationAssets()"></div>
       <div id="automationSymbols" class="auto-symbols"><p class="helper">Carregando ativos...</p></div>
       <div class="auto-step"><span>04</span><strong>Como os dados serão analisados?</strong></div>
-      <p class="helper auto-step-help">Estratégias são métodos de interpretação de dados. Indicadores são medidas auxiliares; nenhum deles prevê resultados com certeza.</p>
+      <p class="helper auto-step-help">Cada estratégia já aplica seus próprios critérios de análise. Os indicadores apresentados no guia são conceitos educativos, não filtros genéricos para selecionar.</p>
       <div class="auto-options">
-        <label class="auto-choice"><input type="radio" name="autoStrategy" value="pulso_v2" checked> PULSO V2 <small>Pressão direcional + volatilidade estável · CALL · M5</small></label>
+        <label class="auto-choice"><input type="radio" name="autoStrategy" value="pulso_v2" checked> PULSO V2 <small>Pressão direcional + volatilidade estável · direção configurável · expiração automática</small></label>
         <label class="auto-choice"><input type="radio" name="autoStrategy" value="trend"> Tendência e pullback <small>EMA 20/50 + confirmação de preço</small></label>
         <label class="auto-choice"><input type="radio" name="autoStrategy" value="rsi"> Reversão RSI <small>RSI e confirmação de reversão</small></label>
       </div>
       <div class="field"><label for="autoDirection">Direção das entradas</label><select id="autoDirection"><option value="AUTO">Automática conforme estratégia</option><option value="CALL">Somente CALL / Alta</option><option value="PUT">Somente PUT / Baixa</option></select></div>
-      <div class="field"><label>Indicadores selecionados</label><p class="helper">Escolha livremente nenhum, um ou vários indicadores de confirmação. Cada filtro adicional precisa concordar com o sinal; filtros demais podem reduzir a frequência de operações.</p><p id="autoIndicatorRecommendation" class="auto-indicator-recommendation" role="status"></p></div>
-      <details class="nx-guide-explainer">
-        <summary>O que significam os indicadores? <span aria-hidden="true">⌄</span></summary>
-        <p>Médias móveis (EMA/SMA) acompanham tendências. RSI e Estocástico comparam movimentos recentes. ATR observa variação; Bandas de Bollinger acompanham dispersão. MACD, ADX, suporte/resistência e padrões de velas são outras formas de analisar dados. Nenhum indicador elimina riscos.</p>
-      </details>
-      <div class="auto-symbols" id="autoIndicators">
-        <label><input type="checkbox" value="EMA"> Média móvel exponencial (EMA)</label>
-        <label><input type="checkbox" value="SMA"> Média móvel simples (SMA)</label>
-        <label><input type="checkbox" value="RSI"> Índice de força relativa (RSI)</label>
-        <label><input type="checkbox" value="MACD"> MACD</label>
-        <label><input type="checkbox" value="BOLLINGER"> Bandas de Bollinger</label>
-        <label><input type="checkbox" value="ATR"> Average True Range (ATR)</label>
-        <label><input type="checkbox" value="ADX"> Índice direcional médio (ADX)</label>
-        <label><input type="checkbox" value="STOCHASTIC"> Estocástico</label>
-        <label><input type="checkbox" value="SUPPORT_RESISTANCE"> Suporte e resistência</label>
-        <label><input type="checkbox" value="CANDLE_PATTERNS"> Padrões de velas</label>
-      </div>
       <div class="auto-step"><span>05</span><strong>Entenda os valores e os limites</strong></div>
       <p class="helper auto-step-help">Este grupo reúne parâmetros financeiros e limites de segurança. Em treinamento, os valores são fictícios. Valores e estratégias não eliminam riscos em contas reais.</p>
       <div class="settings-grid">
@@ -2125,8 +2102,8 @@ body:has(#dashboard:not(.hidden)) .nexora-logo-only .brand img{
     <div class="learning-hero-text">
       <div class="eyebrow">CENTRAL DE CONHECIMENTO · NEXORA IA</div>
       <h1>Conheça os Indicadores e Estratégias</h1>
-      <p>Entenda o que o robô observa no mercado, como identifica sinais e como os indicadores podem complementar uma estratégia.</p>
-      <div class="learning-quickfacts"><span>◈ 3 estratégias</span><span>◈ 10 indicadores e filtros</span><span>◈ Exemplos CALL e PUT</span></div>
+      <p>Conheça as três estratégias e alguns conceitos de análise técnica. Cada estratégia usa regras próprias, sem filtros genéricos adicionais.</p>
+      <div class="learning-quickfacts"><span>◈ 3 estratégias</span><span>◈ 10 conceitos de indicadores</span><span>◈ Exemplos CALL e PUT</span></div>
     </div>
     <div class="learning-hero-graphic" aria-hidden="true">
       <div class="learning-mini-graph">
@@ -2158,7 +2135,7 @@ body:has(#dashboard:not(.hidden)) .nexora-logo-only .brand img{
           <span>Como o sinal é formado</span>
           <strong>Pressão + volatilidade estável + fechamento confirmado</strong>
         </div>
-        <div class="learning-meta"><span>Velas M1</span><span>Direção CALL / PUT</span><span>Expiração configurável</span></div>
+        <div class="learning-meta"><span>Velas M1</span><span>Direção AUTO / CALL / PUT</span><span>Expiração automática · M1 / M3 / M5 / M15</span></div>
         <details class="learning-details"><summary>Entender esta estratégia <span aria-hidden="true">⌄</span></summary>
           <div><p>O robô consulta uma sequência de velas, calcula as condições de pressão e compara a estabilidade do movimento. Quando o conjunto de regras é atendido, gera um sinal na direção configurada.</p>
           <p><strong>Exemplo:</strong> se houver pressão compradora suficiente e o cenário de volatilidade estiver dentro dos critérios, pode surgir um sinal CALL. Na direção PUT, as condições são avaliadas para movimento de baixa.</p></div>
@@ -2196,7 +2173,7 @@ body:has(#dashboard:not(.hidden)) .nexora-logo-only .brand img{
   </div>
   <div id="learningIndicatorsSection" class="learning-section">
     <div class="learning-section-head">
-      <div><div class="eyebrow">FERRAMENTAS DE CONFIRMAÇÃO</div><h2>Conheça os Indicadores</h2><p>Entenda o papel de cada indicador disponível no configurador do NEXORA.</p></div>
+      <div><div class="eyebrow">CONCEITOS DE ANÁLISE TÉCNICA</div><h2>Conheça os Indicadores</h2><p>Aprenda conceitos de análise técnica. No configurador, cada estratégia já possui seus próprios critérios; não há filtros genéricos para selecionar.</p></div>
     </div>
     <div class="learning-indicators">
       <article class="learning-indicator"><span class="learning-indicator-mark trend">EMA</span><div><h3>Média Móvel Exponencial</h3><p>Dá maior peso aos preços recentes. A comparação entre EMA 20 e EMA 50 ajuda a identificar a direção da tendência.</p><small>Categoria: tendência</small></div></article>
@@ -2205,30 +2182,30 @@ body:has(#dashboard:not(.hidden)) .nexora-logo-only .brand img{
       <article class="learning-indicator"><span class="learning-indicator-mark momentum">MACD</span><div><h3>Convergência e Divergência</h3><p>Compara médias exponenciais de 12 e 26 períodos para avaliar o sentido do impulso do preço.</p><small>Categoria: tendência e momentum</small></div></article>
       <article class="learning-indicator"><span class="learning-indicator-mark vol">BB</span><div><h3>Bandas de Bollinger</h3><p>Formam uma região dinâmica ao redor da média do preço. A largura das bandas acompanha a dispersão recente.</p><small>Categoria: volatilidade</small></div></article>
       <article class="learning-indicator"><span class="learning-indicator-mark vol">ATR</span><div><h3>Average True Range</h3><p>Mede a amplitude média das oscilações, sem indicar sozinho se o preço vai subir ou cair.</p><small>Categoria: volatilidade</small></div></article>
-      <article class="learning-indicator"><span class="learning-indicator-mark trend">ADX</span><div><h3>Índice Direcional Médio</h3><p>Ajuda a observar a intensidade do movimento. O NEXORA utiliza um filtro simplificado de deslocamento relativo à amplitude.</p><small>Categoria: força do movimento</small></div></article>
+      <article class="learning-indicator"><span class="learning-indicator-mark trend">ADX</span><div><h3>Índice Direcional Médio</h3><p>Ajuda a observar a intensidade de uma tendência, sem indicar por si só se o preço vai subir ou cair.</p><small>Categoria: força do movimento</small></div></article>
       <article class="learning-indicator"><span class="learning-indicator-mark momentum">STO</span><div><h3>Estocástico</h3><p>Compara o fechamento com a faixa recente de máximas e mínimas, mostrando a posição do preço dentro desse intervalo.</p><small>Categoria: momentum</small></div></article>
       <article class="learning-indicator"><span class="learning-indicator-mark price">S/R</span><div><h3>Suporte e Resistência</h3><p>Identifica regiões de máximas e mínimas anteriores, que podem servir de referência para rompimentos e reação do preço.</p><small>Categoria: ação do preço</small></div></article>
-      <article class="learning-indicator"><span class="learning-indicator-mark price">M1</span><div><h3>Padrões de Velas</h3><p>Analisa a relação entre abertura e fechamento das velas. O filtro inclui padrões de engolfo de alta e de baixa.</p><small>Categoria: ação do preço</small></div></article>
+      <article class="learning-indicator"><span class="learning-indicator-mark price">M1</span><div><h3>Padrões de Velas</h3><p>Analisa a relação entre abertura e fechamento; o engolfo é um exemplo de padrão que compara duas velas consecutivas.</p><small>Categoria: ação do preço</small></div></article>
     </div>
-    <div class="learning-tip"><span aria-hidden="true">✧</span><p><strong>Como os filtros se combinam?</strong> A estratégia define a condição principal de entrada. Os indicadores adicionais funcionam como confirmações: cada filtro escolhido acrescenta um critério ao sinal. Quanto mais critérios, menos oportunidades podem passar.</p></div>
+    <div class="learning-tip"><span aria-hidden="true">✧</span><p><strong>Como funciona a análise do robô?</strong> Os critérios de entrada e confirmação vêm da estratégia selecionada. PULSO V2, Tendência + Pullback e Reversão RSI seguem regras próprias, sem combinações avulsas de filtros genéricos.</p></div>
   </div>
   <div id="learningHowtoSection" class="learning-section">
-    <div class="learning-section-head"><div><div class="eyebrow">SEU CONTROLE</div><h2>Como configurar o NEXORA</h2><p>Monte sua automação de acordo com o mercado e os critérios que deseja acompanhar.</p></div></div>
+    <div class="learning-section-head"><div><div class="eyebrow">SEU CONTROLE</div><h2>Como configurar o NEXORA</h2><p>Escolha o mercado, os ativos e uma estratégia com critérios de análise definidos.</p></div></div>
     <div class="learning-steps">
       <div class="learning-step"><span>01</span><div><h3>Escolha a conta e o mercado</h3><p>Selecione DEMO ou REAL e escolha Forex, Derivados, Ações e Índices ou Matérias-primas.</p></div></div>
       <div class="learning-step"><span>02</span><div><h3>Selecione os ativos</h3><p>Escolha os instrumentos específicos que o NEXORA deverá acompanhar dentro do mercado selecionado.</p></div></div>
-      <div class="learning-step"><span>03</span><div><h3>Defina a estratégia e os indicadores</h3><p>Escolha PULSO V2, Tendência + Pullback ou RSI e, se desejar, selecione filtros de confirmação.</p></div></div>
+      <div class="learning-step"><span>03</span><div><h3>Defina a estratégia</h3><p>Escolha PULSO V2, Tendência + Pullback ou Reversão RSI. Cada estratégia aplica seus próprios critérios de análise.</p></div></div>
       <div class="learning-step"><span>04</span><div><h3>Personalize as operações</h3><p>Informe direção, entrada, expiração, payout mínimo, stops e suas preferências de Martingale, ciclos e notícias.</p></div></div>
       <div class="learning-step"><span>05</span><div><h3>Salve sua configuração</h3><p>Revise as opções no painel, salve seu perfil e utilize os controles de automação da conta escolhida.</p></div></div>
     </div>
     <div class="learning-faq">
       <details><summary>Qual a diferença entre estratégia e indicador?</summary><p>A estratégia reúne regras para identificar o momento de uma possível entrada. O indicador mede um aspecto do mercado, como tendência, impulso ou volatilidade, e pode ajudar a confirmar essas regras.</p></details>
-      <details><summary>Posso escolher vários indicadores?</summary><p>Sim. Eles aparecem no painel como filtros adicionais. Cada um acrescenta uma condição de confirmação ao processo de seleção de sinais.</p></details>
+      <details><summary>Posso escolher vários indicadores?</summary><p>Não no configurador. Você escolhe a estratégia, e ela já aplica seus próprios critérios; assim, não há combinação de filtros genéricos que possa bloquear sinais.</p></details>
       <details><summary>O que significa CALL e PUT?</summary><p>CALL representa uma operação que depende de o preço subir conforme as condições do contrato. PUT representa uma operação que depende de o preço cair.</p></details>
       <details><summary>O que é expiração?</summary><p>É o prazo estabelecido para o encerramento do contrato. No configurador você escolhe a duração disponível para sua automação.</p></details>
     </div>
   </div>
-  <div class="learning-cta"><div><strong>Pronto para personalizar seu robô?</strong><p>Escolha seus ativos, indicadores e estratégia no painel principal.</p></div><button type="button" class="gold" onclick="go('robot-config')">CONFIGURAR MEU ROBÔ</button></div>
+  <div class="learning-cta"><div><strong>Pronto para personalizar seu robô?</strong><p>Escolha seus ativos e a estratégia que deseja utilizar no painel principal.</p></div><button type="button" class="gold" onclick="go('robot-config')">CONFIGURAR MEU ROBÔ</button></div>
 </section>
 <section id="settings" class="hidden">
   <div class="section-heading"><div><div class="eyebrow">SEU CONTROLE</div><h1>Configurações</h1><p>Personalize entradas, stop e progressões. O AutoPilot deve estar desligado para salvar.</p></div></div>
@@ -2664,6 +2641,7 @@ function renderRobotEasyDiagnosis(status){
   }else if(has('aguardando_fechamento_m1')){
    title='Aguardando novos dados';
    explanation='A verificação aguardou o fechamento de um novo registro de mercado.';
+  // Leitura compatível com históricos antigos; o scanner atual não emite esse código.
   }else if(has('indicadores_nao_confirmados')||has('estrategia_sem_sinal')){
    title='Critérios não confirmados';
    explanation='A última verificação não confirmou todos os critérios necessários para classificar uma situação.';
@@ -2869,7 +2847,7 @@ function renderScanMonitor(status){
   $('dashScanCaption').textContent=status.reason||'Ainda não há uma análise recente confirmada.';
  }else if(checking){
   $('dashScanStatus').textContent='VARREDURA EM ANDAMENTO';
-  $('dashScanCaption').textContent='Consultando os ativos e validando os indicadores da estratégia.';
+  $('dashScanCaption').textContent='Consultando os ativos e validando os critérios próprios da estratégia.';
  }else{
   $('dashScanStatus').textContent=data.stage==='signal'?'SINAL ENCONTRADO':'AGUARDANDO OPORTUNIDADE';
   $('dashScanCaption').textContent=status.reason||'Aguardando confirmação de sinal.';
@@ -2885,7 +2863,7 @@ function renderScanMonitor(status){
    'Sem progressão';
  const reasonNames={
   estrategia_sem_sinal:'Estratégia sem sinal confirmado',
-  indicadores_nao_confirmados:'Indicadores não confirmaram',
+  indicadores_nao_confirmados:'Critério legado da estratégia não confirmado',
   velas_insuficientes:'Velas recentes insuficientes',
   velas_incompletas:'Sequência de velas incompleta',
   dados_indisponiveis:'Dados da Deriv indisponíveis',
@@ -3051,18 +3029,13 @@ function askRobotStartConfirmation(profile,risk,catalogue){
  const box=$('robotStartDialogDetails');box.replaceChildren();
  $('robotStartDialogWarning').textContent=profile.account_mode==='real'?
   'ATENÇÃO: ao confirmar, o NEXORA poderá comprar contratos com DINHEIRO REAL da conta Deriv selecionada. Há risco de perder capital, inclusive antes de uma proteção interromper novas entradas. Nenhuma estratégia garante lucro.':
-  'A ativação autoriza novas operações na conta DEMO conforme os parâmetros salvos. Indicadores e estratégias não garantem resultados.';
+  'A ativação autoriza novas operações na conta DEMO conforme os parâmetros salvos. Nenhuma estratégia garante resultados.';
  const marketNames={derived:'Índices derivados',volatility:'Índices derivados',
   forex:'Forex',stocks_indices:'Ações e índices',commodities:'Matérias-primas'};
  const strategyNames={pulso_v2:'PULSO V2',trend:'Tendência e Pullback',rsi:'Reversão RSI'};
  const presetNames={conservative:'Conservadora',aggressive:'Arriscada',custom:'Personalizada'};
- const indicatorNames={EMA:'EMA (média exponencial)',SMA:'SMA (média simples)',
-  RSI:'RSI',MACD:'MACD',BOLLINGER:'Bandas de Bollinger',ATR:'ATR',
-  ADX:'ADX',STOCHASTIC:'Estocástico',SUPPORT_RESISTANCE:'Suporte e resistência',
-  CANDLE_PATTERNS:'Padrões de velas'};
  const symbols=Array.isArray(profile.symbols)?profile.symbols:[];
  const symbolNames=new Map(catalogue.map(item=>[item.symbol,item.name||item.symbol]));
- const indicators=(profile.indicators||[]).map(item=>indicatorNames[item]||item);
  const stopAmount=(value)=>Number(value)>0?reviewAmount(value):'Desativado';
  addRobotReviewGroup(box,'Conta e mercado',[
   ['Conta Deriv',profile.account_mode==='real'?(profile.real_account_id||'Não selecionada'):'Conta de treinamento'],
@@ -3074,7 +3047,6 @@ function askRobotStartConfirmation(profile,risk,catalogue){
  ]);
  addRobotReviewGroup(box,'Estratégia e análise',[
   ['Estratégia',strategyNames[profile.strategy]||profile.strategy],
-  ['Indicadores',indicators.join(', ')||'Nenhum filtro complementar'],
   ['Direção',({AUTO:'Automática',CALL:'Somente alta (CALL)',PUT:'Somente baixa (PUT)'})[profile.direction]||profile.direction],
   ['Expiração','AUTO · M1, M3, M5 ou M15 (payout válido)'],
   ['Payout mínimo',(profile.min_payout_pct??88)+'%']
@@ -3611,7 +3583,7 @@ const automationGuideDescriptions=[
  ['Entenda os tipos de conta','Treinamento utiliza valores fictícios. Operações reais envolvem risco de perda de dinheiro e não fazem parte da experiência introdutória.'],
  ['Conheça os mercados','Os mercados são grupos de instrumentos. A etapa apenas organiza o que será exibido na seleção seguinte.'],
  ['Veja os ativos disponíveis','Um ativo é um instrumento do mercado. Os nomes são obtidos no catálogo; uma lista vazia significa que os dados não foram confirmados.'],
- ['Aprenda sobre análise','Uma estratégia define critérios de análise e indicadores acrescentam informações. Nenhuma opção garante resultado.'],
+ ['Aprenda sobre análise','Cada estratégia segue seus próprios critérios de entrada e confirmação. Não há filtros genéricos separados para alterar essa lógica.'],
  ['Conheça os limites','Veja o significado dos parâmetros e dos limites. Martingale e ciclos ficam separados como opções avançadas de risco elevado.'],
  ['Revise o que está salvo','Confira as preferências antes de salvar. Salvar não liga o robô e não substitui as confirmações posteriores.']
 ];
@@ -3686,7 +3658,6 @@ async function applyAutomationPreset(mode){
    return;
   }
   setAutomationRadio('autoStrategy',conservative?'trend':'rsi');
-  updateStrategyIndicators();
   $('autoDirection').value='AUTO';
   $('autoStake').value=presetMoney(conservative?Math.max(0.5,balance*0.005):Math.max(0.5,balance===null?0.5:balance*0.01));
   $('autoWin').value=conservative?presetMoney(balance*0.05):'0.00';
@@ -3845,38 +3816,8 @@ document.querySelectorAll('input[name="autoMarket"]').forEach(x=>x.addEventListe
 document.querySelectorAll('input[name="autoMode"]').forEach(x=>x.addEventListener('change',()=>{
  changeAutomationAccount();renderAutomationSummary();
 }));
-const automationStrategyDefaults={
- pulso_v2:{indicators:['ATR'],label:'PULSO V2: os indicadores escolhidos são filtros opcionais; mais filtros podem reduzir a frequência de sinais.'},
- trend:{indicators:['EMA'],label:'Tendência + Pullback: combine livremente indicadores de confirmação.'},
- rsi:{indicators:['RSI'],label:'Reversão RSI: combine livremente indicadores de confirmação.'}
-};
-function updateStrategyIndicators(selection){
- const preset=automationStrategyDefaults[automationRadio('autoStrategy')]||automationStrategyDefaults.pulso_v2;
- const values=new Set(Array.isArray(selection)?selection:preset.indicators);
- document.querySelectorAll('#autoIndicators input[type="checkbox"]').forEach(input=>{
-  input.disabled=false;
-  input.checked=values.has(input.value);
-  const label=input.closest('label');
-  if(label){
-   label.hidden=false;
-   label.classList.remove('auto-incompatible','auto-core-indicator');
-   const note=label.querySelector('.auto-indicator-note');
-   if(note)note.remove();
-  }
- });
- $('autoIndicatorRecommendation').textContent=preset.label;
- renderAutomationSummary();
-}
-document.querySelectorAll('#autoIndicators input[type="checkbox"]').forEach(input=>{
- input.addEventListener('change',()=>{
-  automationProfileSaved=false;
-  const count=document.querySelectorAll('#autoIndicators input:checked').length;
-  $('autoIndicatorRecommendation').textContent=count+' filtro(s) escolhido(s). Nenhum indicador adicional é obrigatório; todos devem confirmar para validar um sinal.';
-  renderAutomationSummary();
- });
-});
 document.querySelectorAll('input[name="autoStrategy"]').forEach(x=>x.addEventListener('change',()=>{
- updateStrategyIndicators();automationProfileSaved=false;
+ automationProfileSaved=false;renderAutomationSummary();
 }));
 ['autoStake','autoWin','autoLoss','autoDirection','autoPayout'].forEach(id=>$(id)?.addEventListener('change',renderAutomationSummary));
 
@@ -3919,7 +3860,6 @@ function renderAutomationSummary(){
  const marketNames={forex:'Forex',derived:'Derivados',stocks_indices:'Ações e índices',commodities:'Matérias-primas'};
  const strategyNames={pulso_v2:'PULSO V2',trend:'Tendência e pullback',rsi:'Reversão RSI'};
  const market=automationRadio('autoMarket'),mode=automationRadio('autoMode');
- const count=document.querySelectorAll('#autoIndicators input:checked').length;
  const advanced=$('autoMg').checked?'Martingale selecionado':
    $('autoCycles').value!=='0'?'Ciclos selecionados':'Nenhuma progressão selecionada';
  node.textContent=[
@@ -3927,7 +3867,6 @@ function renderAutomationSummary(){
   'Mercado: '+(marketNames[market]||'Não confirmado'),
   'Ativos: '+automationSelected.size+' selecionado(s)',
   'Análise: '+(strategyNames[automationRadio('autoStrategy')]||'Não confirmada'),
-  'Indicadores complementares: '+count,
   'Direção: '+$('autoDirection').value+' · duração: automática (M1, M3, M5 ou M15)',
   'Valor por entrada: US$ '+$('autoStake').value,
   'Limites registrados: Stop Win US$ '+$('autoWin').value+' · Stop Loss US$ '+$('autoLoss').value,
@@ -3955,7 +3894,6 @@ async function loadAutomationProfile(){
    suggestedAutomationAssets(selectedMarket,automationAssets));
   $('autoPayout').value=String(profile.min_payout_pct??88);
   $('autoDirection').value=profile.direction||'AUTO';
-  updateStrategyIndicators(profile.configured?(profile.indicators||[]):undefined);
   $('autoStake').value=risk.stake;
   $('autoWin').value=risk.stop_win;
   $('autoLoss').value=risk.stop_loss;
@@ -3987,7 +3925,7 @@ async function saveAutomationProfile(){
    expiry_minutes:0,news_filter:false,
    news_minutes_before:30,news_minutes_after:30,
    max_daily_orders:0,
-   indicators:[...document.querySelectorAll('#autoIndicators input:checked')].map(x=>x.value),
+   indicators:[],
    direction:$('autoDirection').value,
    min_payout_pct:Number($('autoPayout').value),
    real_account_id:automationRadio('autoMode')==='real'?$('autoRealAccount').value:null,

@@ -64,7 +64,7 @@ def test_advanced_and_new_options_are_retained_without_becoming_default():
     for name in ("autoMarket", "autoMode", "autoStrategy"):
         assert f'name="{name}"' in panel
     for field in (
-        "autoRealAccount", "automationSymbols", "autoDirection", "autoIndicators",
+        "autoRealAccount", "automationSymbols", "autoDirection",
         "autoStake", "autoWin", "autoLoss", "autoPayout", "autoMg",
         "autoMgSettings", "autoCycles", "autoCycleSettings", "autoCycleMultiplier",
         "autoSaveButton", "autoConfigFeedback",
@@ -75,8 +75,10 @@ def test_advanced_and_new_options_are_retained_without_becoming_default():
     assert 'Opções avançadas e de alto risco' in panel
     assert 'id="autoMg"' in panel.split('id="autoAdvancedOptions"', 1)[1].split('</details>', 1)[0]
     assert 'id="autoCycles"' in panel.split('id="autoAdvancedOptions"', 1)[1].split('</details>', 1)[0]
-    assert 'id="autoIndicators"' in panel
-    assert "O que significam os indicadores?" in panel
+    assert 'id="autoIndicators"' not in panel
+    assert "Indicadores selecionados" not in panel
+    assert "O que significam os indicadores?" not in panel
+    assert 'id="learningIndicatorsSection"' in SOURCE
     assert 'input type="radio" name="autoMode" value="demo" checked' in panel
     assert 'input type="radio" name="autoMode" value="real"' in panel
     assert 'onclick="saveAutomationProfile()"' in panel
@@ -179,11 +181,12 @@ def test_review_explains_existing_parameters_without_saving_automatically():
     )[0]
     for expression in (
         "Conta:", "Mercado:", "Ativos:", "Análise:",
-        "Indicadores complementares:", "Direção:", "Valor por entrada:",
+        "Direção:", "Valor por entrada:",
         "Limites registrados:", "Payout mínimo informado:",
         "Opções avançadas:", "Treinamento · saldo fictício",
     ):
         assert expression in summary
+    assert "Indicadores complementares:" not in summary
     for forbidden in ("fetch(", "req(", "POST", "saveAutomationProfile("):
         assert forbidden not in summary
     assert "node.textContent=[" in summary

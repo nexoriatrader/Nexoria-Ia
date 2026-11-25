@@ -22,7 +22,7 @@ _cache={}
 _cache_lock=asyncio.Lock()
 
 
-async def _candidate_for_symbol(symbol, bucket, *, deadline, direction="AUTO", minutes=5, indicators=(), verdict=None):
+async def _candidate_for_symbol(symbol, bucket, *, deadline, direction="AUTO", minutes=5, verdict=None):
     """Only a closed broker-provided M1 candle can authorize a DEMO signal."""
     def reject(reason):
         if verdict: verdict(reason)
@@ -40,26 +40,20 @@ async def _candidate_for_symbol(symbol, bucket, *, deadline, direction="AUTO", m
     rows=[[b["epoch"],b["open"],b["high"],b["low"],b["close"]]
           for b in tail]
     # AUTO must inspect both real PULSO directions. Explicit CALL/PUT
-    # selections are unchanged; all technical filters remain mandatory.
+    # selections are unchanged; the PULSO's internal rules remain mandatory.
     variants=make_variants(rows)
     permitted=("CALL","PUT") if direction=="AUTO" else (direction,)
     side=None
-    direction_detected=False
     for attempt in permitted:
         signal=variants[("stable_volatility",attempt)][-1]
         if signal!=(1 if attempt=="CALL" else -1):
             continue
-        direction_detected=True
         if time.time()>=deadline:
             return reject('janela_expirada')
-        if indicators:
-            from .automation_signals import _indicators_agree
-            if not _indicators_agree(tail,attempt,indicators,"pulso_v2"):
-                continue
         side=attempt
         break
     if side is None:
-        return reject('indicadores_nao_confirmados' if direction_detected else 'estrategia_sem_sinal')
+        return reject('estrategia_sem_sinal')
     # Duration availability and payout are verified with actual DEMO proposals
     # AFTER a confirmed directional signal; do not make four extra contract
     # catalogue calls inside the narrow closed-candle scanner window.
@@ -74,7 +68,7 @@ async def _candidate_for_symbol(symbol, bucket, *, deadline, direction="AUTO", m
     }
 
 
-async def confirmed_pulso_signal(allowed_symbols=None, direction="AUTO", minutes=5, indicators=(), scan_event=None):
+async def confirmed_pulso_signal(allowed_symbols=None, direction="AUTO", minutes=5, scan_event=None):
     """Scan all Deriv-listed Volatility symbols (or single-symbol fallback).
 
     Return at most ONE live candidate per closed M1 bar. Fail closed on
@@ -88,7 +82,7 @@ async def confirmed_pulso_signal(allowed_symbols=None, direction="AUTO", minutes
     async with _cache_lock:
         now=time.time()
         bucket=int(now//60)*60
-        key=(direction,minutes,tuple(sorted(set(indicators))),tuple(sorted(set(allowed_symbols))) if allowed_symbols is not None else None)
+        key=(direction,minutes,tuple(sorted(set(allowed_symbols))) if allowed_symbols is not None else None)
         cached=_cache.get(key)
         if cached and cached["last_bucket"]==bucket:
             if scan_event: scan_event('cached', None, len(allowed_symbols or []))
@@ -132,7 +126,7 @@ async def confirmed_pulso_signal(allowed_symbols=None, direction="AUTO", minutes
                 try:
                     result=await _candidate_for_symbol(
                         symbol,bucket,deadline=deadline,direction=direction,
-                        minutes=minutes,indicators=indicators,verdict=verdict)
+                        minutes=minutes,verdict=verdict)
                     if result: reason='sinal_confirmado'
                     return result
                 except (MarketError,TimeoutError,OSError,TypeError,ValueError) as exc:

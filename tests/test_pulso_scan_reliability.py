@@ -41,7 +41,7 @@ def test_pulso_keeps_fast_confirmed_candidate_when_other_market_times_out(monkey
     monkeypatch.setattr(pulso_live.time,'time',lambda:126.8)
     pulso_live._cache.clear()
     completed=[]
-    async def broker(symbol,bucket,*,deadline,direction,minutes,indicators,verdict):
+    async def broker(symbol,bucket,*,deadline,direction,minutes,verdict):
         if symbol=='R_FAST':
             return signal_for('R_FAST')
         try:
@@ -67,7 +67,7 @@ def test_pulso_caches_actual_no_signal_but_not_missing_closed_candle(monkeypatch
     monkeypatch.setattr(pulso_live.time,'time',lambda:126.0)
     pulso_live._cache.clear()
     attempts=[]
-    async def broker(symbol,bucket,*,deadline,direction,minutes,indicators,verdict):
+    async def broker(symbol,bucket,*,deadline,direction,minutes,verdict):
         attempts.append(1)
         if len(attempts)==1:
             verdict('velas_insuficientes')

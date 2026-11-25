@@ -1,14 +1,13 @@
-"""Configurable closed-candle signal scanner for Deriv Options automation.
+"""Fixed-rule closed-candle signal scanner for Deriv Options automation.
 
-Strategies use only broker-provided completed M1 candles, selected symbols,
-requested expiry, direction and optional indicator confirmations. Signals do
-not issue a broker order; the order executor remains a separate concern.
+Strategies use broker-provided completed M1 candles, selected symbols,
+requested expiry and direction. Each strategy owns its entry and confirmation
+rules; signals do not issue a broker order.
 """
 from __future__ import annotations
 
 import asyncio
 import json
-import math
 import time
 
 from .market import MarketError, public_request, shared_candle_request
@@ -68,67 +67,6 @@ def _direction_for(rows, strategy):
     return None
 
 
-def _indicators_agree(rows, direction, indicators, strategy):
-    if not indicators:
-        return True
-    closes=[r['close'] for r in rows]
-    opens=[r['open'] for r in rows]
-    high=[r['high'] for r in rows]
-    low=[r['low'] for r in rows]
-    positive=direction=='CALL'
-    if 'EMA' in indicators:
-        a,b=_ema(closes,20),_ema(closes,50)
-        if (a[-1] > b[-1]) != positive:
-            return False
-    if 'SMA' in indicators:
-        a=sum(closes[-20:])/20;b=sum(closes[-50:])/50
-        if (a>b)!=positive:
-            return False
-    if 'RSI' in indicators and strategy!='rsi':
-        values=_rsi(closes)
-        if values is None or ((values[-1]>50)!=positive):
-            return False
-    if 'MACD' in indicators:
-        a,b=_ema(closes,12),_ema(closes,26)
-        if (a[-1]>b[-1]) != positive:
-            return False
-    if 'BOLLINGER' in indicators:
-        middle=sum(closes[-20:])/20
-        sigma=math.sqrt(sum((x-middle)**2 for x in closes[-20:])/20)
-        if sigma==0 or abs(closes[-1]-middle)>2*sigma:
-            return False
-    if 'ATR' in indicators:
-        ranges=[max(h-l,abs(h-p),abs(l-p)) for h,l,p
-                in zip(high[1:],low[1:],closes[:-1])]
-        if sum(ranges[-14:])/14 < .7*sum(ranges[-30:])/30:
-            return False
-    if 'ADX' in indicators:
-        ranges=[max(h-l,abs(h-p),abs(l-p)) for h,l,p
-                in zip(high[1:],low[1:],closes[:-1])]
-        atr=sum(ranges[-14:])/14
-        directional=abs(closes[-1]-closes[-15])/14
-        if atr<=0 or directional/atr < .15:
-            return False
-    if 'STOCHASTIC' in indicators:
-        hi=max(high[-14:]);lo=min(low[-14:])
-        if hi==lo or ((closes[-1]-lo)/(hi-lo)>0.5)!=positive:
-            return False
-    if 'SUPPORT_RESISTANCE' in indicators:
-        if positive and closes[-1]<=max(high[-21:-1]):
-            return False
-        if not positive and closes[-1]>=min(low[-21:-1]):
-            return False
-    if 'CANDLE_PATTERNS' in indicators:
-        a,b=rows[-2],rows[-1]
-        if positive and not (a['close']<a['open'] and b['close']>b['open']
-                             and b['close']>=a['open'] and b['open']<=a['close']):
-            return False
-        if not positive and not (a['close']>a['open'] and b['close']<b['open']
-                                 and b['close']<=a['open'] and b['open']>=a['close']):
-            return False
-    return True
-
-
 _scan_cache = {}
 _scan_lock = asyncio.Lock()
 
@@ -140,17 +78,16 @@ async def confirmed_automation_signal(profile, scan_event=None, excluded_symbols
              if symbol not in excluded]
     if not symbols:
         return None
-    indicators=json.loads(profile.indicators_json or '[]')
     direction=profile.direction
     if profile.strategy=='pulso_v2':
-        return await confirmed_pulso_signal(symbols,direction=direction,minutes=profile.expiry_minutes,indicators=indicators,scan_event=scan_event)
+        return await confirmed_pulso_signal(symbols,direction=direction,minutes=profile.expiry_minutes,scan_event=scan_event)
 
     now=time.time()
     if now%60>12:
         if scan_event: scan_event('window',None,len(symbols),'aguardando_fechamento_m1')
         return None
     bucket=int(now//60)*60
-    key=(profile.strategy,profile.expiry_minutes,direction,tuple(symbols),tuple(indicators))
+    key=(profile.strategy,profile.expiry_minutes,direction,tuple(symbols))
     async with _scan_lock:
         cached=_scan_cache.get(key)
         if cached and cached[0]==bucket:
@@ -193,9 +130,6 @@ async def confirmed_automation_signal(profile, scan_event=None, excluded_symbols
                     if not side or (direction!='AUTO' and side!=direction):
                         reason='estrategia_sem_sinal'
                         return None
-                    if not _indicators_agree(rows,side,indicators,profile.strategy):
-                        reason='indicadores_nao_confirmados'
-                        return None
                     if time.time()>=deadline:
                         reason='janela_expirada'
                         return None
@@ -209,7 +143,7 @@ async def confirmed_automation_signal(profile, scan_event=None, excluded_symbols
                         'direction':side,'symbol':symbol,
                         'minutes':expiry_options[0],'expiry_options':expiry_options,'bar_seconds':60,
                         'last_bar_epoch':rows[-1]['epoch'],
-                        'reason':profile.strategy+' · fechamento M1 · '+','.join(indicators),
+                        'reason':profile.strategy+' · fechamento M1',
                         'score':1
                     }
                 except (MarketError,TimeoutError,OSError,ValueError,TypeError,IndexError):

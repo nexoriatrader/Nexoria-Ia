@@ -1511,6 +1511,7 @@ class AutomationProfileRequest(BaseModel):
     news_minutes_before:int=30
     news_minutes_after:int=30
     max_daily_orders:int=0
+    # Legacy field accepted for older clients; strategy rules now own their filters.
     indicators:list[str]=[]
     direction:str='AUTO'
     real_account_id:str|None=None
@@ -1537,7 +1538,8 @@ def automation_profile_result(profile):
         'news_minutes_before':profile.news_minutes_before,
         'news_minutes_after':profile.news_minutes_after,
         'max_daily_orders':0,
-        'indicators':json.loads(profile.indicators_json or '[]'),
+        # Do not expose stale choices from profiles created by older panels.
+        'indicators':[],
         'direction':profile.direction,
         'real_account_id':profile.real_account_id,
         'min_payout_pct':int(Decimal(profile.min_payout)),
@@ -1576,12 +1578,10 @@ async def save_automation_profile(request:Request,payload:AutomationProfileReque
         raise HTTPException(422,'Payout mínimo fora do intervalo')
     if payload.preset_mode not in ('conservative','aggressive','custom'):
         raise HTTPException(422,'Perfil de configuração inválido')
+    # Validate legacy values for compatibility, but never persist or apply them.
     indicator_options={'EMA','SMA','RSI','MACD','BOLLINGER','ATR','ADX','STOCHASTIC','SUPPORT_RESISTANCE','CANDLE_PATTERNS'}
     if len(payload.indicators)!=len(set(payload.indicators)) or not set(payload.indicators).issubset(indicator_options):
         raise HTTPException(422,'Seleção de indicadores inválida')
-    # Any implemented confirmation indicator can be selected independently.
-    # The directional strategy still supplies its own entry signal; chosen
-    # confirmations are optional AND-filters, not an implicit override.
     if payload.account_mode=='real':
         if not payload.real_account_id or not re.fullmatch(r'[A-Za-z0-9]{2,100}',payload.real_account_id):
             raise HTTPException(422,'Selecione uma conta REAL vinculada à Deriv')
@@ -1622,7 +1622,7 @@ async def save_automation_profile(request:Request,payload:AutomationProfileReque
             profile.news_minutes_before=payload.news_minutes_before
             profile.news_minutes_after=payload.news_minutes_after
             profile.max_daily_orders=0  # Daily operation-count cap retired; risk gates remain active.
-            profile.indicators_json=json.dumps(sorted(payload.indicators))
+            profile.indicators_json='[]'
             profile.direction=payload.direction
             profile.real_account_id=payload.real_account_id if payload.account_mode=='real' else None
             profile.min_payout=str(payload.min_payout_pct)
