@@ -1530,8 +1530,14 @@ body:has(#dashboard:not(.hidden)) .nexora-logo-only .brand img{
 #dashboard .nx-history-row small{font-size:11px;color:#a6bbc9;margin-top:3px}
 #dashboard .nx-history-outcome{text-align:right;flex:0 0 auto;max-width:45%;font-size:12px;color:#d7e5f1}
 #dashboard .nx-history-more{display:block;width:100%;min-height:44px;margin-top:17px;padding:10px;border:1px solid #668da4;border-radius:12px;background:#1a3b52;color:#e5f4ff;font-weight:850;font-size:12px}
+#dashboard .nx-history-tools{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-top:10px}
+#dashboard .nx-history-tool{min-height:46px;padding:10px 12px;border:1px solid #668da4;border-radius:12px;background:#19384e;color:#e5f4ff;font-size:12px;font-weight:850;line-height:1.35}
+#dashboard .nx-history-tool.primary{border-color:#ae8d48;background:linear-gradient(135deg,#604c28,#392f22);color:#ffe8b5}
+#dashboard .nx-history-tool:disabled{opacity:.6;cursor:wait}
+#dashboard .nx-history-action-note{min-height:18px;margin:8px 2px 0;color:#afc5d4;font-size:12px;line-height:1.5}
+#dashboard .nx-history-action-note[data-error="true"]{color:#f2abab}
 #dashboard .nx-history-note{margin-top:10px}
-@media(max-width:640px){#dashboard.nx-calm-dashboard .nx-panel-history{padding:15px;border-radius:19px;margin-top:12px}#dashboard .nx-history-row{padding:10px}}
+@media(max-width:640px){#dashboard.nx-calm-dashboard .nx-panel-history{padding:15px;border-radius:19px;margin-top:12px}#dashboard .nx-history-row{padding:10px}#dashboard .nx-history-tools{grid-template-columns:1fr}}
 </style>
 </head>
 <body>
@@ -1785,6 +1791,11 @@ body:has(#dashboard:not(.hidden)) .nexora-logo-only .brand img{
     <div id="nxPanelHistoryPrevious" class="nx-history-list"><p class="nx-history-note">Consultando histórico…</p></div>
     <p id="nxPanelHistoryNote" class="nx-history-note">Aguardando dados confirmados.</p>
     <button class="nx-history-more" type="button" onclick="go('results')">VER MAIS RESULTADOS <span aria-hidden="true">→</span></button>
+    <div class="nx-history-tools" aria-label="Ações dos resultados">
+      <button id="nxRenewSession" class="nx-history-tool primary" type="button" onclick="renewPanelSession()">Renovar sessão</button>
+      <button id="nxClearResults" class="nx-history-tool" type="button" onclick="clearPanelResults()">Limpar resultados anteriores</button>
+    </div>
+    <p id="nxHistoryActionNote" class="nx-history-action-note" role="status" aria-live="polite">Renovar sessão sincroniza com a Deriv. Limpar oculta somente os resultados encerrados nesta interface; operações em análise e histórico oficial são preservados.</p>
   </section>
   <footer class="nx-premium-footer">NEXORA IA <span aria-hidden="true">·</span> Deriv</footer>
 
@@ -3334,17 +3345,82 @@ function setEducationTab(tab){
  });
  for(const id of groups.all)$(id).classList.toggle('hidden',!groups[tab].includes(id));
 }
+const hiddenResolvedMemory=new Map();
+function hiddenResolvedKey(mode){return 'nexora-hidden-results-v1:'+String(mode||'demo');}
+function hiddenResolvedIDs(mode){
+ const key=hiddenResolvedKey(mode);
+ if(hiddenResolvedMemory.has(key))return hiddenResolvedMemory.get(key);
+ let ids=new Set();
+ try{const saved=JSON.parse(localStorage.getItem(key)||'[]');if(Array.isArray(saved))ids=new Set(saved.map(String));}catch{}
+ hiddenResolvedMemory.set(key,ids);return ids;
+}
+function visibleOrderRows(items,mode){
+ const hidden=hiddenResolvedIDs(mode);
+ return (Array.isArray(items)?items:[]).filter(order=>
+  !(order?.state==='SETTLED'&&hidden.has(String(order.id))));
+}
+function setHistoryActionNote(message,error=false){
+ const note=$('nxHistoryActionNote');if(!note)return;
+ note.textContent=message;note.dataset.error=String(Boolean(error));
+}
+function syncClearResultsButtonLabel(mode){
+ const button=$('nxClearResults');if(!button)return;
+ button.textContent=hiddenResolvedIDs(mode).size?'Restaurar resultados ocultados':'Limpar resultados anteriores';
+}
+function updateLastOrderLabel(){
+ const last=visibleOrderRows(demoOrders,robotConfiguredMode)[0];
+ $('lastOrder').textContent=last?last.symbol+' · '+last.direction+' · M'+last.duration_minutes+' · '+money(last.stake)
+  +(last.pnl===null?' · Aguardando resultado':' · Resultado '+money(last.pnl)):'Nenhum resultado oficial visível.';
+}
+function clearPanelResults(){
+ const key=hiddenResolvedKey(robotConfiguredMode),hidden=hiddenResolvedIDs(robotConfiguredMode);
+ if(hidden.size){
+  hidden.clear();hiddenResolvedMemory.set(key,hidden);
+  try{localStorage.removeItem(key);}catch{}
+  syncClearResultsButtonLabel(robotConfiguredMode);
+  renderOrders();renderRealtimeOrders();renderPanelHistory(demoOrders,robotConfiguredMode);
+  updateLastOrderLabel();
+  setHistoryActionNote('Resultados ocultados restaurados nesta interface. O histórico oficial permaneceu preservado.');
+  return;
+ }
+ const settled=demoOrders.filter(order=>order&&order.state==='SETTLED');
+ if(!settled.length){setHistoryActionNote('Não há resultados encerrados para ocultar. Operações pendentes permanecem visíveis.');return;}
+ settled.forEach(order=>hidden.add(String(order.id)));
+ hiddenResolvedMemory.set(key,hidden);
+ try{localStorage.setItem(key,JSON.stringify([...hidden]));}catch{}
+ syncClearResultsButtonLabel(robotConfiguredMode);
+ renderOrders();renderRealtimeOrders();renderPanelHistory(demoOrders,robotConfiguredMode);
+ updateLastOrderLabel();
+ setHistoryActionNote(settled.length+' resultado(s) encerrado(s) ocultado(s) nesta interface. O histórico oficial foi preservado; operações em análise continuam visíveis.');
+}
+async function renewPanelSession(){
+ const button=$('nxRenewSession');if(button?.disabled)return;
+ if(button)button.disabled=true;
+ setHistoryActionNote('Conectando à Deriv e verificando operações pendentes…');
+ try{
+  const result=await req('/api/orders/recover',{method:'POST'});
+  await loadDemoOrders().catch(()=>{});
+  await refreshPanelStatusDisplay().catch(()=>{});
+  const details=[];
+  if(result.settled)details.push(result.settled+' resultado(s) atualizado(s) pela Deriv');
+  if(result.released)details.push(result.released+' bloqueio(s) liberado(s) após confirmação de ausência');
+  if(result.blocked)details.push(result.blocked+' operação(ões) permanecem protegidas aguardando confirmação');
+  setHistoryActionNote(result.checked===0?result.message:'Sincronização concluída. '+(details.join('; ')||'Nenhuma alteração necessária.')+'.');
+ }catch(error){setHistoryActionNote('Não foi possível confirmar a sincronização: '+(error?.message||'falha de conexão')+'. Nenhum bloqueio foi liberado por esta tentativa.',true);}
+ finally{if(button)button.disabled=false;}
+}
 function renderRealtimeOrders(){
  const list=$('dashRealtimeOrders');
  if(!list)return;
  list.replaceChildren();
- if(!demoOrders.length){
+ const displayOrders=visibleOrderRows(demoOrders,robotConfiguredMode);
+ if(!displayOrders.length){
   const empty=document.createElement('p');
   empty.className='muted';
-  empty.textContent=robotRunning?'Robô monitorando oportunidades. Nenhuma operação registrada neste histórico.':'Nenhuma operação recente.';
+  empty.textContent=robotRunning?'Robô monitorando oportunidades. Nenhuma operação visível neste histórico.':'Nenhuma operação recente visível.';
   list.append(empty);return;
  }
- for(const order of demoOrders.slice(0,6)){
+ for(const order of displayOrders.slice(0,6)){
   const tile=document.createElement('div');tile.className='dash-trade';
   const main=document.createElement('div');main.className='dash-trade-main';
   const title=document.createElement('strong');
@@ -3426,7 +3502,7 @@ function renderPanelHistory(items,mode){
  }
  const dateOf=o=>o.started_at_brasilia||o.broker_purchase_at||'';
  const stamp=o=>{const value=Date.parse(dateOf(o));return Number.isFinite(value)?value:-Infinity;};
- const rows=items.filter(o=>o&&o.state==='SETTLED'&&o.progression?.source==='autopilot').sort((a,b)=>stamp(b)-stamp(a)).slice(0,4);
+ const rows=visibleOrderRows(items,mode).filter(o=>o&&o.state==='SETTLED'&&o.progression?.source==='autopilot').sort((a,b)=>stamp(b)-stamp(a)).slice(0,4);
  function tile(order){
   const row=document.createElement('div');row.className='nx-history-row';
   const main=document.createElement('div'),title=document.createElement('strong'),sub=document.createElement('small');
@@ -3445,7 +3521,7 @@ function renderPanelHistory(items,mode){
  if(rows.length<2)empty(previous,'Nenhuma operação anterior registrada.');
  note.textContent=(mode==='real'?'Conta real':'Treinamento · saldo fictício')+' · histórico confirmado · resultados passados não garantem resultados futuros.';
 }
-async function loadDemoOrders(){const historyMode=robotConfiguredMode;try{const data=await req(historyMode==='real'?'/api/real/orders':'/api/demo/orders');demoOrders=data.items||[];const last=demoOrders[0];$('lastOrder').textContent=last?last.symbol+' · '+last.direction+' · M'+last.duration_minutes+' · '+money(last.stake)+(last.pnl===null?' · Aguardando resultado':' · Resultado '+money(last.pnl)):'Nenhum contrato oficial ainda.';renderOrders();renderRealtimeOrders();if(historyMode===robotConfiguredMode)renderPanelHistory(data.items||[],historyMode);return data}catch(e){if(historyMode===robotConfiguredMode)renderPanelHistory(null);$('ordersBody').innerHTML='<tr><td colspan="11" class="empty">Não foi possível carregar o histórico.</td></tr>';throw e}}
+async function loadDemoOrders(){const historyMode=robotConfiguredMode;try{const data=await req(historyMode==='real'?'/api/real/orders':'/api/demo/orders');demoOrders=data.items||[];if(historyMode===robotConfiguredMode)syncClearResultsButtonLabel(historyMode);updateLastOrderLabel();renderOrders();renderRealtimeOrders();if(historyMode===robotConfiguredMode)renderPanelHistory(data.items||[],historyMode);return data}catch(e){if(historyMode===robotConfiguredMode)renderPanelHistory(null);$('ordersBody').innerHTML='<tr><td colspan="11" class="empty">Não foi possível carregar o histórico.</td></tr>';throw e}}
 const brasilDateTime=(iso)=>{
  if(!iso)return ['—','—'];
  const d=new Date(iso);
@@ -3466,12 +3542,13 @@ function tradeStage(o){
 }
 function renderOrders(){
  const tbody=$('ordersBody');tbody.replaceChildren();
- if(!demoOrders.length){
+ const displayOrders=visibleOrderRows(demoOrders,robotConfiguredMode);
+ if(!displayOrders.length){
    const tr=document.createElement('tr'),td=document.createElement('td');
-   td.colSpan=11;td.className='empty';td.textContent='Nenhum contrato nesta avaliação.';
+   td.colSpan=11;td.className='empty';td.textContent='Nenhum contrato visível nesta avaliação.';
    tr.append(td);tbody.append(tr);return;
  }
- for(const o of demoOrders){
+ for(const o of displayOrders){
    const row=document.createElement('tr');
    const [date,time]=brasilDateTime(o.started_at_brasilia||o.broker_purchase_at);
    const result=o.outcome||'PENDING';

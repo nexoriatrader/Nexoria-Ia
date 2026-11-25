@@ -145,6 +145,45 @@ def unknown(session, order):
         order.error_summary='Confirmação indisponível; requer reconciliação com a Deriv'
         session.commit()
 
+def link_recovered_contract(session, order, contract):
+    """Attach an account-history match to an uncertain DEMO reservation."""
+    if order.state not in ACTIVE or order.contract_id:
+        raise OrderGuardError('Reserva DEMO não pode ser associada novamente')
+    contract_id=str(contract.get('contract_id',''))
+    if not contract_id.isdigit():
+        raise OrderGuardError('Identificador de contrato DEMO inválido')
+    if (str(contract.get('underlying_symbol','')).upper()!=order.symbol.upper()
+        or str(contract.get('contract_type','')).upper()!=order.direction.upper()):
+        raise OrderGuardError('Contrato recuperado não corresponde à reserva DEMO')
+    price=money(contract.get('buy_price'))
+    if price<=0 or price>money(order.stake):
+        raise OrderGuardError('Preço do contrato recuperado fora da reserva DEMO')
+    order.contract_id=contract_id
+    order.buy_price=str(price)
+    instant=official_broker_epoch(contract.get('purchase_time'))
+    if instant is None:
+        instant=official_broker_epoch(contract.get('date_start'))
+    if instant is not None:
+        order.broker_purchase_at=instant
+    order.state='CONFIRMED'
+    order.error_summary=None
+    order.broker_status='recovered'
+    session.commit()
+    return order
+
+def mark_broker_absent(session, order, *, verified=False):
+    """Release a DEMO slot only after complete authenticated broker evidence."""
+    if verified is not True:
+        raise OrderGuardError('Ausência na Deriv não foi confirmada')
+    if order.state!='UNKNOWN':
+        return False
+    order.state='CANCELLED'
+    order.active_slot=None
+    order.broker_status='confirmed_absent'
+    order.error_summary='Ausência confirmada no portfolio e extrato da Deriv'
+    session.commit()
+    return True
+
 def settle(session, order, broker_contract):
     """Never fabricate settlement; only broker is_sold and finite profit accepted."""
     if order.state not in ACTIVE or not order.contract_id:

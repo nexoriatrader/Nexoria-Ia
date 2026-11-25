@@ -4,7 +4,8 @@ from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session
 import pytest
 from app.db import Base, User, DemoOrder
-from app.demo_ledger import reserve, confirmed, settle, unknown, order_guard, OrderGuardError
+from app.demo_ledger import (reserve, confirmed, settle, unknown, order_guard,
+    OrderGuardError, link_recovered_contract, mark_broker_absent)
 from app.demo import _validate_demo_url, DemoTradingError
 
 @pytest.fixture
@@ -49,6 +50,32 @@ def test_unknown_is_fail_closed(setup_db):
         unknown(s,order)
         with pytest.raises(OrderGuardError,match='pendente de reconciliação'):
             reserve(s,u,request_key='retry-other',symbol='1HZ100V',direction='CALL',minutes=5)
+
+def test_recovery_links_unique_contract_and_preserves_absent_audit_row(setup_db):
+    engine,uid=setup_db
+    with Session(engine) as s:
+        u=s.get(User,uid)
+        order,_=reserve(s,u,request_key='recovery-match-1',symbol='1HZ100V',direction='CALL',minutes=5)
+        unknown(s,order)
+        link_recovered_contract(s,order,{
+            'contract_id':'812345','underlying_symbol':'1HZ100V',
+            'contract_type':'CALL','buy_price':'1.00','purchase_time':1764090000,
+        })
+        assert order.state=='CONFIRMED' and order.contract_id=='812345'
+        assert order.active_slot==u.id
+        assert order.broker_status=='recovered'
+        assert settle(s,order,{'contract_id':'812345','is_sold':1,'profit':'0.50'})
+
+        absent,_=reserve(s,u,request_key='recovery-absent-1',symbol='1HZ100V',direction='PUT',minutes=5)
+        unknown(s,absent)
+        with pytest.raises(OrderGuardError,match='não foi confirmada'):
+            mark_broker_absent(s,absent)
+        assert absent.active_slot==u.id and absent.state=='UNKNOWN'
+        assert mark_broker_absent(s,absent,verified=True)
+        assert absent.state=='CANCELLED' and absent.active_slot is None
+        assert s.get(DemoOrder,absent.id) is not None
+        replacement,created=reserve(s,u,request_key='recovery-retry-1',symbol='1HZ100V',direction='PUT',minutes=5)
+        assert created and replacement.id!=absent.id
 
 def test_reject_foreign_contract_or_nonfinite_pnl(setup_db):
     engine,uid=setup_db

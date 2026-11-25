@@ -7,7 +7,8 @@ from sqlalchemy.pool import StaticPool
 from app import db
 from app.real_ledger import (
     reserve_real_order, confirm_real_order, mark_real_unknown,
-    settle_real_order, RealOrderGuardError,
+    settle_real_order, RealOrderGuardError, link_recovered_real_contract,
+    mark_real_broker_absent,
 )
 
 @pytest.fixture
@@ -65,6 +66,29 @@ def test_uncertain_order_never_releases_real_account_slot(session):
     assert order.active_slot=="CR123"
     with pytest.raises(RealOrderGuardError,match="contrato aberto"):
         place(session,"second-12345678")
+
+def test_real_recovery_links_or_cancels_only_with_broker_evidence(session):
+    order,_=place(session)
+    mark_real_unknown(session,order)
+    with pytest.raises(RealOrderGuardError,match='não foi confirmada'):
+        mark_real_broker_absent(session,order)
+    assert order.active_slot=='CR123'
+    link_recovered_real_contract(session,order,{
+        'contract_id':'723456789','underlying_symbol':'R_100',
+        'contract_type':'CALL','buy_price':'1','purchase_time':1760000000,
+    })
+    assert order.state=='CONFIRMED' and order.contract_id=='723456789'
+    assert order.active_slot=='CR123'
+    assert settle_real_order(session,order,{
+        'contract_id':'723456789','is_sold':1,'profit':'0.50',
+    })
+    absent,_=place(session,'second-12345678')
+    mark_real_unknown(session,absent)
+    assert mark_real_broker_absent(session,absent,verified=True)
+    assert absent.state=='CANCELLED' and absent.active_slot is None
+    assert session.get(db.RealOrder,absent.id) is not None
+    next_order,created=place(session,'third-12345678')
+    assert created and next_order.id!=absent.id
 
 def test_real_contract_settlement_releases_slot_only_with_broker_proof(session):
     order,_=place(session)

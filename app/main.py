@@ -25,9 +25,12 @@ from .access import (access_control_enabled, access_status, access_status_for_gr
 from .demo import (DemoTradingError, DemoPreBuyDeadlineExceeded, demo_account_balance,
                    demo_contract_status, demo_buy, demo_proposal, demo_expiry_quotes,
                    prepare_demo_buy_socket)
-from .demo_ledger import OrderGuardError, reserve, public_order, confirmed, unknown, settle
+from .demo_ledger import (OrderGuardError, reserve, public_order, confirmed, unknown,
+                          settle, link_recovered_contract, mark_broker_absent)
 from . import real_runtime
-from .real_broker import RealExecutionError, real_account_balance
+from .real_broker import RealExecutionError, real_account_balance, real_contract_status
+from .order_recovery import (RecoverySnapshotError, account_recovery_snapshot,
+                             classify_unidentified_order)
 from .autopilot import analyze, quote_assessment
 from .engine import Engine, Settings
 from .market import MarketError, discover_symbols, discover_contracts, indicative_proposal, public_feed_messages
@@ -3271,6 +3274,205 @@ async def demo_orders_route(request:Request,nexora_sid:str|None=Cookie(default=N
                 'execution':'DERIV_DEMO_ONLY','timezone':'America/Sao_Paulo',
                 'retention_days':3,'history_cutoff':cutoff.isoformat(),
                 'batch':('NEXORA_2.1' if batch.max_orders>=100 else 'NEXORA_2.0') if batch else 'PREVIOUS'}
+
+async def _recover_account_orders(user, token, mode, account_id):
+    """Refresh one authenticated Deriv account without sending any trade request."""
+    if mode=='demo':
+        model=db.DemoOrder
+        active_states=('PENDING','CONFIRMED','UNKNOWN')
+        status_call=demo_contract_status
+        from .demo import APP_ID as recovery_app_id
+        ledger_link=link_recovered_contract
+        ledger_absent=mark_broker_absent
+    else:
+        from .real_ledger import (RealOrderGuardError, link_recovered_real_contract,
+                                  mark_real_broker_absent, settle_real_order)
+        model=db.RealOrder
+        active_states=('PENDING','CONFIRMED','UNKNOWN')
+        status_call=real_contract_status
+        from .real_broker import APP_ID as recovery_app_id
+        ledger_link=link_recovered_real_contract
+        ledger_absent=mark_real_broker_absent
+
+    with db.SessionLocal() as session:
+        query=select(model).where(model.user_id==user.id,
+                                  model.state.in_(active_states))
+        if mode=='real':
+            query=query.where(model.account_id==account_id)
+        rows=session.scalars(query.order_by(model.id.asc())).all()
+        if not rows:
+            return {'mode':mode,'checked':0,'linked':0,'settled':0,
+                    'released':0,'blocked':0,'message':'Nenhuma operação pendente nesta conta.'}
+        order_data=[{'id':row.id,'contract_id':row.contract_id,
+                     'created_at':row.created_at,'updated_at':row.updated_at,
+                     'state':row.state} for row in rows]
+        known_ids={str(row.contract_id) for row in session.scalars(
+            select(model).where(model.contract_id.is_not(None))).all()}
+
+    oldest=min(row['created_at'] for row in order_data)
+    if oldest.tzinfo is None:
+        oldest=oldest.replace(tzinfo=timezone.utc)
+    date_from=max(946684800,int(oldest.timestamp())-3600)
+    date_to=int(time.time())
+    try:
+        snapshot=await account_recovery_snapshot(mode,token,account_id,date_from,date_to)
+    except RecoverySnapshotError as exc:
+        raise HTTPException(502,str(exc)) from None
+    if snapshot.get('complete') is not True:
+        raise HTTPException(502,'A Deriv não confirmou a consulta completa; bloqueios preservados.')
+
+    decisions={}
+    contract_claims={}
+    for item in order_data:
+        if item['contract_id']:
+            continue
+        with db.SessionLocal() as session:
+            order=session.get(model,item['id'])
+            if not order:
+                continue
+            classification,cid,evidence=classify_unidentified_order(
+                order,snapshot['contracts'],snapshot['transactions'],recovery_app_id)
+        if classification=='MATCH' and (cid in known_ids):
+            classification,cid,evidence='AMBIGUOUS',None,'contrato já associado a outro registro'
+        decisions[item['id']]=(classification,cid,evidence)
+        if classification=='MATCH':
+            contract_claims.setdefault(cid,[]).append(item['id'])
+    for cid,order_ids in contract_claims.items():
+        if len(order_ids)>1:
+            for order_id in order_ids:
+                decisions[order_id]=('AMBIGUOUS',None,'mesmo contrato compatível com mais de uma reserva')
+
+    counts={'checked':len(order_data),'linked':0,'settled':0,'released':0,'blocked':0}
+    status_targets=[]
+    async with reconcile_lock if mode=='demo' else real_runtime.user_lock(user.id):
+        with db.SessionLocal() as session:
+            for item in order_data:
+                order=session.scalar(select(model).where(
+                    model.id==item['id']).with_for_update())
+                if not order or order.state not in active_states:
+                    continue
+                cid=str(order.contract_id) if order.contract_id else None
+                if cid:
+                    status_targets.append((order.id,cid))
+                    continue
+                classification,candidate_id,evidence=decisions.get(
+                    order.id,('AMBIGUOUS',None,'reserva alterada durante a consulta'))
+                if classification=='MATCH':
+                    try:
+                        ledger_link(session,order,evidence)
+                        counts['linked']+=1
+                        status_targets.append((order.id,str(candidate_id)))
+                    except Exception as exc:
+                        session.rollback()
+                        log.warning('Recovery link rejected: mode=%s order=%s error=%s',
+                                    mode,order.id,type(exc).__name__)
+                        counts['blocked']+=1
+                elif classification=='ABSENT':
+                    # PENDING may still be inside a broker buy request. For
+                    # UNKNOWN, wait five full minutes after the state changed
+                    # to UNKNOWN, not merely after reservation creation; the
+                    # just-failed request must age out before a snapshot can
+                    # release its durable slot.
+                    if order.state!='UNKNOWN':
+                        counts['blocked']+=1
+                        continue
+                    uncertain_since=order.updated_at or order.created_at
+                    if uncertain_since.tzinfo is None:
+                        uncertain_since=uncertain_since.replace(tzinfo=timezone.utc)
+                    if time.time()-uncertain_since.timestamp()<300:
+                        counts['blocked']+=1
+                        continue
+                    try:
+                        if ledger_absent(session,order,verified=True):
+                            counts['released']+=1
+                    except Exception as exc:
+                        session.rollback()
+                        log.warning('Recovery release rejected: mode=%s order=%s error=%s',
+                                    mode,order.id,type(exc).__name__)
+                        counts['blocked']+=1
+                else:
+                    counts['blocked']+=1
+
+    # Known or newly linked contract IDs are checked through Deriv's official
+    # contract-status request. Errors never release a slot.
+    settle_call=settle if mode=='demo' else settle_real_order
+    for order_id,cid in status_targets:
+        try:
+            receipt=await status_call(token,account_id,cid)
+            contract=receipt.get('contract')
+            if not isinstance(contract,dict):
+                counts['blocked']+=1
+                continue
+        except Exception as exc:
+            if isinstance(exc,asyncio.CancelledError):
+                raise
+            counts['blocked']+=1
+            log.warning('Recovery status unavailable: mode=%s order=%s error=%s',
+                        mode,order_id,type(exc).__name__)
+            continue
+        if mode=='demo':
+            async with reconcile_lock:
+                with db.SessionLocal() as session:
+                    order=session.scalar(select(model).where(model.id==order_id,
+                        model.user_id==user.id,model.contract_id==cid))
+                    if order and order.state in active_states:
+                        try:
+                            if settle_call(session,order,contract):
+                                counts['settled']+=1
+                        except OrderGuardError:
+                            session.rollback();counts['blocked']+=1
+        else:
+            async with real_runtime.user_lock(user.id):
+                with db.SessionLocal() as session:
+                    order=session.scalar(select(model).where(model.id==order_id,
+                        model.user_id==user.id,model.account_id==account_id,
+                        model.contract_id==cid))
+                    if order and order.state in active_states:
+                        try:
+                            if settle_call(session,order,contract):
+                                counts['settled']+=1
+                        except RealOrderGuardError:
+                            session.rollback();counts['blocked']+=1
+
+    if counts['released']:
+        log.warning('Deriv absence confirmed; durable reservation marked cancelled: mode=%s count=%s',
+                    mode,counts['released'])
+    counts['mode']=mode
+    counts['message']='Sincronização concluída; confira o status atualizado.'
+    return counts
+
+@app.post('/api/orders/recover')
+async def recover_orders_route(request:Request,nexora_sid:str|None=Cookie(default=None)):
+    """Reconnect read-only to Deriv and reconcile only the signed-in user's active orders."""
+    user,token=active_session(request,nexora_sid)
+    with db.SessionLocal() as session:
+        profile=session.get(db.AutomationProfile,user.id)
+        mode=profile.account_mode if profile and profile.account_mode in ('demo','real') else 'demo'
+        real_account_id=profile.real_account_id if mode=='real' else None
+        consent=session.get(db.RealRobotConsent,user.id) if mode=='real' else None
+        if mode=='real' and (not real_account_id or not consent
+                             or consent.account_id!=real_account_id):
+            raise HTTPException(403,'Conta REAL sem autorização vinculada; nenhuma operação foi alterada.')
+    if mode=='demo':
+        return await _recover_account_orders(user,token,'demo',user.deriv_account_id)
+
+    # The REAL path is read-only, but still revalidates account ownership from
+    # the authenticated Deriv session before requesting the account OTP.
+    try:
+        async with httpx.AsyncClient(timeout=15) as client:
+            response=await client.get('https://api.derivws.com/trading/v1/options/accounts',
+                headers={'Authorization':f'Bearer {token}'})
+            response.raise_for_status()
+            payload=response.json()
+        from .auth_helpers import extract_accounts,real_accounts
+        valid={row['account_id'] for row in real_accounts(extract_accounts(payload))}
+        if real_account_id not in valid:
+            raise HTTPException(403,'A Deriv não confirmou a conta REAL selecionada; bloqueios preservados.')
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(502,'Não foi possível revalidar a conta REAL na Deriv; bloqueios preservados.') from None
+    return await _recover_account_orders(user,token,'real',real_account_id)
 
 @app.post('/api/demo/orders/{order_id}/reconcile')
 async def reconcile_demo_route(request:Request,order_id:int,

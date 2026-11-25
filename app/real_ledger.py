@@ -144,6 +144,41 @@ def mark_real_unknown(session, order):
         order.error_summary='Resultado REAL incerto: reconciliação obrigatória'
         session.commit()
 
+def link_recovered_real_contract(session, order, contract):
+    """Attach a unique, account-scoped Deriv match to an uncertain REAL row."""
+    if order.state not in ACTIVE or order.contract_id:
+        raise RealOrderGuardError('Reserva REAL não pode ser associada novamente')
+    contract_id=str(contract.get('contract_id',''))
+    if not contract_id.isdigit():
+        raise RealOrderGuardError('Identificador de contrato REAL inválido')
+    if (str(contract.get('underlying_symbol','')).upper()!=order.symbol.upper()
+        or str(contract.get('contract_type','')).upper()!=order.direction.upper()):
+        raise RealOrderGuardError('Contrato recuperado não corresponde à reserva REAL')
+    price=_money(contract.get('buy_price'),'Preço recuperado')
+    if price<=0 or price>_money(order.stake,'Valor reservado'):
+        raise RealOrderGuardError('Preço do contrato recuperado fora da reserva REAL')
+    order.contract_id=contract_id
+    order.buy_price=str(price)
+    order.broker_purchase_at=(official_broker_epoch(contract.get('purchase_time'))
+                              or official_broker_epoch(contract.get('date_start')))
+    order.state='CONFIRMED'
+    order.error_summary=None
+    order.broker_status='recovered'
+    session.commit()
+    return order
+
+def mark_real_broker_absent(session, order, *, verified=False):
+    """Release a REAL slot only after complete authenticated broker evidence."""
+    if verified is not True:
+        raise RealOrderGuardError('Ausência na Deriv não foi confirmada')
+    if order.state!='UNKNOWN':
+        return False
+    order.state='CANCELLED'
+    order.active_slot=None
+    order.broker_status='confirmed_absent'
+    order.error_summary='Ausência confirmada no portfolio e extrato da Deriv'
+    session.commit()
+    return True
 
 def settle_real_order(session, order, contract):
     if order.state not in ACTIVE or not order.contract_id:

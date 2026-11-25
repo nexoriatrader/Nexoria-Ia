@@ -8,6 +8,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 from app import main, db
+from app.demo import APP_ID
 from app.security import encrypt, hashsecret
 
 
@@ -215,6 +216,192 @@ def test_unknown_without_contract_id_stays_blocked_from_automatic_reconcile(api,
     assert not status.called
     asyncio.run(main.reconcile_confirmed_orders_once())
     assert not status.called
+
+
+def test_recovery_route_requires_authenticated_session(api):
+    client,_=api
+    response=client.post('/api/orders/recover')
+    assert response.status_code==401
+
+
+def test_incomplete_deriv_snapshot_never_releases_unknown_reservation(api,monkeypatch):
+    client,factory=api
+    sid=add_user(factory)
+    with factory() as s:
+        user=s.query(db.User).one()
+        order=db.DemoOrder(user_id=user.id,request_key='recovery-unknown-01',
+            active_slot=user.id,state='UNKNOWN',symbol='1HZ100V',direction='CALL',
+            duration_minutes=5,stake='2.00',created_at=db.utcnow()-timedelta(minutes=10))
+        s.add(order);s.commit();order_id=order.id
+    snapshot=AsyncMock(side_effect=main.RecoverySnapshotError('snapshot incompleto'))
+    monkeypatch.setattr(main,'account_recovery_snapshot',snapshot)
+    client.cookies.set('nexora_sid',sid)
+
+    response=client.post('/api/orders/recover')
+
+    assert response.status_code==502
+    with factory() as s:
+        order=s.get(db.DemoOrder,order_id)
+        assert order.state=='UNKNOWN' and order.active_slot is not None
+    snapshot.assert_awaited_once()
+
+
+def test_recovery_marks_absent_order_cancelled_without_deleting_audit(api,monkeypatch):
+    client,factory=api
+    sid=add_user(factory)
+    with factory() as s:
+        user=s.query(db.User).one()
+        order=db.DemoOrder(user_id=user.id,request_key='recovery-absent-01',
+            active_slot=user.id,state='UNKNOWN',symbol='1HZ100V',direction='CALL',
+            duration_minutes=5,stake='2.00',created_at=db.utcnow()-timedelta(minutes=10),
+            updated_at=db.utcnow()-timedelta(minutes=10))
+        s.add(order);s.commit();order_id=order.id
+    snapshot=AsyncMock(return_value={'contracts':[],'transactions':[],'complete':True})
+    monkeypatch.setattr(main,'account_recovery_snapshot',snapshot)
+    client.cookies.set('nexora_sid',sid)
+
+    response=client.post('/api/orders/recover')
+
+    assert response.status_code==200,response.text
+    assert response.json()['released']==1
+    with factory() as s:
+        order=s.get(db.DemoOrder,order_id)
+        assert order is not None
+        assert order.state=='CANCELLED' and order.active_slot is None
+        assert order.broker_status=='confirmed_absent'
+
+
+def test_recent_order_is_not_released_even_when_snapshot_is_empty(api,monkeypatch):
+    client,factory=api
+    sid=add_user(factory)
+    with factory() as s:
+        user=s.query(db.User).one()
+        order=db.DemoOrder(user_id=user.id,request_key='recovery-recent-01',
+            active_slot=user.id,state='UNKNOWN',symbol='1HZ100V',direction='CALL',
+            duration_minutes=5,stake='2.00',created_at=db.utcnow()-timedelta(minutes=10),
+            updated_at=db.utcnow()-timedelta(seconds=30))
+        s.add(order);s.commit();order_id=order.id
+    monkeypatch.setattr(main,'account_recovery_snapshot',AsyncMock(return_value={
+        'contracts':[],'transactions':[],'complete':True,
+    }))
+    client.cookies.set('nexora_sid',sid)
+
+    response=client.post('/api/orders/recover')
+
+    assert response.status_code==200
+    assert response.json()['released']==0
+    assert response.json()['blocked']==1
+    with factory() as s:
+        order=s.get(db.DemoOrder,order_id)
+        assert order.state=='UNKNOWN' and order.active_slot is not None
+
+
+def test_unknown_transition_during_snapshot_cannot_use_old_reservation_age(api,monkeypatch):
+    client,factory=api
+    sid=add_user(factory)
+    with factory() as s:
+        user=s.query(db.User).one()
+        order=db.DemoOrder(user_id=user.id,request_key='recovery-pending-01',
+            active_slot=user.id,state='PENDING',symbol='1HZ100V',direction='CALL',
+            duration_minutes=5,stake='2.00',created_at=db.utcnow()-timedelta(minutes=20),
+            updated_at=db.utcnow()-timedelta(minutes=20))
+        s.add(order);s.commit();order_id=order.id
+    async def snapshot_after_buy_timeout(*args,**kwargs):
+        with factory() as s:
+            current=s.get(db.DemoOrder,order_id)
+            current.state='UNKNOWN'
+            current.updated_at=db.utcnow()
+            s.commit()
+        return {'contracts':[],'transactions':[],'complete':True}
+    monkeypatch.setattr(main,'account_recovery_snapshot',snapshot_after_buy_timeout)
+    client.cookies.set('nexora_sid',sid)
+
+    response=client.post('/api/orders/recover')
+
+    assert response.status_code==200
+    assert response.json()['released']==0 and response.json()['blocked']==1
+    with factory() as s:
+        order=s.get(db.DemoOrder,order_id)
+        assert order.state=='UNKNOWN' and order.active_slot is not None
+
+
+def test_pending_buy_is_never_released_even_when_reservation_is_old(api,monkeypatch):
+    client,factory=api
+    sid=add_user(factory)
+    with factory() as s:
+        user=s.query(db.User).one()
+        order=db.DemoOrder(user_id=user.id,request_key='recovery-pending-01',
+            active_slot=user.id,state='PENDING',symbol='1HZ100V',direction='CALL',
+            duration_minutes=5,stake='2.00',created_at=db.utcnow()-timedelta(minutes=20),
+            updated_at=db.utcnow()-timedelta(minutes=20))
+        s.add(order);s.commit();order_id=order.id
+    monkeypatch.setattr(main,'account_recovery_snapshot',AsyncMock(return_value={
+        'contracts':[],'transactions':[],'complete':True,
+    }))
+    client.cookies.set('nexora_sid',sid)
+
+    response=client.post('/api/orders/recover')
+
+    assert response.status_code==200
+    assert response.json()['released']==0 and response.json()['blocked']==1
+    with factory() as s:
+        order=s.get(db.DemoOrder,order_id)
+        assert order.state=='PENDING' and order.active_slot is not None
+
+
+def test_real_recovery_requires_existing_profile_and_consent(api,monkeypatch):
+    client,factory=api
+    sid=add_user(factory,mode='real')
+    with factory() as s:
+        user=s.query(db.User).one()
+        s.add(db.AutomationProfile(user_id=user.id,account_mode='real',
+            real_account_id='CR123',market='derived',symbols_json='[]',strategy='trend',
+            expiry_minutes=0,indicators_json='[]',direction='AUTO',min_payout='88',
+            news_filter=False))
+        s.commit()
+    forbidden=AsyncMock(side_effect=AssertionError('real validation must not be skipped'))
+    monkeypatch.setattr(main,'account_recovery_snapshot',forbidden)
+    client.cookies.set('nexora_sid',sid)
+
+    response=client.post('/api/orders/recover')
+
+    assert response.status_code==403
+    assert not forbidden.called
+
+
+def test_recovery_links_unique_broker_contract_but_keeps_open_slot(api,monkeypatch):
+    client,factory=api
+    sid=add_user(factory)
+    with factory() as s:
+        user=s.query(db.User).one()
+        order=db.DemoOrder(user_id=user.id,request_key='recovery-match-01',
+            active_slot=user.id,state='UNKNOWN',symbol='1HZ100V',direction='CALL',
+            duration_minutes=5,stake='2.00',created_at=db.utcnow()-timedelta(seconds=30))
+        s.add(order);s.commit();order_id=order.id;created=order.created_at
+    epoch=int(created.replace(tzinfo=timezone.utc).timestamp()) if created.tzinfo is None else int(created.timestamp())
+    snapshot=AsyncMock(return_value={'contracts':[{
+        'contract_id':24680,'underlying_symbol':'1HZ100V','contract_type':'CALL',
+        'buy_price':'2.00','purchase_time':epoch,
+    }],'transactions':[{
+        'action_type':'buy','app_id':APP_ID,'amount':'-2.00',
+        'shortcode':'CALL_1HZ100V','contract_id':'24680','transaction_time':epoch,
+    }],'complete':True})
+    status=AsyncMock(return_value={'account_mode':'demo','contract':{
+        'contract_id':'24680','is_sold':0,'profit':'0',
+    }})
+    monkeypatch.setattr(main,'account_recovery_snapshot',snapshot)
+    monkeypatch.setattr(main,'demo_contract_status',status)
+    client.cookies.set('nexora_sid',sid)
+
+    response=client.post('/api/orders/recover')
+
+    assert response.status_code==200,response.text
+    assert response.json()['linked']==1
+    status.assert_awaited_once_with('test-token','V333','24680')
+    with factory() as s:
+        order=s.get(db.DemoOrder,order_id)
+        assert order.state=='CONFIRMED' and order.contract_id=='24680'
+        assert order.active_slot is not None
 
 
 def test_demo_capabilities_never_enable_real_or_autopilot(api, monkeypatch):
