@@ -14,7 +14,7 @@ from statistics import mean
 from .market import MarketError, public_request, shared_candle_request
 from .trade_selector_v2 import strict_closed_bars, supported
 from .pulso_live import confirmed_pulso_signal
-from .strategy_registry import FOREX_DEMO_STRATEGIES
+from .strategy_registry import FOREX_MTF_STRATEGIES
 
 
 def _ema(values, period):
@@ -95,7 +95,7 @@ def forex_multitimeframe_signal(strategy, h1_rows, m15_rows, *, now):
 
     This is an experimental signal rule, not an estimate of profitability.
     """
-    if strategy not in FOREX_DEMO_STRATEGIES:
+    if strategy not in FOREX_MTF_STRATEGIES:
         return None
     m15_required = 55 if strategy == 'fx_pullback_m15' else 21
     if len(h1_rows) < 54 or len(m15_rows) < m15_required:
@@ -185,9 +185,9 @@ _scan_lock = asyncio.Lock()
 
 
 async def _confirmed_forex_signal(profile, scan_event=None, excluded_symbols=()):
-    """Scan only Forex DEMO profiles; this routine never submits an order."""
-    if (profile.market != 'forex' or profile.account_mode != 'demo'
-        or profile.strategy not in FOREX_DEMO_STRATEGIES):
+    """Scan eligible Forex DEMO/REAL profiles; this routine never submits an order."""
+    if (profile.market != 'forex' or profile.account_mode not in ('demo','real')
+        or profile.strategy not in FOREX_MTF_STRATEGIES):
         return None
     excluded = set(excluded_symbols)
     symbols = [symbol for symbol in json.loads(profile.symbols_json)
@@ -283,7 +283,7 @@ async def _confirmed_forex_signal(profile, scan_event=None, excluded_symbols=())
 
 async def confirmed_automation_signal(profile, scan_event=None, excluded_symbols=()):
     """Return one strategy-owned signal from fresh, completed candles, or None."""
-    if profile.strategy in FOREX_DEMO_STRATEGIES:
+    if profile.strategy in FOREX_MTF_STRATEGIES:
         return await _confirmed_forex_signal(profile, scan_event, excluded_symbols)
     excluded=set(excluded_symbols)
     symbols=[symbol for symbol in json.loads(profile.symbols_json)

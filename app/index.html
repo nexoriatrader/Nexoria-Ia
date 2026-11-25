@@ -2040,10 +2040,10 @@ body:has(#dashboard:not(.hidden)) .nexora-logo-only .brand img{
         <label class="auto-choice"><input type="radio" name="autoStrategy" value="pulso_v2" checked> PULSO V2 <small>Pressão direcional + volatilidade estável · direção configurável · expiração automática</small></label>
         <label class="auto-choice"><input type="radio" name="autoStrategy" value="trend"> Tendência e pullback <small>EMA 20/50 + confirmação de preço</small></label>
         <label class="auto-choice"><input type="radio" name="autoStrategy" value="rsi"> Reversão RSI <small>RSI e confirmação de reversão</small></label>
-        <label class="auto-choice hidden" data-forex-demo-strategy><input type="radio" name="autoStrategy" value="fx_pullback_m15"> Forex · Tendência H1 + pullback M15 <small>Experimental · somente Forex em Treinamento/DEMO · expiração fixa M15</small></label>
-        <label class="auto-choice hidden" data-forex-demo-strategy><input type="radio" name="autoStrategy" value="fx_breakout_m15"> Forex · Tendência H1 + rompimento M15 <small>Experimental · somente Forex em Treinamento/DEMO · expiração fixa M15</small></label>
+        <label class="auto-choice hidden" data-forex-experimental-strategy><input type="radio" name="autoStrategy" value="fx_pullback_m15"> Forex · Tendência H1 + pullback M15 <small>Experimental · Forex · Treinamento/DEMO e REAL · expiração fixa M15</small></label>
+        <label class="auto-choice hidden" data-forex-experimental-strategy><input type="radio" name="autoStrategy" value="fx_breakout_m15"> Forex · Tendência H1 + rompimento M15 <small>Experimental · Forex · Treinamento/DEMO e REAL · expiração fixa M15</small></label>
       </div>
-      <p class="helper" id="forexStrategyDisclosure" hidden>Estratégias experimentais ainda não validadas quanto ao desempenho. A análise não garante lucro; as opções ficam disponíveis somente em Forex na conta de Treinamento/DEMO.</p>
+      <p class="helper" id="forexStrategyDisclosure" hidden>Estratégias experimentais ainda não validadas quanto ao desempenho e sem garantia de lucro. Disponíveis somente em Forex nas contas Treinamento/DEMO e REAL. Em REAL, contratos podem gerar perdas financeiras.</p>
       <div class="field"><label for="autoDirection">Direção das entradas</label><select id="autoDirection"><option value="AUTO">Automática conforme estratégia</option><option value="CALL">Somente CALL / Alta</option><option value="PUT">Somente PUT / Baixa</option></select></div>
       <div class="auto-step"><span>05</span><strong>Entenda os valores e os limites</strong></div>
       <p class="helper auto-step-help">Este grupo reúne parâmetros financeiros e limites de segurança. Em treinamento, os valores são fictícios. Valores e estratégias não eliminam riscos em contas reais.</p>
@@ -3059,7 +3059,7 @@ function askRobotStartConfirmation(profile,risk,catalogue){
  addRobotReviewGroup(box,'Estratégia e análise',[
   ['Estratégia',strategyNames[profile.strategy]||profile.strategy],
   ['Direção',({AUTO:'Automática',CALL:'Somente alta (CALL)',PUT:'Somente baixa (PUT)'})[profile.direction]||profile.direction],
-  ['Expiração',isForexDemoStrategy(profile.strategy)?'Fixa · 15 minutos (M15)':'AUTO · M1, M3, M5 ou M15 (payout válido)'],
+  ['Expiração',isForexExperimentalStrategy(profile.strategy)?'Fixa · 15 minutos (M15)':profile.account_mode==='real'?'REAL · primeira duração do sinal (M1 se automático; proposta/payout validados)':'AUTO · M1, M3, M5 ou M15 (payout válido)'],
   ['Payout mínimo',(profile.min_payout_pct??88)+'%']
  ]);
  addRobotReviewGroup(box,'Entradas e proteção',[
@@ -3809,23 +3809,26 @@ function setAutomationRadio(name,value){
  const field=document.querySelector('input[name="'+name+'"][value="'+value+'"]');
  if(field)field.checked=true;
 }
-function isForexDemoStrategy(strategy){
+function isForexExperimentalStrategy(strategy){
  return strategy==='fx_pullback_m15'||strategy==='fx_breakout_m15';
 }
 function syncAutomationStrategyChoices(){
- const eligible=automationRadio('autoMode')==='demo'&&automationRadio('autoMarket')==='forex';
- document.querySelectorAll('[data-forex-demo-strategy]').forEach(label=>
+ const eligible=automationRadio('autoMarket')==='forex';
+ document.querySelectorAll('[data-forex-experimental-strategy]').forEach(label=>
   label.classList.toggle('hidden',!eligible));
  const selected=automationRadio('autoStrategy');
- if(!eligible&&isForexDemoStrategy(selected)){
+ if(!eligible&&isForexExperimentalStrategy(selected)){
   setAutomationRadio('autoStrategy','pulso_v2');
   automationProfileSaved=false;
  }
- const fixed=isForexDemoStrategy(automationRadio('autoStrategy'));
+ const fixed=isForexExperimentalStrategy(automationRadio('autoStrategy'));
  $('forexStrategyDisclosure').hidden=!eligible;
- $('autoExpiryLabel').textContent=fixed?'Expiração fixa da estratégia':'Expiração automática inteligente';
+ const real=automationRadio('autoMode')==='real';
+ $('autoExpiryLabel').textContent=fixed?'Expiração fixa da estratégia':
+  real?'Expiração automática · conta REAL':'Expiração automática inteligente';
  $('autoExpiryHelp').textContent=fixed
   ?'Esta estratégia usa contrato de 15 minutos (M15). A Deriv ainda precisa aceitar a proposta; indisponibilidade ou payout abaixo do mínimo impedem a entrada.'
+  :real?'Em REAL, o executor tenta a primeira duração indicada pelo sinal (M1 quando automático). A Deriv ainda valida a proposta e o payout mínimo; se não atender aos limites, não opera.'
   :'O NEXORA compara M1, M3, M5 e M15 disponíveis na Deriv após confirmar um sinal e escolhe a proposta que atende ao payout mínimo. Sem proposta válida, não opera.';
 }
 async function changeAutomationAccount(selectedAccount){
@@ -3922,7 +3925,7 @@ function renderAutomationSummary(){
   'Mercado: '+(marketNames[market]||'Não confirmado'),
   'Ativos: '+automationSelected.size+' selecionado(s)',
   'Análise: '+(strategyNames[automationRadio('autoStrategy')]||'Não confirmada'),
-  'Direção: '+$('autoDirection').value+' · duração: '+(isForexDemoStrategy(automationRadio('autoStrategy'))?'fixa M15 (15 minutos)':'automática (M1, M3, M5 ou M15)'),
+  'Direção: '+$('autoDirection').value+' · duração: '+(isForexExperimentalStrategy(automationRadio('autoStrategy'))?'fixa M15 (15 minutos)':mode==='real'?'REAL: primeira duração do sinal (M1 se automático)':'automática (M1, M3, M5 ou M15)'),
   'Valor por entrada: US$ '+$('autoStake').value,
   'Limites registrados: Stop Win US$ '+$('autoWin').value+' · Stop Loss US$ '+$('autoLoss').value,
   'Payout mínimo informado: '+$('autoPayout').value+'%',

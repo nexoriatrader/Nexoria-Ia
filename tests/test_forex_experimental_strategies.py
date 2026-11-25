@@ -10,9 +10,9 @@ from types import SimpleNamespace
 import pytest
 from fastapi import HTTPException
 
-from app import automation_signals, main
+from app import automation_signals, main, real_runtime
 from app.expiry_policy import proposal_durations
-from app.strategy_registry import FOREX_DEMO_STRATEGIES, strategy_allowed
+from app.strategy_registry import FOREX_MTF_STRATEGIES, strategy_allowed
 
 
 def _signal_close():
@@ -127,7 +127,8 @@ def test_forex_signal_rejects_early_stale_and_discontinuous_data():
         "fx_breakout_m15", broken_h1, m15, now=close + 5) is None
 
 
-def test_forex_scanner_requests_h1_m15_and_discards_forming_candles(monkeypatch):
+@pytest.mark.parametrize("account_mode", ["demo", "real"])
+def test_forex_scanner_requests_h1_m15_and_discards_forming_candles(monkeypatch, account_mode):
     close = _signal_close()
     h1 = _h1("CALL", close)
     m15 = _m15("CALL", close, "fx_breakout_m15")
@@ -154,7 +155,7 @@ def test_forex_scanner_requests_h1_m15_and_discards_forming_candles(monkeypatch)
     monkeypatch.setattr(automation_signals, "shared_candle_request", candle_request)
     automation_signals._scan_cache.clear()
     profile = SimpleNamespace(
-        market="forex", account_mode="demo", strategy="fx_breakout_m15",
+        market="forex", account_mode=account_mode, strategy="fx_breakout_m15",
         symbols_json='["frxEURUSD"]', direction="AUTO",
     )
     try:
@@ -168,16 +169,19 @@ def test_forex_scanner_requests_h1_m15_and_discards_forming_candles(monkeypatch)
     assert result["last_bar_epoch"] == close - 900
 
 
-def test_new_strategies_are_forex_demo_only_and_existing_ids_remain_eligible():
-    assert FOREX_DEMO_STRATEGIES == {"fx_pullback_m15", "fx_breakout_m15"}
-    for strategy in FOREX_DEMO_STRATEGIES:
+def test_new_strategies_are_forex_only_in_demo_and_real_and_existing_ids_remain_eligible():
+    assert FOREX_MTF_STRATEGIES == {"fx_pullback_m15", "fx_breakout_m15"}
+    for strategy in FOREX_MTF_STRATEGIES:
         assert strategy_allowed(strategy, "forex", "demo")
-        assert not strategy_allowed(strategy, "forex", "real")
+        assert strategy_allowed(strategy, "forex", "real")
         assert not strategy_allowed(strategy, "volatility", "demo")
-        assert not strategy_allowed(strategy, "stocks_indices", "demo")
+        assert not strategy_allowed(strategy, "stocks_indices", "real")
+        assert not strategy_allowed(strategy, "commodities", "real")
     for strategy in ("pulso_v2", "trend", "rsi"):
-        assert strategy_allowed(strategy, "forex", "demo")
-        assert strategy_allowed(strategy, "volatility", "real")
+        for mode in ("demo", "real"):
+            for market in ("forex", "volatility", "stocks_indices", "commodities"):
+                assert strategy_allowed(strategy, market, mode)
+        assert not strategy_allowed(strategy, "forex", "paper")
 
 
 def test_candidate_entry_deadline_uses_candidate_timeframe_and_fails_closed():
@@ -192,19 +196,39 @@ def test_candidate_entry_deadline_uses_candidate_timeframe_and_fails_closed():
     assert main.candidate_entry_deadline(None) == 0
 
 
-def test_forex_profile_api_rejects_real_or_non_forex_strategy_without_network(monkeypatch):
+def test_real_candidate_window_honors_explicit_m15_deadline_and_fails_closed(monkeypatch):
+    candidate = {
+        "symbol": "frxEURUSD", "direction": "CALL",
+        "last_bar_epoch": 1800000000, "bar_seconds": 900,
+        "deadline_epoch": 1800000025,
+    }
+    monkeypatch.setattr(real_runtime.time, "time", lambda: 1800000010)
+    assert real_runtime._candidate_window(candidate) == 1800000025
+    assert real_runtime._candidate_window({
+        "symbol": "frxEURUSD", "direction": "CALL",
+        "last_bar_epoch": 1800000000, "bar_seconds": 900,
+    }) == 1800000912
+    assert real_runtime._candidate_window({
+        "symbol": "frxEURUSD", "direction": "CALL",
+        "last_bar_epoch": 1800000000, "bar_seconds": 7200,
+    }) is None
+    monkeypatch.setattr(real_runtime.time, "time", lambda: 1800000026)
+    assert real_runtime._candidate_window(candidate) is None
+
+
+@pytest.mark.parametrize("account_mode", ["demo", "real"])
+def test_forex_profile_api_rejects_non_forex_strategy_without_network(monkeypatch, account_mode):
     monkeypatch.setattr(main, "active_session", lambda request, sid: (SimpleNamespace(id=7), "offline"))
-    for account_mode, market in (("real", "forex"), ("demo", "volatility")):
-        payload = main.AutomationProfileRequest(
-            account_mode=account_mode,
-            market=market,
-            symbols=["frxEURUSD"],
-            strategy="fx_pullback_m15",
-        )
-        with pytest.raises(HTTPException) as caught:
-            asyncio.run(main.save_automation_profile(None, payload, "offline"))
-        assert caught.value.status_code == 422
-        assert "apenas em Forex" in caught.value.detail
+    payload = main.AutomationProfileRequest(
+        account_mode=account_mode,
+        market="volatility",
+        symbols=["frxEURUSD"],
+        strategy="fx_pullback_m15",
+    )
+    with pytest.raises(HTTPException) as caught:
+        asyncio.run(main.save_automation_profile(None, payload, "offline"))
+    assert caught.value.status_code == 422
+    assert "apenas em Forex" in caught.value.detail
 
 
 def test_new_forex_profile_persists_in_demo_without_generic_indicators(monkeypatch):
@@ -249,6 +273,148 @@ def test_new_forex_profile_persists_in_demo_without_generic_indicators(monkeypat
     assert saved["account_mode"] == "demo"
     assert saved["market"] == "forex"
     assert saved["indicators"] == []
+
+
+def test_new_forex_profile_persists_in_real_with_broker_apis_mocked(monkeypatch):
+    from app import auth_helpers, db
+
+    class MemorySession:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+        def get(self, model, user_id):
+            return None
+
+        def add(self, item):
+            pass
+
+        def commit(self):
+            pass
+
+    class Response:
+        def raise_for_status(self):
+            pass
+
+        def json(self):
+            return {"accounts": []}
+
+    class MockAsyncClient:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            return False
+
+        async def get(self, *args, **kwargs):
+            return Response()
+
+    monkeypatch.setattr(main, "active_session", lambda request, sid: (SimpleNamespace(id=813), "offline"))
+    monkeypatch.setattr(db, "SessionLocal", MemorySession)
+    monkeypatch.setattr(main.httpx, "AsyncClient", lambda **kwargs: MockAsyncClient())
+    monkeypatch.setattr(auth_helpers, "extract_accounts", lambda payload: [])
+    monkeypatch.setattr(auth_helpers, "real_accounts", lambda rows: [{"account_id": "R123"}])
+
+    async def instruments(group):
+        assert group == "forex"
+        return [{"symbol": "frxEURUSD"}]
+
+    monkeypatch.setattr(main, "featured_instruments_by_group", instruments)
+    payload = main.AutomationProfileRequest(
+        account_mode="real", market="forex", symbols=["frxEURUSD"],
+        strategy="fx_pullback_m15", real_account_id="R123",
+        indicators=["EMA"], direction="AUTO", min_payout_pct=88,
+    )
+    saved = asyncio.run(main.save_automation_profile(None, payload, "offline"))
+    assert saved["saved"] is True
+    assert saved["strategy"] == "fx_pullback_m15"
+    assert saved["account_mode"] == "real"
+    assert saved["market"] == "forex"
+    assert saved["expiry_minutes"] == 0
+    assert saved["indicators"] == []
+    assert saved["execution"] == "DERIV_REAL_CONFIGURED"
+
+
+def test_real_activation_accepts_forex_experimental_without_sending_orders(tmp_path, monkeypatch):
+    from unittest.mock import AsyncMock
+    from test_release_modes import client_with_user
+    from app import auth_helpers, db
+
+    client, engine, uid = client_with_user(tmp_path, monkeypatch)
+    class Response:
+        def raise_for_status(self):
+            pass
+
+        def json(self):
+            return {"accounts": []}
+
+    class MockAsyncClient:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            return False
+
+        async def get(self, *args, **kwargs):
+            return Response()
+
+    with db.SessionLocal() as session:
+        user = session.get(db.User, uid)
+        user.stake = "0.50"
+        user.stop_loss = "2.00"
+        user.martingale = False
+        profile = db.AutomationProfile(
+            user_id=uid, market="forex", symbols_json='["frxEURUSD"]',
+            strategy="fx_breakout_m15", account_mode="real",
+            expiry_minutes=0, news_filter=False, min_payout="88",
+            max_daily_orders=0, indicators_json="[]", direction="AUTO",
+            real_account_id="R123", preset_mode="custom",
+        )
+        session.add(profile)
+        session.commit()
+
+    monkeypatch.setattr(real_runtime, "real_available", lambda: True)
+    monkeypatch.setattr(real_runtime, "real_tick", AsyncMock())
+    monkeypatch.setattr(main, "access_status", lambda sess, user_id: {"allowed": True})
+    monkeypatch.setattr(main.httpx, "AsyncClient", lambda **kwargs: MockAsyncClient())
+    monkeypatch.setattr(auth_helpers, "extract_accounts", lambda payload: [])
+    monkeypatch.setattr(auth_helpers, "real_accounts", lambda rows: [{"account_id": "R123"}])
+    monkeypatch.setattr(main, "real_account_balance", AsyncMock(return_value={
+        "currency": "USD", "balance": "10.00",
+    }))
+    buy = AsyncMock(side_effect=AssertionError("REAL buy must never run in this test"))
+    monkeypatch.setattr(real_runtime, "buy_real_contract", buy)
+    real_runtime.running.discard(uid)
+    try:
+        response = client.post(
+            "/api/autopilot/start", json={"confirm": "START_REAL_AUTOPILOT"}
+        )
+        assert response.status_code == 200, response.text
+        assert response.json()["running"] is True
+        assert response.json()["execution"] == "DERIV_REAL"
+        buy.assert_not_awaited()
+        with db.SessionLocal() as session:
+            assert session.query(db.RealOrder).count() == 0
+    finally:
+        real_runtime.running.discard(uid)
+        real_runtime.last_scan.pop(uid, None)
+        engine.dispose()
+
+
+def test_forex_experimental_choices_are_real_visible_and_clearly_disclosed():
+    from pathlib import Path
+
+    html = (Path(__file__).resolve().parents[1] / "app" / "index.html").read_text(encoding="utf-8")
+    assert 'data-forex-experimental-strategy' in html
+    assert "const eligible=automationRadio('autoMarket')==='forex';" in html
+    assert "Treinamento/DEMO e REAL" in html
+    assert "Em REAL, contratos podem gerar perdas financeiras" in html
+    assert "isForexExperimentalStrategy" in html
+    assert "fixa M15 (15 minutos)" in html
+    assert "Em REAL, o executor tenta a primeira duração indicada pelo sinal" in html
+    assert "REAL: primeira duração do sinal (M1 se automático)" in html
 
 
 def test_status_syncs_persisted_demo_run_and_blocks_duplicate_start(tmp_path, monkeypatch):

@@ -1,8 +1,9 @@
-"""Live DEMO-only NEXORA PULSO v2 signal verification.
+"""Live NEXORA PULSO v2 signal verification.
 
-Mirrors the historical PULSO v2 hypothesis on the 1HZ100V original
-Deriv M1 closed candles. For user-opted-in DEMO only, not real-money
-and never places orders. Fail closed if data or contract support missing.
+Mirrors the PULSO v2 hypothesis on Deriv M1 closed candles. This module only
+produces signal candidates; DEMO or explicitly opted-in REAL runtimes apply
+their own broker, account, consent, and risk checks before any order. Fail
+closed if data or contract support is missing. This rule does not promise profit.
 """
 from __future__ import annotations
 import asyncio
@@ -63,7 +64,7 @@ async def _candidate_for_symbol(symbol, bucket, *, deadline, direction="AUTO", m
         "direction":side,"symbol":symbol,
         "minutes":supported_expiries[0],"expiry_options":supported_expiries,"bar_seconds":60,
         "last_bar_epoch":bars[-1]["epoch"],
-        "reason":"PULSO V2: pressão eficiente + volatilidade estável; expiração escolhida pela proposta DEMO",
+        "reason":"PULSO V2: pressão eficiente + volatilidade estável; duração validada pelo executor",
         "score":1,
     }
 
@@ -73,7 +74,8 @@ async def confirmed_pulso_signal(allowed_symbols=None, direction="AUTO", minutes
 
     Return at most ONE live candidate per closed M1 bar. Fail closed on
     incomplete data, closed execution window, unsupported duration or errors.
-    Existing DEMO reconciliation and official risk gates remain in main.py.
+    This is signal-only; order submission and risk gates belong to the selected
+    DEMO or REAL executor.
     """
     now=time.time()
     if now%60>12:

@@ -11,6 +11,7 @@ import logging
 import os
 import secrets
 import time
+from math import isfinite
 from decimal import Decimal
 from datetime import timezone
 
@@ -28,6 +29,7 @@ from .real_ledger import (
     reserve_real_order, settle_real_order,
 )
 from .security import decrypt
+from .strategy_registry import strategy_allowed
 
 logger=logging.getLogger('nexora.real')
 running: set[int]=set()
@@ -90,9 +92,16 @@ def _candidate_window(candidate):
     if not candidate.get('symbol'):
         return None
     bar=candidate.get('last_bar_epoch')
-    if not isinstance(bar,(int,float)):
+    if not isinstance(bar,(int,float)) or not isfinite(bar) or bar<=0:
         return None
-    expiry=bar+60+12
+    explicit=candidate.get('deadline_epoch')
+    if isinstance(explicit,(int,float)) and isfinite(explicit) and explicit>0:
+        expiry=explicit
+    else:
+        bar_seconds=candidate.get('bar_seconds',60)
+        if not isinstance(bar_seconds,int) or bar_seconds not in (60,300,900):
+            return None
+        expiry=bar+bar_seconds+12
     if time.time()>expiry:
         return None
     return expiry
@@ -102,8 +111,8 @@ async def _user_scan(uid):
     async with user_lock(uid):
         if uid not in running or not real_available():
             return
-        # Prevent ten REAL robots from constantly re-running identical M1
-        # analysis when the latest candle has not changed.
+        # Prevent REAL robots from constantly re-running identical analysis
+        # when the latest strategy candle has not changed.
         loop_time=asyncio.get_running_loop().time()
         if loop_time-last_scan.get(uid,-1e12)<4:
             return
@@ -124,7 +133,7 @@ async def _user_scan(uid):
             if profile.news_filter:
                 reasons[uid]='Filtro de notícias indisponível; sem compra REAL'
                 return
-            if profile.strategy not in ('pulso_v2','trend','rsi'):
+            if not strategy_allowed(profile.strategy,profile.market,profile.account_mode):
                 disarm_real(uid,'Estratégia REAL inválida')
                 return
             orders=sess.scalars(select(db.RealOrder).where(

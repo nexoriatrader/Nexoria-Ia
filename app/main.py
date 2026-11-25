@@ -44,8 +44,7 @@ from .asset_scanner import scan_assets, scan_intelligence_markets, scan_intellig
 from .trade_selector_v2 import (select_demo_signal, last_scan_report, has_pending_signals,
                                 active_market, catalogue, supported, fetch_closed_timeframe,
                                 SIGNAL_PROFILE)
-from .strategy_registry import (BASE_STRATEGIES, FOREX_DEMO_STRATEGIES,
-                                strategy_allowed)
+from .strategy_registry import FOREX_MTF_STRATEGIES, strategy_allowed
 from .progression import next_entry, ProgressionHalt, NextEntry
 from .expiry_policy import proposal_durations
 from .security import CLIENT_ID, REDIRECT, TOKEN_URL, build_authorize_url, make_login, make_session_id, hashsecret, encrypt, decrypt, cookie_options
@@ -825,7 +824,7 @@ async def autopilot_once():
                     selected_ratio=(Decimal('1')+Decimal(str(profile.min_payout))/Decimal('100')
                                     if pulso_active and profile is not None else Decimal('1.50'))
                     auto_expiry=bool(pulso_active and profile is not None
-                                     and profile.strategy not in FOREX_DEMO_STRATEGIES)
+                                     and profile.strategy not in FOREX_MTF_STRATEGIES)
                     durations=proposal_durations(
                         profile.market if auto_expiry else '',
                         candidate.get('expiry_options',(candidate['minutes'],)),
@@ -1597,8 +1596,8 @@ async def save_automation_profile(request:Request,payload:AutomationProfileReque
     if payload.market not in (*AUTOMATION_GROUPS, 'volatility'):
         raise HTTPException(422,'Mercado inválido')
     if not strategy_allowed(payload.strategy,payload.market,payload.account_mode):
-        if payload.strategy in FOREX_DEMO_STRATEGIES:
-            raise HTTPException(422,'As novas estratégias estão disponíveis apenas em Forex no Treinamento/DEMO')
+        if payload.strategy in FOREX_MTF_STRATEGIES:
+            raise HTTPException(422,'As estratégias experimentais estão disponíveis apenas em Forex, em conta Treinamento/DEMO ou REAL')
         raise HTTPException(422,'Estratégia inválida')
     if payload.expiry_minutes not in (0,1,3,5,15):
         raise HTTPException(422,'Expiração inválida')
@@ -2246,10 +2245,8 @@ async def start_real_autopilot(request:Request,nexora_sid:str|None=None):
                 raise ValueError()
         except (InvalidOperation,ValueError):
             raise HTTPException(409,'Configure Stop Loss REAL de pelo menos uma entrada e valor válido') from None
-        if profile.strategy in FOREX_DEMO_STRATEGIES:
-            raise HTTPException(409,'As estratégias Forex experimentais ainda não estão liberadas para conta REAL')
-        if profile.strategy not in BASE_STRATEGIES:
-            raise HTTPException(409,'Estratégia REAL inválida')
+        if not strategy_allowed(profile.strategy,profile.market,profile.account_mode):
+            raise HTTPException(409,'Estratégia REAL não permitida para o mercado selecionado')
         try:
             symbols=json.loads(profile.symbols_json)
         except (ValueError,TypeError):
