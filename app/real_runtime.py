@@ -13,7 +13,7 @@ import secrets
 import time
 from math import isfinite
 from decimal import Decimal
-from datetime import timezone
+from datetime import timezone, timedelta
 
 from sqlalchemy import select
 
@@ -78,11 +78,101 @@ def disarm_real(uid,why):
     running.discard(uid)
     reasons[uid]=why
     with db.SessionLocal() as sess:
+        manual_run=sess.get(db.ManualSignalRun,uid)
+        if manual_run and manual_run.status=='RUNNING':
+            manual_run.status='PAUSED';manual_run.pause_reason=str(why)[:255];manual_run.paused_at=db.utcnow()
         consent=sess.get(db.RealRobotConsent,uid)
         if consent and consent.revoked_at is None:
             consent.revoked_at=db.utcnow()
-            sess.commit()
+        sess.commit()
 
+
+async def _manual_real_signal(uid, user, profile, consent, token):
+    """Execute one due Manual signal exclusively through REAL reservation and broker ledger."""
+    now=db.utcnow()
+    with db.SessionLocal() as sess:
+        run=sess.get(db.ManualSignalRun,uid)
+        if not run or run.status!='RUNNING' or run.account_mode!='real' or run.real_account_id!=consent.account_id:
+            disarm_real(uid,'Sessão Manual REAL pausada ou conta incompatível');return
+        rows=sess.scalars(select(db.ManualSignal).where(
+            db.ManualSignal.user_id==uid,db.ManualSignal.session_number==run.session_number,
+            db.ManualSignal.status.in_(('SCHEDULED','CLAIMED','UNKNOWN')))
+            .order_by(db.ManualSignal.scheduled_at,db.ManualSignal.id)).all()
+        for row in rows:
+            order=sess.get(db.RealOrder,row.ledger_order_id) if row.ledger_order_id else sess.scalar(select(db.RealOrder).where(
+                db.RealOrder.account_id==consent.account_id,db.RealOrder.request_key==row.request_key))
+            if order and row.ledger_order_id is None:
+                row.ledger_mode='real';row.ledger_order_id=order.id
+            if row.status=='UNKNOWN' and order and order.state in ('SETTLED','CANCELLED'):
+                row.status='COMPLETED' if order.state=='SETTLED' else 'FAILED'
+                row.reason='Reconciliação oficial concluída';row.capacity_slot=None
+            due=row.scheduled_at.replace(tzinfo=timezone.utc) if row.scheduled_at.tzinfo is None else row.scheduled_at
+            if row.status in ('SCHEDULED','CLAIMED') and now>=due+timedelta(seconds=60):
+                row.status='EXPIRED';row.reason='Janela do minuto indicada encerrada; sem recuperação';row.capacity_slot=None
+        sess.commit()
+        if sess.scalar(select(db.RealOrder.id).where(db.RealOrder.account_id==consent.account_id,
+            db.RealOrder.state.in_(ACTIVE)).limit(1)):return
+        signal=next((r for r in rows if r.status=='SCHEDULED' and
+            (r.scheduled_at.replace(tzinfo=timezone.utc) if r.scheduled_at.tzinfo is None else r.scheduled_at)<=now),None)
+        if signal is None:return
+        due=signal.scheduled_at.replace(tzinfo=timezone.utc) if signal.scheduled_at.tzinfo is None else signal.scheduled_at
+        if now>=due+timedelta(seconds=60):return
+        signal.status='CLAIMED';signal.claim_token=secrets.token_hex(16);signal.claimed_at=db.utcnow()
+        signal.ledger_mode='real';sess.commit()
+        signal_id=signal.id;request_key=signal.request_key;account_id=consent.account_id
+        symbol,direction,duration=signal.symbol,signal.direction,signal.duration_minutes
+        deadline=due.timestamp()+60-0.001;stake=user.stake;min_ratio=str(Decimal('1')+Decimal(profile.min_payout)/Decimal('100'))
+    with db.SessionLocal() as sess:
+        fresh_user=sess.get(db.User,uid)
+        try:
+            order,created=reserve_real_order(sess,fresh_user,account_id=account_id,
+                request_key=request_key,symbol=symbol,direction=direction,duration=duration,
+                stake=stake,currency='USD')
+        except RealOrderGuardError as exc:
+            with db.SessionLocal() as update:
+                row=update.get(db.ManualSignal,signal_id)
+                if row:row.status='FAILED';row.reason=str(exc)[:255];row.capacity_slot=None;update.commit()
+            reasons[uid]=str(exc);return
+        order_id=order.id
+        if not created:
+            # A durable prior attempt is never replayed to the broker.
+            row=sess.get(db.ManualSignal,signal_id);row.status='UNKNOWN';row.ledger_order_id=order_id
+            row.reason='Tentativa REAL existente; reconciliação obrigatória';sess.commit();return
+    if uid not in running or time.time()>=deadline:
+        with db.SessionLocal() as sess:
+            order=sess.get(db.RealOrder,order_id)
+            if order and order.state=='PENDING':cancel_unsubmitted_real_order(sess,order,'Sinal expirado antes do envio')
+            row=sess.get(db.ManualSignal,signal_id)
+            if row:row.status='EXPIRED';row.reason='Janela encerrada antes do envio';row.capacity_slot=None;row.ledger_order_id=order_id;sess.commit()
+        return
+    try:
+        receipt=await buy_real_contract(token,account_id,symbol=symbol,contract_type=direction,
+            stake=stake,duration=duration,currency='USD',min_payout_ratio=min_ratio,
+            latest_buy_send_epoch=deadline)
+        with db.SessionLocal() as sess:
+            order=sess.get(db.RealOrder,order_id);confirm_real_order(sess,order,receipt)
+            row=sess.get(db.ManualSignal,signal_id);row.status='EXECUTED';row.ledger_order_id=order_id
+            row.ledger_mode='real';row.reason='Compra REAL confirmada no ledger oficial';row.capacity_slot=None;sess.commit()
+        reasons[uid]='Sinal Manual REAL executado; aguardando liquidação oficial'
+    except RealPurchaseUncertain:
+        with db.SessionLocal() as sess:
+            order=sess.get(db.RealOrder,order_id);mark_real_unknown(sess,order)
+            row=sess.get(db.ManualSignal,signal_id);row.status='UNKNOWN';row.ledger_order_id=order_id
+            row.reason='Resultado REAL incerto; capacidade retida até reconciliação oficial';sess.commit()
+        disarm_real(uid,'Compra REAL incerta; novas entradas bloqueadas até reconciliação')
+    except RealExecutionError as exc:
+        with db.SessionLocal() as sess:
+            order=sess.get(db.RealOrder,order_id);cancel_unsubmitted_real_order(sess,order,str(exc))
+            row=sess.get(db.ManualSignal,signal_id);row.status='FAILED';row.ledger_order_id=order_id
+            row.reason='Proposta REAL rejeitada antes da compra';row.capacity_slot=None;sess.commit()
+        reasons[uid]='Proposta REAL rejeitada; nenhuma compra enviada'
+    except Exception as exc:
+        with db.SessionLocal() as sess:
+            order=sess.get(db.RealOrder,order_id);mark_real_unknown(sess,order)
+            row=sess.get(db.ManualSignal,signal_id);row.status='UNKNOWN';row.ledger_order_id=order_id
+            row.reason='Resultado incerto; reconciliação REAL necessária';sess.commit()
+        disarm_real(uid,'Erro REAL incerto; confira contratos na Deriv')
+        logger.error('REAL manual execution uncertain: %s',type(exc).__name__)
 
 def _candidate_window(candidate):
     if not isinstance(candidate,dict):
@@ -114,9 +204,13 @@ async def _user_scan(uid):
         # Prevent REAL robots from constantly re-running identical analysis
         # when the latest strategy candle has not changed.
         loop_time=asyncio.get_running_loop().time()
-        if loop_time-last_scan.get(uid,-1e12)<4:
-            return
-        last_scan[uid]=loop_time
+        with db.SessionLocal() as initial:
+            initial_profile=initial.get(db.AutomationProfile,uid)
+            manual_mode=bool(initial_profile and getattr(initial_profile,'operation_mode','strategies')=='manual')
+        if not manual_mode:
+            if loop_time-last_scan.get(uid,-1e12)<4:
+                return
+            last_scan[uid]=loop_time
         with db.SessionLocal() as sess:
             user=sess.get(db.User,uid)
             profile=sess.get(db.AutomationProfile,uid)
@@ -130,10 +224,25 @@ async def _user_scan(uid):
             if not access_status(sess,uid)['allowed']:
                 disarm_real(uid,'Acesso ao robô expirado')
                 return
-            if profile.news_filter:
+            if getattr(profile,'operation_mode','strategies')=='manual':
+                token=latest_token(sess,uid)
+                if not token:
+                    disarm_real(uid,'Sessão Deriv expirada; reconecte a conta REAL');return
+                # Manual entries bypass only the strategy scanner, never consent, access,
+                # active-order, stop-loss or broker-ledger protections.
+                orders=sess.scalars(select(db.RealOrder).where(db.RealOrder.account_id==consent.account_id)).all()
+                if any(x.state in ACTIVE for x in orders):
+                    reasons[uid]='Contrato REAL aberto ou incerto; aguardando confirmação';return
+                sess.expunge(user);sess.expunge(profile);sess.expunge(consent)
+                manual_snapshot=(user,profile,consent,token)
+                await _manual_real_signal(uid,*manual_snapshot)
+                return
+            else:
+                manual_snapshot=None
+            if manual_snapshot is None and profile.news_filter:
                 reasons[uid]='Filtro de notícias indisponível; sem compra REAL'
                 return
-            if not strategy_allowed(profile.strategy,profile.market,profile.account_mode):
+            if manual_snapshot is None and not strategy_allowed(profile.strategy,profile.market,profile.account_mode):
                 disarm_real(uid,'Estratégia REAL inválida')
                 return
             orders=sess.scalars(select(db.RealOrder).where(
@@ -156,6 +265,9 @@ async def _user_scan(uid):
                 return
             # Daily Stop Win/Loss is enforced inside the locked, durable
             # reservation transaction, not against a lifetime P/L snapshot.
+        if manual_snapshot is not None:
+            await _manual_real_signal(uid,*manual_snapshot)
+            return
         try:
             candidate=await confirmed_automation_signal(profile)
         except Exception as exc:
@@ -301,9 +413,15 @@ async def reconcile_real_once():
                     order=sess.get(db.RealOrder,order_id)
                     if order and order.state in ACTIVE:
                         try:
-                            settle_real_order(sess,order,result['contract'])
+                            settled=settle_real_order(sess,order,result['contract'])
                         except RealOrderGuardError:
                             return
+                        if settled:
+                            manual_row=sess.scalar(select(db.ManualSignal).where(
+                                db.ManualSignal.ledger_mode=='real',db.ManualSignal.ledger_order_id==order.id,
+                                db.ManualSignal.status=='UNKNOWN'))
+                            if manual_row:
+                                manual_row.status='COMPLETED';manual_row.reason='Liquidação oficial REAL confirmada';manual_row.capacity_slot=None;sess.commit()
     await asyncio.gather(*(one(x) for x in due_ids))
 
 

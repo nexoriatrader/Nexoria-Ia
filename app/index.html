@@ -1532,6 +1532,40 @@ body:has(#dashboard:not(.hidden)) .nexora-logo-only .brand img{
 #dashboard .nx-history-action-note[data-error="true"]{color:#f2abab}
 #dashboard .nx-history-note{margin-top:10px}
 @media(max-width:640px){#dashboard.nx-calm-dashboard .nx-panel-history{padding:15px;border-radius:19px;margin-top:12px}#dashboard .nx-history-row{padding:10px}#dashboard .nx-history-tools{grid-template-columns:1fr}}
+.operation-mode-picker{border:1px solid #35566e;border-radius:15px;padding:14px 16px;margin:14px 0 18px;background:#0d2132}
+.operation-mode-picker legend{padding:0 7px;color:#f0cf85;font-size:12px;font-weight:900;letter-spacing:.04em}
+.operation-mode-options{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.operation-mode-option{display:flex;align-items:flex-start;gap:10px;min-height:72px;padding:13px;border:1px solid #37546a;border-radius:12px;background:#10283a;cursor:pointer}
+.operation-mode-option:has(input:checked){border-color:#64c9b2;box-shadow:inset 0 0 0 1px #64c9b222;background:#123535}
+.operation-mode-option input{accent-color:#f2c56d;margin:3px 0 0;width:18px;height:18px;flex:none}
+.operation-mode-option strong,.operation-mode-option small{display:block}.operation-mode-option strong{font-size:13px}.operation-mode-option small{font-size:11px;color:#a9c2d2;margin-top:4px;line-height:1.45}
+.operation-mode-picker>p{margin:9px 0 0}
+#robot-config.manual-mode .auto-wizard-step[data-wizard-step="3"],#robot-config.manual-mode .auto-wizard-step[data-wizard-step="4"],#robot-config.manual-mode .auto-wizard-step[data-wizard-step="5"]{display:none!important}
+#robot-config.manual-mode .nx-guide-path li:nth-child(2),#robot-config.manual-mode .nx-guide-path li:nth-child(3),#robot-config.manual-mode .nx-guide-path li:nth-child(4){display:none}
+#robot-config.manual-mode .auto-preset-layout,#robot-config.manual-mode .auto-step:first-of-type{display:none!important}
+.manual-signals-card{border-color:#4b6e80;scroll-margin-top:16px}
+.manual-signals-head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:16px}
+.manual-signals-head h2{font-size:21px;margin:4px 0}.manual-signals-head p{font-size:12px;color:#a8c0d0}
+.manual-run-badge{flex:none;border:1px solid #536575;border-radius:999px;background:#1c2b39;padding:7px 10px;font-size:10px;font-weight:900;color:#c5d4dd}
+.manual-run-badge[data-state="active"]{border-color:#3e9475;background:#123c36;color:#a5f0cb}.manual-run-badge[data-state="interrupted"]{border-color:#aa8b51;background:#3b2e1c;color:#ffe3a3}
+.manual-signals-callout{border:1px solid #a17c3e;background:#392e1d;border-radius:12px;padding:12px 14px;margin:13px 0;color:#ffedc5;font-size:12px;line-height:1.55}
+.manual-signals-callout strong{display:block;color:#ffe09a;margin-bottom:4px}.manual-signals-fields{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin:13px 0}
+.manual-signals-fields select,.manual-list-field textarea{width:100%;border:1px solid #3b5b72;border-radius:11px;background:#091b2b;color:#f3f8ff;padding:11px 12px}
+.manual-signals-fields select{height:46px}.manual-list-field textarea{display:block;resize:vertical;min-height:145px;font:13px/1.55 ui-monospace,SFMono-Regular,Consolas,monospace}
+.manual-list-field textarea:focus,.manual-signals-fields select:focus{outline:2px solid #65c7e4;outline-offset:1px}
+.manual-capacity{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:12px 0;padding:11px 13px;border:1px solid #34546a;border-radius:11px;background:#0a2031;font-size:11px;color:#a9c1d1}
+.manual-capacity strong{color:#f6d48e;font-size:13px}.manual-capacity span:last-child{margin-left:auto}
+.manual-preview-actions{margin:11px 0}.manual-preview-actions button{width:100%;min-height:45px}
+.manual-preview-result{border:1px solid #345368;background:#0b2030;border-radius:12px;padding:13px;margin:11px 0;font-size:12px;line-height:1.55;color:#c7d9e5;overflow-wrap:anywhere}
+.manual-preview-summary{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:9px}.manual-preview-summary span{border:1px solid #3b5e73;border-radius:999px;padding:4px 8px;color:#e4f4fb;background:#173347}
+.manual-line-list,.manual-queue-list{display:grid;gap:7px}.manual-line-row,.manual-queue-row{border:1px solid #35556b;border-radius:10px;padding:9px 11px;background:#10283a;overflow-wrap:anywhere}
+.manual-line-row strong,.manual-line-row small,.manual-queue-row strong,.manual-queue-row small{display:block}.manual-line-row small,.manual-queue-row small{margin-top:3px;color:#abc2d1;font-size:11px}.manual-line-row.is-issue{border-color:#805750;background:#301f23}.manual-line-row.is-valid{border-color:#3d7969}
+.manual-confirm-line{display:flex;align-items:flex-start;gap:10px;color:#e6d7b3;font-size:12px;line-height:1.5;padding:10px 0}.manual-confirm-line input{accent-color:#f3c15b;width:18px;height:18px;flex:none}
+.manual-signal-actions{display:flex;flex-wrap:wrap;gap:10px}.manual-signal-actions button{flex:1 1 185px;min-height:46px}.manual-signal-actions button[hidden]{display:none}
+.manual-queue-title{font-size:14px;margin:20px 0 8px;color:#d9eaf4}.manual-queue-list{max-height:340px;overflow:auto}.manual-queue-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:7px;align-items:center}.manual-queue-row em{font-style:normal;font-size:10px;font-weight:900;color:#f0cf85}.manual-signals-feedback-error{color:#ffb3b3}
+#dashboard.manual-dashboard .nx-panel-history{margin-top:12px}
+#dashboard.manual-dashboard #robotButton,#dashboard.manual-dashboard #nxNeoQuickStop{display:none!important}
+@media(max-width:650px){.operation-mode-options{grid-template-columns:1fr}.manual-signals-fields{grid-template-columns:1fr}.manual-capacity span:last-child{margin-left:0;width:100%}.manual-signals-head{align-items:flex-start}.manual-signals-card{padding:17px}}
 </style>
 </head>
 <body>
@@ -1776,6 +1810,23 @@ body:has(#dashboard:not(.hidden)) .nexora-logo-only .brand img{
   </div>
   </details>
   </section>
+  <section id="manualSignalsCard" class="card manual-signals-card hidden" aria-labelledby="manualSignalsTitle">
+    <div class="manual-signals-head"><div><span class="nx-neo-section-caption">NEXORA MANUAL · LISTA DE SINAIS</span><h2 id="manualSignalsTitle">Agendar sinais</h2><p>Escolha o mercado, o dia e o fuso. Cada linha é validada separadamente.</p></div><span id="manualSignalsRunBadge" class="manual-run-badge" data-state="idle">PAUSADO</span></div>
+    <div class="manual-signals-callout"><strong>Atenção aos horários</strong><p>M15 é a duração do contrato a partir da aceitação da compra pela Deriv. Cada sinal só é tentado no minuto indicado; sinais vencidos nunca são recuperados.</p></div>
+    <div class="manual-signals-fields">
+      <div class="field"><label for="manualMarket">Mercado desta lista</label><select id="manualMarket"><option value="forex">Forex</option><option value="derived">Derivados</option><option value="stocks_indices">Ações e índices</option><option value="commodities">Matérias-primas</option></select></div>
+      <div class="field"><label for="manualDay">Dia dos horários</label><select id="manualDay"><option value="today">Hoje</option><option value="tomorrow">Amanhã</option></select></div>
+      <div class="field"><label for="manualTimezone">Fuso horário</label><select id="manualTimezone"><option value="America/Sao_Paulo" selected>Brasília (UTC−03:00) · padrão</option><option value="America/Noronha">Fernando de Noronha</option><option value="America/Manaus">Manaus</option><option value="America/Rio_Branco">Rio Branco</option><option value="UTC">UTC</option><option value="America/New_York">Nova York</option><option value="America/Chicago">Chicago</option><option value="America/Denver">Denver</option><option value="America/Los_Angeles">Los Angeles</option><option value="Europe/London">Londres</option><option value="Europe/Lisbon">Lisboa</option><option value="Europe/Madrid">Madri</option></select></div>
+    </div>
+    <div class="field manual-list-field"><label for="manualSignalText">Lista textual · uma linha por sinal</label><textarea id="manualSignalText" maxlength="20000" rows="7" placeholder="M15 EURUSD 19:00 CALL&#10;M5 GBPUSD 19:10 PUT" aria-describedby="manualSignalFormat"></textarea><p id="manualSignalFormat" class="helper">Formato: M15 EURUSD 19:00 CALL · durações aceitas: M1, M3, M5 ou M15. Você pode agendar listas em slots menores ou enviar até a capacidade disponível de uma só vez.</p></div>
+    <div class="manual-capacity"><span>Fila pendente</span><strong id="manualCapacityValue">Consultando…</strong><span>Limite: 100 sinais pendentes nesta sessão</span></div>
+    <div class="manual-preview-actions"><button id="manualPreviewButton" class="outline" type="button" onclick="previewManualSignals()">VALIDAR E VER PRÉVIA</button></div>
+    <div id="manualPreviewResult" class="manual-preview-result" role="status" aria-live="polite">A prévia não envia nem executa ordens.</div>
+    <label class="manual-confirm-line"><input id="manualScheduleConfirm" type="checkbox" disabled> <span>Confirmo o agendamento explícito dos sinais válidos exibidos acima. Entendo que isso ligará a modalidade Manual e autorizará tentativas na conta e com as proteções salvas.</span></label>
+    <div class="manual-signal-actions"><button id="manualScheduleButton" class="gold" type="button" onclick="scheduleManualSignals()" disabled>CONFIRMAR E AGENDAR VÁLIDOS</button><button id="manualActivateButton" class="outline" type="button" onclick="activateManualSignals()" hidden>REATIVAR EXECUÇÃO MANUAL</button><button id="manualPauseButton" class="outline" type="button" onclick="pauseManualSignals()" hidden>PAUSAR · PRESERVAR FILA</button></div>
+    <p id="manualSignalsFeedback" class="helper" role="status" aria-live="polite">Nenhuma compra é enviada pela prévia ou pelo agendamento.</p>
+    <h3 class="manual-queue-title">Fila e estado persistidos</h3><div id="manualQueueList" class="manual-queue-list"><p class="muted">Consultando fila Manual…</p></div>
+  </section>
   <div id="nxPanelHistoryState" class="nx-history-state" data-state="unknown" role="status">Consultando o estado do robô…</div>
   <section class="nx-panel-history" aria-labelledby="nxPanelHistoryTitle">
     <div class="nx-history-head"><span class="nx-history-icon" aria-hidden="true">▤</span><div><span class="nx-neo-section-caption">HISTÓRICO</span><h2 id="nxPanelHistoryTitle">Resultados do robô</h2><p>Registros de operações encerradas</p></div></div>
@@ -1979,6 +2030,10 @@ body:has(#dashboard:not(.hidden)) .nexora-logo-only .brand img{
   </div>
   <div class="card auto-config" id="automationConfigCard">
     <p class="helper nx-guide-lead">Treinamento usa saldo fictício. Navegar ou salvar preferências não liga o robô.</p>
+    <fieldset class="operation-mode-picker"><legend>Escolha a modalidade do robô</legend><div class="operation-mode-options">
+      <label class="operation-mode-option"><input type="radio" name="operationMode" value="strategies" checked><span><strong>Nexora IA Estratégias</strong><small>Preserva o assistente atual: mercado, ativos e estratégia.</small></span></label>
+      <label class="operation-mode-option"><input type="radio" name="operationMode" value="manual"><span><strong>Nexora Manual (lista de sinais)</strong><small>Mercado e horários são escolhidos no painel.</small></span></label>
+    </div><p id="operationModeHelp" class="helper">A conta e as proteções permanecem configuráveis nas duas modalidades.</p></fieldset>
     <div class="auto-wizard-header">
       <span id="autoWizardProgress" role="status" aria-live="polite">Etapa 1 de 6</span>
       <div class="auto-wizard-track" id="autoWizardTrack" role="progressbar" aria-label="Progresso da configuração" aria-valuemin="1" aria-valuemax="6" aria-valuenow="1"><span id="autoWizardFill"></span></div>
@@ -2067,7 +2122,7 @@ body:has(#dashboard:not(.hidden)) .nexora-logo-only .brand img{
       <div class="field"><label for="autoCycles">Ciclos adicionais (não exigem Martingale)</label><select id="autoCycles" onchange="toggleAutomationProgressions('cycles')"><option value="0">Desativados</option><option value="1">1 ciclo</option><option value="2">2 ciclos</option><option value="3">3 ciclos</option><option value="4">4 ciclos</option><option value="5">5 ciclos</option></select></div>
       <div id="autoCycleSettings" class="field hidden"><label for="autoCycleMultiplier">Multiplicador dos ciclos</label><input id="autoCycleMultiplier" type="number" min="1" step=".1" value="2.00"></div>
       </details>
-      <div class="auto-step"><span>06</span><strong>Confira antes de guardar suas preferências</strong></div>
+      <div class="auto-step"><span>07</span><strong>Confira antes de guardar suas preferências</strong></div>
       <p class="helper">Veja o resumo do que foi selecionado. Salvar não inicia nenhuma operação; a ativação tem verificações e confirmação separadas.</p>
       <div id="autoConfigSummary" class="auto-summary">Selecione os ativos para configurar o robô.</div>
       <p class="nx-guide-save-note" role="note">As preferências serão registradas, mas o robô permanecerá no estado atual.</p>
@@ -2422,6 +2477,7 @@ async function refreshPanelStatusDisplay(){
   renderScanMonitor(status);
   const state=status.running?'active':status.interrupted_after_restart?'interrupted':status.auto_buy_enabled?'paused':'unavailable';
   renderPanelHistoryState(state,status.scan_progress);
+  if(manualProfileMode)refreshManualSignalsState().catch(()=>{});
  }catch(error){
   if(activePage==='dashboard'&&sequence===dashboardStatusSequence)renderPanelHistoryState('unknown',null,error?.name!=='AbortError');
   throw error;
@@ -2447,7 +2503,7 @@ function updateResultsPolling(){
    },activePage==='dashboard'?7000:3000);
  }
 }
-function go(v){page(v);updateResultsPolling();window.scrollTo({top:0,behavior:'smooth'});if(v==='setup')loadOnboarding();if(v==='dashboard'){refreshDashboard();loadDemoOrders().catch(()=>{});loadDailyResults().catch(()=>{});}if(v==='robot-config'){initAutomationWizard();setAutomationWizardStep(2);loadAutomationProfile();}if(v==='results'){loadDemoOrders();}if(v==='account'){loadRobotAccess();loadBillingPlans()}if(v==='settings')loadSettings()}
+function go(v){page(v);updateResultsPolling();window.scrollTo({top:0,behavior:'smooth'});if(v==='setup')loadOnboarding();if(v==='dashboard'){refreshDashboard();loadDemoOrders().catch(()=>{});loadDailyResults().catch(()=>{});loadManualSignalsState();}if(v==='robot-config'){initAutomationWizard();setAutomationWizardStep(operationMode()==='manual'?autoWizardStep:2);loadAutomationProfile();}if(v==='results'){loadDemoOrders();}if(v==='account'){loadRobotAccess();loadBillingPlans()}if(v==='settings')loadSettings()}
 function fail(msg){$('error').textContent=msg||''}
 async function req(path,opts={}){const r=await fetch(path,{credentials:'same-origin',...opts});let data;try{data=await r.json()}catch{throw Error('Resposta inválida do servidor')}if(!r.ok)throw Error(data.detail||'Falha na conexão');return data}
 async function refreshLandingOffer(){
@@ -2536,6 +2592,7 @@ async function init(){
     refreshDashboard();
     loadDemoOrders().catch(()=>{});
     loadDailyResults().catch(()=>{});
+    loadManualSignalsState();
     updateResultsPolling();
   }
   refreshTimer=setInterval(()=>{
@@ -3075,6 +3132,7 @@ function askRobotStartConfirmation(profile,risk,catalogue){
  return new Promise(resolve=>{robotStartDialogResolver=resolve});
 }
 async function toggleRobot(){
+ if(typeof manualProfileMode!=='undefined'&&manualProfileMode){showRobotNotice('Este perfil usa Nexora Manual. Use o card de sinais no painel; o controle de Estratégias não inicia esta fila.');return}
  const button=$('robotButton');
  if(button.dataset.commandPending==='true')return;
  let wasRunning=robotRunning;
@@ -3571,8 +3629,21 @@ function renderOrders(){
  }
 }
 let automationAssets=[],automationSelected=new Set(),automationProfileSaved=false,automationMarketRequest=0;
+let manualProfileMode=false;
 
 let autoWizardStep=2,autoWizardReady=false,autoPresetMode='custom',autoPresetApplying=false;
+const operationMode=()=>document.querySelector('input[name="operationMode"]:checked')?.value==='manual'?'manual':'strategies';
+function setAutomationMode(mode){
+ const selected=mode==='manual'?'manual':'strategies';
+ const radio=document.querySelector('input[name="operationMode"][value="'+selected+'"]');if(radio)radio.checked=true;
+ $('robot-config').classList.toggle('manual-mode',selected==='manual');
+ $('operationModeHelp').textContent=selected==='manual'?
+  'Nexora Manual: conta e proteções continuam iguais; mercado e sinais serão definidos no painel, sem seleção antecipada de ativos ou estratégia.':
+  'Nexora IA Estratégias mantém o assistente atual. A conta e as proteções permanecem configuráveis nas duas modalidades.';
+ if(autoWizardReady)setAutomationWizardStep(autoWizardStep);
+ automationProfileSaved=false;
+}
+document.querySelectorAll('input[name="operationMode"]').forEach(radio=>radio.addEventListener('change',()=>setAutomationMode(radio.value)));
 function setAutomationPresetMode(mode,notice){
  autoPresetMode=mode;
  document.querySelectorAll('.auto-preset-button').forEach(button=>{
@@ -3621,8 +3692,32 @@ const automationGuideDescriptions=[
  ['Revise o que está salvo','Confira as preferências antes de salvar. Salvar não liga o robô e não substitui as confirmações posteriores.']
 ];
 function setAutomationWizardStep(step){
+ if(typeof operationMode==='function'&&operationMode()==='manual'){
+  const manualSteps=[2,6,7];
+  let manualIndex=manualSteps.indexOf(step);
+  if(manualIndex<0)manualIndex=step<=2?0:step<7?1:2;
+  autoWizardStep=manualSteps[manualIndex];
+  for(const element of document.querySelectorAll('.auto-wizard-step'))element.hidden=Number(element.dataset.wizardStep)!==autoWizardStep;
+  const [manualTitle,manualDescription]=autoWizardStep===2?['Escolha a conta','Selecione Treinamento ou uma conta REAL vinculada. A modalidade Manual usa as mesmas autorizações e proteções salvas.']:
+   autoWizardStep===6?['Revise valores e proteções','Configure a entrada, os limites e as proteções avançadas; estes parâmetros também serão usados nos sinais Manual.']:
+   ['Confira e salve o perfil Manual','Salvar registra a modalidade e as proteções; não agenda sinais nem liga a execução. A ativação será confirmada no painel.'];
+  const visibleStep=manualIndex+1;
+  $('autoWizardProgress').textContent='Etapa '+visibleStep+' de 3';
+  $('autoWizardFill').style.width=(visibleStep/3*100)+'%';
+  $('autoWizardTrack').setAttribute('aria-valuemax','3');$('autoWizardTrack').setAttribute('aria-valuenow',String(visibleStep));
+  $('autoWizardTitle').textContent=manualTitle;$('autoWizardHint').textContent=manualDescription;
+  document.querySelectorAll('[data-nx-wizard]').forEach(marker=>{
+   const number=Number(marker.dataset.nxWizard),current=number===autoWizardStep;
+   if(current)marker.setAttribute('aria-current','step');else marker.removeAttribute('aria-current');
+   marker.dataset.past=String(manualSteps.indexOf(number)>=0&&manualSteps.indexOf(number)<manualIndex);
+  });
+  $('autoWizardBack').hidden=manualIndex===0;$('autoWizardNext').hidden=manualIndex===2;
+  $('autoWizardNext').textContent=manualIndex===1?'VER REVISÃO →':'CONTINUAR →';
+  return;
+ }
  // Preserve internal step IDs and their existing validation rules.
  autoWizardStep=Math.min(7,Math.max(2,step));
+ $('autoWizardTrack').setAttribute('aria-valuemax','6');
  const visibleStep=autoWizardStep-1;
  for(const element of document.querySelectorAll('.auto-wizard-step')){
   element.hidden=Number(element.dataset.wizardStep)!==autoWizardStep;
@@ -3644,6 +3739,14 @@ function setAutomationWizardStep(step){
  $('autoWizardNext').textContent=autoWizardStep===6?'VER REVISÃO →':'CONTINUAR →';
 }
 function changeAutomationWizardStep(delta){
+ if(operationMode()==='manual'){
+  if(delta>0&&autoWizardStep===2&&automationRadio('autoMode')==='real'&&!$('autoRealAccount').value){
+   focusAutomationInvalid(markAutomationInvalid('autoRealAccount','Selecione sua conta real vinculada.'));return;
+  }
+  const steps=[2,6,7],index=steps.indexOf(autoWizardStep);
+  setAutomationWizardStep(steps[Math.max(0,Math.min(steps.length-1,index+delta))]);
+  $('automationConfigCard').scrollIntoView({behavior:'smooth',block:'start'});return;
+ }
  if(delta>0){
   if(autoWizardStep===2&&automationRadio('autoMode')==='real'&&!$('autoRealAccount').value){
    focusAutomationInvalid(markAutomationInvalid('autoRealAccount','Selecione sua conta real para continuar.'));
@@ -3770,7 +3873,7 @@ function validateAutomationSettings(){
  clearAutomationErrors();
  const errors=[];
  const check=(id,condition,message)=>{if(condition)errors.push(markAutomationInvalid(id,message))};
- check('automationSymbols',!automationSelected.size,'Selecione pelo menos um ativo deste mercado.');
+ if(operationMode()!=='manual')check('automationSymbols',!automationSelected.size,'Selecione pelo menos um ativo deste mercado.');
  check('autoRealAccount',automationRadio('autoMode')==='real'&&!$('autoRealAccount').value,'Selecione sua conta real vinculada.');
  for(const [id,min,max,label] of [
   ['autoStake',0.5,Infinity,'Valor da entrada'],['autoWin',0,1000000,'Stop Win'],
@@ -3913,6 +4016,16 @@ function renderAutomationAssets(){
 }
 function renderAutomationSummary(){
  const node=$('autoConfigSummary');if(!node)return;
+ if(operationMode()==='manual'){
+  const mode=automationRadio('autoMode'),advanced=$('autoMg').checked?'Martingale selecionado':$('autoCycles').value!=='0'?'Ciclos selecionados':'Nenhuma progressão selecionada';
+  node.textContent=['Modalidade: Nexora Manual · lista de sinais',
+   'Conta: '+(mode==='real'?'REAL · envolve dinheiro e risco':'Treinamento · saldo fictício'),
+   'Mercado e ativos: escolhidos ao preparar cada lista no painel; nenhum ativo pré-selecionado',
+   'Entrada por sinal: US$ '+$('autoStake').value,
+   'Limites: Stop Win US$ '+$('autoWin').value+' · Stop Loss US$ '+$('autoLoss').value,
+   'Proteções avançadas: '+advanced].join('\n');
+  return;
+ }
  const marketNames={forex:'Forex',derived:'Derivados',stocks_indices:'Ações e índices',commodities:'Matérias-primas'};
  const strategyNames={pulso_v2:'PULSO V2',trend:'Tendência e pullback',rsi:'Reversão RSI',
   fx_pullback_m15:'Forex · tendência H1 + pullback M15 (experimental)',
@@ -3939,7 +4052,25 @@ async function loadAutomationProfile(){
    req('/api/automation/profile'),req('/api/onboarding/config')
   ]);
   setAutomationRadio('autoMode',profile.account_mode||'demo');
+  setAutomationMode(profile.operation_mode||'strategies');
   await changeAutomationAccount(profile.real_account_id);
+  $('autoPayout').value=String(profile.min_payout_pct??88);
+  $('autoDirection').value=profile.direction||'AUTO';
+  $('autoStake').value=risk.stake;
+  $('autoWin').value=risk.stop_win;
+  $('autoLoss').value=risk.stop_loss;
+  $('autoMg').checked=Boolean(risk.martingale);
+  $('autoGales').value=String(risk.gale_count||1);
+  $('autoMultiplier').value=String(risk.multiplier||'2.00');
+  $('autoCycles').value=String(risk.cycles||'0');
+  $('autoCycleMultiplier').value=String(risk.cycle_multiplier||'2.00');
+  if(operationMode()==='manual'){
+   automationAssets=[];automationSelected.clear();renderAutomationAssets();toggleAutomationProgressions();
+   automationProfileSaved=Boolean(profile.configured);
+   setAutomationPresetMode('custom','Nexora Manual · conta e proteções carregadas.');
+   feedback.textContent=profile.configured?'Perfil Manual e proteções carregados.':'Configure conta e proteções e salve o perfil Manual.';
+   return;
+  }
   setAutomationRadio('autoMarket',profile.market==='volatility'?'derived':(profile.market||'derived'));
   setAutomationRadio('autoStrategy',profile.strategy||'pulso_v2');
   syncAutomationStrategyChoices();
@@ -3951,16 +4082,6 @@ async function loadAutomationProfile(){
   automationSelected=new Set(profile.configured?
    profile.symbols.filter(symbol=>automationAssets.some(item=>item.symbol===symbol)):
    suggestedAutomationAssets(selectedMarket,automationAssets));
-  $('autoPayout').value=String(profile.min_payout_pct??88);
-  $('autoDirection').value=profile.direction||'AUTO';
-  $('autoStake').value=risk.stake;
-  $('autoWin').value=risk.stop_win;
-  $('autoLoss').value=risk.stop_loss;
-  $('autoMg').checked=Boolean(risk.martingale);
-  $('autoGales').value=String(risk.gale_count||1);
-  $('autoMultiplier').value=String(risk.multiplier||'2.00');
-  $('autoCycles').value=String(risk.cycles||'0');
-  $('autoCycleMultiplier').value=String(risk.cycle_multiplier||'2.00');
   renderAutomationAssets();toggleAutomationProgressions();
   automationProfileSaved=Boolean(profile.configured);
   setAutomationPresetMode(profile.preset_mode||'custom',
@@ -3979,8 +4100,9 @@ async function saveAutomationProfile(){
  const payout=Number($('autoPayout').value);
  button.disabled=true;feedback.textContent='Validando e salvando suas preferências...';
  try{
-  const profile={account_mode:automationRadio('autoMode'),market:automationRadio('autoMarket'),
-   symbols:[...automationSelected],strategy:automationRadio('autoStrategy'),
+  const manual=operationMode()==='manual';
+  const profile={operation_mode:manual?'manual':'strategies',account_mode:automationRadio('autoMode'),market:manual?'volatility':automationRadio('autoMarket'),
+   symbols:manual?[]:[...automationSelected],strategy:manual?'manual':automationRadio('autoStrategy'),
    expiry_minutes:0,news_filter:false,
    news_minutes_before:30,news_minutes_after:30,
    max_daily_orders:0,
@@ -4003,6 +4125,197 @@ async function saveAutomationProfile(){
   go('dashboard');
  }catch(e){automationProfileSaved=false;feedback.textContent='Não foi possível concluir a configuração: '+e.message}
  finally{button.disabled=false}
+}
+const MANUAL_SIGNAL_API={state:'/api/manual-signals/status',preview:'/api/manual-signals/preview',confirm:'/api/manual-signals/confirm'};
+let manualSignalsProfile=null,manualSignalsPreview=null,manualSignalsCurrentState=null,manualSignalsBusy=false;
+const MANUAL_IDEMPOTENCY_STORAGE_KEY='nexora.manual.confirmation-keys.v1';
+async function manualPayloadFingerprint(payload){
+ const source=JSON.stringify({text:payload.text,market:payload.market,day:payload.day,timezone_name:payload.timezone_name});
+ if(globalThis.crypto?.subtle){
+  const digest=await globalThis.crypto.subtle.digest('SHA-256',new TextEncoder().encode(source));
+  return [...new Uint8Array(digest)].map(value=>value.toString(16).padStart(2,'0')).join('');
+ }
+ let hash=2166136261;
+ for(let index=0;index<source.length;index++){hash^=source.charCodeAt(index);hash=Math.imul(hash,16777619)}
+ return 'fnv1a-'+(hash>>>0).toString(16);
+}
+async function manualIdempotencyKey(payload){
+ const fingerprint=await manualPayloadFingerprint(payload);let entries={};
+ try{entries=JSON.parse(localStorage.getItem(MANUAL_IDEMPOTENCY_STORAGE_KEY)||'{}')}catch(_){entries={}}
+ if(!entries||typeof entries!=='object'||Array.isArray(entries))entries={};
+ if(entries[fingerprint])return {fingerprint,key:entries[fingerprint]};
+ const key=(globalThis.crypto?.randomUUID?globalThis.crypto.randomUUID():('manual-'+Date.now()+'-'+Math.random().toString(36).slice(2,10))).slice(0,64);
+ entries[fingerprint]=key;
+ try{localStorage.setItem(MANUAL_IDEMPOTENCY_STORAGE_KEY,JSON.stringify(entries))}
+ catch(_){throw new Error('O navegador não permitiu salvar a chave segura do agendamento; habilite o armazenamento local e tente novamente.')}
+ return {fingerprint,key};
+}
+function clearManualIdempotencyKey(fingerprint){
+ try{const entries=JSON.parse(localStorage.getItem(MANUAL_IDEMPOTENCY_STORAGE_KEY)||'{}');if(entries&&typeof entries==='object'&&!Array.isArray(entries)){delete entries[fingerprint];localStorage.setItem(MANUAL_IDEMPOTENCY_STORAGE_KEY,JSON.stringify(entries))}}catch(_){}
+}
+function invalidateManualPreview(){
+ manualSignalsPreview=null;$('manualScheduleConfirm').checked=false;$('manualScheduleConfirm').disabled=true;
+ $('manualScheduleButton').disabled=true;
+}
+for(const id of ['manualSignalText','manualMarket','manualDay','manualTimezone'])$(id).addEventListener('input',invalidateManualPreview);
+for(const id of ['manualMarket','manualDay','manualTimezone'])$(id).addEventListener('change',invalidateManualPreview);
+$('manualScheduleConfirm').addEventListener('change',()=>{$('manualScheduleButton').disabled=!manualSignalsPreview||!$('manualScheduleConfirm').checked});
+function manualStatusLabel(state){
+ return ({SCHEDULED:'AGENDADO',QUEUED:'NA FILA',CLAIMED:'TENTANDO',BUYING:'COMPRA EM CONFIRMAÇÃO',PURCHASED:'COMPRA ACEITA',SKIPPED:'VENCIDO · NÃO RECUPERADO',REJECTED:'NÃO EXECUTADO',FAILED:'FALHA DEFINITIVA',UNKNOWN:'RESULTADO INCERTO',CANCELLED:'CANCELADO'})[String(state||'').toUpperCase()]||String(state||'Estado não informado').replaceAll('_',' ');
+}
+function renderManualQueue(state){
+ manualSignalsCurrentState=state;
+ const list=$('manualQueueList');list.replaceChildren();
+ const rows=Array.isArray(state?.signals)?state.signals:Array.isArray(state?.queue)?state.queue:Array.isArray(state?.items)?state.items:[];
+ const pending=Number(state?.pending_count??state?.pending??rows.filter(x=>['SCHEDULED','QUEUED','CLAIMED','BUYING','UNKNOWN'].includes(String(x.status||'').toUpperCase())).length);
+ const capacity=Math.max(0,Math.min(100,Number(state?.capacity_remaining??state?.remaining_capacity??(100-pending))));
+ $('manualCapacityValue').textContent=pending+' pendente(s) · '+capacity+' vaga(s) disponível(is)';
+ const run=String(state?.status||state?.run_status||'IDLE').toUpperCase();
+ const interrupted=Boolean(state?.interrupted_after_restart||state?.requires_reactivation||run==='INTERRUPTED'||(Number(state?.session_number)>0&&run!=='RUNNING'&&!state?.running));
+ const active=Boolean(state?.running||state?.active||run==='RUNNING');
+ const badge=$('manualSignalsRunBadge');badge.dataset.state=interrupted?'interrupted':active?'active':'idle';
+ badge.textContent=interrupted?'PAUSADO · REATIVE':active?'MANUAL ATIVO':'PAUSADO';
+ $('manualPauseButton').hidden=!active;$('manualActivateButton').hidden=active||(!interrupted&&Number(state?.session_number)===0&&!rows.length&&pending===0);
+ $('manualActivateButton').textContent=interrupted?'REATIVAR EXECUÇÃO PAUSADA':'ATIVAR EXECUÇÃO MANUAL';
+ $('manualPauseButton').disabled=manualSignalsBusy;$('manualActivateButton').disabled=manualSignalsBusy;
+ if(!rows.length){const empty=document.createElement('p');empty.className='muted';empty.textContent=pending?'Há sinais pendentes; detalhes ainda não foram fornecidos pelo servidor.':'Nenhum sinal na fila persistida.';list.append(empty);return}
+ rows.forEach(item=>{
+  const row=document.createElement('article');row.className='manual-queue-row';
+  const main=document.createElement('div'),title=document.createElement('strong'),detail=document.createElement('small'),status=document.createElement('em');
+  title.textContent=[item.symbol||'Ativo',item.direction||'',item.duration_minutes?'M'+item.duration_minutes:''].filter(Boolean).join(' · ');
+  const due=item.scheduled_at?new Date(item.scheduled_at):null;
+  const marketLabel=({'forex':'Forex','derived':'Deriv (Volatility)','volatility':'Deriv (Volatility)'})[item.market]||item.market;
+  const localDue=item.local_date&&item.local_time?item.local_date+' '+item.local_time:null;
+  const dueLabel=localDue?[localDue,item.timezone_name,marketLabel].filter(Boolean).join(' · '):
+   due&&!Number.isNaN(due.getTime())?(item.timezone_name?
+    new Intl.DateTimeFormat('pt-BR',{timeZone:item.timezone_name,day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit',hour12:false}).format(due)+' · '+item.timezone_name:
+    due.toISOString().slice(0,16).replace('T',' ')+' UTC'):null;
+  detail.textContent=[item.raw_line,dueLabel,item.reason].filter(Boolean).join(' · ');
+  status.textContent=manualStatusLabel(item.status);main.append(title,detail);row.append(main,status);list.append(row);
+ });
+}
+function renderManualPreview(result){
+ const box=$('manualPreviewResult');box.replaceChildren();
+ const valid=Array.isArray(result?.valid)?result.valid:Array.isArray(result?.signals)?result.signals:[];
+ const issues=Array.isArray(result?.issues)?result.issues:[];
+ const summary=document.createElement('div');summary.className='manual-preview-summary';
+ for(const text of [valid.length+' sinal(is) válido(s)',issues.length+' linha(s) com problema',((result?.market_label)||$('manualMarket').selectedOptions[0]?.textContent)+' · '+(result?.date||$('manualDay').value)]){
+  const pill=document.createElement('span');pill.textContent=text;summary.append(pill);
+ }
+ box.append(summary);
+ const rows=document.createElement('div');rows.className='manual-line-list';
+ valid.forEach(item=>{
+  const row=document.createElement('div');row.className='manual-line-row is-valid';
+  const strong=document.createElement('strong');strong.textContent=(item.raw_line||('M'+item.duration_minutes+' '+item.symbol+' '+item.local_time+' '+item.direction));
+  const small=document.createElement('small');small.textContent=[item.display_name,item.symbol,item.local_date,item.local_time,item.utc_offset||item.timezone_name].filter(Boolean).join(' · ');
+  row.append(strong,small);rows.append(row);
+ });
+ issues.forEach(item=>{
+  const row=document.createElement('div');row.className='manual-line-row is-issue';
+  const strong=document.createElement('strong');strong.textContent='Linha '+(item.line_number||'?')+': '+(item.raw_line||'Sinal inválido');
+  const small=document.createElement('small');small.textContent=item.reason||'Não foi possível validar esta linha.';
+  row.append(strong,small);rows.append(row);
+ });
+ if(rows.children.length)box.append(rows);
+ if(result?.note){const note=document.createElement('p');note.textContent=result.note;box.append(note)}
+ manualSignalsPreview={payload:{market:$('manualMarket').value,day:$('manualDay').value,timezone_name:$('manualTimezone').value,text:$('manualSignalText').value},result,validCount:valid.length};
+ const remaining=Math.max(0,Number($('manualCapacityValue').textContent.match(/(\d+) vaga/)?.[1]??100));
+ $('manualScheduleConfirm').disabled=valid.length===0||valid.length>remaining;
+ $('manualScheduleButton').disabled=valid.length===0||valid.length>remaining;
+ if(valid.length>remaining){const note=document.createElement('p');note.textContent='A lista tem mais sinais válidos do que vagas disponíveis agora. Divida-a em um slot menor ou aguarde liberações e valide novamente.';note.className='manual-signals-feedback-error';box.append(note)}
+}
+async function refreshManualSignalsState(){
+ const state=await req(MANUAL_SIGNAL_API.state);renderManualQueue(state);return state;
+}
+async function loadManualSignalsState(){
+ const card=$('manualSignalsCard');if(!card)return;
+ try{
+  const profile=await req('/api/automation/profile');
+  manualSignalsProfile=profile;manualProfileMode=profile.operation_mode==='manual';
+  card.classList.toggle('hidden',!manualProfileMode);$('dashboard').classList.toggle('manual-dashboard',manualProfileMode);
+  if(!manualProfileMode)return;
+  try{await refreshManualSignalsState()}
+  catch(error){
+   manualSignalsCurrentState=null;$('manualSignalsFeedback').textContent='Estado da fila não confirmado. Prévia permanece somente informativa; confirme o estado antes de qualquer ativação.';
+   $('manualQueueList').textContent='Não foi possível consultar a fila persistida.';
+   $('manualScheduleButton').disabled=true;$('manualActivateButton').disabled=true;$('manualPauseButton').disabled=true;
+  }
+ }catch(error){
+  // Profile read errors fail closed: no Manual action or broker request is offered.
+  card.classList.add('hidden');$('dashboard').classList.remove('manual-dashboard');
+ }
+}
+async function previewManualSignals(){
+ if(manualSignalsBusy)return;
+ invalidateManualPreview();
+ const payload={market:$('manualMarket').value,day:$('manualDay').value,timezone_name:$('manualTimezone').value,text:$('manualSignalText').value};
+ if(!payload.text.trim()){$('manualSignalsFeedback').textContent='Informe pelo menos uma linha para validar.';return}
+ const button=$('manualPreviewButton');button.disabled=true;$('manualSignalsFeedback').textContent='Validando cada linha com o catálogo Deriv…';
+ try{
+  const result=await req(MANUAL_SIGNAL_API.preview,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+  renderManualPreview(result);$('manualSignalsFeedback').textContent='Prévia concluída. Nenhuma compra foi enviada.';
+ }catch(error){$('manualPreviewResult').textContent='Prévia indisponível: '+error.message;$('manualSignalsFeedback').textContent='Nenhum sinal foi agendado nem executado.'}
+ finally{button.disabled=false}
+}
+async function scheduleManualSignals(){
+ if(manualSignalsBusy||!manualSignalsPreview||!$('manualScheduleConfirm').checked)return;
+ if(!manualSignalsCurrentState){$('manualSignalsFeedback').textContent='Atualize o estado da fila antes de agendar ou ativar.';return}
+ if(manualSignalsPreview.payload.text!==$('manualSignalText').value||manualSignalsPreview.payload.market!==$('manualMarket').value||manualSignalsPreview.payload.day!==$('manualDay').value||manualSignalsPreview.payload.timezone_name!==$('manualTimezone').value){invalidateManualPreview();$('manualSignalsFeedback').textContent='A lista mudou. Gere uma nova prévia antes de confirmar.';return}
+ const amount=manualSignalsPreview.validCount;
+ const account=manualSignalsProfile?.account_mode==='real'?'REAL · dinheiro da conta Deriv':'Treinamento · saldo fictício';
+ const current=manualSignalsCurrentState||{};
+ const active=Boolean(current.running||String(current.persisted_status||'').toUpperCase()==='RUNNING');
+ const newSession=Number(current.session_number||0)===0;
+ if(!active&&!newSession){$('manualSignalsFeedback').textContent='A fila está pausada. Use “Reativar execução pausada” e confirme antes de agendar novos sinais.';return}
+ const consent=window.confirm((active?'Agendar ':'Ligar Nexora Manual e agendar ')+amount+' sinal(is) válido(s)?\n\nConta: '+account+'\nMercado: '+$('manualMarket').selectedOptions[0]?.textContent+'\nFuso: '+$('manualTimezone').value+'\n\nSomente sinais não vencidos serão tentados no minuto indicado.');
+ if(!consent)return;
+ manualSignalsBusy=true;const button=$('manualScheduleButton');button.disabled=true;$('manualSignalsFeedback').textContent='Registrando fila e ativação explícita…';
+ let startedHere=false,confirmationCompleted=false;
+ try{
+  const idempotency=await manualIdempotencyKey(manualSignalsPreview.payload);
+  if(!active){
+   const startConfirm=manualSignalsProfile?.account_mode==='real'?'START_REAL_AUTOPILOT':'START_DEMO_AUTOPILOT';
+   await req('/api/autopilot/start',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({confirm:startConfirm})});
+   startedHere=true;
+  }
+  const result=await req(MANUAL_SIGNAL_API.confirm,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({...manualSignalsPreview.payload,idempotency_key:idempotency.key})});
+  confirmationCompleted=true;
+  clearManualIdempotencyKey(idempotency.fingerprint);
+  $('manualSignalsFeedback').textContent=(result.note||'Lista confirmada e persistida.')+' '+(result.confirmed?.length||0)+' sinal(is) enfileirado(s); '+(result.issues?.length||0)+' linha(s) não agendada(s).';
+  if(Array.isArray(result.issues)&&result.issues.length){
+   const issueList=document.createElement('div');issueList.className='manual-line-list';
+   result.issues.forEach(issue=>{const row=document.createElement('div');row.className='manual-line-row is-issue';const title=document.createElement('strong'),reason=document.createElement('small');title.textContent='Linha '+(issue.line_number||'?')+': '+(issue.raw_line||'Sinal não agendado');reason.textContent=issue.reason||'Não foi possível confirmar esta linha.';row.append(title,reason);issueList.append(row)});
+   $('manualPreviewResult').append(issueList);
+  }
+  $('manualScheduleConfirm').checked=false;invalidateManualPreview();await refreshManualSignalsState();
+ }catch(error){
+  if(startedHere&&!confirmationCompleted){try{await req('/api/autopilot/stop',{method:'POST'})}catch(_){};try{await refreshManualSignalsState()}catch(_){}}
+  $('manualSignalsFeedback').textContent=confirmationCompleted?
+   'Agendamento confirmado e persistido, mas não foi possível atualizar o estado da fila: '+error.message+' · consulte a fila novamente antes de enviar outra lista.':
+   'Não foi possível confirmar o agendamento: '+error.message+(startedHere?' · a ativação iniciada por esta confirmação foi pausada; a fila não é apagada. Confira o estado antes de tentar novamente.':'')
+ }
+ finally{manualSignalsBusy=false;button.disabled=!manualSignalsPreview||!$('manualScheduleConfirm').checked}
+}
+async function activateManualSignals(){
+ if(manualSignalsBusy)return;
+ const account=manualSignalsProfile?.account_mode==='real'?'Conta REAL · envolve dinheiro e risco de perda.':'Conta Treinamento · saldo fictício.';
+ if(!window.confirm('Reativar explicitamente a execução Nexora Manual?\n\n'+account+'\nA fila persistida será mantida. Sinais cujo minuto já passou não serão recuperados.'))return;
+ manualSignalsBusy=true;$('manualActivateButton').disabled=true;$('manualSignalsFeedback').textContent='Solicitando reativação explícita…';
+ try{
+  const result=await req('/api/autopilot/start',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({confirm:manualSignalsProfile?.account_mode==='real'?'START_REAL_AUTOPILOT':'START_DEMO_AUTOPILOT'})});
+  $('manualSignalsFeedback').textContent=result.message||'Execução Manual reativada explicitamente. Fila pendente preservada.';await refreshManualSignalsState();
+ }catch(error){$('manualSignalsFeedback').textContent='Reativação não confirmada: '+error.message}
+ finally{manualSignalsBusy=false;$('manualActivateButton').disabled=false}
+}
+async function pauseManualSignals(){
+ if(manualSignalsBusy)return;
+ if(!window.confirm('Pausar novas tentativas da Nexora Manual? Sinais pendentes serão preservados e não serão apagados.'))return;
+ manualSignalsBusy=true;$('manualPauseButton').disabled=true;$('manualSignalsFeedback').textContent='Pausando novas tentativas sem apagar a fila…';
+ try{
+  const result=await req('/api/autopilot/stop',{method:'POST'});
+  $('manualSignalsFeedback').textContent=result.message||'Execução pausada. Os sinais pendentes permanecem na fila.';await refreshManualSignalsState();
+ }catch(error){$('manualSignalsFeedback').textContent='Não foi possível confirmar a pausa: '+error.message}
+ finally{manualSignalsBusy=false;$('manualPauseButton').disabled=false}
 }
 async function loadSettings(){
  $('configFeedback').textContent='';

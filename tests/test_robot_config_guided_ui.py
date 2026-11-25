@@ -191,3 +191,50 @@ def test_review_explains_existing_parameters_without_saving_automatically():
         assert forbidden not in summary
     assert "node.textContent=[" in summary
     assert "].join('\\n');" in summary
+
+
+def test_manual_mode_reuses_risk_settings_but_skips_strategy_asset_steps():
+    panel = config_source()
+    assert 'value="strategies" checked' in panel
+    assert 'Nexora IA Estratégias' in panel
+    assert 'Nexora Manual (lista de sinais)' in panel
+    assert 'operation_mode:manual?\'manual\':\'strategies\'' in SOURCE
+    assert "if(operationMode()!=='manual')check('automationSymbols'" in SOURCE
+    profile_loader = SOURCE.split("async function loadAutomationProfile(){", 1)[1].split(
+        "async function saveAutomationProfile(){", 1
+    )[0]
+    manual_load = profile_loader.split("if(operationMode()==='manual'){", 1)[1].split(
+        "setAutomationRadio('autoMarket'", 1
+    )[0]
+    assert 'automationAssets=[];automationSelected.clear()' in manual_load
+    assert 'req(\'/api/automation/catalogue?' not in manual_load
+    assert 'autoStake' in panel and 'autoWin' in panel and 'autoLoss' in panel
+    assert 'id="autoMg"' in panel and 'id="autoCycles"' in panel
+    assert 'data-wizard-step="3"' in SOURCE
+    assert 'data-wizard-step="4"' in SOURCE
+    assert 'data-wizard-step="5"' in SOURCE
+
+
+def test_manual_signal_card_uses_readonly_preview_and_explicit_queue_transitions():
+    assert 'id="manualSignalsCard"' in SOURCE
+    for field in ('manualMarket', 'manualDay', 'manualTimezone', 'manualSignalText'):
+        assert f'id="{field}"' in SOURCE
+    assert 'value="America/Sao_Paulo" selected>Brasília (UTC−03:00) · padrão' in SOURCE
+    assert 'M15 é a duração do contrato a partir da aceitação da compra' in SOURCE
+    assert 'Cada sinal só é tentado no minuto indicado' in SOURCE
+    assert 'sinais vencidos nunca são recuperados' in SOURCE
+    assert "state:'/api/manual-signals/status'" in SOURCE
+    assert "preview:'/api/manual-signals/preview'" in SOURCE
+    assert "confirm:'/api/manual-signals/confirm'" in SOURCE
+    assert "body:JSON.stringify({...manualSignalsPreview.payload,idempotency_key:idempotency.key})" in SOURCE
+    assert "MANUAL_IDEMPOTENCY_STORAGE_KEY='nexora.manual.confirmation-keys.v1'" in SOURCE
+    assert 'localStorage.getItem(MANUAL_IDEMPOTENCY_STORAGE_KEY)' in SOURCE
+    assert 'localStorage.setItem(MANUAL_IDEMPOTENCY_STORAGE_KEY,JSON.stringify(entries))' in SOURCE
+    assert 'item.local_date&&item.local_time' in SOURCE
+    assert 'item.timezone_name,marketLabel' in SOURCE
+    assert 'SCHEDULE_DEMO_MANUAL_SIGNALS' not in SOURCE
+    assert "req('/api/autopilot/start'" in SOURCE
+    assert "req('/api/autopilot/stop',{method:'POST'})" in SOURCE
+    assert 'Sinais pendentes serão preservados e não serão apagados' in SOURCE
+    assert 'Reativar explicitamente a execução Nexora Manual' in SOURCE
+    assert "if(typeof manualProfileMode!=='undefined'&&manualProfileMode){showRobotNotice('Este perfil usa Nexora Manual." in SOURCE

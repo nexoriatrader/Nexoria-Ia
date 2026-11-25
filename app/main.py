@@ -18,7 +18,8 @@ from sqlalchemy import select, delete, func
 from . import db
 from .public_urls import origin_for_request, checkout_return_origin, nexora_referral_origin, canonical_origin
 from .stripe_billing import PLANS, billing_enabled, stripe_expected_livemode, create_checkout, stripe_signature_valid, apply_paid_checkout, plan_can_purchase, test_plan_enabled
-from .automation_markets import GROUPS as AUTOMATION_GROUPS, instruments_by_group, featured_instruments_by_group
+from .automation_markets import GROUPS as AUTOMATION_GROUPS, instruments_by_group, featured_instruments_by_group, market_instruments
+from . import manual_signals as manual
 from .access import (access_control_enabled, access_status, access_status_for_grant,
                      start_trial_on_first_robot_start, register_first_login,
                      referral_report, trial_duration_hours, utc)
@@ -334,7 +335,10 @@ def restore_demo_autopilot_consent():
                 except Exception:
                     continue
             reason=None
-            if not access_status(sess,uid)['allowed']:
+            profile=sess.get(db.AutomationProfile,uid)
+            if profile and getattr(profile,'operation_mode','strategies')=='manual':
+                reason='Modalidade Manual exige reativação explícita após reinício'
+            if reason is None and not access_status(sess,uid)['allowed']:
                 reason='Acesso ao robô expirado ou ainda não ativado'
             if reason is None and (not user or not run or user.selected_mode!='demo' or user.martingale):
                 reason='Retomada bloqueada: configuração ou conta DEMO inválida'
@@ -505,9 +509,94 @@ def m1_recovery_window_open(settled_at, now=None):
     return candle_start>=next_after_settlement and 0<=current_ts-candle_start<=8
 
 
+async def _run_manual_demo_signal(uid):
+    """Dispatch at most one due Manual DEMO signal through the guarded official ledger."""
+    if uid not in autopilot_enabled or not autopilot_allowed():return
+    now=datetime.now(timezone.utc)
+    with db.SessionLocal() as session:
+        profile=session.get(db.AutomationProfile,uid);run=session.get(db.ManualSignalRun,uid)
+        user=session.get(db.User,uid)
+        if not profile or getattr(profile,'operation_mode','strategies')!='manual':return
+        if not run or run.status!='RUNNING' or run.account_mode!='demo' or not user or user.selected_mode!='demo':
+            autopilot_enabled.discard(uid);autopilot_reasons[uid]='Sessão Manual pausada ou conta incompatível';return
+        auths=session.scalars(select(db.Session).where(db.Session.user_id==uid).order_by(db.Session.created_at.desc())).all()
+        token=None
+        for auth in auths:
+            exp=auth.expires_at.replace(tzinfo=timezone.utc) if auth.expires_at.tzinfo is None else auth.expires_at
+            if exp>now:
+                try:token=decrypt(auth.token_encrypted);break
+                except Exception:continue
+        if not token:
+            run.status='PAUSED';run.pause_reason='Sessão Deriv expirada; reative após reconectar';run.paused_at=db.utcnow();session.commit()
+            autopilot_enabled.discard(uid);autopilot_reasons[uid]=run.pause_reason;return
+        signals=session.scalars(select(db.ManualSignal).where(db.ManualSignal.user_id==uid,
+            db.ManualSignal.session_number==run.session_number,
+            db.ManualSignal.status.in_(('SCHEDULED','CLAIMED','UNKNOWN')))
+            .order_by(db.ManualSignal.scheduled_at,db.ManualSignal.id)).all()
+        # Reconcile signal capacity only from durable official ledger states.
+        for sig in signals:
+            order=session.get(db.DemoOrder,sig.ledger_order_id) if sig.ledger_order_id else None
+            if sig.status=='UNKNOWN' and order and order.state in ('SETTLED','CANCELLED'):
+                sig.status='COMPLETED' if order.state=='SETTLED' else 'FAILED'
+                sig.reason='Reconciliação oficial concluída';sig.capacity_slot=None
+            due=sig.scheduled_at.replace(tzinfo=timezone.utc) if sig.scheduled_at.tzinfo is None else sig.scheduled_at
+            if sig.status in ('SCHEDULED','CLAIMED') and now>=due+timedelta(seconds=manual.ENTRY_WINDOW_SECONDS):
+                sig.status='EXPIRED';sig.reason='Janela do minuto indicada encerrada; sem recuperação';sig.capacity_slot=None
+        session.commit()
+        # Existing unresolved demo orders continue to block the official ledger.
+        active=session.scalar(select(db.DemoOrder.id).where(db.DemoOrder.user_id==uid,
+            db.DemoOrder.state.in_(('PENDING','CONFIRMED','UNKNOWN'))).limit(1))
+        if active:return
+        signal=next((x for x in signals if x.status=='SCHEDULED' and
+            (x.scheduled_at.replace(tzinfo=timezone.utc) if x.scheduled_at.tzinfo is None else x.scheduled_at)<=now),None)
+        if not signal:return
+        due=signal.scheduled_at.replace(tzinfo=timezone.utc) if signal.scheduled_at.tzinfo is None else signal.scheduled_at
+        if now>=due+timedelta(seconds=60):return
+        signal.status='CLAIMED';signal.claim_token=secrets.token_hex(16);signal.claimed_at=db.utcnow();session.commit()
+        signal_id=signal.id;key=signal.request_key
+        user=session.get(db.User,uid)
+        payload=DemoBuy(symbol=signal.symbol,direction=signal.direction,minutes=signal.duration_minutes,
+                        confirm='DEMO_ONLY',request_key=key)
+        deadline=due.timestamp()+60-0.001
+    try:
+        result=await perform_demo_buy(user,token,payload,
+            attribution={'strategy':'manual','reason':'Sinal manual confirmado · duração a partir da aceitação'},
+            latest_buy_send_epoch=deadline)
+        with db.SessionLocal() as session:
+            sig=session.get(db.ManualSignal,signal_id)
+            if sig:
+                sig.status='EXECUTED';sig.ledger_mode='demo';sig.ledger_order_id=result.get('id')
+                sig.reason='Compra DEMO confirmada no ledger oficial';sig.capacity_slot=None;session.commit()
+        autopilot_reasons[uid]='Sinal Manual DEMO executado; aguardando liquidação oficial'
+    except HTTPException as exc:
+        with db.SessionLocal() as session:
+            sig=session.get(db.ManualSignal,signal_id)
+            order=session.scalar(select(db.DemoOrder).where(db.DemoOrder.user_id==uid,db.DemoOrder.request_key==key))
+            if sig:
+                sig.ledger_mode='demo';sig.ledger_order_id=order.id if order else None
+                if order and order.state in ('PENDING','UNKNOWN'):
+                    sig.status='UNKNOWN';sig.reason='Resultado incerto; capacidade retida até reconciliação oficial'
+                else:
+                    sig.status='FAILED';sig.reason=str(exc.detail)[:255];sig.capacity_slot=None
+                session.commit()
+        autopilot_reasons[uid]=str(exc.detail)
+
 async def autopilot_once():
     """DEMO order progression uses only settled, verified broker contracts."""
     if not autopilot_enabled:
+        return
+    # Manual users are dispatched from the durable queue and never touch a strategy scanner.
+    strategy_users=[]
+    for manual_uid in tuple(autopilot_enabled):
+        with db.SessionLocal() as ss:
+            prof=ss.get(db.AutomationProfile,manual_uid)
+            is_manual=bool(prof and getattr(prof,'operation_mode','strategies')=='manual')
+        if is_manual:
+            async with autopilot_lock:
+                await _run_manual_demo_signal(manual_uid)
+        else:
+            strategy_users.append(manual_uid)
+    if not strategy_users:
         return
     now=asyncio.get_running_loop().time()
     async with lock:
@@ -520,7 +609,10 @@ async def autopilot_once():
             live_v2={v for v in autopilot_enabled
                      if sess.get(db.PilotValidationBatch,v) is not None}
         for uid in tuple(autopilot_enabled):
-            if uid not in live_v2:
+            with db.SessionLocal() as ss:
+                prof=ss.get(db.AutomationProfile,uid)
+                is_manual=bool(prof and getattr(prof,'operation_mode','strategies')=='manual')
+            if uid not in live_v2 and not is_manual:
                 autopilot_reasons[uid]='Aguardando cotações recentes da Deriv'
         if not live_v2:
             return
@@ -529,6 +621,10 @@ async def autopilot_once():
     for uid in tuple(autopilot_enabled):
         if uid not in autopilot_enabled:
             continue
+        with db.SessionLocal() as mode_session:
+            mode_profile=mode_session.get(db.AutomationProfile,uid)
+            if mode_profile and getattr(mode_profile,'operation_mode','strategies')=='manual':
+                continue
         async with autopilot_lock:
             if uid not in autopilot_enabled or not autopilot_allowed():
                 continue
@@ -1034,6 +1130,12 @@ async def _reconcile_one_order(order_id):
                     log.warning('Demo reconciliation rejected: order=%s error=%s',order_id,type(exc).__name__)
                     return
                 if settled:
+                    manual_row=sess.scalar(select(db.ManualSignal).where(
+                        db.ManualSignal.ledger_mode=='demo',db.ManualSignal.ledger_order_id==order.id,
+                        db.ManualSignal.status=='UNKNOWN'))
+                    if manual_row:
+                        manual_row.status='COMPLETED';manual_row.reason='Liquidação oficial DEMO confirmada';manual_row.capacity_slot=None
+                        sess.commit()
                     log.info('Demo contract settlement recorded from Deriv: order=%s',order_id)
     except DemoTradingError as exc:
         log.warning('Demo reconciliation unavailable: order=%s error=%s',order_id,type(exc).__name__)
@@ -1077,12 +1179,39 @@ async def reconcile_confirmed_loop():
         await asyncio.sleep(1)
 
 
+def pause_manual_sessions_after_restart():
+    """Process memory is never treated as explicit consent to resume Manual orders."""
+    with db.SessionLocal() as session:
+        rows=session.scalars(select(db.ManualSignalRun).where(db.ManualSignalRun.status=='RUNNING')).all()
+        for run in rows:
+            run.status='PAUSED';run.pause_reason='Processo reiniciado; reative manualmente';run.paused_at=db.utcnow()
+            claimed=session.scalars(select(db.ManualSignal).where(db.ManualSignal.user_id==run.user_id,
+                db.ManualSignal.session_number==run.session_number,db.ManualSignal.status=='CLAIMED')).all()
+            for sig in claimed:
+                order=(session.scalar(select(db.DemoOrder).where(db.DemoOrder.user_id==run.user_id,
+                    db.DemoOrder.request_key==sig.request_key)) if run.account_mode=='demo' else
+                    session.scalar(select(db.RealOrder).where(db.RealOrder.account_id==run.real_account_id,
+                    db.RealOrder.request_key==sig.request_key)))
+                if order is None:
+                    sig.status='FAILED';sig.reason='Processo interrompido antes da reserva no ledger; nenhuma tentativa repetida';sig.capacity_slot=None
+                elif order.state in ('PENDING','UNKNOWN'):
+                    sig.status='UNKNOWN';sig.ledger_order_id=order.id;sig.ledger_mode=run.account_mode
+                    sig.reason='Resultado incerto após reinício; aguarda reconciliação oficial'
+                elif order.state in ('CONFIRMED','SETTLED'):
+                    sig.status='EXECUTED';sig.ledger_order_id=order.id;sig.ledger_mode=run.account_mode
+                    sig.reason='Compra confirmada no ledger oficial';sig.capacity_slot=None
+                else:
+                    sig.status='FAILED';sig.ledger_order_id=order.id;sig.ledger_mode=run.account_mode
+                    sig.reason='Tentativa encerrada sem compra';sig.capacity_slot=None
+        if rows:session.commit()
+
 @asynccontextmanager
 async def lifespan(app):
     global market_task, reconcile_task, autopilot_task, research_worker_task, m1_research_task, real_task, real_reconciliation_task
     if os.getenv('NEXORA_PUBLIC_URL','').startswith('https://') and db.DB_URL.startswith('sqlite:'):
         raise RuntimeError('Não usar SQLite efêmero em implantação pública: configure DATABASE_URL de Postgres')
     db.init_db()
+    pause_manual_sessions_after_restart()
     restore_demo_autopilot_consent()
     market_task=asyncio.create_task(feed())
     reconcile_task=asyncio.create_task(reconcile_confirmed_loop())
@@ -1508,6 +1637,9 @@ async def logout(request:Request,nexora_sid:str|None=Cookie(default=None)):
                 async with lock:
                     engine=runtimes.get(session.user_id)
                     if engine:engine.running=False
+                manual_run=s.get(db.ManualSignalRun,session.user_id)
+                if manual_run and manual_run.status=='RUNNING':
+                    manual_run.status='PAUSED';manual_run.pause_reason='Sessão encerrada; reative explicitamente';manual_run.paused_at=db.utcnow()
                 old_run=s.get(db.RobotRun,session.user_id)
                 if old_run:s.delete(old_run)
                 s.delete(session);s.commit()
@@ -1535,6 +1667,7 @@ async def current_config(request:Request,nexora_sid:str|None=Cookie(default=None
 
 class AutomationProfileRequest(BaseModel):
     """Explicit user choices; not an instruction to place a buy."""
+    operation_mode:str='strategies'
     account_mode:str='demo'
     market:str='volatility'
     symbols:list[str]=[]
@@ -1555,7 +1688,7 @@ class AutomationProfileRequest(BaseModel):
 def automation_profile_result(profile):
     if profile is None:
         return {
-            'account_mode':'demo','market':'volatility','symbols':[],
+            'operation_mode':'strategies','account_mode':'demo','market':'volatility','symbols':[],
             'strategy':'pulso_v2','expiry_minutes':0,
             'news_filter':False,'news_minutes_before':30,
             'news_minutes_after':30,'max_daily_orders':0,
@@ -1564,6 +1697,7 @@ def automation_profile_result(profile):
             'configured':False,'execution':'DERIV_DEMO_ONLY'
         }
     return {
+        'operation_mode':getattr(profile,'operation_mode','strategies'),
         'account_mode':profile.account_mode,'market':profile.market,
         'symbols':json.loads(profile.symbols_json),
         'strategy':profile.strategy,'expiry_minutes':0,
@@ -1593,20 +1727,24 @@ async def get_automation_profile(request:Request,nexora_sid:str|None=Cookie(defa
 async def save_automation_profile(request:Request,payload:AutomationProfileRequest,
                                   nexora_sid:str|None=Cookie(default=None)):
     user,token=active_session(request,nexora_sid)
+    if payload.operation_mode not in ('strategies','manual'):
+        raise HTTPException(422,'Modalidade de operação inválida')
+    manual_mode=payload.operation_mode=='manual'
     if payload.account_mode not in ('demo','real'):
         raise HTTPException(422,'Modo de conta inválido')
     if payload.market not in (*AUTOMATION_GROUPS, 'volatility'):
         raise HTTPException(422,'Mercado inválido')
-    if not strategy_allowed(payload.strategy,payload.market,payload.account_mode):
+    if not manual_mode and not strategy_allowed(payload.strategy,payload.market,payload.account_mode):
         if payload.strategy in FOREX_MTF_STRATEGIES:
             raise HTTPException(422,'As estratégias experimentais estão disponíveis apenas em Forex, em conta Treinamento/DEMO ou REAL')
         raise HTTPException(422,'Estratégia inválida')
-    if payload.expiry_minutes not in (0,1,3,5,15):
-        raise HTTPException(422,'Expiração inválida')
-    if not 1<=len(payload.symbols)<=5 or len(payload.symbols)!=len(set(payload.symbols)):
-        raise HTTPException(422,'Selecione de 1 a 5 ativos diferentes')
-    if any(not re.fullmatch(r'[A-Za-z0-9_]{2,30}',x) for x in payload.symbols):
-        raise HTTPException(422,'Símbolo inválido')
+    if not manual_mode:
+        if payload.expiry_minutes not in (0,1,3,5,15):
+            raise HTTPException(422,'Expiração inválida')
+        if not 1<=len(payload.symbols)<=5 or len(payload.symbols)!=len(set(payload.symbols)):
+            raise HTTPException(422,'Selecione de 1 a 5 ativos diferentes')
+        if any(not re.fullmatch(r'[A-Za-z0-9_]{2,30}',x) for x in payload.symbols):
+            raise HTTPException(422,'Símbolo inválido')
     if payload.news_minutes_before not in (0,15,30,60) or payload.news_minutes_after not in (0,15,30,60):
         raise HTTPException(422,'Janela de notícias inválida')
     if payload.direction not in ('AUTO','CALL','PUT'):
@@ -1634,26 +1772,47 @@ async def save_automation_profile(request:Request,payload:AutomationProfileReque
         owned={a['account_id'] for a in real_accounts(extract_accounts(payload_accounts))}
         if payload.real_account_id not in owned:
             raise HTTPException(403,'Conta REAL não pertence à sessão autenticada')
-    # Validate membership in the actual broker catalog, not a fabricated list.
-    try:
-        instruments=await featured_instruments_by_group('derived' if payload.market=='volatility' else payload.market)
-        available={item['symbol'] for item in instruments}
-    except (MarketError,TimeoutError,OSError):
-        raise HTTPException(503,'Catálogo da Deriv indisponível; configuração não salva') from None
-    if not set(payload.symbols).issubset(available):
-        raise HTTPException(422,'Seleção contém ativo não disponível no mercado escolhido')
+    # Strategy profiles validate selected assets against the broker catalogue.
+    if not manual_mode:
+        try:
+            instruments=await featured_instruments_by_group('derived' if payload.market=='volatility' else payload.market)
+            available={item['symbol'] for item in instruments}
+        except (MarketError,TimeoutError,OSError):
+            raise HTTPException(503,'Catálogo da Deriv indisponível; configuração não salva') from None
+        if not set(payload.symbols).issubset(available):
+            raise HTTPException(422,'Seleção contém ativo não disponível no mercado escolhido')
     async with autopilot_lock:
         if user.id in autopilot_enabled or user.id in real_runtime.running:
             raise HTTPException(409,'Desligue o robô antes de alterar sua automação')
         with db.SessionLocal() as session:
+            try:
+                session.get(db.User,user.id,with_for_update=True)
+            except TypeError:
+                # Lightweight in-memory sessions in legacy unit tests do not
+                # expose SQLAlchemy's optional row-lock keyword.
+                session.get(db.User,user.id)
             profile=session.get(db.AutomationProfile,user.id)
+            run=session.get(db.ManualSignalRun,user.id)
+            pending=(session.scalar(select(db.ManualSignal.id).where(
+                db.ManualSignal.user_id==user.id,
+                db.ManualSignal.status.in_(('SCHEDULED','CLAIMED','UNKNOWN'))).limit(1))
+                if hasattr(session,'scalar') else None)
+            if pending:
+                same_execution=(manual_mode and profile is not None
+                    and getattr(profile,'operation_mode','strategies')=='manual'
+                    and run is not None and run.account_mode==payload.account_mode
+                    and (run.account_mode!='real' or run.real_account_id==payload.real_account_id))
+                if not same_execution:
+                    raise HTTPException(409,
+                        'Há sinais pendentes ou incertos. Pause a fila e aguarde o desfecho oficial antes de mudar modalidade ou conta.')
             if profile is None:
                 profile=db.AutomationProfile(user_id=user.id)
                 session.add(profile)
+            profile.operation_mode=payload.operation_mode
             profile.market=payload.market
             profile.account_mode=payload.account_mode
-            profile.symbols_json=json.dumps(sorted(payload.symbols))
-            profile.strategy=payload.strategy
+            profile.symbols_json=json.dumps([] if manual_mode else sorted(payload.symbols))
+            profile.strategy='manual' if manual_mode else payload.strategy
             profile.expiry_minutes=0
             profile.news_filter=payload.news_filter
             profile.news_minutes_before=payload.news_minutes_before
@@ -1667,7 +1826,7 @@ async def save_automation_profile(request:Request,payload:AutomationProfileReque
             session.commit()
             result=automation_profile_result(profile)
     return {**result,'saved':True,'running':False,
-        'ready_to_start':(payload.account_mode=='demo' and not payload.news_filter),
+        'ready_to_start':(payload.account_mode=='demo' and (manual_mode or not payload.news_filter)),
         'note':'Preferências registradas. A ativação é um comando separado.'}
 
 
@@ -1685,6 +1844,142 @@ async def automation_catalogue(request:Request,market:str='volatility',
             'items':[{'symbol':x['symbol'],'name':x['name'],'group':x['group']} for x in items],
             'source':'DERIV_PUBLIC_CATALOG'}
 
+
+class ManualSignalPreviewRequest(BaseModel):
+    text:str
+    market:str
+    day:str
+    timezone_name:str=manual.DEFAULT_TIMEZONE
+class ManualSignalConfirmRequest(ManualSignalPreviewRequest):
+    idempotency_key:str
+
+def _manual_market(value):
+    return 'derived' if value=='volatility' else value
+
+def _manual_profile(session, uid):
+    profile=session.get(db.AutomationProfile,uid)
+    if not profile or getattr(profile,'operation_mode','strategies')!='manual':
+        raise HTTPException(409,'Salve a modalidade Nexora Manual antes de continuar')
+    return profile
+
+def _manual_capacity_status(session, run):
+    if run is None:return 0
+    return len(session.scalars(select(db.ManualSignal.id).where(
+        db.ManualSignal.user_id==run.user_id,db.ManualSignal.session_number==run.session_number,
+        db.ManualSignal.status.in_(('SCHEDULED','CLAIMED','UNKNOWN')))).all())
+
+@app.post('/api/manual-signals/preview')
+async def manual_signals_preview(request:Request,payload:ManualSignalPreviewRequest,
+                                 nexora_sid:str|None=Cookie(default=None)):
+    user=active_user(request,nexora_sid)
+    with db.SessionLocal() as session:_manual_profile(session,user.id)
+    try:
+        result=manual.validate_signal_list(text=payload.text,market=_manual_market(payload.market),
+            day=payload.day,timezone_name=payload.timezone_name,catalogue=await market_instruments())
+    except manual.ManualSignalInputError as exc:raise HTTPException(422,str(exc)) from None
+    except (MarketError,TimeoutError,OSError):raise HTTPException(503,'Catálogo público Deriv indisponível; prévia não concluída') from None
+    result['requested_market']=payload.market;result['market']=payload.market
+    result['volatility_alias']=payload.market=='volatility'
+    return result
+
+@app.post('/api/manual-signals/confirm')
+async def manual_signals_confirm(request:Request,payload:ManualSignalConfirmRequest,
+                                 nexora_sid:str|None=Cookie(default=None)):
+    user,_=active_session(request,nexora_sid)
+    if not re.fullmatch(r'[A-Za-z0-9_-]{8,64}',payload.idempotency_key or ''):
+        raise HTTPException(422,'Chave idempotente inválida')
+    import hashlib
+    payload_hash=hashlib.sha256(json.dumps({
+        'text':payload.text,'market':payload.market,'day':payload.day,
+        'timezone_name':payload.timezone_name},ensure_ascii=False,sort_keys=True,
+        separators=(',',':')).encode('utf-8')).hexdigest()
+    with db.SessionLocal() as session:
+        session.get(db.User,user.id,with_for_update=True)
+        profile=_manual_profile(session,user.id);run=session.get(db.ManualSignalRun,user.id)
+        if not run:raise HTTPException(409,'Ligue explicitamente a modalidade Manual antes de confirmar sinais')
+        sess_no=run.session_number
+        previous=session.scalar(select(db.ManualSignalBatch).where(
+            db.ManualSignalBatch.user_id==user.id,
+            db.ManualSignalBatch.session_number==sess_no,
+            db.ManualSignalBatch.idempotency_key==payload.idempotency_key))
+        if previous:
+            if previous.payload_hash!=payload_hash:
+                raise HTTPException(409,'Esta chave idempotente já foi usada com outra lista ou configuração')
+            return json.loads(previous.response_json)
+        if run.status!='RUNNING':raise HTTPException(409,'Ligue explicitamente a modalidade Manual antes de confirmar sinais')
+        if run.account_mode!=profile.account_mode or (run.account_mode=='real' and run.real_account_id!=profile.real_account_id):
+            raise HTTPException(409,'Conta alterada; desligue e reative a modalidade Manual')
+    try:
+        preview=manual.validate_signal_list(text=payload.text,market=_manual_market(payload.market),
+            day=payload.day,timezone_name=payload.timezone_name,catalogue=await market_instruments())
+    except manual.ManualSignalInputError as exc:raise HTTPException(422,str(exc)) from None
+    except (MarketError,TimeoutError,OSError):raise HTTPException(503,'Catálogo público Deriv indisponível; sinais não confirmados') from None
+    accepted=[]
+    with db.SessionLocal() as session:
+        session.get(db.User,user.id,with_for_update=True)
+        profile=_manual_profile(session,user.id)
+        run=session.get(db.ManualSignalRun,user.id,with_for_update=True)
+        if not run or run.session_number!=sess_no:raise HTTPException(409,'Sessão Manual alterada; confirme novamente')
+        previous=session.scalar(select(db.ManualSignalBatch).where(
+            db.ManualSignalBatch.user_id==user.id,
+            db.ManualSignalBatch.session_number==sess_no,
+            db.ManualSignalBatch.idempotency_key==payload.idempotency_key))
+        if previous:
+            if previous.payload_hash!=payload_hash:
+                raise HTTPException(409,'Esta chave idempotente já foi usada com outra lista ou configuração')
+            return json.loads(previous.response_json)
+        if run.status!='RUNNING':raise HTTPException(409,'Sessão Manual pausada; reative explicitamente antes de agendar')
+        if run.account_mode!=profile.account_mode or (run.account_mode=='real' and run.real_account_id!=profile.real_account_id):
+            raise HTTPException(409,'Conta alterada; desligue e reative a modalidade Manual')
+        existing=session.scalars(select(db.ManualSignal).where(db.ManualSignal.user_id==user.id,
+            db.ManualSignal.session_number==sess_no)).all()
+        occupied={r.capacity_slot for r in existing if r.capacity_slot is not None and r.status in ('SCHEDULED','CLAIMED','UNKNOWN')}
+        pending=len(occupied)
+        for item in preview['valid']:
+            request_key=hashlib.sha256(f'{user.id}:{sess_no}:{payload.idempotency_key}:{item["line_number"]}'.encode()).hexdigest()
+            old=session.scalar(select(db.ManualSignal).where(db.ManualSignal.request_key==request_key))
+            if old:accepted.append(old);continue
+            if pending>=manual.MAX_MANUAL_SIGNALS_PER_SESSION:
+                preview['issues'].append({'line_number':item['line_number'],'raw_line':item['raw_line'],'code':'capacity','reason':'Limite de 100 sinais pendentes nesta sessão Manual.'});continue
+            slot=next((n for n in range(1,101) if n not in occupied),None)
+            if slot is None:continue
+            row=db.ManualSignal(user_id=user.id,session_number=sess_no,capacity_slot=slot,
+                line_number=item['line_number'],raw_line=item['raw_line'],market=item['market'],
+                timezone_name=item['timezone_name'],local_date=item['local_date'],local_time=item['local_time'],
+                scheduled_at=item['scheduled_at'],symbol=item['symbol'],direction=item['direction'],
+                duration_minutes=item['duration_minutes'],status='SCHEDULED',request_key=request_key)
+            session.add(row);session.flush();accepted.append(row);occupied.add(slot);pending+=1
+        response_rows=[{'id':r.id,'line_number':r.line_number,'symbol':r.symbol,'direction':r.direction,
+            'duration_minutes':r.duration_minutes,'market':r.market,'timezone_name':r.timezone_name,
+            'local_date':r.local_date,'local_time':r.local_time,'scheduled_at':r.scheduled_at.isoformat(),
+            'status':r.status,'request_key':r.request_key} for r in accepted]
+        result={'confirmed':response_rows,'issues':preview['issues'],'market':payload.market,
+        'timezone_name':payload.timezone_name,'session_number':sess_no,'pending_count':pending,
+        'remaining_capacity':max(0,100-pending),
+        'execution':'DERIV_REAL' if profile.account_mode=='real' else 'DERIV_DEMO_ONLY',
+        'note':'Confirmação apenas agenda sinais; cada compra seguirá os limites e o ledger da conta.'}
+        session.add(db.ManualSignalBatch(user_id=user.id,session_number=sess_no,
+            idempotency_key=payload.idempotency_key,payload_hash=payload_hash,
+            response_json=json.dumps(result,ensure_ascii=False,separators=(',',':'))))
+        session.commit()
+    return result
+
+@app.get('/api/manual-signals/status')
+async def manual_signals_status(request:Request,nexora_sid:str|None=Cookie(default=None)):
+    user=active_user(request,nexora_sid)
+    with db.SessionLocal() as session:
+        profile=session.get(db.AutomationProfile,user.id);run=session.get(db.ManualSignalRun,user.id)
+        if not profile or getattr(profile,'operation_mode','strategies')!='manual':return {'configured':False,'running':False,'signals':[],'pending_count':0}
+        rows=session.scalars(select(db.ManualSignal).where(db.ManualSignal.user_id==user.id,
+            db.ManualSignal.session_number==run.session_number).order_by(db.ManualSignal.scheduled_at,db.ManualSignal.id)).all() if run else []
+        return {'configured':True,'operation_mode':'manual','running':bool(run and run.status=='RUNNING' and (user.id in autopilot_enabled or user.id in real_runtime.running)),
+            'persisted_status':run.status if run else 'IDLE','session_number':run.session_number if run else 0,
+            'account_mode':run.account_mode if run else profile.account_mode,'pause_reason':run.pause_reason if run else None,
+            'pending_count':_manual_capacity_status(session,run),'remaining_capacity':max(0,100-_manual_capacity_status(session,run)),
+            'signals':[{'id':r.id,'line_number':r.line_number,'raw_line':r.raw_line,'market':r.market,
+                'timezone_name':r.timezone_name,'local_date':r.local_date,'local_time':r.local_time,'symbol':r.symbol,
+                'direction':r.direction,'duration_minutes':r.duration_minutes,'scheduled_at':r.scheduled_at.isoformat(),
+                'status':r.status,'reason':r.reason,'ledger_mode':r.ledger_mode,'ledger_order_id':r.ledger_order_id} for r in rows]}
 
 class AutoPilotSwitch(BaseModel):
     confirm:str=''
@@ -2220,6 +2515,43 @@ async def select_pulso_v2(request:Request,payload:PulsoChoiceRequest,
             'message':'PULSO V2 selecionado. Clique LIGAR ROBÔ para iniciar DEMO.'}
 
 
+def _begin_manual_run(sess,user,account_mode,real_account_id=None):
+    run=sess.get(db.ManualSignalRun,user.id,with_for_update=True)
+    if run is None:
+        run=db.ManualSignalRun(user_id=user.id,session_number=1)
+        sess.add(run)
+    elif run.status=='COMPLETED':
+        run.session_number+=1
+    run.status='RUNNING';run.account_mode=account_mode;run.real_account_id=real_account_id
+    run.pause_reason=None;run.paused_at=None;run.started_at=db.utcnow();run.completed_at=None
+    return run
+
+async def _start_manual_demo(user):
+    if not autopilot_allowed():raise HTTPException(503,'AutoPilot DEMO não habilitado no servidor')
+    if user.selected_mode!='demo':raise HTTPException(403,'Somente conta demonstrativa')
+    if user.id in real_runtime.running:raise HTTPException(409,'Desligue o robô REAL antes de iniciar Manual DEMO')
+    with db.SessionLocal() as sess:
+        profile=_manual_profile(sess,user.id)
+        if profile.account_mode!='demo':raise HTTPException(409,'A modalidade Manual está configurada para REAL')
+        if not access_status(sess,user.id)['allowed'] and access_status(sess,user.id)['status']!='TRIAL_AVAILABLE':
+            raise HTTPException(403,'Acesso do robô expirado ou suspenso')
+        orders=sess.scalars(select(db.DemoOrder).where(db.DemoOrder.user_id==user.id)).all()
+        boundary=latest_risk_session(sess,user.id)
+        blocker=autopilot_start_blocker(user,orders,after_order_id=boundary.after_order_id if boundary else 0)
+        if blocker:raise HTTPException(409,blocker)
+    async with autopilot_lock:
+        if user.id in autopilot_enabled:raise HTTPException(409,'A modalidade Manual já está ativa')
+        with db.SessionLocal() as sess:
+            sess.get(db.User,user.id,with_for_update=True)
+            access=start_trial_on_first_robot_start(sess,user.id)
+            if access['enforced'] and not access['allowed']:raise HTTPException(403,'Acesso do robô expirado. Renove antes de ligar.')
+            _begin_manual_run(sess,user,'demo')
+            sess.commit()
+        autopilot_last_attempt.pop(user.id,None);autopilot_enabled.add(user.id)
+        autopilot_reasons[user.id]='Nexora Manual DEMO ativa; aguardando sinais confirmados'
+    return {'running':True,'operation_mode':'manual','access':access,'execution':'DERIV_DEMO_ONLY',
+            'real_orders_enabled':False,'message':'Sessão Manual ativa. A fila confirmada será executada sem scanner de Estratégias.'}
+
 async def start_real_autopilot(request:Request,nexora_sid:str|None=None):
     """Explicit opt-in REAL start. No implicit resume after a server restart."""
     user,token=active_session(request,nexora_sid)
@@ -2232,11 +2564,12 @@ async def start_real_autopilot(request:Request,nexora_sid:str|None=None):
         plan=sess.get(db.RobotPlan,user.id)
         if not profile or profile.account_mode!='real' or not profile.real_account_id:
             raise HTTPException(409,'Selecione e salve uma conta REAL nas configurações')
-        if profile.news_filter:
+        manual_mode=getattr(profile,'operation_mode','strategies')=='manual'
+        if not manual_mode and profile.news_filter:
             raise HTTPException(409,'Filtro de notícias indisponível; desative para usar REAL')
-        if plan and (plan.requested_martingale or plan.cycles_limit):
+        if not manual_mode and plan and (plan.requested_martingale or plan.cycles_limit):
             raise HTTPException(409,'Conta REAL beta exige Martingale e ciclos desativados')
-        if user.martingale:
+        if not manual_mode and user.martingale:
             raise HTTPException(409,'Desative Martingale nas configurações atuais')
         if not access_status(sess,user.id)['allowed']:
             raise HTTPException(403,'Acesso ao robô expirado ou suspenso')
@@ -2247,14 +2580,15 @@ async def start_real_autopilot(request:Request,nexora_sid:str|None=None):
                 raise ValueError()
         except (InvalidOperation,ValueError):
             raise HTTPException(409,'Configure Stop Loss REAL de pelo menos uma entrada e valor válido') from None
-        if not strategy_allowed(profile.strategy,profile.market,profile.account_mode):
-            raise HTTPException(409,'Estratégia REAL não permitida para o mercado selecionado')
-        try:
-            symbols=json.loads(profile.symbols_json)
-        except (ValueError,TypeError):
-            raise HTTPException(409,'Seleção de ativos inválida') from None
-        if not isinstance(symbols,list) or not 1<=len(symbols)<=5:
-            raise HTTPException(409,'Selecione de 1 a 5 ativos para REAL')
+        if not manual_mode:
+            if not strategy_allowed(profile.strategy,profile.market,profile.account_mode):
+                raise HTTPException(409,'Estratégia REAL não permitida para o mercado selecionado')
+            try:
+                symbols=json.loads(profile.symbols_json)
+            except (ValueError,TypeError):
+                raise HTTPException(409,'Seleção de ativos inválida') from None
+            if not isinstance(symbols,list) or not 1<=len(symbols)<=5:
+                raise HTTPException(409,'Selecione de 1 a 5 ativos para REAL')
         account_id=profile.real_account_id
         pending=sess.scalar(select(db.RealOrder.id).where(
             db.RealOrder.account_id==account_id,
@@ -2298,13 +2632,14 @@ async def start_real_autopilot(request:Request,nexora_sid:str|None=None):
                 consent.max_stake=str(stake)
                 consent.stop_loss=str(stop)
                 consent.revoked_at=None
+            if manual_mode:_begin_manual_run(sess,user,'real',account_id)
             sess.commit()
         real_runtime.last_scan.pop(user.id,None)
         real_runtime.running.add(user.id)
-        real_runtime.reasons[user.id]='Conta REAL ligada; aguardando sinal confirmado'
-    return {'running':True,'execution':'DERIV_REAL',
+        real_runtime.reasons[user.id]='Nexora Manual REAL ativa; aguardando sinais confirmados' if manual_mode else 'Conta REAL ligada; aguardando sinal confirmado'
+    return {'running':True,'operation_mode':'manual' if manual_mode else 'strategies','execution':'DERIV_REAL',
             'real_orders_enabled':True,
-            'message':'Compras REAL autorizadas com stop obrigatório e contrato único'}
+            'message':'Sessão Manual REAL ativa com consentimento vigente' if manual_mode else 'Compras REAL autorizadas com stop obrigatório e contrato único'}
 
 
 @app.post('/api/autopilot/start')
@@ -2315,6 +2650,11 @@ async def autopilot_start(request:Request,payload:AutoPilotSwitch,
     user,_=active_session(request,nexora_sid)
     if payload.confirm!='START_DEMO_AUTOPILOT':
         raise HTTPException(403,'Confirme o modo automático de treinamento')
+    with db.SessionLocal() as profile_session:
+        stored_profile=profile_session.get(db.AutomationProfile,user.id)
+        is_manual=bool(stored_profile and getattr(stored_profile,'operation_mode','strategies')=='manual')
+    if is_manual:
+        return await _start_manual_demo(user)
     if not autopilot_allowed():
         raise HTTPException(503,'AutoPilot DEMO não habilitado no servidor')
     if not v2_enabled():
@@ -2398,6 +2738,21 @@ async def autopilot_start(request:Request,payload:AutoPilotSwitch,
 @app.post('/api/autopilot/stop')
 async def autopilot_stop(request:Request,nexora_sid:str|None=Cookie(default=None)):
     user=active_user(request,nexora_sid)
+    with db.SessionLocal() as check:
+        profile=check.get(db.AutomationProfile,user.id)
+        manual_mode=bool(profile and getattr(profile,'operation_mode','strategies')=='manual')
+    if manual_mode:
+        if user.id in real_runtime.running:
+            async with real_runtime.user_lock(user.id):
+                real_runtime.disarm_real(user.id,'Desligado manualmente; sinais futuros pausados e contratos REAL continuam em reconciliação')
+        else:
+            async with autopilot_lock:
+                autopilot_enabled.discard(user.id)
+                with db.SessionLocal() as sess:
+                    run=sess.get(db.ManualSignalRun,user.id)
+                    if run and run.status=='RUNNING':
+                        run.status='PAUSED';run.pause_reason='Desligado manualmente; sinais futuros preservados';run.paused_at=db.utcnow();sess.commit()
+        return {'running':False,'operation_mode':'manual','persisted_status':'PAUSED','execution':'DERIV_REAL' if profile.account_mode=='real' else 'DERIV_DEMO_ONLY','real_orders_enabled':real_runtime.real_available()}
     # Real execution is independently locked and cannot be confused with DEMO.
     if user.id in real_runtime.running:
         async with real_runtime.user_lock(user.id):
@@ -2426,14 +2781,17 @@ async def status(request:Request,nexora_sid:str|None=Cookie(default=None)):
     with db.SessionLocal() as sess:
         configured_profile=sess.get(db.AutomationProfile,user.id)
         configured_account_mode=configured_profile.account_mode if configured_profile else 'demo'
+        operation_mode=getattr(configured_profile,'operation_mode','strategies') if configured_profile else 'strategies'
+        manual_run=sess.get(db.ManualSignalRun,user.id)
         run=sess.get(db.RobotRun,user.id)
         consent=sess.get(db.AutoPilotResumeConsent,user.id)
         demo_run_intent=bool(
             run is not None and consent is not None
             and configured_account_mode=='demo'
-            and autopilot_allowed() and v2_enabled())
+            and operation_mode!='manual' and autopilot_allowed() and v2_enabled())
         interrupted=(run is not None and user.id not in autopilot_enabled
-                     and not demo_run_intent)
+                     and not demo_run_intent) or bool(manual_run and manual_run.status=='PAUSED' and manual_run.pause_reason=='Processo reiniciado; reative manualmente')
+        manual_pending=_manual_capacity_status(sess,manual_run)
         batch=sess.get(db.PilotValidationBatch,user.id)
         selected_strategy='pulso_v2' if v2_enabled() else 'unavailable'
         mode='V2_PULSO' if v2_enabled() else 'V1_SINGLE_ASSET'
@@ -2441,6 +2799,10 @@ async def status(request:Request,nexora_sid:str|None=Cookie(default=None)):
     async with lock:
         engine=rt_for(user)
         return {'connected':engine.connected,'symbol':engine.symbol,
+                'operation_mode':operation_mode,
+                'manual_session':({'status':manual_run.status,'session_number':manual_run.session_number,
+                    'pause_reason':manual_run.pause_reason,'pending_count':manual_pending}
+                    if operation_mode=='manual' and manual_run else None),
                 'latest_price':engine.prices[-1] if engine.prices else None,
                 'ticks':len(engine.prices),'execution':'DERIV_REAL' if real_running else 'DERIV_DEMO_ONLY',
                 'running':real_running or user.id in autopilot_enabled or demo_run_intent,
@@ -3555,9 +3917,15 @@ async def reconcile_demo_route(request:Request,order_id:int,
             if order.state=='SETTLED':
                 return public_order(order)
             try:
-                settle(s,order,receipt['contract'])
+                settled=settle(s,order,receipt['contract'])
             except OrderGuardError as e:
                 raise HTTPException(502,str(e)) from None
+            if settled:
+                manual_row=s.scalar(select(db.ManualSignal).where(
+                    db.ManualSignal.ledger_mode=='demo',db.ManualSignal.ledger_order_id==order.id,
+                    db.ManualSignal.status=='UNKNOWN'))
+                if manual_row:
+                    manual_row.status='COMPLETED';manual_row.reason='Liquidação oficial DEMO confirmada';manual_row.capacity_slot=None;s.commit()
             return public_order(order)
 
 @app.get('/api/demo/contract/{contract_id}')

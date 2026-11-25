@@ -170,6 +170,7 @@ class AutomationProfile(Base):
     """Per-user requested automation profile. Settings alone never arm trading."""
     __tablename__='automation_profiles'
     user_id=Column(Integer,ForeignKey('users.id'),primary_key=True)
+    operation_mode=Column(String(24),nullable=False,default='strategies')
     market=Column(String(24),nullable=False,default='volatility')
     symbols_json=Column(Text,nullable=False,default='["1HZ100V"]')
     strategy=Column(String(40),nullable=False,default='pulso_v2')
@@ -197,6 +198,54 @@ class RiskSession(Base):
     __table_args__ = (Index('ix_risk_sessions_user_id_id', 'user_id', 'id'),)
 
 
+class ManualSignalRun(Base):
+    """Persistent per-user controller; session_number separates completed runs."""
+    __tablename__='manual_signal_runs'
+    user_id=Column(Integer,ForeignKey('users.id'),primary_key=True)
+    session_number=Column(Integer,nullable=False,default=0)
+    status=Column(String(16),nullable=False,default='IDLE')
+    account_mode=Column(String(16),nullable=False,default='demo')
+    real_account_id=Column(String(100),nullable=True)
+    pause_reason=Column(String(255),nullable=True)
+    started_at=Column(DateTime(timezone=True),nullable=True)
+    paused_at=Column(DateTime(timezone=True),nullable=True)
+    completed_at=Column(DateTime(timezone=True),nullable=True)
+    updated_at=Column(DateTime(timezone=True),default=utcnow,onupdate=utcnow,nullable=False)
+
+
+class ManualSignal(Base):
+    """One durable signal line; broker orders remain in separate official ledgers."""
+    __tablename__='manual_signals'
+    id=Column(Integer,primary_key=True)
+    user_id=Column(Integer,ForeignKey('users.id'),nullable=False,index=True)
+    session_number=Column(Integer,nullable=False)
+    capacity_slot=Column(Integer,nullable=True)
+    line_number=Column(Integer,nullable=False)
+    raw_line=Column(String(255),nullable=False)
+    market=Column(String(32),nullable=False)
+    timezone_name=Column(String(64),nullable=False)
+    local_date=Column(String(10),nullable=False)
+    local_time=Column(String(5),nullable=False)
+    scheduled_at=Column(DateTime(timezone=True),nullable=False,index=True)
+    symbol=Column(String(30),nullable=False)
+    direction=Column(String(10),nullable=False)
+    duration_minutes=Column(Integer,nullable=False)
+    status=Column(String(16),nullable=False,default='SCHEDULED',index=True)
+    reason=Column(String(255),nullable=True)
+    request_key=Column(String(64),nullable=False,unique=True)
+    ledger_mode=Column(String(16),nullable=True)
+    ledger_order_id=Column(Integer,nullable=True)
+    claim_token=Column(String(64),nullable=True)
+    claimed_at=Column(DateTime(timezone=True),nullable=True)
+    created_at=Column(DateTime(timezone=True),default=utcnow,nullable=False)
+    updated_at=Column(DateTime(timezone=True),default=utcnow,onupdate=utcnow,nullable=False)
+    __table_args__=(
+        UniqueConstraint('user_id','session_number','capacity_slot',name='uq_manual_signal_capacity_slot'),
+        Index('ix_manual_signal_queue_due','status','scheduled_at'),
+        Index('ix_manual_signal_session','user_id','session_number','status'),
+    )
+
+
 
 class LoginFlow(Base):
     __tablename__ = 'login_flows'
@@ -204,6 +253,20 @@ class LoginFlow(Base):
     verifier_encrypted = Column(Text, nullable=False)
     referral_code = Column(String(32), nullable=True)
     created_at = Column(DateTime(timezone=True), default=utcnow)
+
+class ManualSignalBatch(Base):
+    """Idempotent confirmation receipt; payload identity survives page reloads."""
+    __tablename__='manual_signal_batches'
+    id=Column(Integer,primary_key=True)
+    user_id=Column(Integer,ForeignKey('users.id'),nullable=False,index=True)
+    session_number=Column(Integer,nullable=False)
+    idempotency_key=Column(String(64),nullable=False)
+    payload_hash=Column(String(64),nullable=False)
+    response_json=Column(Text,nullable=False)
+    created_at=Column(DateTime(timezone=True),default=utcnow,nullable=False)
+    __table_args__=(UniqueConstraint('user_id','session_number','idempotency_key',
+        name='uq_manual_signal_batch_idempotency'),)
+
 
 class Session(Base):
     __tablename__ = 'sessions'
@@ -254,6 +317,9 @@ def init_db():
     if 'preset_mode' not in profile_columns:
         with engine.begin() as conn:
             conn.execute(text("ALTER TABLE automation_profiles ADD COLUMN preset_mode VARCHAR(20) NOT NULL DEFAULT 'custom'"))
+    if 'operation_mode' not in profile_columns:
+        with engine.begin() as conn:
+            conn.execute(text("ALTER TABLE automation_profiles ADD COLUMN operation_mode VARCHAR(24) NOT NULL DEFAULT 'strategies'"))
     access_columns={col['name'] for col in inspect(engine).get_columns('robot_access')}
     if 'suspended' not in access_columns:
         with engine.begin() as conn:

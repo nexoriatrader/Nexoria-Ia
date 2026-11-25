@@ -1,0 +1,205 @@
+import asyncio
+from datetime import datetime, timedelta, timezone
+from unittest.mock import AsyncMock
+import pytest
+from fastapi.testclient import TestClient
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+from app import db, main, real_runtime
+from app.security import encrypt, hashsecret
+
+@pytest.fixture
+def api(tmp_path,monkeypatch):
+    engine=create_engine(f"sqlite:///{tmp_path}/manual.sqlite")
+    db.Base.metadata.create_all(engine);factory=sessionmaker(bind=engine,expire_on_commit=False)
+    monkeypatch.setattr(db,'SessionLocal',factory);monkeypatch.setattr(main.db,'SessionLocal',factory)
+    client=TestClient(main.app)
+    yield client,factory
+    engine.dispose()
+
+def add_manual_user(factory,*,account_mode='demo'):
+    sid='manual-session-cookie'
+    with factory() as s:
+        user=db.User(deriv_account_id='V9001',selected_mode='demo',stake='2.00',stop_win='20',stop_loss='10')
+        s.add(user);s.flush()
+        s.add(db.Session(session_hash=hashsecret(sid),user_id=user.id,token_encrypted=encrypt('mock-token'),expires_at=db.utcnow()+timedelta(hours=2)))
+        s.add(db.AutomationProfile(user_id=user.id,operation_mode='manual',account_mode=account_mode,
+            market='volatility',symbols_json='[]',strategy='manual',real_account_id='R9001' if account_mode=='real' else None))
+        s.commit();uid=user.id
+    return sid,uid
+
+def test_manual_profile_needs_no_strategy_assets_and_preview_is_read_only(api,monkeypatch):
+    client,factory=api;sid,uid=add_manual_user(factory);client.cookies.set('nexora_sid',sid)
+    catalog=[{'symbol':'frxEURUSD','name':'EUR/USD','group':'forex'},
+             {'symbol':'R_100','name':'Volatility 100','group':'derived'}]
+    monkeypatch.setattr(main,'market_instruments',AsyncMock(return_value=catalog))
+    buy=AsyncMock(side_effect=AssertionError('preview must never buy'))
+    monkeypatch.setattr(main,'demo_buy',buy)
+    result=client.post('/api/manual-signals/preview',json={'text':'M15 EURUSD 23:00 CALL\nM5 R_100 23:01 PUT',
+        'market':'forex','day':'tomorrow','timezone_name':'UTC'})
+    assert result.status_code==200
+    body=result.json()
+    assert len(body['valid'])==1 and body['valid'][0]['symbol']=='frxEURUSD'
+    assert any(i['code']=='outside_market' for i in body['issues'])
+    assert not buy.called
+
+def test_manual_confirmation_is_idempotent_limited_to_active_session_and_status(api,monkeypatch):
+    client,factory=api;sid,uid=add_manual_user(factory);client.cookies.set('nexora_sid',sid)
+    monkeypatch.setenv('NEXORA_AUTOPILOT_DEMO_ENABLED','true');monkeypatch.setenv('NEXORA_DEMO_BUY_ENABLED','true')
+    monkeypatch.setattr(main,'market_instruments',AsyncMock(return_value=[{'symbol':'frxEURUSD','name':'EUR/USD','group':'forex'}]))
+    monkeypatch.setattr(main,'perform_demo_buy',AsyncMock(side_effect=AssertionError('schedule test cannot buy')))
+    started=client.post('/api/autopilot/start',json={'confirm':'START_DEMO_AUTOPILOT'})
+    assert started.status_code==200 and started.json()['operation_mode']=='manual'
+    data={'text':'M15 EURUSD 23:00 CALL','market':'forex','day':'tomorrow','timezone_name':'UTC','idempotency_key':'manual-test-001'}
+    first=client.post('/api/manual-signals/confirm',json=data)
+    second=client.post('/api/manual-signals/confirm',json=data)
+    assert first.status_code==200 and second.status_code==200
+    assert first.json()['confirmed'][0]['id']==second.json()['confirmed'][0]['id']
+    assert first.json()['pending_count']==1 and second.json()['pending_count']==1
+    changed_payload={**data,'text':'M15 EURUSD 23:05 CALL'}
+    reused_key=client.post('/api/manual-signals/confirm',json=changed_payload)
+    assert reused_key.status_code==409 and 'outra lista' in reused_key.json()['detail']
+    assert not main.perform_demo_buy.called
+    status=client.get('/api/manual-signals/status').json()
+    assert status['running'] and status['pending_count']==1
+    signal=status['signals'][0]
+    assert signal['market']=='forex' and signal['timezone_name']=='UTC'
+    assert signal['local_date'] and signal['local_time']=='23:00'
+    with factory() as s:
+        assert s.query(db.ManualSignalBatch).count()==1
+    stopped=client.post('/api/autopilot/stop')
+    assert stopped.status_code==200 and stopped.json()['persisted_status']=='PAUSED'
+    retry_after_pause=client.post('/api/manual-signals/confirm',json=data)
+    assert retry_after_pause.status_code==200
+    assert retry_after_pause.json()==first.json()
+    status=client.get('/api/status').json()
+    assert status['operation_mode']=='manual' and status['manual_session']['status']=='PAUSED'
+    assert main.autopilot_enabled.isdisjoint({uid})
+
+def test_manual_preview_and_status_require_authenticated_session(api):
+    client,_=api
+    assert client.post('/api/manual-signals/preview',json={'text':'','market':'forex','day':'today'}).status_code==401
+    assert client.post('/api/manual-signals/confirm',json={'text':'','market':'forex','day':'today','idempotency_key':'manual-key-01'}).status_code==401
+    assert client.get('/api/manual-signals/status').status_code==401
+
+def test_real_manual_executor_does_not_call_broker_for_no_due_signals(api,monkeypatch):
+    _,factory=api;_,uid=add_manual_user(factory,account_mode='real')
+    with factory() as s:
+        user=s.query(db.User).one();profile=s.get(db.AutomationProfile,uid)
+        run=db.ManualSignalRun(user_id=uid,session_number=1,status='RUNNING',account_mode='real',real_account_id='R9001')
+        consent=db.RealRobotConsent(user_id=uid,account_id='R9001',max_stake='2',stop_loss='10')
+        s.add_all([run,consent]);s.commit();s.expunge(user);s.expunge(profile);s.expunge(consent)
+    buy=AsyncMock(side_effect=AssertionError('no due signal means no broker purchase'))
+    monkeypatch.setattr(real_runtime,'buy_real_contract',buy)
+    real_runtime.running.add(uid)
+    try:
+        asyncio.run(real_runtime._manual_real_signal(uid,user,profile,consent,'mock-token'))
+        assert not buy.called
+    finally:real_runtime.running.discard(uid)
+
+def test_manual_profile_save_skips_strategy_and_asset_requirements(api,monkeypatch):
+    client,factory=api;sid,uid=add_manual_user(factory);client.cookies.set('nexora_sid',sid)
+    catalogue=AsyncMock(side_effect=AssertionError('manual profile save must not require a selected asset catalogue'))
+    monkeypatch.setattr(main,'featured_instruments_by_group',catalogue)
+    response=client.post('/api/automation/profile',json={'operation_mode':'manual','account_mode':'demo',
+        'market':'volatility','symbols':[],'strategy':'','expiry_minutes':0})
+    assert response.status_code==200
+    profile=response.json()
+    assert profile['operation_mode']=='manual' and profile['strategy']=='manual' and profile['symbols']==[]
+    assert not catalogue.called
+
+@pytest.mark.parametrize('target_mode,target_account,initial_account',[
+    ('manual','demo','real'),       # Account change while retaining Manual.
+    ('strategies','demo','demo'),   # Leaving Manual while its pending queue exists.
+])
+def test_profile_cannot_change_execution_identity_while_manual_signals_are_pending(api,monkeypatch,target_mode,target_account,initial_account):
+    client,factory=api;sid,uid=add_manual_user(factory,account_mode=initial_account);client.cookies.set('nexora_sid',sid)
+    now=datetime.now(timezone.utc)
+    with factory() as s:
+        run=db.ManualSignalRun(user_id=uid,session_number=1,status='PAUSED',account_mode=initial_account,
+            real_account_id='R9001' if initial_account=='real' else None)
+        signal=db.ManualSignal(user_id=uid,session_number=1,capacity_slot=1,line_number=1,
+            raw_line='M15 EURUSD 23:00 CALL',market='forex',timezone_name='UTC',
+            local_date=(now+timedelta(hours=1)).date().isoformat(),local_time='23:00',
+            scheduled_at=now+timedelta(hours=1),symbol='frxEURUSD',direction='CALL',
+            duration_minutes=15,status='SCHEDULED',request_key='pending-profile-guard')
+        s.add_all([run,signal]);s.commit()
+    monkeypatch.setattr(main,'strategy_allowed',lambda *args:True)
+    monkeypatch.setattr(main,'featured_instruments_by_group',AsyncMock(return_value=[
+        {'symbol':'frxEURUSD','name':'EUR/USD','group':'forex'}]))
+    payload={'operation_mode':target_mode,'account_mode':target_account,'market':'forex',
+        'symbols':['frxEURUSD'] if target_mode=='strategies' else [],
+        'strategy':'pulso_v2' if target_mode=='strategies' else '',
+        'expiry_minutes':15 if target_mode=='strategies' else 0}
+    response=client.post('/api/automation/profile',json=payload)
+    assert response.status_code==409 and 'sinais pendentes' in response.json()['detail']
+    with factory() as s:
+        profile=s.get(db.AutomationProfile,uid)
+        assert profile.operation_mode=='manual' and profile.account_mode==initial_account
+        assert s.query(db.ManualSignal).one().status=='SCHEDULED'
+
+def test_manual_capacity_is_100_pending_per_session(api,monkeypatch):
+    client,factory=api;sid,uid=add_manual_user(factory);client.cookies.set('nexora_sid',sid)
+    monkeypatch.setenv('NEXORA_AUTOPILOT_DEMO_ENABLED','true');monkeypatch.setenv('NEXORA_DEMO_BUY_ENABLED','true')
+    monkeypatch.setattr(main,'market_instruments',AsyncMock(return_value=[{'symbol':'frxEURUSD','name':'EUR/USD','group':'forex'}]))
+    monkeypatch.setattr(main,'perform_demo_buy',AsyncMock(side_effect=AssertionError('future signals are only queued')))
+    assert client.post('/api/autopilot/start',json={'confirm':'START_DEMO_AUTOPILOT'}).status_code==200
+    lines='\n'.join(f'M1 EURUSD {hour:02d}:{minute:02d} CALL' for hour,minute in
+        [(i//60,i%60) for i in range(101)])
+    response=client.post('/api/manual-signals/confirm',json={'text':lines,'market':'forex',
+        'day':'tomorrow','timezone_name':'UTC','idempotency_key':'cap-test-0001'})
+    assert response.status_code==200
+    body=response.json()
+    assert len(body['confirmed'])==100 and body['pending_count']==100 and body['remaining_capacity']==0
+    assert any(issue['code']=='capacity' for issue in body['issues'])
+    assert not main.perform_demo_buy.called
+    main.autopilot_enabled.discard(uid)
+
+def test_due_demo_signal_uses_official_buy_adapter_with_exact_duration_and_deadline(api,monkeypatch):
+    _,factory=api;_,uid=add_manual_user(factory)
+    monkeypatch.setattr(main,'autopilot_allowed',lambda:True)
+    main.autopilot_enabled.add(uid)
+    due=datetime.now(timezone.utc)-timedelta(seconds=5)
+    with factory() as s:
+        s.add(db.ManualSignalRun(user_id=uid,session_number=1,status='RUNNING',account_mode='demo'))
+        s.add(db.ManualSignal(user_id=uid,session_number=1,capacity_slot=1,line_number=1,
+            raw_line='M15 EURUSD 19:00 CALL',market='forex',timezone_name='America/Sao_Paulo',
+            local_date=due.date().isoformat(),local_time=due.strftime('%H:%M'),scheduled_at=due,
+            symbol='frxEURUSD',direction='CALL',duration_minutes=15,status='SCHEDULED',
+            request_key='manual-demo-due-test'))
+        s.commit()
+    buy=AsyncMock(return_value={'id':9876})
+    monkeypatch.setattr(main,'perform_demo_buy',buy)
+    try:
+        asyncio.run(main._run_manual_demo_signal(uid))
+        assert buy.await_count==1
+        _,token,payload=buy.call_args.args
+        assert token=='mock-token'
+        assert payload.symbol=='frxEURUSD' and payload.direction=='CALL' and payload.minutes==15
+        assert buy.call_args.kwargs['latest_buy_send_epoch']==pytest.approx(due.timestamp()+60-0.001)
+        with factory() as s:
+            row=s.query(db.ManualSignal).one()
+            assert row.status=='EXECUTED' and row.ledger_mode=='demo' and row.capacity_slot is None
+    finally:
+        main.autopilot_enabled.discard(uid)
+
+def test_real_manual_dispatch_never_calls_strategy_scanner(api,monkeypatch):
+    _,factory=api;_,uid=add_manual_user(factory,account_mode='real')
+    with factory() as s:
+        s.add(db.RealRobotConsent(user_id=uid,account_id='R9001',max_stake='2.00',stop_loss='10.00'))
+        s.commit()
+    manual_worker=AsyncMock(return_value=None)
+    scanner=AsyncMock(side_effect=AssertionError('Manual REAL must not scan strategies'))
+    monkeypatch.setattr(real_runtime,'real_available',lambda:True)
+    monkeypatch.setattr(real_runtime,'_manual_real_signal',manual_worker)
+    monkeypatch.setattr(real_runtime,'confirmed_automation_signal',scanner)
+    last_scan_before=real_runtime.last_scan.get(uid)
+    real_runtime.running.add(uid)
+    try:
+        asyncio.run(real_runtime._user_scan(uid))
+        assert manual_worker.await_count==1
+        assert manual_worker.call_args.args[0]==uid
+        assert not scanner.called
+        assert real_runtime.last_scan.get(uid)==last_scan_before
+    finally:
+        real_runtime.running.discard(uid)
