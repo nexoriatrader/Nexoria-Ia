@@ -48,6 +48,7 @@ from .trade_selector_v2 import (select_demo_signal, last_scan_report, has_pendin
 from .strategy_registry import FOREX_MTF_STRATEGIES, strategy_allowed
 from .progression import next_entry, ProgressionHalt, NextEntry
 from .expiry_policy import proposal_durations
+from . import signal_cataloger
 from .security import CLIENT_ID, REDIRECT, TOKEN_URL, build_authorize_url, make_login, make_session_id, hashsecret, encrypt, decrypt, cookie_options
 
 log=logging.getLogger('nexora')
@@ -1843,6 +1844,89 @@ async def automation_catalogue(request:Request,market:str='volatility',
     return {'market':market,'markets':AUTOMATION_GROUPS,
             'items':[{'symbol':x['symbol'],'name':x['name'],'group':x['group']} for x in items],
             'source':'DERIV_PUBLIC_CATALOG'}
+
+class CatalogerGenerateRequest(BaseModel):
+    market:str
+    symbol:str
+    granularity_seconds:int=900
+    lookback_days:int=60
+    target_day:str='tomorrow'
+    timezone_name:str=manual.DEFAULT_TIMEZONE
+
+@app.get('/api/cataloger/assets')
+async def cataloger_assets(request:Request,market:str='derived',
+                           nexora_sid:str|None=Cookie(default=None)):
+    active_user(request,nexora_sid)
+    if market not in AUTOMATION_GROUPS:
+        raise HTTPException(422,'Mercado inválido')
+    try:
+        items=await instruments_by_group(market)
+    except (MarketError,TimeoutError,OSError):
+        raise HTTPException(503,'Não foi possível consultar o catálogo atual da Deriv') from None
+    return {'market':market,'market_label':AUTOMATION_GROUPS[market],
+            'items':[{'symbol':item['symbol'],'name':item['name']} for item in items],
+            'timezones':manual.TIMEZONES,'source':'DERIV_PUBLIC_CATALOG'}
+
+@app.post('/api/cataloger/generate')
+async def cataloger_generate(payload:CatalogerGenerateRequest,request:Request,
+                             nexora_sid:str|None=Cookie(default=None)):
+    active_user(request,nexora_sid)
+    try:
+        signal_cataloger.validate_request(
+            symbol=payload.symbol,
+            granularity_seconds=payload.granularity_seconds,
+            lookback_days=payload.lookback_days,
+            target_day=payload.target_day,
+            timezone_name=payload.timezone_name,
+        )
+    except ValueError as exc:
+        raise HTTPException(422,str(exc)) from None
+    if payload.market not in AUTOMATION_GROUPS:
+        raise HTTPException(422,'Mercado inválido')
+    try:
+        items=await instruments_by_group(payload.market)
+        selected=next((item for item in items if item['symbol']==payload.symbol),None)
+        if selected is None:
+            raise HTTPException(422,'O ativo não pertence ao mercado escolhido ou não está no catálogo atual da Deriv')
+        candles=await signal_cataloger.fetch_historical_candles(
+            symbol=payload.symbol,
+            granularity_seconds=payload.granularity_seconds,
+            lookback_days=payload.lookback_days,
+        )
+        result=signal_cataloger.catalogue_time_slots(
+            candles=candles,
+            granularity_seconds=payload.granularity_seconds,
+            target_day=payload.target_day,
+            timezone_name=payload.timezone_name,
+            market=payload.market,
+        )
+    except HTTPException:
+        raise
+    except MarketError as exc:
+        raise HTTPException(502,str(exc)) from None
+    except (TimeoutError,OSError):
+        raise HTTPException(503,'A consulta ao histórico Deriv falhou. Tente novamente em instantes.') from None
+    duration_minutes=payload.granularity_seconds//60
+    for signal in result['signals']:
+        signal.update({
+            'symbol':selected['symbol'],
+            'asset_name':selected['name'],
+            'duration_minutes':duration_minutes,
+            'formatted':f"M{duration_minutes} {selected['symbol']} {signal['time']} {signal['direction']}",
+        })
+    return {
+        **result,
+        'market':payload.market,
+        'symbol':selected['symbol'],
+        'asset_name':selected['name'],
+        'granularity_seconds':payload.granularity_seconds,
+        'lookback_days':payload.lookback_days,
+        'timezone_name':payload.timezone_name,
+        'duration_minutes':duration_minutes,
+        'source':'DERIV_PUBLIC_HISTORICAL_CANDLES',
+        'read_only':True,
+        'execution_allowed':False,
+    }
 
 
 class ManualSignalPreviewRequest(BaseModel):

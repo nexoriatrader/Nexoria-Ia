@@ -1566,6 +1566,14 @@ body:has(#dashboard:not(.hidden)) .nexora-logo-only .brand img{
 #dashboard.manual-dashboard .nx-panel-history{margin-top:12px}
 #dashboard.manual-dashboard #robotButton,#dashboard.manual-dashboard #nxNeoQuickStop{display:none!important}
 @media(max-width:650px){.operation-mode-options{grid-template-columns:1fr}.manual-signals-fields{grid-template-columns:1fr}.manual-capacity span:last-child{margin-left:0;width:100%}.manual-signals-head{align-items:flex-start}.manual-signals-card{padding:17px}}
+.cataloger-card{max-width:960px;margin-inline:auto}.cataloger-intro{max-width:660px;color:#a9bfd0;font-size:13px;line-height:1.65;margin:8px 0 20px}
+.cataloger-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}.cataloger-fields .field select{min-height:48px}
+.cataloger-action{width:100%;min-height:54px;margin-top:18px;font-size:14px}.cataloger-feedback{min-height:22px;margin-top:12px;color:#b9d0df;font-size:12px}
+.cataloger-results{max-width:960px;margin:15px auto 0}.cataloger-results-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:14px}.cataloger-results-head h2{font-size:19px}.cataloger-result-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.cataloger-result{border:1px solid #31546b;border-radius:14px;padding:14px;background:linear-gradient(145deg,#132b40,#0d1d2e)}.cataloger-result-top{display:flex;align-items:center;justify-content:space-between;gap:8px}.cataloger-result-time{font-size:19px;font-weight:900;color:#f4d28c}.cataloger-result-dir{border:1px solid #38725f;background:#12372e;color:#a4efd0;border-radius:999px;padding:5px 10px;font-size:11px;font-weight:900}.cataloger-result-dir.put{border-color:#73515a;background:#38252c;color:#ffc5c9}
+.cataloger-stats{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:11px}.cataloger-stat{border:1px solid #29455a;border-radius:10px;padding:9px;background:#0c1c2c}.cataloger-stat small{display:block;color:#9eb5c7;font-size:10px}.cataloger-stat strong{display:block;margin-top:3px;font-size:14px}.cataloger-export{width:100%;min-height:110px;margin-top:12px;border:1px solid #395a72;border-radius:12px;background:#081827;color:#e4eff7;padding:12px;font:12px/1.7 ui-monospace,SFMono-Regular,Consolas,monospace;resize:vertical}
+.cataloger-disclaimer{border-left:3px solid #d4aa55;background:#2b2a234d;border-radius:0 10px 10px 0;padding:12px;margin-top:14px;color:#c7c5b9;font-size:11px;line-height:1.6}.cataloger-empty{border:1px dashed #456076;border-radius:13px;padding:18px;color:#bdd1df;background:#0b1b2a}
+@media(max-width:600px){.cataloger-fields,.cataloger-result-grid{grid-template-columns:1fr}.cataloger-card{padding:17px}.cataloger-results-head{display:block}.cataloger-results-head .outline{margin-top:10px;width:100%}.nx-neo-mobile-nav{grid-template-columns:repeat(4,minmax(0,1fr))}}
 </style>
 </head>
 <body>
@@ -1579,6 +1587,7 @@ body:has(#dashboard:not(.hidden)) .nexora-logo-only .brand img{
   <button class="nav-link" data-view="robot-config" type="button" onclick="go('robot-config')">Configurar Robô</button>
   <a class="nav-link" href="/configuracao-educativa">Configuração educativa (6 etapas)</a>
   <button class="nav-link" data-view="results" type="button" onclick="go('results')">Resultados do Robô</button>
+  <button class="nav-link" data-view="cataloger" type="button" onclick="go('cataloger')">Catalogador</button>
   <a class="nav-link" href="/nexora2" aria-label="Abrir NEXORA 2.0: pesquisa e treinamento">NEXORA 2.0</a>
   <button class="nav-link" data-view="features" type="button" onclick="go('features')">Entenda as Funcionalidades</button>
   <button class="nav-link" data-view="strategies" type="button" onclick="go('strategies')">Conheça os Indicadores e Estratégias</button>
@@ -2018,10 +2027,45 @@ body:has(#dashboard:not(.hidden)) .nexora-logo-only .brand img{
   <nav class="nx-neo-mobile-nav" aria-label="Navegação rápida do painel">
     <button type="button" class="is-current" aria-current="page" onclick="go('dashboard')"><span aria-hidden="true">◫</span><small>Início</small></button>
     <button type="button" onclick="go('results')"><span aria-hidden="true">▥</span><small>Histórico</small></button>
+    <button type="button" onclick="go('cataloger')"><span aria-hidden="true">⌕</span><small>Catalogador</small></button>
     <button type="button" onclick="go('account')"><span aria-hidden="true">◉</span><small>Conta</small></button>
   </nav>
 
   </details>
+</section>
+<section id="cataloger" class="hidden" aria-labelledby="catalogerHeading">
+  <div class="section-heading">
+    <div><div class="eyebrow">NEXORA · PESQUISA HISTÓRICA</div><h1 id="catalogerHeading">Catalogador de Sinais</h1><p>Gere uma lista candidata em poucos passos, baseada em candles públicos da Deriv.</p></div>
+    <button class="outline" type="button" onclick="go('dashboard')">← PAINEL</button>
+  </div>
+  <div class="card cataloger-card">
+    <div class="surface-heading">Monte sua análise</div>
+    <p class="cataloger-intro">O Nexora procura direções que se repetiram no mesmo horário local e verifica o método em dados posteriores, sem os usar para escolher os candidatos. A estratégia é fixa nesta versão: Viés histórico por horário.</p>
+    <form id="catalogerForm" onsubmit="generateCataloger(event)">
+      <div class="cataloger-fields">
+        <div class="field"><label for="catalogerMarket">Mercado</label><select id="catalogerMarket" required>
+          <option value="derived">Derivados</option><option value="forex">Forex</option><option value="commodities">Matérias-primas</option><option value="stocks_indices">Ações e índices</option>
+        </select></div>
+        <div class="field"><label for="catalogerAsset">Ativo da Deriv</label><select id="catalogerAsset" required><option value="">Carregando ativos...</option></select></div>
+        <div class="field"><label for="catalogerGranularity">Duração e timeframe</label><select id="catalogerGranularity"><option value="900">M15 · 15 minutos</option><option value="300">M5 · 5 minutos</option></select></div>
+        <div class="field"><label for="catalogerTargetDay">Quando usar a lista</label><select id="catalogerTargetDay"><option value="tomorrow">Amanhã</option><option value="today">Hoje</option></select></div>
+        <div class="field"><label for="catalogerLookback">Histórico</label><select id="catalogerLookback"><option value="60">60 dias (recomendado)</option><option value="30">30 dias</option></select></div>
+        <div class="field"><label for="catalogerTimezone">Fuso horário</label><select id="catalogerTimezone"><option value="America/Sao_Paulo">Brasília (UTC−03:00) · padrão</option></select></div>
+      </div>
+      <button id="catalogerGenerateButton" class="gold cataloger-action" type="submit">ANALISAR HISTÓRICO E GERAR LISTA</button>
+    </form>
+    <p id="catalogerFeedback" class="cataloger-feedback" role="status" aria-live="polite">Somente análise. Nenhum sinal será agendado ou executado por esta página.</p>
+  </div>
+  <section id="catalogerResults" class="card cataloger-results hidden" aria-labelledby="catalogerResultsHeading">
+    <div class="cataloger-results-head"><div><div class="eyebrow">LISTA CANDIDATA · SOMENTE LEITURA</div><h2 id="catalogerResultsHeading">Resultado da análise</h2><p id="catalogerSummary" class="helper"></p></div><button class="outline" type="button" onclick="copyCatalogerList()">COPIAR PARA NEXORA MANUAL</button></div>
+    <p id="catalogerNote" class="muted" role="status"></p>
+    <div id="catalogerSignalCards" class="cataloger-result-grid" aria-live="polite"></div>
+    <div id="catalogerNoSignals" class="cataloger-empty hidden" role="status"></div>
+    <label class="helper" for="catalogerExportText">Lista no formato compatível com o Nexora Manual:</label>
+    <textarea id="catalogerExportText" class="cataloger-export" rows="5" readonly aria-label="Lista formatada para copiar"></textarea>
+    <p id="catalogerCopyStatus" class="helper" role="status" aria-live="polite"></p>
+    <p class="cataloger-disclaimer">As taxas são resultados observados em candles históricos, não uma probabilidade calibrada nem retorno financeiro de contrato. Desempenho passado não garante resultados futuros. Confira ativo, horário, payout e regras da Deriv antes de usar a lista.</p>
+  </section>
 </section>
 <section id="robot-config" class="hidden">
   <div class="section-heading robot-config-page-heading">
@@ -2340,6 +2384,8 @@ body:has(#dashboard:not(.hidden)) .nexora-logo-only .brand img{
 <script>
 const $=id=>document.getElementById(id);
 let activePage='welcome',demoOrders=[],demoBalance=null,refreshTimer=null,resultsRefreshTimer=null,resultsRequestBusy=false,lastRequestKey=null,robotRunning=false,robotStatusConfirmed=false,robotConfiguredMode='demo';
+let catalogerAssetsByMarket={};
+let catalogerAssetRequest=0;
 let dashboardStatusSequence=0;
 let accessExpiresMs=null,accessServerDelta=0,accessMode='UNKNOWN',accessTrialSeconds=24*3600;
 const durationString=seconds=>{
@@ -2438,7 +2484,7 @@ async function saveOnboarding(event){
  }catch(e){$('setupFeedback').textContent='Não foi possível salvar: '+e.message;fail('')}
  finally{btn.disabled=false}
 }
-function page(v){document.body.classList.toggle('marketing-mode',v==='welcome');$('primaryNavigation').classList.toggle('hidden',v==='welcome'||v==='setup');for(const name of ['welcome','setup','dashboard','robot-config','results','settings','account','features','strategies'])$(name).classList.toggle('hidden',name!==v);activePage=v;document.querySelectorAll('.nav-link[data-view]').forEach(b=>b.classList.toggle('active',b.dataset.view===v))}
+function page(v){document.body.classList.toggle('marketing-mode',v==='welcome');$('primaryNavigation').classList.toggle('hidden',v==='welcome'||v==='setup');for(const name of ['welcome','setup','dashboard','robot-config','results','settings','account','features','strategies','cataloger'])$(name).classList.toggle('hidden',name!==v);activePage=v;document.querySelectorAll('.nav-link[data-view]').forEach(b=>b.classList.toggle('active',b.dataset.view===v))}
 
 let dailyResultsLoading=false;
 async function loadDailyResults(){
@@ -2503,9 +2549,81 @@ function updateResultsPolling(){
    },activePage==='dashboard'?7000:3000);
  }
 }
-function go(v){page(v);updateResultsPolling();window.scrollTo({top:0,behavior:'smooth'});if(v==='setup')loadOnboarding();if(v==='dashboard'){refreshDashboard();loadDemoOrders().catch(()=>{});loadDailyResults().catch(()=>{});loadManualSignalsState();}if(v==='robot-config'){initAutomationWizard();setAutomationWizardStep(operationMode()==='manual'?autoWizardStep:2);loadAutomationProfile();}if(v==='results'){loadDemoOrders();}if(v==='account'){loadRobotAccess();loadBillingPlans()}if(v==='settings')loadSettings()}
+function go(v){page(v);updateResultsPolling();window.scrollTo({top:0,behavior:'smooth'});if(v==='setup')loadOnboarding();if(v==='dashboard'){refreshDashboard();loadDemoOrders().catch(()=>{});loadDailyResults().catch(()=>{});loadManualSignalsState();}if(v==='robot-config'){initAutomationWizard();setAutomationWizardStep(operationMode()==='manual'?autoWizardStep:2);loadAutomationProfile();}if(v==='results'){loadDemoOrders();}if(v==='cataloger')loadCatalogerAssets();if(v==='account'){loadRobotAccess();loadBillingPlans()}if(v==='settings')loadSettings()}
 function fail(msg){$('error').textContent=msg||''}
 async function req(path,opts={}){const r=await fetch(path,{credentials:'same-origin',...opts});let data;try{data=await r.json()}catch{throw Error('Resposta inválida do servidor')}if(!r.ok)throw Error(data.detail||'Falha na conexão');return data}
+async function loadCatalogerAssets(force=false){
+ const market=$('catalogerMarket').value,assetSelect=$('catalogerAsset'),requestId=++catalogerAssetRequest;
+ if(!force&&catalogerAssetsByMarket[market]){fillCatalogerAssets(catalogerAssetsByMarket[market]);return}
+ assetSelect.replaceChildren(new Option('Carregando ativos da Deriv...',''));
+ $('catalogerFeedback').textContent='Consultando os ativos disponíveis no catálogo Deriv...';
+ try{
+  const data=await req('/api/cataloger/assets?market='+encodeURIComponent(market));
+  if(requestId!==catalogerAssetRequest||$('catalogerMarket').value!==market)return;
+  catalogerAssetsByMarket[market]=data.items||[];
+  fillCatalogerAssets(catalogerAssetsByMarket[market]);
+  const timezoneSelect=$('catalogerTimezone'),selected=timezoneSelect.value;
+  timezoneSelect.replaceChildren();
+  for(const [value,label] of Object.entries(data.timezones||{})){
+   const option=document.createElement('option');option.value=value;option.textContent=label;timezoneSelect.appendChild(option);
+  }
+  timezoneSelect.value=selected&&data.timezones?.[selected]?selected:'America/Sao_Paulo';
+  $('catalogerFeedback').textContent='Ativos atualizados pela Deriv. A análise não agenda nem executa operações.';
+ }catch(error){if(requestId===catalogerAssetRequest){assetSelect.replaceChildren(new Option('Não foi possível carregar ativos',''));$('catalogerFeedback').textContent='Não foi possível carregar o catálogo Deriv: '+error.message;}}
+}
+function fillCatalogerAssets(items){
+ const select=$('catalogerAsset'),previous=select.value;select.replaceChildren();
+ if(!items.length){select.appendChild(new Option('Nenhum ativo disponível',''));return}
+ for(const item of items){const option=document.createElement('option');option.value=item.symbol;option.textContent=item.name+' · '+item.symbol;select.appendChild(option)}
+ if(items.some(item=>item.symbol===previous))select.value=previous;
+}
+function percent(value){const number=Number(value);return Number.isFinite(number)?(number*100).toLocaleString('pt-BR',{minimumFractionDigits:1,maximumFractionDigits:1})+'%':'—'}
+function renderCatalogerResults(data){
+ const signals=Array.isArray(data.signals)?data.signals:[],container=$('catalogerSignalCards');container.replaceChildren();
+ $('catalogerResults').classList.remove('hidden');
+ $('catalogerSummary').textContent=`${data.asset_name||data.symbol} · ${data.target_date||''} · M${data.duration_minutes} · ${data.history_days||0} dias observados · ${data.history_candles||0} candles · ${data.slots_tested||0} horários avaliados`;
+ $('catalogerNote').textContent=data.note||'';
+ $('catalogerNoSignals').classList.toggle('hidden',signals.length>0);
+ $('catalogerNoSignals').textContent=signals.length?'':(data.history_days<20?'Ainda não há dados suficientes para separar treino e validação. Tente 60 dias ou outro ativo.':'Nenhum horário passou pelos critérios mínimos da análise. Tente outro timeframe ou período, sem interpretar a ausência como recomendação de operar.');
+ for(const signal of signals){
+  const card=document.createElement('article');card.className='cataloger-result';
+  const top=document.createElement('div');top.className='cataloger-result-top';
+  const time=document.createElement('strong');time.className='cataloger-result-time';time.textContent=signal.time;
+  const dir=document.createElement('span');dir.className='cataloger-result-dir'+(signal.direction==='PUT'?' put':'');dir.textContent=signal.direction;
+  top.append(time,dir);card.appendChild(top);
+  const stats=document.createElement('div');stats.className='cataloger-stats';
+  const values=[
+   ['Treino histórico',`${signal.train_hits}/${signal.train_samples} · ${percent(signal.train_rate)}`],
+   ['Validação walk-forward',`${signal.walk_forward_hits}/${signal.walk_forward_samples} · ${percent(signal.walk_forward_rate)}`],
+   ['Amostras totais do horário',String(signal.historical_samples)],
+   ['Ativo',`${signal.asset_name||signal.symbol} · M${signal.duration_minutes}`],
+  ];
+  for(const [label,value] of values){const stat=document.createElement('div');stat.className='cataloger-stat';const small=document.createElement('small');small.textContent=label;const strong=document.createElement('strong');strong.textContent=value;stat.append(small,strong);stats.appendChild(stat)}
+  card.appendChild(stats);container.appendChild(card);
+ }
+ $('catalogerExportText').value=signals.map(signal=>signal.formatted).join('\n');
+ $('catalogerCopyStatus').textContent=signals.length?'Revise os horários e as métricas antes de copiar. A lista não será agendada automaticamente.':'';
+}
+async function generateCataloger(event){
+ event.preventDefault();const button=$('catalogerGenerateButton');button.disabled=true;
+ $('catalogerFeedback').textContent='Buscando candles públicos e validando os horários…';$('catalogerResults').classList.add('hidden');
+ const controller=new AbortController(),timeout=setTimeout(()=>controller.abort(),90000);
+ try{
+  const data=await req('/api/cataloger/generate',{method:'POST',headers:{'Content-Type':'application/json'},signal:controller.signal,body:JSON.stringify({
+   market:$('catalogerMarket').value,symbol:$('catalogerAsset').value,
+   granularity_seconds:Number($('catalogerGranularity').value),lookback_days:Number($('catalogerLookback').value),
+   target_day:$('catalogerTargetDay').value,timezone_name:$('catalogerTimezone').value,
+  })});
+  renderCatalogerResults(data);$('catalogerFeedback').textContent='Análise concluída. Confira a amostra e a validação antes de usar qualquer lista.';
+ }catch(error){$('catalogerFeedback').textContent=error.name==='AbortError'?'A consulta demorou mais que o esperado. Tente novamente em instantes.':'Não foi possível gerar a lista: '+error.message;}
+ finally{clearTimeout(timeout);button.disabled=false;}
+}
+async function copyCatalogerList(){
+ const text=$('catalogerExportText').value;if(!text){$('catalogerCopyStatus').textContent='Não há sinais para copiar.';return}
+ try{await navigator.clipboard.writeText(text);$('catalogerCopyStatus').textContent='Lista copiada. Cole-a na prévia do Nexora Manual e confira os sinais antes de confirmar.';}
+ catch{$('catalogerExportText').focus();$('catalogerExportText').select();$('catalogerCopyStatus').textContent='Selecione e copie o texto da lista; o navegador não autorizou a cópia automática.';}
+}
+document.getElementById('catalogerMarket').addEventListener('change',()=>loadCatalogerAssets(true));
 async function refreshLandingOffer(){
   // Public server policy is authoritative; the 24h HTML is only a fallback.
   try{
