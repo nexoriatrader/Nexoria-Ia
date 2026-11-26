@@ -98,7 +98,7 @@ def test_completed_manual_list_can_be_turned_off_before_switching_to_strategies(
     try:
         state=client.get('/api/manual-signals/status').json()
         assert not state['running'] and state['persisted_status']=='COMPLETED'
-        assert state['pending_count']==0 and state['signals'][0]['status']=='EXECUTED'
+        assert state['pending_count']==0 and state['signals']==[]
         stopped=client.post('/api/autopilot/stop')
         assert stopped.status_code==200 and stopped.json()['persisted_status']=='PAUSED'
         assert 'Robô Manual desligado' in stopped.json()['message']
@@ -237,3 +237,190 @@ def test_real_manual_dispatch_never_calls_strategy_scanner(api,monkeypatch):
         assert real_runtime.last_scan.get(uid)==last_scan_before
     finally:
         real_runtime.running.discard(uid)
+
+
+@pytest.mark.parametrize('account_mode', ['demo','real'])
+def test_manual_exhausted_list_turns_robot_off_and_hides_signal_without_touching_ledger(api,account_mode):
+    client,factory=api;sid,uid=add_manual_user(factory,account_mode=account_mode)
+    client.cookies.set('nexora_sid',sid)
+    now=datetime.now(timezone.utc)
+    with factory() as s:
+        run=db.ManualSignalRun(user_id=uid,session_number=1,status='RUNNING',
+            account_mode=account_mode,real_account_id='R9001' if account_mode=='real' else None)
+        if account_mode=='demo':
+            order=db.DemoOrder(user_id=uid,request_key='manual-final-demo-order',active_slot=uid,
+                state='CONFIRMED',contract_id='99001',symbol='frxEURUSD',direction='CALL',
+                duration_minutes=15,stake='2.00')
+        else:
+            order=db.RealOrder(user_id=uid,account_id='R9001',request_key='manual-final-real-order',
+                active_slot='R9001',state='CONFIRMED',contract_id='99002',symbol='frxEURUSD',
+                direction='CALL',duration_minutes=15,stake='2.00',currency='USD')
+            s.add(db.RealRobotConsent(user_id=uid,account_id='R9001',max_stake='2.00',stop_loss='10.00'))
+        s.add_all([run,order]);s.flush()
+        s.add(db.ManualSignal(user_id=uid,session_number=1,capacity_slot=None,line_number=1,
+            raw_line='M15 EURUSD 19:00 CALL',market='forex',timezone_name='UTC',
+            local_date=now.date().isoformat(),local_time='19:00',scheduled_at=now,
+            symbol='frxEURUSD',direction='CALL',duration_minutes=15,status='EXECUTED',
+            request_key='manual-final-signal-'+account_mode,ledger_mode=account_mode,
+            ledger_order_id=order.id))
+        s.commit()
+    if account_mode=='demo':main.autopilot_enabled.add(uid)
+    else:real_runtime.running.add(uid)
+    try:
+        asyncio.run(main.reconcile_manual_lifecycle_once())
+        with factory() as s:
+            run=s.get(db.ManualSignalRun,uid)
+            order=(s.query(db.DemoOrder).one() if account_mode=='demo' else s.query(db.RealOrder).one())
+            assert run.status=='COMPLETED'
+            assert 'automaticamente' in run.pause_reason
+            assert order.state=='CONFIRMED'  # accepted contract remains untouched for Deriv reconciliation
+        state=client.get('/api/manual-signals/status').json()
+        assert state['persisted_status']=='COMPLETED' and state['list_completed']
+        assert state['signals']==[] and state['pending_count']==0
+        assert uid not in (main.autopilot_enabled if account_mode=='demo' else real_runtime.running)
+    finally:
+        main.autopilot_enabled.discard(uid);real_runtime.running.discard(uid)
+
+
+@pytest.mark.parametrize('account_mode', ['demo','real'])
+def test_manual_cancel_waits_for_official_order_settlement_then_cancels_future_rows(api,account_mode):
+    client,factory=api;sid,uid=add_manual_user(factory,account_mode=account_mode)
+    client.cookies.set('nexora_sid',sid)
+    now=datetime.now(timezone.utc)
+    with factory() as s:
+        run=db.ManualSignalRun(user_id=uid,session_number=1,status='RUNNING',
+            account_mode=account_mode,real_account_id='R9001' if account_mode=='real' else None)
+        if account_mode=='demo':
+            order=db.DemoOrder(user_id=uid,request_key='manual-current-demo-order',active_slot=uid,
+                state='CONFIRMED',contract_id='99101',symbol='frxEURUSD',direction='CALL',
+                duration_minutes=15,stake='2.00')
+        else:
+            order=db.RealOrder(user_id=uid,account_id='R9001',request_key='manual-current-real-order',
+                active_slot='R9001',state='CONFIRMED',contract_id='99102',symbol='frxEURUSD',
+                direction='CALL',duration_minutes=15,stake='2.00',currency='USD')
+            s.add(db.RealRobotConsent(user_id=uid,account_id='R9001',max_stake='2.00',stop_loss='10.00'))
+        s.add_all([run,order]);s.flush()
+        s.add_all([
+            db.ManualSignal(user_id=uid,session_number=1,capacity_slot=None,line_number=1,
+                raw_line='M15 EURUSD 19:00 CALL',market='forex',timezone_name='UTC',
+                local_date=now.date().isoformat(),local_time='19:00',scheduled_at=now,
+                symbol='frxEURUSD',direction='CALL',duration_minutes=15,status='EXECUTED',
+                request_key='manual-current-signal-'+account_mode,ledger_mode=account_mode,
+                ledger_order_id=order.id),
+            db.ManualSignal(user_id=uid,session_number=1,capacity_slot=1,line_number=2,
+                raw_line='M15 EURUSD 19:15 PUT',market='forex',timezone_name='UTC',
+                local_date=now.date().isoformat(),local_time='19:15',scheduled_at=now+timedelta(minutes=15),
+                symbol='frxEURUSD',direction='PUT',duration_minutes=15,status='SCHEDULED',
+                request_key='manual-future-signal-'+account_mode),
+        ])
+        s.commit()
+    if account_mode=='demo':main.autopilot_enabled.add(uid)
+    else:real_runtime.running.add(uid)
+    try:
+        response=client.post('/api/manual-signals/cancel')
+        assert response.status_code==200 and response.json()['cancel_pending']
+        with factory() as s:
+            run=s.get(db.ManualSignalRun,uid)
+            current=s.query(db.ManualSignal).filter_by(status='EXECUTED').one()
+            future=s.query(db.ManualSignal).filter_by(status='SCHEDULED').one()
+            order=(s.query(db.DemoOrder).one() if account_mode=='demo' else s.query(db.RealOrder).one())
+            assert run.status=='CANCELLING'
+            assert future.status=='SCHEDULED' and current.status=='EXECUTED'
+            assert order.state=='CONFIRMED'
+        # A worker restart must preserve the blocking cancellation state; an
+        # accepted but unsettled official-ledger contract is not cancellable.
+        main.pause_manual_sessions_after_restart()
+        asyncio.run(main.reconcile_manual_lifecycle_once())
+        with factory() as s:
+            assert s.get(db.ManualSignalRun,uid).status=='CANCELLING'
+            assert s.query(db.ManualSignal).filter_by(status='SCHEDULED').count()==1
+        # The queue action never cancels a purchased contract. Simulate the
+        # official settlement receipt; lifecycle reconciliation cancels only future rows.
+        with factory() as s:
+            order=(s.query(db.DemoOrder).one() if account_mode=='demo' else s.query(db.RealOrder).one())
+            order.state='SETTLED';order.pnl='0.25';s.commit()
+        asyncio.run(main.reconcile_manual_lifecycle_once())
+        with factory() as s:
+            run=s.get(db.ManualSignalRun,uid)
+            statuses={row.status for row in s.query(db.ManualSignal).all()}
+            order=(s.query(db.DemoOrder).one() if account_mode=='demo' else s.query(db.RealOrder).one())
+            assert run.status=='COMPLETED'
+            assert statuses=={'EXECUTED','CANCELLED'}
+            assert order.state=='SETTLED' and order.pnl=='0.25'
+        state=client.get('/api/manual-signals/status').json()
+        assert state['signals']==[] and state['list_completed']
+    finally:
+        main.autopilot_enabled.discard(uid);real_runtime.running.discard(uid)
+
+
+def test_manual_unknown_attempt_without_official_ledger_blocks_descheduling(api):
+    client,factory=api;sid,uid=add_manual_user(factory);client.cookies.set('nexora_sid',sid)
+    now=datetime.now(timezone.utc)
+    with factory() as s:
+        s.add(db.ManualSignalRun(user_id=uid,session_number=1,status='RUNNING',account_mode='demo'))
+        s.add_all([
+            db.ManualSignal(user_id=uid,session_number=1,capacity_slot=1,line_number=1,
+                raw_line='M15 EURUSD 19:00 CALL',market='forex',timezone_name='UTC',
+                local_date=now.date().isoformat(),local_time='19:00',scheduled_at=now,
+                symbol='frxEURUSD',direction='CALL',duration_minutes=15,status='UNKNOWN',
+                request_key='unknown-without-ledger'),
+            db.ManualSignal(user_id=uid,session_number=1,capacity_slot=2,line_number=2,
+                raw_line='M15 EURUSD 19:15 PUT',market='forex',timezone_name='UTC',
+                local_date=now.date().isoformat(),local_time='19:15',scheduled_at=now+timedelta(minutes=15),
+                symbol='frxEURUSD',direction='PUT',duration_minutes=15,status='SCHEDULED',
+                request_key='future-behind-unknown'),
+        ])
+        s.commit()
+    try:
+        response=client.post('/api/manual-signals/cancel')
+        assert response.status_code==200 and response.json()['cancel_pending']
+        with factory() as s:
+            run=s.get(db.ManualSignalRun,uid)
+            assert run.status=='CANCELLING'
+            assert {row.status for row in s.query(db.ManualSignal).all()}=={'UNKNOWN','SCHEDULED'}
+    finally:
+        main.autopilot_enabled.discard(uid)
+
+
+def test_demo_settlement_resolves_unknown_manual_signal_after_restart(api,monkeypatch):
+    client,factory=api;sid,uid=add_manual_user(factory);client.cookies.set('nexora_sid',sid)
+    now=datetime.now(timezone.utc)
+    with factory() as s:
+        run=db.ManualSignalRun(user_id=uid,session_number=1,status='CANCELLING',account_mode='demo')
+        order=db.DemoOrder(user_id=uid,request_key='manual-unknown-official-settlement',active_slot=uid,
+            state='UNKNOWN',contract_id='99201',symbol='frxEURUSD',direction='CALL',
+            duration_minutes=15,stake='2.00')
+        s.add_all([run,order]);s.flush()
+        s.add_all([
+            db.ManualSignal(user_id=uid,session_number=1,capacity_slot=1,line_number=1,
+                raw_line='M15 EURUSD 19:00 CALL',market='forex',timezone_name='UTC',
+                local_date=now.date().isoformat(),local_time='19:00',scheduled_at=now,
+                symbol='frxEURUSD',direction='CALL',duration_minutes=15,status='UNKNOWN',
+                request_key='manual-unknown-official-settlement',ledger_mode='demo',ledger_order_id=order.id),
+            db.ManualSignal(user_id=uid,session_number=1,capacity_slot=2,line_number=2,
+                raw_line='M15 EURUSD 19:15 PUT',market='forex',timezone_name='UTC',
+                local_date=now.date().isoformat(),local_time='19:15',scheduled_at=now+timedelta(minutes=15),
+                symbol='frxEURUSD',direction='PUT',duration_minutes=15,status='SCHEDULED',
+                request_key='manual-future-after-unknown-settlement'),
+        ])
+        order_id=order.id;s.commit()
+    monkeypatch.setattr(main,'demo_contract_status',AsyncMock(return_value={'contract':{
+        'contract_id':'99201','is_sold':1,'profit':'0.25','status':'won'}}))
+    try:
+        main.pause_manual_sessions_after_restart()
+        with factory() as s:
+            assert s.get(db.ManualSignalRun,uid).status=='CANCELLING'
+        asyncio.run(main._reconcile_one_order(order_id))
+        asyncio.run(main.reconcile_manual_lifecycle_once())
+        with factory() as s:
+            run=s.get(db.ManualSignalRun,uid)
+            order=s.get(db.DemoOrder,order_id)
+            statuses={row.status for row in s.query(db.ManualSignal).all()}
+            assert run.status=='COMPLETED'
+            assert order.state=='SETTLED' and order.pnl=='0.25'
+            assert statuses=={'COMPLETED','CANCELLED'}
+        state=client.get('/api/manual-signals/status').json()
+        assert state['list_completed'] and state['signals']==[] and state['pending_count']==0
+        main.demo_contract_status.assert_awaited_once_with('mock-token','V9001','99201')
+    finally:
+        main.autopilot_enabled.discard(uid)

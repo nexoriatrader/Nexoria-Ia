@@ -34,8 +34,9 @@ def test_restart_is_detected_not_automatically_rearmed(tmp_path,monkeypatch):
     try:
         assert client.post('/api/autopilot/start',json={'confirm':'START_DEMO_AUTOPILOT'}).status_code==200
         assert uid in main.autopilot_enabled
-        main.autopilot_enabled.clear()  # New worker after a Render deploy.
+        main.autopilot_enabled.clear()
         main.autopilot_reasons.clear()
+        main.pause_demo_autopilot_after_restart()  # Render startup revokes durable consent.
         status=client.get('/api/status')
         assert status.status_code==200
         assert status.json()['running'] is False

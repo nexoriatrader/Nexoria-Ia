@@ -1830,7 +1830,7 @@ body:has(#dashboard:not(.hidden)) .nexora-logo-only .brand img{
     <div class="manual-preview-actions"><button id="manualPreviewButton" class="outline" type="button" onclick="previewManualSignals()">VALIDAR E VER PRÉVIA</button></div>
     <div id="manualPreviewResult" class="manual-preview-result" role="status" aria-live="polite">A prévia não envia nem executa ordens.</div>
     <label class="manual-confirm-line"><input id="manualScheduleConfirm" type="checkbox" disabled> <span>Confirmo o agendamento explícito dos sinais válidos exibidos acima. Entendo que isso ligará a modalidade Manual e autorizará tentativas na conta e com as proteções salvas.</span></label>
-    <div class="manual-signal-actions"><button id="manualScheduleButton" class="gold" type="button" onclick="scheduleManualSignals()" disabled>CONFIRMAR E AGENDAR VÁLIDOS</button><button id="manualActivateButton" class="outline" type="button" onclick="activateManualSignals()" hidden>REATIVAR EXECUÇÃO MANUAL</button><button id="manualPauseButton" class="outline" type="button" onclick="pauseManualSignals()" hidden>PAUSAR · PRESERVAR FILA</button></div>
+    <div class="manual-signal-actions"><button id="manualScheduleButton" class="gold" type="button" onclick="scheduleManualSignals()" disabled>CONFIRMAR E AGENDAR VÁLIDOS</button><button id="manualPauseButton" class="outline" type="button" onclick="pauseManualSignals()" hidden>DESLIGAR ROBÔ</button><button id="manualCancelButton" class="outline" type="button" onclick="cancelManualSignals()" hidden>DESAGENDAR LISTA</button></div>
     <p id="manualSignalsFeedback" class="helper" role="status" aria-live="polite">Nenhuma compra é enviada pela prévia ou pelo agendamento.</p>
     <h3 class="manual-queue-title">Fila e estado persistidos</h3><div id="manualQueueList" class="manual-queue-list"><p class="muted">Consultando fila Manual…</p></div>
   </section>
@@ -4241,7 +4241,7 @@ async function saveAutomationProfile(){
  }catch(e){automationProfileSaved=false;feedback.textContent='Não foi possível concluir a configuração: '+e.message}
  finally{button.disabled=false}
 }
-const MANUAL_SIGNAL_API={state:'/api/manual-signals/status',preview:'/api/manual-signals/preview',confirm:'/api/manual-signals/confirm'};
+const MANUAL_SIGNAL_API={state:'/api/manual-signals/status',preview:'/api/manual-signals/preview',confirm:'/api/manual-signals/confirm',cancel:'/api/manual-signals/cancel'};
 let manualSignalsProfile=null,manualSignalsPreview=null,manualSignalsCurrentState=null,manualSignalsBusy=false;
 const MANUAL_IDEMPOTENCY_STORAGE_KEY='nexora.manual.confirmation-keys.v1';
 async function manualPayloadFingerprint(payload){
@@ -4286,19 +4286,23 @@ function renderManualQueue(state){
  const capacity=Math.max(0,Math.min(100,Number(state?.capacity_remaining??state?.remaining_capacity??(100-pending))));
  $('manualCapacityValue').textContent=pending+' pendente(s) · '+capacity+' vaga(s) disponível(is)';
  const run=String(state?.persisted_status||state?.status||state?.run_status||'IDLE').toUpperCase();
- const completedStatuses=new Set(['COMPLETED','EXECUTED','EXPIRED','FAILED','REJECTED','CANCELLED','SKIPPED']);
- const listComplete=rows.length>0&&pending===0&&rows.every(x=>completedStatuses.has(String(x.status||'').toUpperCase()));
+ const listComplete=Boolean(state?.list_completed||run==='COMPLETED');
+ const cancelPending=Boolean(state?.cancel_pending||run==='CANCELLING');
  const runtimeActive=Boolean(state?.running||state?.active);
- const interrupted=Boolean(state?.interrupted_after_restart||state?.requires_reactivation||run==='INTERRUPTED'||(Number(state?.session_number)>0&&run!=='RUNNING'&&run!=='COMPLETED'&&!runtimeActive));
  const active=Boolean(runtimeActive||run==='RUNNING');
- const stopCompleted=listComplete&&Number(state?.session_number)>0&&run!=='PAUSED';
- const badge=$('manualSignalsRunBadge');badge.dataset.state=interrupted?'interrupted':active?'active':'idle';
- badge.textContent=interrupted?'PAUSADO · REATIVE':listComplete?(active?'LISTA CONCLUÍDA · ROBÔ LIGADO':'LISTA CONCLUÍDA'):active?'MANUAL ATIVO':'PAUSADO';
- $('manualPauseButton').hidden=!(active||stopCompleted);$('manualPauseButton').textContent='DESLIGAR ROBÔ';
- $('manualActivateButton').hidden=active||stopCompleted||(!interrupted&&Number(state?.session_number)===0&&!rows.length&&pending===0);
- $('manualActivateButton').textContent=interrupted?'REATIVAR EXECUÇÃO PAUSADA':'ATIVAR EXECUÇÃO MANUAL';
- $('manualPauseButton').disabled=manualSignalsBusy;$('manualActivateButton').disabled=manualSignalsBusy;
- if(!rows.length){const empty=document.createElement('p');empty.className='muted';empty.textContent=pending?'Há sinais pendentes; detalhes ainda não foram fornecidos pelo servidor.':'Nenhum sinal na fila persistida.';list.append(empty);return}
+ const badge=$('manualSignalsRunBadge');badge.dataset.state=cancelPending?'interrupted':active?'active':'idle';
+ badge.textContent=cancelPending?'AGUARDANDO LIQUIDAÇÃO':listComplete?'LISTA CONCLUÍDA':active?'MANUAL ATIVO':'PAUSADO';
+ $('manualPauseButton').hidden=!active;$('manualPauseButton').textContent='DESLIGAR ROBÔ';
+ $('manualCancelButton').hidden=cancelPending||pending===0||listComplete;
+ $('manualPauseButton').disabled=manualSignalsBusy;$('manualCancelButton').disabled=manualSignalsBusy;
+ $('manualScheduleButton').disabled=Boolean(manualSignalsBusy||cancelPending||(!active&&pending>0)||!manualSignalsPreview||!$('manualScheduleConfirm').checked);
+ if(cancelPending&&state?.lifecycle_message)$('manualSignalsFeedback').textContent=state.lifecycle_message;
+ if(!rows.length){const empty=document.createElement('p');empty.className='muted';
+  if(cancelPending)empty.textContent='Desagendamento pendente; a operação atual continuará até a liquidação oficial.';
+  else if(listComplete&&String(state?.lifecycle_message||'').toLowerCase().includes('desagendada'))empty.textContent='Lista desagendada. Contratos e histórico oficial permanecem disponíveis em Resultados.';
+  else if(listComplete)empty.textContent='Lista concluída. Os resultados oficiais permanecem disponíveis na página Resultados.';
+  else empty.textContent=pending?'Há sinais pendentes; detalhes ainda não foram fornecidos pelo servidor.':'Nenhum sinal agendado ou em reconciliação.';
+  list.append(empty);return}
  rows.forEach(item=>{
   const row=document.createElement('article');row.className='manual-queue-row';
   const main=document.createElement('div'),title=document.createElement('strong'),detail=document.createElement('small'),status=document.createElement('em');
@@ -4358,7 +4362,7 @@ async function loadManualSignalsState(){
   catch(error){
    manualSignalsCurrentState=null;$('manualSignalsFeedback').textContent='Estado da fila não confirmado. Prévia permanece somente informativa; confirme o estado antes de qualquer ativação.';
    $('manualQueueList').textContent='Não foi possível consultar a fila persistida.';
-   $('manualScheduleButton').disabled=true;$('manualActivateButton').disabled=true;$('manualPauseButton').disabled=true;
+   $('manualScheduleButton').disabled=true;$('manualPauseButton').disabled=true;$('manualCancelButton').disabled=true;
   }
  }catch(error){
   // Profile read errors fail closed: no Manual action or broker request is offered.
@@ -4385,8 +4389,10 @@ async function scheduleManualSignals(){
  const account=manualSignalsProfile?.account_mode==='real'?'REAL · dinheiro da conta Deriv':'Treinamento · saldo fictício';
  const current=manualSignalsCurrentState||{};
  const active=Boolean(current.running||String(current.persisted_status||'').toUpperCase()==='RUNNING');
- const newSession=Number(current.session_number||0)===0;
- if(!active&&!newSession){$('manualSignalsFeedback').textContent='A fila está pausada. Use “Reativar execução pausada” e confirme antes de agendar novos sinais.';return}
+ const currentRun=String(current.persisted_status||'').toUpperCase();
+ const pending=Number(current.pending_count||0);
+ if(currentRun==='CANCELLING'){$('manualSignalsFeedback').textContent='O desagendamento está aguardando liquidação oficial; aguarde antes de iniciar outra lista.';return}
+ if(!active&&pending>0){$('manualSignalsFeedback').textContent='Há sinais pendentes em uma sessão pausada. Use “Desagendar lista” antes de enviar uma nova lista.';return}
  const consent=window.confirm((active?'Agendar ':'Ligar Nexora Manual e agendar ')+amount+' sinal(is) válido(s)?\n\nConta: '+account+'\nMercado: '+$('manualMarket').selectedOptions[0]?.textContent+'\nFuso: '+$('manualTimezone').value+'\n\nSomente sinais não vencidos serão tentados no minuto indicado.');
  if(!consent)return;
  manualSignalsBusy=true;const button=$('manualScheduleButton');button.disabled=true;$('manualSignalsFeedback').textContent='Registrando fila e ativação explícita…';
@@ -4416,16 +4422,16 @@ async function scheduleManualSignals(){
  }
  finally{manualSignalsBusy=false;button.disabled=!manualSignalsPreview||!$('manualScheduleConfirm').checked}
 }
-async function activateManualSignals(){
- if(manualSignalsBusy)return;
- const account=manualSignalsProfile?.account_mode==='real'?'Conta REAL · envolve dinheiro e risco de perda.':'Conta Treinamento · saldo fictício.';
- if(!window.confirm('Reativar explicitamente a execução Nexora Manual?\n\n'+account+'\nA fila persistida será mantida. Sinais cujo minuto já passou não serão recuperados.'))return;
- manualSignalsBusy=true;$('manualActivateButton').disabled=true;$('manualSignalsFeedback').textContent='Solicitando reativação explícita…';
+async function cancelManualSignals(){
+ if(manualSignalsBusy||!manualSignalsCurrentState)return;
+ if(!window.confirm('Desagendar os sinais restantes desta lista?\n\nNovas entradas serão bloqueadas. Se houver uma tentativa ou contrato em andamento/incerto, ele continuará sem interrupção e o restante só será cancelado após confirmação oficial da Deriv. Contratos e resultados já comprados não serão apagados.'))return;
+ manualSignalsBusy=true;$('manualCancelButton').disabled=true;$('manualSignalsFeedback').textContent='Solicitando desagendamento seguro; nenhuma operação já comprada será interrompida…';
  try{
-  const result=await req('/api/autopilot/start',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({confirm:manualSignalsProfile?.account_mode==='real'?'START_REAL_AUTOPILOT':'START_DEMO_AUTOPILOT'})});
-  $('manualSignalsFeedback').textContent=result.message||'Execução Manual reativada explicitamente. Fila pendente preservada.';await refreshManualSignalsState();
- }catch(error){$('manualSignalsFeedback').textContent='Reativação não confirmada: '+error.message}
- finally{manualSignalsBusy=false;$('manualActivateButton').disabled=false}
+  const result=await req(MANUAL_SIGNAL_API.cancel,{method:'POST'});
+  $('manualSignalsFeedback').textContent=result.message||'Desagendamento recebido; aguardando reconciliação oficial quando necessária.';
+  await refreshManualSignalsState();
+ }catch(error){$('manualSignalsFeedback').textContent='Não foi possível confirmar o desagendamento: '+error.message}
+ finally{manualSignalsBusy=false;$('manualCancelButton').disabled=false}
 }
 async function pauseManualSignals(){
  if(manualSignalsBusy)return;

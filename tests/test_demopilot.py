@@ -286,7 +286,7 @@ def test_reconciliation_prioritizes_recent_contracts(tmp_path,monkeypatch):
         cleanup(engine)
 
 
-def test_resume_consent_created_on_manual_start_and_cleared_on_stop(tmp_path,monkeypatch):
+def test_restart_revokes_consent_and_requires_explicit_activation(tmp_path,monkeypatch):
     client,factory,engine,uid=prepare(tmp_path,monkeypatch)
     try:
         assert client.post('/api/autopilot/start',json={'confirm':'START_DEMO_AUTOPILOT'}).status_code==200
@@ -294,16 +294,23 @@ def test_resume_consent_created_on_manual_start_and_cleared_on_stop(tmp_path,mon
             assert s.get(db.AutoPilotResumeConsent,uid) is not None
             original=s.get(db.RobotRun,uid).after_order_id
         main.autopilot_enabled.clear()  # simulate memory loss during restart
-        main.restore_demo_autopilot_consent()
-        assert uid in main.autopilot_enabled
+        main.autopilot_reasons.clear()
+        main.pause_demo_autopilot_after_restart()
+        assert uid not in main.autopilot_enabled
         with factory() as s:
             assert s.get(db.RobotRun,uid).after_order_id==original
+            assert s.get(db.AutoPilotResumeConsent,uid) is None
+        state=client.get('/api/status').json()
+        assert state['running'] is False
+        assert state['demo_run_intent'] is False
+        assert state['interrupted_after_restart'] is True
+        assert 'reative manualmente' in state['reason']
+        assert client.post('/api/autopilot/start',json={'confirm':'START_DEMO_AUTOPILOT'}).status_code==200
+        assert client.get('/api/status').json()['running'] is True
         assert client.post('/api/autopilot/stop').status_code==200
         with factory() as s:
             assert s.get(db.AutoPilotResumeConsent,uid) is None
-        main.autopilot_enabled.clear()
-        main.restore_demo_autopilot_consent()
-        assert uid not in main.autopilot_enabled
+            assert s.get(db.RobotRun,uid) is None
     finally: cleanup(engine)
 
 
@@ -313,12 +320,12 @@ def test_old_robot_run_does_not_imply_resume_consent(tmp_path,monkeypatch):
         with factory() as s:
             s.add(db.RobotRun(user_id=uid,after_order_id=0))
             s.commit()
-        main.restore_demo_autopilot_consent()
+        main.pause_demo_autopilot_after_restart()
         assert uid not in main.autopilot_enabled
     finally: cleanup(engine)
 
 
-def test_resume_rejects_unknown_order_and_revokes_consent(tmp_path,monkeypatch):
+def test_restart_requires_activation_and_explicit_start_blocks_unknown_order(tmp_path,monkeypatch):
     client,factory,engine,uid=prepare(tmp_path,monkeypatch)
     try:
         assert client.post('/api/autopilot/start',json={'confirm':'START_DEMO_AUTOPILOT'}).status_code==200
@@ -328,15 +335,16 @@ def test_resume_rejects_unknown_order_and_revokes_consent(tmp_path,monkeypatch):
                 duration_minutes=5,stake='2.00',active_slot=uid))
             s.commit()
         main.autopilot_enabled.clear()
-        main.restore_demo_autopilot_consent()
+        main.pause_demo_autopilot_after_restart()
         assert uid not in main.autopilot_enabled
         with factory() as s:
             assert s.get(db.AutoPilotResumeConsent,uid) is None
-        assert 'pendente ou incerto' in main.autopilot_reasons[uid]
+        assert client.post('/api/autopilot/start',json={'confirm':'START_DEMO_AUTOPILOT'}).status_code==409
+        assert uid not in main.autopilot_enabled
     finally: cleanup(engine)
 
 
-def test_resume_rejects_expired_session_and_revokes_consent(tmp_path,monkeypatch):
+def test_restart_revokes_consent_even_when_deriv_session_expired(tmp_path,monkeypatch):
     client,factory,engine,uid=prepare(tmp_path,monkeypatch)
     try:
         assert client.post('/api/autopilot/start',json={'confirm':'START_DEMO_AUTOPILOT'}).status_code==200
@@ -345,7 +353,7 @@ def test_resume_rejects_expired_session_and_revokes_consent(tmp_path,monkeypatch
             auth.expires_at=db.utcnow()-timedelta(minutes=2)
             s.commit()
         main.autopilot_enabled.clear()
-        main.restore_demo_autopilot_consent()
+        main.pause_demo_autopilot_after_restart()
         assert uid not in main.autopilot_enabled
         with factory() as s:
             assert s.get(db.AutoPilotResumeConsent,uid) is None
@@ -373,7 +381,7 @@ def test_stop_loss_halt_revokes_resume_consent(tmp_path,monkeypatch):
     finally: cleanup(engine)
 
 
-def test_resume_with_confirmed_contract_keeps_broker_buy_blocked(tmp_path,monkeypatch):
+def test_restart_requires_reactivation_and_confirmed_contract_blocks_duplicate_buy(tmp_path,monkeypatch):
     client,factory,engine,uid=prepare(tmp_path,monkeypatch)
     try:
         assert client.post('/api/autopilot/start',json={'confirm':'START_DEMO_AUTOPILOT'}).status_code==200
@@ -387,9 +395,8 @@ def test_resume_with_confirmed_contract_keeps_broker_buy_blocked(tmp_path,monkey
                 strategy='tendencia',direction='CALL',reason='historico oficial'))
             s.commit()
         main.autopilot_enabled.clear()
-        main.restore_demo_autopilot_consent()
-        # A confirmed contract may remain armed only while the normal loop
-        # waits for broker settlement and never buys a second one.
+        main.pause_demo_autopilot_after_restart()
+        assert uid not in main.autopilot_enabled
         broker=AsyncMock(side_effect=AssertionError('duplicate broker buy'))
         monkeypatch.setattr(main,'demo_buy',broker)
         monkeypatch.setattr(main,'market_connected',True)
@@ -397,6 +404,9 @@ def test_resume_with_confirmed_contract_keeps_broker_buy_blocked(tmp_path,monkey
         async def tick():
             main.market_last_tick=asyncio.get_running_loop().time()
             await main.autopilot_once()
+        asyncio.run(tick())
+        broker.assert_not_awaited()
+        assert client.post('/api/autopilot/start',json={'confirm':'START_DEMO_AUTOPILOT'}).status_code==200
         asyncio.run(tick())
         broker.assert_not_awaited()
         assert uid in main.autopilot_enabled

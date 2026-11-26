@@ -87,7 +87,7 @@ def test_reset_revokes_durable_resume_intent(tmp_path,monkeypatch):
         with factory() as s:
             assert s.get(db.RobotRun,uid) is None
             assert s.get(db.AutoPilotResumeConsent,uid) is None
-        main.restore_demo_autopilot_consent()
+        main.pause_demo_autopilot_after_restart()
         assert uid not in main.autopilot_enabled
     finally:
         cleanup(engine)

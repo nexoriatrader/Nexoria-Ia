@@ -235,6 +235,8 @@ async def _user_scan(uid):
                     reasons[uid]='Contrato REAL aberto ou incerto; aguardando confirmação';return
                 sess.expunge(user);sess.expunge(profile);sess.expunge(consent)
                 manual_snapshot=(user,profile,consent,token)
+                # _user_scan already holds user_lock(uid); do not acquire the
+                # non-reentrant lock again while dispatching the Manual signal.
                 await _manual_real_signal(uid,*manual_snapshot)
                 return
             else:
