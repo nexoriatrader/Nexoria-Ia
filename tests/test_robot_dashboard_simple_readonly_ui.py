@@ -261,7 +261,7 @@ def test_new_studio_dashboard_is_a_real_visual_template():
     assert "Atividade do scanner" in panel
     assert "Sem leituras nesta visita" in panel
     assert "Detalhes e resultados" in panel
-    assert "nx-neo-mobile-nav" in panel
+    assert "nx-neo-mobile-nav" not in panel
     assert "Acompanhe o sistema com clareza" in panel
     assert "Sem dados simulados" in panel
     assert "robotEasyDiagnosis" in panel
@@ -274,10 +274,12 @@ def test_new_studio_dashboard_is_a_real_visual_template():
     assert "id=\"profitMetric\"" in panel
     assert "id=\"realProfitMetric\"" in panel
     assert "id=\"dashScanMonitor\"" in panel
-    assert "body:has(#dashboard:not(.hidden)) .primary-nav{display:none}" in HTML
+    assert ".primary-nav{position:sticky;top:0" in HTML
+    assert "body:has(#dashboard:not(.hidden)) .primary-nav{display:none}" not in HTML
     assert "@media(max-width:640px)" in HTML
     assert "prefers-reduced-motion:reduce" in HTML
-    assert 'aria-label="Navegação rápida do painel"' in panel
+    assert 'aria-label="Navegação principal"' in HTML
+    assert 'aria-label="Navegação rápida do painel"' not in panel
     assert 'aria-label="Atualizar dados do painel"' in panel
     assert "function renderNxNeoScannerChart(status)" in HTML
     assert "renderNxNeoScannerChart(status);" in HTML

@@ -35,6 +35,7 @@ A saída deve poder ser copiada como linhas `M5 <ativo> HH:MM CALL/PUT` ou `M15 
 
 ## Interface e estilo
 Reutilizar o painel Nexora existente: cartões escuros em azul-marinho, bordas azul-petróleo, destaque dourado para ações principais, hierarquia tipográfica e componentes responsivos já presentes. O card prioriza estados legíveis, explicações por linha e confirmação inequívoca de conta REAL; não introduzir imagens ou dependências visuais novas.
+No painel mobile, manter a navegação principal sticky do topo visível e remover a barra inferior fixa atual que a substitui.
 
 ## Restrições materiais
 - Sem novas dependências externas e sem alteração destrutiva dos ledgers ou da agenda de estudo.

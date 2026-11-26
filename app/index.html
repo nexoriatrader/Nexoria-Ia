@@ -1034,11 +1034,8 @@ html,body{max-width:100%;overflow-x:clip}
 #dashboard .nx-neo-more-action{color:#88c5e5;font-size:11px}
 #dashboard .nx-neo-more[open]>summary{border-bottom:1px solid #2c5269;margin-bottom:14px}
 #dashboard .nx-neo-more>.dash-daily-card,#dashboard .nx-neo-more>.dash-realtime-card{border-radius:14px}
-#dashboard .nx-neo-mobile-nav{display:none}
 @media(max-width:900px){#dashboard .nx-neo-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}#dashboard .nx-neo-center{grid-template-columns:1fr}#dashboard .nx-neo-diagnosis strong{margin-top:18px}}
 @media(max-width:640px){
- body:has(#dashboard:not(.hidden)) .primary-nav{display:none}
- #dashboard.nx-neo-dashboard{padding-bottom:88px}
  #dashboard .nx-neo-top{align-items:flex-start;margin:7px 0 18px;gap:8px}
  #dashboard .nx-neo-title-block h1{font-size:30px}
  #dashboard .nx-neo-title-block p{font-size:11px}
@@ -1066,11 +1063,6 @@ html,body{max-width:100%;overflow-x:clip}
  #dashboard .dash-control-grid{grid-template-columns:1fr;gap:10px}
  #dashboard .dash-control-actions{grid-template-columns:1fr 1fr}
  #dashboard .dash-balance-grid{grid-template-columns:1fr 1fr}
- #dashboard .nx-neo-mobile-nav{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));position:fixed;z-index:40;bottom:9px;left:12px;right:12px;padding:7px;border-radius:17px;background:#0b2032f5;backdrop-filter:blur(18px);border:1px solid #345c72;box-shadow:0 13px 35px #02070dbd}
- #dashboard .nx-neo-mobile-nav button{display:flex;align-items:center;flex-direction:column;gap:2px;min-height:48px;border:0;border-radius:11px;background:transparent;color:#aac6d8;padding:5px 8px}
- #dashboard .nx-neo-mobile-nav button.is-current{background:#18475d;color:#bbf3ec}
- #dashboard .nx-neo-mobile-nav button>span{font-size:19px;line-height:1}
- #dashboard .nx-neo-mobile-nav button small{font-size:10px;font-weight:850}
 }
 @media(prefers-reduced-motion:reduce){#dashboard .nx-neo-chart-bars>span{transition:none}}
 </style>
@@ -1572,7 +1564,7 @@ body:has(#dashboard:not(.hidden)) .nexora-logo-only .brand img{
 .cataloger-result{border:1px solid #31546b;border-radius:14px;padding:14px;background:linear-gradient(145deg,#132b40,#0d1d2e)}.cataloger-result-top{display:flex;align-items:center;justify-content:space-between;gap:8px}.cataloger-result-time{font-size:19px;font-weight:900;color:#f4d28c}.cataloger-result-dir{border:1px solid #38725f;background:#12372e;color:#a4efd0;border-radius:999px;padding:5px 10px;font-size:11px;font-weight:900}.cataloger-result-dir.put{border-color:#73515a;background:#38252c;color:#ffc5c9}
 .cataloger-stats{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:11px}.cataloger-stat{border:1px solid #29455a;border-radius:10px;padding:9px;background:#0c1c2c}.cataloger-stat small{display:block;color:#9eb5c7;font-size:10px}.cataloger-stat strong{display:block;margin-top:3px;font-size:14px}.cataloger-export{width:100%;min-height:110px;margin-top:12px;border:1px solid #395a72;border-radius:12px;background:#081827;color:#e4eff7;padding:12px;font:12px/1.7 ui-monospace,SFMono-Regular,Consolas,monospace;resize:vertical}
 .cataloger-disclaimer{border-left:3px solid #d4aa55;background:#2b2a234d;border-radius:0 10px 10px 0;padding:12px;margin-top:14px;color:#c7c5b9;font-size:11px;line-height:1.6}.cataloger-empty{border:1px dashed #456076;border-radius:13px;padding:18px;color:#bdd1df;background:#0b1b2a}
-@media(max-width:600px){.cataloger-fields,.cataloger-result-grid{grid-template-columns:1fr}.cataloger-card{padding:17px}.cataloger-results-head{display:block}.cataloger-results-head .outline{margin-top:10px;width:100%}.nx-neo-mobile-nav{grid-template-columns:repeat(4,minmax(0,1fr))}}
+@media(max-width:600px){.cataloger-fields,.cataloger-result-grid{grid-template-columns:1fr}.cataloger-card{padding:17px}.cataloger-results-head{display:block}.cataloger-results-head .outline{margin-top:10px;width:100%}}
 </style>
 </head>
 <body>
@@ -2020,12 +2012,6 @@ body:has(#dashboard:not(.hidden)) .nexora-logo-only .brand img{
 
   </details>
   </details>
-  <nav class="nx-neo-mobile-nav" aria-label="Navegação rápida do painel">
-    <button type="button" class="is-current" aria-current="page" onclick="go('dashboard')"><span aria-hidden="true">◫</span><small>Início</small></button>
-    <button type="button" onclick="go('results')"><span aria-hidden="true">▥</span><small>Histórico</small></button>
-    <button type="button" onclick="go('cataloger')"><span aria-hidden="true">⌕</span><small>Catalogador</small></button>
-    <button type="button" onclick="go('account')"><span aria-hidden="true">◉</span><small>Conta</small></button>
-  </nav>
 </section>
 <section id="cataloger" class="hidden" aria-labelledby="catalogerHeading">
   <div class="section-heading">

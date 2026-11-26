@@ -1,59 +1,25 @@
-from html.parser import HTMLParser
 from pathlib import Path
 
 
 INDEX_HTML = Path(__file__).resolve().parents[1] / "app" / "index.html"
 
 
-class MobileNavigationParser(HTMLParser):
-    VOID_ELEMENTS = {
-        "area", "base", "br", "col", "embed", "hr", "img", "input",
-        "link", "meta", "param", "source", "track", "wbr",
-    }
-
-    def __init__(self):
-        super().__init__()
-        self.stack = []
-        self.ancestors = None
-        self.in_mobile_nav = False
-        self.button_count = 0
-
-    def handle_starttag(self, tag, attrs):
-        attributes = dict(attrs)
-        classes = set((attributes.get("class") or "").split())
-        if tag == "nav" and "nx-neo-mobile-nav" in classes:
-            self.ancestors = list(self.stack)
-            self.in_mobile_nav = True
-        elif self.in_mobile_nav and tag == "button":
-            self.button_count += 1
-
-        if tag not in self.VOID_ELEMENTS:
-            self.stack.append((tag, attributes))
-
-    def handle_endtag(self, tag):
-        for index in range(len(self.stack) - 1, -1, -1):
-            if self.stack[index][0] == tag:
-                del self.stack[index:]
-                break
-        if tag == "nav" and self.in_mobile_nav:
-            self.in_mobile_nav = False
-
-
-def test_dashboard_mobile_nav_is_visible_outside_collapsible_details():
-    parser = MobileNavigationParser()
-    parser.feed(INDEX_HTML.read_text())
-
-    assert parser.ancestors is not None
-    assert any(tag == "section" and attrs.get("id") == "dashboard"
-               for tag, attrs in parser.ancestors)
-    assert not any(tag == "details" for tag, _ in parser.ancestors)
-    assert parser.button_count == 4
-
-
-def test_dashboard_mobile_nav_uses_a_fixed_four_column_layout():
+def test_mobile_dashboard_keeps_the_primary_navigation_sticky_and_visible():
     html = INDEX_HTML.read_text()
 
-    assert (
-        "#dashboard .nx-neo-mobile-nav{display:grid;"
-        "grid-template-columns:repeat(4,minmax(0,1fr));position:fixed"
-    ) in html
+    assert '<nav id="primaryNavigation" class="primary-nav hidden" aria-label="Navegação principal">' in html
+    assert ".primary-nav{position:sticky;top:0" in html
+    assert "body:has(#dashboard:not(.hidden)) .primary-nav{display:none}" not in html
+    assert "$('primaryNavigation').classList.toggle('hidden',v==='welcome'||v==='setup')" in html
+    primary_nav = html.split('<nav id="primaryNavigation"', 1)[1].split("</nav>", 1)[0]
+    for view in ("account", "dashboard", "robot-config", "results", "cataloger"):
+        assert f'data-view="{view}"' in primary_nav
+    assert 'class="nav-link nav-broker-link"' in primary_nav
+
+
+def test_old_fixed_bottom_dashboard_navigation_is_removed():
+    html = INDEX_HTML.read_text()
+
+    assert "nx-neo-mobile-nav" not in html
+    assert 'aria-label="Navegação rápida do painel"' not in html
+    assert "padding-bottom:88px" not in html
