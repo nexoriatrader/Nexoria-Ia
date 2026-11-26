@@ -82,6 +82,40 @@ def test_manual_preview_and_status_require_authenticated_session(api):
     assert client.post('/api/manual-signals/confirm',json={'text':'','market':'forex','day':'today','idempotency_key':'manual-key-01'}).status_code==401
     assert client.get('/api/manual-signals/status').status_code==401
 
+def test_completed_manual_list_can_be_turned_off_before_switching_to_strategies(api,monkeypatch):
+    client,factory=api;sid,uid=add_manual_user(factory);client.cookies.set('nexora_sid',sid)
+    now=datetime.now(timezone.utc)
+    with factory() as s:
+        run=db.ManualSignalRun(user_id=uid,session_number=1,status='COMPLETED',account_mode='demo',completed_at=now)
+        signal=db.ManualSignal(user_id=uid,session_number=1,capacity_slot=None,line_number=1,
+            raw_line='M15 EURUSD 19:00 CALL',market='forex',timezone_name='UTC',
+            local_date=now.date().isoformat(),local_time='19:00',scheduled_at=now,
+            symbol='frxEURUSD',direction='CALL',duration_minutes=15,status='EXECUTED',
+            request_key='completed-manual-test',ledger_mode='demo')
+        s.add_all([run,signal]);s.commit()
+    # Simulate the stale in-memory state that can still block profile saves after the queue ends.
+    main.autopilot_enabled.add(uid)
+    try:
+        state=client.get('/api/manual-signals/status').json()
+        assert not state['running'] and state['persisted_status']=='COMPLETED'
+        assert state['pending_count']==0 and state['signals'][0]['status']=='EXECUTED'
+        stopped=client.post('/api/autopilot/stop')
+        assert stopped.status_code==200 and stopped.json()['persisted_status']=='PAUSED'
+        assert 'Robô Manual desligado' in stopped.json()['message']
+        assert uid not in main.autopilot_enabled
+        with factory() as s:
+            assert s.get(db.ManualSignalRun,uid).status=='PAUSED'
+            assert s.query(db.ManualSignal).one().status=='EXECUTED'
+        monkeypatch.setattr(main,'strategy_allowed',lambda *args:True)
+        monkeypatch.setattr(main,'featured_instruments_by_group',AsyncMock(return_value=[
+            {'symbol':'frxEURUSD','name':'EUR/USD','group':'forex'}]))
+        changed=client.post('/api/automation/profile',json={'operation_mode':'strategies',
+            'account_mode':'demo','market':'forex','symbols':['frxEURUSD'],
+            'strategy':'trend','expiry_minutes':15})
+        assert changed.status_code==200 and changed.json()['operation_mode']=='strategies'
+    finally:
+        main.autopilot_enabled.discard(uid)
+
 def test_real_manual_executor_does_not_call_broker_for_no_due_signals(api,monkeypatch):
     _,factory=api;_,uid=add_manual_user(factory,account_mode='real')
     with factory() as s:

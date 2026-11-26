@@ -4170,12 +4170,17 @@ function renderManualQueue(state){
  const pending=Number(state?.pending_count??state?.pending??rows.filter(x=>['SCHEDULED','QUEUED','CLAIMED','BUYING','UNKNOWN'].includes(String(x.status||'').toUpperCase())).length);
  const capacity=Math.max(0,Math.min(100,Number(state?.capacity_remaining??state?.remaining_capacity??(100-pending))));
  $('manualCapacityValue').textContent=pending+' pendente(s) · '+capacity+' vaga(s) disponível(is)';
- const run=String(state?.status||state?.run_status||'IDLE').toUpperCase();
- const interrupted=Boolean(state?.interrupted_after_restart||state?.requires_reactivation||run==='INTERRUPTED'||(Number(state?.session_number)>0&&run!=='RUNNING'&&!state?.running));
- const active=Boolean(state?.running||state?.active||run==='RUNNING');
+ const run=String(state?.persisted_status||state?.status||state?.run_status||'IDLE').toUpperCase();
+ const completedStatuses=new Set(['COMPLETED','EXECUTED','EXPIRED','FAILED','REJECTED','CANCELLED','SKIPPED']);
+ const listComplete=rows.length>0&&pending===0&&rows.every(x=>completedStatuses.has(String(x.status||'').toUpperCase()));
+ const runtimeActive=Boolean(state?.running||state?.active);
+ const interrupted=Boolean(state?.interrupted_after_restart||state?.requires_reactivation||run==='INTERRUPTED'||(Number(state?.session_number)>0&&run!=='RUNNING'&&run!=='COMPLETED'&&!runtimeActive));
+ const active=Boolean(runtimeActive||run==='RUNNING');
+ const stopCompleted=listComplete&&Number(state?.session_number)>0&&run!=='PAUSED';
  const badge=$('manualSignalsRunBadge');badge.dataset.state=interrupted?'interrupted':active?'active':'idle';
- badge.textContent=interrupted?'PAUSADO · REATIVE':active?'MANUAL ATIVO':'PAUSADO';
- $('manualPauseButton').hidden=!active;$('manualActivateButton').hidden=active||(!interrupted&&Number(state?.session_number)===0&&!rows.length&&pending===0);
+ badge.textContent=interrupted?'PAUSADO · REATIVE':listComplete?(active?'LISTA CONCLUÍDA · ROBÔ LIGADO':'LISTA CONCLUÍDA'):active?'MANUAL ATIVO':'PAUSADO';
+ $('manualPauseButton').hidden=!(active||stopCompleted);$('manualPauseButton').textContent='DESLIGAR ROBÔ';
+ $('manualActivateButton').hidden=active||stopCompleted||(!interrupted&&Number(state?.session_number)===0&&!rows.length&&pending===0);
  $('manualActivateButton').textContent=interrupted?'REATIVAR EXECUÇÃO PAUSADA':'ATIVAR EXECUÇÃO MANUAL';
  $('manualPauseButton').disabled=manualSignalsBusy;$('manualActivateButton').disabled=manualSignalsBusy;
  if(!rows.length){const empty=document.createElement('p');empty.className='muted';empty.textContent=pending?'Há sinais pendentes; detalhes ainda não foram fornecidos pelo servidor.':'Nenhum sinal na fila persistida.';list.append(empty);return}
@@ -4309,11 +4314,11 @@ async function activateManualSignals(){
 }
 async function pauseManualSignals(){
  if(manualSignalsBusy)return;
- if(!window.confirm('Pausar novas tentativas da Nexora Manual? Sinais pendentes serão preservados e não serão apagados.'))return;
- manualSignalsBusy=true;$('manualPauseButton').disabled=true;$('manualSignalsFeedback').textContent='Pausando novas tentativas sem apagar a fila…';
+ if(!window.confirm('Desligar o robô Nexora Manual? Sinais pendentes serão preservados na fila e contratos já enviados continuarão na Deriv; nada será apagado ou cancelado.'))return;
+ manualSignalsBusy=true;$('manualPauseButton').disabled=true;$('manualSignalsFeedback').textContent='Desligando o robô sem apagar a fila nem cancelar contratos…';
  try{
   const result=await req('/api/autopilot/stop',{method:'POST'});
-  $('manualSignalsFeedback').textContent=result.message||'Execução pausada. Os sinais pendentes permanecem na fila.';await refreshManualSignalsState();
+  $('manualSignalsFeedback').textContent=result.message||'Robô desligado. Os sinais pendentes permanecem na fila.';await refreshManualSignalsState();
  }catch(error){$('manualSignalsFeedback').textContent='Não foi possível confirmar a pausa: '+error.message}
  finally{manualSignalsBusy=false;$('manualPauseButton').disabled=false}
 }

@@ -2742,17 +2742,22 @@ async def autopilot_stop(request:Request,nexora_sid:str|None=Cookie(default=None
         profile=check.get(db.AutomationProfile,user.id)
         manual_mode=bool(profile and getattr(profile,'operation_mode','strategies')=='manual')
     if manual_mode:
-        if user.id in real_runtime.running:
+        if profile.account_mode=='real' or user.id in real_runtime.running:
             async with real_runtime.user_lock(user.id):
                 real_runtime.disarm_real(user.id,'Desligado manualmente; sinais futuros pausados e contratos REAL continuam em reconciliação')
+                autopilot_enabled.discard(user.id)
+                with db.SessionLocal() as sess:
+                    run=sess.get(db.ManualSignalRun,user.id)
+                    if run and run.status!='PAUSED':
+                        run.status='PAUSED';run.pause_reason='Desligado manualmente; sinais futuros preservados';run.paused_at=db.utcnow();sess.commit()
         else:
             async with autopilot_lock:
                 autopilot_enabled.discard(user.id)
                 with db.SessionLocal() as sess:
                     run=sess.get(db.ManualSignalRun,user.id)
-                    if run and run.status=='RUNNING':
+                    if run and run.status!='PAUSED':
                         run.status='PAUSED';run.pause_reason='Desligado manualmente; sinais futuros preservados';run.paused_at=db.utcnow();sess.commit()
-        return {'running':False,'operation_mode':'manual','persisted_status':'PAUSED','execution':'DERIV_REAL' if profile.account_mode=='real' else 'DERIV_DEMO_ONLY','real_orders_enabled':real_runtime.real_available()}
+        return {'running':False,'operation_mode':'manual','persisted_status':'PAUSED','execution':'DERIV_REAL' if profile.account_mode=='real' else 'DERIV_DEMO_ONLY','real_orders_enabled':real_runtime.real_available(),'message':'Robô Manual desligado. Sinais pendentes preservados; contratos já enviados continuam na Deriv.'}
     # Real execution is independently locked and cannot be confused with DEMO.
     if user.id in real_runtime.running:
         async with real_runtime.user_lock(user.id):

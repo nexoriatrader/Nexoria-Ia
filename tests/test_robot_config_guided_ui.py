@@ -235,6 +235,12 @@ def test_manual_signal_card_uses_readonly_preview_and_explicit_queue_transitions
     assert 'SCHEDULE_DEMO_MANUAL_SIGNALS' not in SOURCE
     assert "req('/api/autopilot/start'" in SOURCE
     assert "req('/api/autopilot/stop',{method:'POST'})" in SOURCE
-    assert 'Sinais pendentes serão preservados e não serão apagados' in SOURCE
+    assert 'Sinais pendentes serão preservados na fila' in SOURCE
+    assert 'contratos já enviados continuarão na Deriv; nada será apagado ou cancelado' in SOURCE
     assert 'Reativar explicitamente a execução Nexora Manual' in SOURCE
     assert "if(typeof manualProfileMode!=='undefined'&&manualProfileMode){showRobotNotice('Este perfil usa Nexora Manual." in SOURCE
+    assert 'state?.persisted_status||state?.status||state?.run_status' in SOURCE
+    assert 'const listComplete=rows.length>0&&pending===0&&rows.every(' in SOURCE
+    assert "manualPauseButton').textContent='DESLIGAR ROBÔ'" in SOURCE
+    assert 'LISTA CONCLUÍDA · ROBÔ LIGADO' in SOURCE
+    assert 'Desligar o robô Nexora Manual?' in SOURCE
