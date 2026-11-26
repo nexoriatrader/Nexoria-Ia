@@ -186,6 +186,50 @@ def test_manual_profile_needs_no_strategy_assets_and_preview_is_read_only(api,mo
     assert any(i['code']=='outside_market' for i in body['issues'])
     assert not buy.called
 
+def test_manual_expired_access_blocks_preview_and_confirmation_but_keeps_status_and_cancel(api,monkeypatch):
+    client,factory=api;sid,uid=add_manual_user(factory);client.cookies.set('nexora_sid',sid)
+    monkeypatch.setenv('NEXORA_ACCESS_CONTROL_ENABLED','true')
+    expired_at=db.utcnow()-timedelta(seconds=5)
+    with factory() as s:
+        s.add(db.RobotAccess(user_id=uid,access_kind='trial_24h',
+            starts_at=expired_at-timedelta(hours=24),expires_at=expired_at))
+        s.add(db.ManualSignalRun(user_id=uid,session_number=1,status='RUNNING',account_mode='demo'))
+        s.get(db.AutomationExecutionState,uid).active_panel_mode='manual'
+        s.commit()
+    market=AsyncMock(side_effect=AssertionError('expired access must block signal validation'))
+    monkeypatch.setattr(main,'market_instruments',market)
+
+    preview=client.post('/api/manual-signals/preview',json={'text':'M15 EURUSD 23:00 CALL',
+        'market':'forex','day':'tomorrow','timezone_name':'UTC'})
+    confirmed=client.post('/api/manual-signals/confirm',json={'text':'M15 EURUSD 23:00 CALL',
+        'market':'forex','day':'tomorrow','timezone_name':'UTC','idempotency_key':'expired-access-01'})
+    assert preview.status_code==403 and 'tempo de acesso' in preview.json()['detail']
+    assert confirmed.status_code==403 and 'tempo de acesso' in confirmed.json()['detail']
+    assert not market.called
+
+    status=client.get('/api/manual-signals/status')
+    cancelled=client.post('/api/manual-signals/cancel')
+    assert status.status_code==200 and status.json()['persisted_status']=='RUNNING'
+    assert cancelled.status_code==200 and not cancelled.json()['cancel_pending']
+
+def test_manual_preview_starts_trial_for_legacy_account_without_separate_timer(api,monkeypatch):
+    client,factory=api;sid,uid=add_manual_user(factory);client.cookies.set('nexora_sid',sid)
+    monkeypatch.setenv('NEXORA_ACCESS_CONTROL_ENABLED','true')
+    monkeypatch.setattr(main,'market_instruments',AsyncMock(return_value=[
+        {'symbol':'frxEURUSD','name':'EUR/USD','group':'forex'}]))
+    preview=client.post('/api/manual-signals/preview',json={'text':'M15 EURUSD 23:00 CALL',
+        'market':'forex','day':'tomorrow','timezone_name':'UTC'})
+    assert preview.status_code==200
+    with factory() as s:
+        grant=s.get(db.RobotAccess,uid)
+        assert grant is not None and grant.access_kind=='trial_24h'
+        first_expiry=grant.expires_at
+    repeated=client.post('/api/manual-signals/preview',json={'text':'M15 EURUSD 23:15 PUT',
+        'market':'forex','day':'tomorrow','timezone_name':'UTC'})
+    assert repeated.status_code==200
+    with factory() as s:
+        assert s.get(db.RobotAccess,uid).expires_at==first_expiry
+
 def test_manual_confirmation_is_idempotent_limited_to_active_session_and_status(api,monkeypatch):
     client,factory=api;sid,uid=add_manual_user(factory);client.cookies.set('nexora_sid',sid)
     monkeypatch.setenv('NEXORA_AUTOPILOT_DEMO_ENABLED','true');monkeypatch.setenv('NEXORA_DEMO_BUY_ENABLED','true')

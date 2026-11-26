@@ -573,13 +573,13 @@ html,body{max-width:100%;overflow-x:clip}
 @media(max-width:550px){.dash-access{padding:8px 5px}.dash-add-time{min-height:39px;font-size:9px;padding:6px 3px}}
 </style><style>
 /* Simple logo-only header with the broker link in the sticky navigation */
-.nexora-logo-only{justify-content:center;padding:10px 0 16px;border-bottom:0}
-.nexora-logo-only .brand{justify-content:center}
-.nexora-logo-only .brand img{width:clamp(260px,24vw,320px);height:auto;max-width:100%;object-fit:contain}
+.nexora-logo-only{align-items:center;justify-content:space-between;gap:12px;padding:8px 0 13px;border-bottom:0}
+.nexora-logo-only .brand{justify-content:flex-start}
+.nexora-logo-only .brand img{width:clamp(155px,20vw,220px);height:auto;max-width:100%;object-fit:contain}
 .primary-nav .nav-broker-link{display:inline-flex;align-items:center;justify-content:center;text-decoration:none;border:1px solid #44859d;background:#15394b;color:#d9f4ff;font-weight:900}
 .primary-nav .nav-broker-link:hover{background:#1e526b;color:#fff;border-color:#64bad6}
 .primary-nav .nav-broker-link:focus-visible{outline:2px solid #74d5ff}
-@media(max-width:550px){.nexora-logo-only{padding:8px 0 12px}.nexora-logo-only .brand img{width:clamp(190px,56vw,230px);height:auto}.primary-nav .nav-broker-link{padding:10px 12px;min-height:45px}}
+@media(max-width:550px){.nexora-logo-only{padding:7px 0 10px}.nexora-logo-only .brand img{width:clamp(126px,38vw,158px);height:auto}.primary-nav .nav-broker-link{padding:10px 12px;min-height:45px}}
 </style><style>
 /* Account dashboard: single identity, membership, referrals, and plan catalog */
 #account .account-profile-card{padding:22px 24px}
@@ -1218,7 +1218,7 @@ body:has(#dashboard:not(.hidden)){background:
  linear-gradient(180deg,#071524 0%,#06111f 64%,#050d19 100%)!important}
 body:has(#dashboard:not(.hidden)) .shell{max-width:890px!important;padding-top:15px!important}
 body:has(#dashboard:not(.hidden)) .nexora-logo-only{
- justify-content:center!important;padding:24px 0 30px!important;
+ justify-content:space-between!important;padding:8px 0 13px!important;
  border:0!important;position:relative;isolation:isolate
 }
 body:has(#dashboard:not(.hidden)) .nexora-logo-only::before{
@@ -1226,7 +1226,7 @@ body:has(#dashboard:not(.hidden)) .nexora-logo-only::before{
  background:radial-gradient(ellipse at center,#1c8dca26,transparent 66%);filter:blur(16px)
 }
 body:has(#dashboard:not(.hidden)) .nexora-logo-only .brand img{
- width:clamp(216px,42vw,328px)!important;max-width:90vw!important;height:auto!important;
+ width:clamp(155px,20vw,220px)!important;max-width:100%!important;height:auto!important;
  filter:drop-shadow(0 0 11px #29d5f245) drop-shadow(0 9px 26px #004a7658)
 }
 #dashboard.nx-calm-dashboard{max-width:735px!important;position:relative;isolation:isolate}
@@ -1384,8 +1384,8 @@ body:has(#dashboard:not(.hidden)) .nexora-logo-only .brand img{
 #dashboard.nx-calm-dashboard .nx-premium-footer span{color:#4b728e;margin:0 5px}
 @media(max-width:640px){
  body:has(#dashboard:not(.hidden)) .shell{padding:8px 12px 36px!important}
- body:has(#dashboard:not(.hidden)) .nexora-logo-only{padding:18px 0 24px!important}
- body:has(#dashboard:not(.hidden)) .nexora-logo-only .brand img{width:clamp(180px,62vw,270px)!important}
+ body:has(#dashboard:not(.hidden)) .nexora-logo-only{padding:7px 0 10px!important}
+ body:has(#dashboard:not(.hidden)) .nexora-logo-only .brand img{width:clamp(126px,38vw,158px)!important}
  #dashboard.nx-calm-dashboard .nx-neo-controls>.dash-control-card{padding:17px!important;border-radius:22px!important}
  #dashboard.nx-calm-dashboard .nx-neo-controls .dash-robot-icon{
    width:45px!important;height:45px!important;flex-basis:45px!important;font-size:23px!important
@@ -2436,9 +2436,10 @@ const safe=(v)=>v===null||v===undefined?'—':String(v);
 const APP_PAGES=new Set(['welcome','auth-guide','app-home','setup','dashboard','manual-dashboard','robot-config','results','account','cataloger']);
 function page(v){
  if(!APP_PAGES.has(v))v='dashboard';
- document.body.classList.toggle('marketing-mode',v==='welcome'||v==='auth-guide');
- $('primaryNavigation').classList.toggle('hidden',v==='welcome'||v==='auth-guide'||v==='setup');
- $('topAccessSummary').classList.toggle('hidden',v!=='app-home');
+ const publicPage=v==='welcome'||v==='auth-guide';
+ document.body.classList.toggle('marketing-mode',publicPage);
+ $('primaryNavigation').classList.toggle('hidden',publicPage||v==='setup');
+ $('topAccessSummary').classList.toggle('hidden',publicPage);
  for(const name of APP_PAGES)$(name).classList.toggle('hidden',name!==v);
  activePage=v;
  document.querySelectorAll('.nav-link[data-view]').forEach(b=>b.classList.toggle('active',b.dataset.view===v));
@@ -2511,7 +2512,7 @@ function updateResultsPolling(){
 }
 function go(v,panelMode){if(v==='robot-config'){setAutomationMode(panelMode||'strategies')}page(v);updateResultsPolling();window.scrollTo({top:0,behavior:'smooth'});if(v==='dashboard'){refreshDashboard();loadDemoOrders().catch(()=>{});loadDailyResults().catch(()=>{});}if(v==='manual-dashboard'){refreshManualPanelStatus();loadManualSignalsState();}if(v==='robot-config'){initAutomationWizard();setAutomationWizardStep(2);loadAutomationProfile();}if(v==='results'){loadDemoOrders();}if(v==='cataloger')loadCatalogerAssets();if(v==='account'){loadRobotAccess();loadBillingPlans()}}
 function fail(msg){$('error').textContent=msg||''}
-async function req(path,opts={}){const r=await fetch(path,{credentials:'same-origin',...opts});let data;try{data=await r.json()}catch{throw Error('Resposta inválida do servidor')}if(!r.ok){const error=Error(data.detail||'Falha na conexão');error.status=r.status;throw error}return data}
+async function req(path,opts={}){const refreshAccess=['/api/autopilot/start','/api/cataloger/generate','/api/manual-signals/preview','/api/manual-signals/confirm'].includes(path.split('?')[0]);const r=await fetch(path,{credentials:'same-origin',...opts});let data;try{data=await r.json()}catch{throw Error('Resposta inválida do servidor')}if(refreshAccess&&(accessMode==='TRIAL_AVAILABLE'||r.status===403))await loadRobotAccess();if(!r.ok){const error=Error(data.detail||'Falha na conexão');error.status=r.status;throw error}return data}
 function updateCatalogerMarketControls(){
  const market=$('catalogerMarket').value,granularity=$('catalogerGranularity'),lookback=$('catalogerLookback');
  if(market==='forex'){
@@ -3534,7 +3535,7 @@ async function loadRobotAccess(){
       return;
     }
     if(a.status==='TRIAL_AVAILABLE'){
-      target.textContent=durationString(accessTrialSeconds)+' grátis disponíveis. Para novas contas, o período começa no primeiro login validado pela Deriv.';
+      target.textContent=durationString(accessTrialSeconds)+' grátis disponíveis. Para contas antigas sem concessão, começa no primeiro uso protegido; para novas contas, no primeiro login validado pela Deriv.';
       return;
     }
     const until=a.expires_at?new Date(a.expires_at):null;

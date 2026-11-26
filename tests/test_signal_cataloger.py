@@ -480,3 +480,69 @@ def test_cataloger_endpoint_maps_public_history_failure_to_gateway_error(catalog
     })
     assert response.status_code == 502
     assert response.json()["detail"] == "Deriv unavailable"
+
+
+def test_cataloger_blocks_expired_access_before_fetching_assets_or_history(cataloger_api, monkeypatch):
+    client, factory = cataloger_api
+    monkeypatch.setenv("NEXORA_ACCESS_CONTROL_ENABLED", "true")
+    sid = add_user(factory)
+    client.cookies.set("nexora_sid", sid)
+    with factory() as session:
+        user = session.query(db.User).one()
+        expired_at = db.utcnow() - timedelta(seconds=5)
+        session.add(db.RobotAccess(user_id=user.id, access_kind="trial_24h",
+            starts_at=expired_at - timedelta(hours=24), expires_at=expired_at))
+        session.commit()
+
+    instruments = AsyncMock(side_effect=AssertionError("expired access must stop the Cataloger before API reads"))
+    history = AsyncMock(side_effect=AssertionError("expired access must stop history generation"))
+    monkeypatch.setattr(main, "instruments_by_group", instruments)
+    monkeypatch.setattr(main.cataloger_storage, "fetch_historical_candles", history)
+
+    assets = client.get("/api/cataloger/assets?market=derived")
+    generated = client.post("/api/cataloger/generate", json={
+        "market": "derived", "symbol": "R_100", "granularity_seconds": 900,
+        "lookback_days": 30, "target_day": "tomorrow", "timezone_name": "UTC",
+    })
+    assert assets.status_code == 403 and "tempo de acesso" in assets.json()["detail"]
+    assert generated.status_code == 403 and "tempo de acesso" in generated.json()["detail"]
+    assert not instruments.called and not history.called
+
+
+def test_cataloger_starts_one_shared_trial_reused_by_manual_preview(cataloger_api, monkeypatch):
+    client, factory = cataloger_api
+    monkeypatch.setenv("NEXORA_ACCESS_CONTROL_ENABLED", "true")
+    sid = add_user(factory)
+    client.cookies.set("nexora_sid", sid)
+    with factory() as session:
+        user = session.query(db.User).one()
+        db.ensure_panel_profiles(session, user.id)
+        session.commit()
+
+    listed = [{"symbol": "R_100", "name": "Volatility 100", "group": "derived"}]
+    monkeypatch.setattr(main, "instruments_by_group", AsyncMock(return_value=listed))
+    monkeypatch.setattr(main, "market_instruments", AsyncMock(return_value=listed))
+    history_start = date(2025, 1, 1)
+    historical = {history_start + timedelta(days=i): "CALL" for i in range(32)}
+    monkeypatch.setattr(main.cataloger_storage, "fetch_historical_candles",
+        AsyncMock(return_value=candles_for_days(history_start, historical)))
+
+    generated = client.post("/api/cataloger/generate", json={
+        "market": "derived", "symbol": "R_100", "granularity_seconds": 900,
+        "lookback_days": 30, "target_day": "tomorrow", "timezone_name": "UTC",
+    })
+    assert generated.status_code == 200
+    with factory() as session:
+        user = session.query(db.User).one()
+        grant = session.get(db.RobotAccess, user.id)
+        assert grant is not None and grant.access_kind == "trial_24h"
+        first_expiry = grant.expires_at
+
+    preview = client.post("/api/manual-signals/preview", json={
+        "text": "M15 R_100 12:00 CALL", "market": "derived",
+        "day": "tomorrow", "timezone_name": "UTC",
+    })
+    assert preview.status_code == 200
+    with factory() as session:
+        user = session.query(db.User).one()
+        assert session.get(db.RobotAccess, user.id).expires_at == first_expiry

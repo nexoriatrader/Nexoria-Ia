@@ -194,6 +194,18 @@ def active_session(request:Request, sid):
 def active_user(request:Request, sid):
     return active_session(request, sid)[0]
 
+def require_nexora_access(user_id, *, start_trial_if_available=False):
+    """Enforce the shared access window for every protected Nexora tool."""
+    with db.SessionLocal() as session:
+        status=access_status(session,user_id)
+        if start_trial_if_available and status['status']=='TRIAL_AVAILABLE':
+            status=start_trial_on_first_robot_start(session,user_id)
+            session.commit()
+    if not status['allowed']:
+        raise HTTPException(403,
+            'Seu tempo de acesso ao Nexora expirou ou está suspenso. Verifique Minha Conta para conferir a validade.')
+    return status
+
 async def feed():
     global market_connected, last_market_reason, recent_prices, market_last_tick
     delay=2
@@ -2041,7 +2053,8 @@ async def cataloger_instruments_by_group(group: str):
 @app.get('/api/cataloger/assets')
 async def cataloger_assets(request:Request,market:str='derived',
                            nexora_sid:str|None=Cookie(default=None)):
-    active_user(request,nexora_sid)
+    user=active_user(request,nexora_sid)
+    require_nexora_access(user.id)
     if market not in AUTOMATION_GROUPS:
         raise HTTPException(422,'Mercado inválido')
     try:
@@ -2055,7 +2068,8 @@ async def cataloger_assets(request:Request,market:str='derived',
 @app.post('/api/cataloger/generate')
 async def cataloger_generate(payload:CatalogerGenerateRequest,request:Request,
                              nexora_sid:str|None=Cookie(default=None)):
-    active_user(request,nexora_sid)
+    user=active_user(request,nexora_sid)
+    require_nexora_access(user.id,start_trial_if_available=True)
     try:
         signal_cataloger.validate_request(
             symbol=payload.symbol,
@@ -2092,6 +2106,7 @@ async def cataloger_generate(payload:CatalogerGenerateRequest,request:Request,
         raise HTTPException(502,str(exc)) from None
     except (TimeoutError,OSError):
         raise HTTPException(503,'A consulta ao histórico Deriv falhou. Tente novamente em instantes.') from None
+    require_nexora_access(user.id)
     duration_minutes=payload.granularity_seconds//60
     for signal in result['signals']:
         signal.update({
@@ -2142,12 +2157,14 @@ def _manual_capacity_status(session, run):
 async def manual_signals_preview(request:Request,payload:ManualSignalPreviewRequest,
                                  nexora_sid:str|None=Cookie(default=None)):
     user=active_user(request,nexora_sid)
+    require_nexora_access(user.id,start_trial_if_available=True)
     with db.SessionLocal() as session:_manual_profile(session,user.id)
     try:
         result=manual.validate_signal_list(text=payload.text,market=_manual_market(payload.market),
             day=payload.day,timezone_name=payload.timezone_name,catalogue=await market_instruments())
     except manual.ManualSignalInputError as exc:raise HTTPException(422,str(exc)) from None
     except (MarketError,TimeoutError,OSError):raise HTTPException(503,'Catálogo público Deriv indisponível; prévia não concluída') from None
+    require_nexora_access(user.id)
     result['requested_market']=payload.market;result['market']=payload.market
     result['volatility_alias']=payload.market=='volatility'
     return result
@@ -2156,6 +2173,7 @@ async def manual_signals_preview(request:Request,payload:ManualSignalPreviewRequ
 async def manual_signals_confirm(request:Request,payload:ManualSignalConfirmRequest,
                                  nexora_sid:str|None=Cookie(default=None)):
     user,_=active_session(request,nexora_sid)
+    require_nexora_access(user.id,start_trial_if_available=True)
     if not re.fullmatch(r'[A-Za-z0-9_-]{8,64}',payload.idempotency_key or ''):
         raise HTTPException(422,'Chave idempotente inválida')
     import hashlib
@@ -2190,6 +2208,7 @@ async def manual_signals_confirm(request:Request,payload:ManualSignalConfirmRequ
             day=payload.day,timezone_name=payload.timezone_name,catalogue=await market_instruments())
     except manual.ManualSignalInputError as exc:raise HTTPException(422,str(exc)) from None
     except (MarketError,TimeoutError,OSError):raise HTTPException(503,'Catálogo público Deriv indisponível; sinais não confirmados') from None
+    require_nexora_access(user.id)
     accepted=[]
     with db.SessionLocal() as session:
         session.get(db.User,user.id,with_for_update=True)

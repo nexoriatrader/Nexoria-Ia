@@ -10,7 +10,10 @@ def test_mobile_dashboard_keeps_the_primary_navigation_sticky_and_visible():
     assert '<nav id="primaryNavigation" class="primary-nav hidden" aria-label="Navegação principal">' in html
     assert ".primary-nav{position:sticky;top:0" in html
     assert "body:has(#dashboard:not(.hidden)) .primary-nav{display:none}" not in html
-    assert "$('primaryNavigation').classList.toggle('hidden',v==='welcome'||v==='auth-guide'||v==='setup')" in html
+    assert "const publicPage=v==='welcome'||v==='auth-guide';" in html
+    assert "$('primaryNavigation').classList.toggle('hidden',publicPage||v==='setup')" in html
+    assert "$('topAccessSummary').classList.toggle('hidden',publicPage)" in html
+    assert ".nexora-logo-only{align-items:center;justify-content:space-between" in html
     primary_nav = html.split('<nav id="primaryNavigation"', 1)[1].split("</nav>", 1)[0]
     for view in ("app-home", "account", "dashboard", "manual-dashboard", "results", "cataloger"):
         assert f'data-view="{view}"' in primary_nav
