@@ -92,9 +92,15 @@ def test_landing_preserves_explicit_deriv_oauth_and_no_auto_start():
     assert 'id="lpHeroTrialButton"' in welcome
     assert 'onclick="startNexoraTrial(event)"' in welcome
     assert 'data-trial-label>24 horas</span>' in welcome
-    assert 'Conexão oficial Deriv' in welcome
+    assert 'Login oficial Deriv' in welcome
+    assert 'Catalogador de sinais' in welcome
+    assert 'Nexora Estratégias' in welcome
+    assert 'Nexora Manual' in welcome
+    assert 'Treinamento e REAL' in welcome
     assert 'Como funciona' in welcome
     assert 'Operações financeiras envolvem riscos' in welcome
+    assert 'apenas em DEMO' not in welcome
+    assert 'somente em DEMO' not in welcome
     assert '/api/autopilot/start' not in welcome
     assert 'id="robotButton"' in html
 

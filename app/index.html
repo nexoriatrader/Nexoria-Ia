@@ -1566,6 +1566,120 @@ body:has(#dashboard:not(.hidden)) .nexora-logo-only .brand img{
 .cataloger-disclaimer{border-left:3px solid #d4aa55;background:#2b2a234d;border-radius:0 10px 10px 0;padding:12px;margin-top:14px;color:#c7c5b9;font-size:11px;line-height:1.6}.cataloger-empty{border:1px dashed #456076;border-radius:13px;padding:18px;color:#bdd1df;background:#0b1b2a}
 @media(max-width:600px){.cataloger-fields,.cataloger-result-grid{grid-template-columns:1fr}.cataloger-card{padding:17px}.cataloger-results-head{display:block}.cataloger-results-head .outline{margin-top:10px;width:100%}}
 #robot-config.manual-mode [data-strategy-only]{display:none!important}
+/* Nexora landing refresh: glass surfaces, editorial spacing and a product-first story. */
+body.marketing-mode{background:#060b14;color:#eff7ff}
+body.marketing-mode .shell{max-width:1360px;padding:0 24px 38px}
+body.marketing-mode .shell>header{display:none}
+body.marketing-mode .primary-nav{display:none!important}
+#welcome.lp{--lp-ink:#f2f8ff;--lp-muted:#a9bbcc;--lp-line:rgba(149,197,224,.17);--lp-cyan:#73d7ea;--lp-gold:#f1c46b;position:relative;isolation:isolate;overflow:hidden;padding:0 0 36px;color:var(--lp-ink);background:radial-gradient(ellipse at 86% 13%,rgba(21,117,151,.25),transparent 34%),radial-gradient(ellipse at 10% 56%,rgba(51,91,157,.14),transparent 38%),linear-gradient(145deg,#07111d 0%,#081522 55%,#07101a 100%)}
+#welcome.lp::before{content:"";position:absolute;z-index:-1;inset:0;border:0;transform:none;box-shadow:none;background:radial-gradient(circle at 75% 19%,rgba(90,212,239,.10),transparent 23%),radial-gradient(circle at 22% 89%,rgba(240,192,91,.06),transparent 25%);pointer-events:none}
+#welcome.lp::after{content:none}
+#welcome.lp a{text-decoration:none}
+#welcome .lp-nav{position:sticky;top:10px;z-index:10;display:flex;align-items:center;justify-content:space-between;gap:18px;margin:12px 2px 0;padding:11px 14px 11px 18px;border:1px solid rgba(167,211,236,.18);border-radius:18px;background:rgba(8,18,30,.76);box-shadow:0 12px 34px rgba(0,0,0,.23),inset 0 1px rgba(255,255,255,.06);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px)}
+#welcome .lp-logo{display:flex;align-items:center;flex:none}
+#welcome .lp-logo img{width:190px;height:auto;max-height:56px;object-fit:contain;object-position:left}
+#welcome .lp-links{display:flex;align-items:center;justify-content:flex-end;gap:clamp(10px,1.8vw,24px)}
+#welcome .lp-links>a{color:#d5e2ec;font-size:13px;font-weight:680;transition:color .18s ease,background .18s ease,border-color .18s ease}
+#welcome .lp-links>a:hover{color:#fff}
+#welcome .lp-links .lp-signin{padding:10px 15px;border:1px solid rgba(175,207,226,.24);border-radius:12px;background:rgba(255,255,255,.035)}
+#welcome .lp-links .lp-nav-cta{padding:10px 15px;border:1px solid rgba(255,225,159,.75);border-radius:12px;background:linear-gradient(120deg,#ffe39a,#efb844);color:#151d27;font-weight:900;box-shadow:0 8px 24px rgba(239,184,68,.16)}
+#welcome .lp-hero{display:grid;grid-template-columns:minmax(0,1.02fr) minmax(390px,.98fr);align-items:center;gap:clamp(34px,5.7vw,82px);min-height:610px;padding:72px 22px 82px}
+#welcome .lp-eyebrow{display:inline-flex;align-items:center;gap:9px;margin:0 0 21px;padding:8px 12px;border:1px solid rgba(125,212,231,.22);border-radius:999px;background:rgba(72,169,198,.08);color:#a9e8f4;font-size:10px;font-weight:850;letter-spacing:.14em;text-transform:uppercase}
+#welcome .lp-eyebrow::before{content:"";width:7px;height:7px;border-radius:50%;background:#6fe2c0;box-shadow:0 0 14px rgba(111,226,192,.8)}
+#welcome .lp-hero h1{max-width:700px;color:#f5f9ff;font-size:clamp(43px,5.35vw,75px);font-weight:880;letter-spacing:-.06em;line-height:1.03}
+#welcome .lp-hero h1 em{font-style:normal;color:transparent;background:linear-gradient(105deg,#b9f3ff 3%,#69d0e6 48%,#f1c46b 100%);background-clip:text;-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+#welcome .lp-subtitle{max-width:620px;margin:23px 0 0;color:#b8c9d8;font-size:clamp(16px,1.55vw,19px);line-height:1.7}
+#welcome .lp-actions{display:flex;align-items:center;flex-wrap:wrap;gap:12px;margin-top:29px}
+#welcome .lp-button{display:inline-flex;align-items:center;justify-content:center;gap:11px;min-height:56px;padding:14px 20px;border:1px solid transparent;border-radius:14px;font-size:14px;font-weight:870;transition:transform .18s ease,box-shadow .18s ease,background .18s ease}
+#welcome .lp-button:hover{transform:translateY(-2px)}
+#welcome .lp-button:focus-visible,#welcome .lp-links a:focus-visible,#welcome .lp-feature-link:focus-visible{outline:3px solid #70d6ed;outline-offset:3px}
+#welcome .lp-button-primary{background:linear-gradient(120deg,#ffe59f,#efb94a);border-color:#ffebb8;color:#17202c;box-shadow:0 12px 30px rgba(237,181,68,.2)}
+#welcome .lp-button-primary:hover{box-shadow:0 16px 38px rgba(237,181,68,.32)}
+#welcome .lp-button-outline{background:rgba(255,255,255,.045);border-color:rgba(161,201,224,.23);color:#eaf5fc;box-shadow:none}
+#welcome .lp-button-arrow{display:grid;place-items:center;width:25px;height:25px;border-radius:8px;background:rgba(13,26,39,.12);font-size:17px}
+#welcome .lp-trial-note{margin:13px 0 0;color:#8ea5b7;font-size:11px;line-height:1.55}
+#welcome .lp-proof{display:flex;flex-wrap:wrap;gap:9px;margin-top:28px}
+#welcome .lp-proof span{display:inline-flex;align-items:center;gap:7px;padding:8px 10px;border:1px solid rgba(157,192,214,.14);border-radius:999px;background:rgba(255,255,255,.035);color:#c7d7e3;font-size:11px}
+#welcome .lp-proof b{color:#80e1c1;font-size:13px}
+#welcome .lp-visual-shell{position:relative;overflow:hidden;padding:19px;border:1px solid rgba(162,211,237,.24);border-radius:27px;background:linear-gradient(148deg,rgba(28,55,78,.75),rgba(8,19,32,.88) 72%);box-shadow:0 30px 85px rgba(0,0,0,.45),inset 0 1px rgba(255,255,255,.13);backdrop-filter:blur(22px);-webkit-backdrop-filter:blur(22px)}
+#welcome .lp-visual-shell::before{content:"";position:absolute;top:-105px;right:-92px;width:290px;height:290px;border-radius:50%;background:radial-gradient(circle,rgba(71,192,221,.22),rgba(71,192,221,0) 70%);pointer-events:none}
+#welcome .lp-visual-top{position:relative;display:flex;align-items:center;justify-content:space-between;gap:12px;padding-bottom:15px;border-bottom:1px solid rgba(187,222,242,.13)}
+#welcome .lp-visual-brand{display:flex;align-items:center;gap:11px}
+#welcome .lp-visual-brand img{width:124px;max-height:34px;object-fit:contain;object-position:left}
+#welcome .lp-visual-brand small{display:block;margin-top:2px;color:#849caf;font-size:8px;letter-spacing:.14em}
+#welcome .lp-visual-status{display:inline-flex;align-items:center;gap:7px;padding:7px 9px;border:1px solid rgba(109,218,189,.2);border-radius:999px;background:rgba(34,111,92,.12);color:#a7ead4;font-size:8px;font-weight:850;letter-spacing:.09em;white-space:nowrap}
+#welcome .lp-visual-status i{width:6px;height:6px;border-radius:50%;background:#6fe2c0;box-shadow:0 0 10px rgba(111,226,192,.7)}
+#welcome .lp-visual-heading{position:relative;display:flex;align-items:flex-end;justify-content:space-between;gap:12px;margin:22px 2px 15px}
+#welcome .lp-visual-heading small{color:#8aa8bb;font-size:9px;font-weight:820;letter-spacing:.16em}
+#welcome .lp-visual-heading h2{margin-top:6px;color:#f2f8ff;font-size:clamp(20px,2.5vw,27px);letter-spacing:-.04em}
+#welcome .lp-visual-heading h2 span{color:#83dced}
+#welcome .lp-visual-count{color:#829aac;font-size:9px;font-weight:800;letter-spacing:.1em;white-space:nowrap}
+#welcome .lp-visual-options{display:grid;gap:9px}
+#welcome .lp-visual-option{display:grid;grid-template-columns:40px minmax(0,1fr) 20px;align-items:center;gap:12px;padding:13px;border:1px solid rgba(161,203,226,.14);border-radius:16px;background:linear-gradient(120deg,rgba(255,255,255,.075),rgba(255,255,255,.025));box-shadow:inset 0 1px rgba(255,255,255,.05)}
+#welcome .lp-visual-option:first-child{border-color:rgba(114,211,232,.33);background:linear-gradient(120deg,rgba(48,131,158,.21),rgba(255,255,255,.035))}
+#welcome .lp-visual-option-icon{display:grid;place-items:center;width:40px;height:40px;border:1px solid rgba(134,201,224,.19);border-radius:12px;background:rgba(55,130,154,.14);color:#a8e7f1}
+#welcome .lp-visual-option-icon svg{width:21px;height:21px}
+#welcome .lp-visual-option small{display:block;margin-bottom:3px;color:#92aabb;font-size:8px;font-weight:850;letter-spacing:.1em}
+#welcome .lp-visual-option strong{display:block;color:#ecf5fc;font-size:13px;font-weight:820}
+#welcome .lp-visual-option p{margin-top:3px;color:#99adbd;font-size:10px;line-height:1.4}
+#welcome .lp-visual-option-arrow{color:#86cadb;font-size:17px}
+#welcome .lp-visual-footer{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:14px;padding-top:13px;border-top:1px solid rgba(187,222,242,.12);color:#9db2c1;font-size:9px}
+#welcome .lp-visual-modes{display:flex;gap:6px;flex-wrap:wrap}
+#welcome .lp-visual-modes span{padding:6px 8px;border:1px solid rgba(172,206,225,.16);border-radius:999px;background:rgba(255,255,255,.035);color:#c9dce8;font-size:9px}
+#welcome .lp-visual-caption{margin-top:11px;color:#738b9f;font-size:9px;line-height:1.5;text-align:right}
+#welcome .lp-section{position:relative;padding:60px 10px 20px;scroll-margin-top:92px}
+#welcome .lp-section-heading{display:flex;align-items:flex-end;justify-content:space-between;gap:20px;margin-bottom:22px}
+#welcome .lp-section-kicker{display:block;margin-bottom:9px;color:#8edce8;font-size:9px;font-weight:900;letter-spacing:.17em;text-transform:uppercase}
+#welcome .lp-section-title{display:block;margin:0;color:#f2f8ff;font-size:clamp(27px,3.5vw,40px);font-weight:840;letter-spacing:-.045em;line-height:1.12;text-align:left}
+#welcome .lp-section-title::before,#welcome .lp-section-title::after{content:none}
+#welcome .lp-section-intro{max-width:450px;color:#96aebe;font-size:13px;line-height:1.6}
+#welcome .lp-feature-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
+#welcome .lp-feature-card{position:relative;display:flex;flex-direction:column;min-height:263px;overflow:hidden;padding:22px;border:1px solid rgba(159,199,222,.17);border-radius:21px;background:linear-gradient(145deg,rgba(23,45,65,.72),rgba(11,24,39,.74));box-shadow:0 17px 40px rgba(0,0,0,.18),inset 0 1px rgba(255,255,255,.07);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);transition:transform .2s ease,border-color .2s ease,background .2s ease}
+#welcome .lp-feature-card::after{content:"";position:absolute;top:-86px;right:-65px;width:170px;height:170px;border-radius:50%;background:radial-gradient(circle,rgba(87,199,222,.12),transparent 68%);pointer-events:none}
+#welcome .lp-feature-card:hover{transform:translateY(-4px);border-color:rgba(117,210,232,.36);background:linear-gradient(145deg,rgba(28,58,80,.84),rgba(11,24,39,.82))}
+#welcome .lp-feature-top{position:relative;z-index:1;display:flex;align-items:center;justify-content:space-between;gap:12px}
+#welcome .lp-feature-icon{display:grid;place-items:center;width:47px;height:47px;border:1px solid rgba(135,205,225,.22);border-radius:15px;background:rgba(63,142,166,.13);color:#a7e5f0}
+#welcome .lp-feature-icon svg{width:24px;height:24px}
+#welcome .lp-feature-index{color:#8199aa;font-size:9px;font-weight:900;letter-spacing:.12em}
+#welcome .lp-feature-card h3{position:relative;z-index:1;margin:22px 0 9px;color:#eef6fc;font-size:19px;letter-spacing:-.025em}
+#welcome .lp-feature-card p{position:relative;z-index:1;color:#9fb3c2;font-size:12px;line-height:1.65}
+#welcome .lp-feature-tag{display:inline-flex;align-items:center;gap:7px;width:max-content;margin-top:17px;padding:7px 9px;border:1px solid rgba(174,209,225,.14);border-radius:999px;background:rgba(255,255,255,.035);color:#c0d4e1;font-size:9px;font-weight:760}
+#welcome .lp-feature-tag i{width:5px;height:5px;border-radius:50%;background:#6fe2c0}
+#welcome .lp-section#como-funciona{padding-top:65px}
+#welcome .lp-steps{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:11px}
+#welcome .lp-step{display:flex;align-items:flex-start;gap:13px;min-height:151px;padding:18px 15px;border:1px solid rgba(159,199,222,.15);border-radius:17px;background:rgba(255,255,255,.035);box-shadow:inset 0 1px rgba(255,255,255,.045)}
+#welcome .lp-step-num{display:grid;place-items:center;flex:none;width:34px;height:34px;border:1px solid rgba(137,212,230,.28);border-radius:11px;background:rgba(66,156,180,.13);color:#aeeaf4;font-size:12px;font-weight:900}
+#welcome .lp-step h3{margin:2px 0 7px;color:#eaf4fb;font-size:13px;font-weight:820}
+#welcome .lp-step p{color:#91a8b9;font-size:11px;line-height:1.6}
+#welcome .lp-access-panel{padding:clamp(20px,4vw,36px);border:1px solid rgba(161,205,229,.19);border-radius:24px;background:linear-gradient(130deg,rgba(20,47,66,.66),rgba(10,22,36,.78));box-shadow:0 20px 50px rgba(0,0,0,.19),inset 0 1px rgba(255,255,255,.07);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px)}
+#welcome .lp-access-intro{max-width:760px;margin:0 auto 24px;color:#a9bdcb;font-size:13px;line-height:1.7;text-align:center}
+#welcome .lp-access-intro strong{color:#f1ce81}
+#welcome .lp-plan-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:11px;max-width:900px;margin:0 auto}
+#welcome .lp-plan{padding:19px 16px;border:1px solid rgba(160,198,219,.17);border-radius:17px;background:rgba(255,255,255,.035);text-align:center;box-shadow:inset 0 1px rgba(255,255,255,.04)}
+#welcome .lp-plan span{display:block;color:#b9d0dc;font-size:12px;font-weight:800}
+#welcome .lp-plan strong{display:block;margin:8px 0;color:#f1ce81;font-size:clamp(22px,2.5vw,29px)}
+#welcome .lp-plan p{color:#9bb0bf;font-size:11px;line-height:1.5}
+#welcome .lp-access-note{max-width:820px;margin:17px auto 0;color:#849bab;font-size:10px;line-height:1.65;text-align:center}
+#welcome .lp-faq-list{display:grid;gap:9px;max-width:920px;margin:0 auto}
+#welcome .lp-faq-list details{overflow:hidden;border:1px solid rgba(159,199,222,.15);border-radius:15px;background:rgba(255,255,255,.035);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px)}
+#welcome .lp-faq-list summary{display:flex;align-items:center;justify-content:space-between;gap:14px;min-height:51px;padding:14px 17px;color:#e5f1f9;font-size:13px;font-weight:800;list-style:none;cursor:pointer}
+#welcome .lp-faq-list summary::-webkit-details-marker{display:none}
+#welcome .lp-faq-list summary::after{content:'+';color:#84dced;font-size:20px;font-weight:500}
+#welcome .lp-faq-list details[open] summary::after{content:'−'}
+#welcome .lp-faq-list details p{padding:0 17px 17px;color:#a1b4c2;font-size:12px;line-height:1.7}
+#welcome .lp-strip{display:grid;grid-template-columns:repeat(3,1fr);gap:9px;margin:42px 10px 16px;padding:16px;border:1px solid rgba(157,204,228,.15);border-radius:18px;background:rgba(255,255,255,.03)}
+#welcome .lp-strip>div{display:flex;align-items:center;justify-content:center;gap:9px;padding:8px;color:#c3d5e0;font-size:11px;font-weight:760;text-align:center}
+#welcome .lp-strip>div+div{border-left:1px solid rgba(176,211,229,.13)}
+#welcome .lp-strip span{color:#8bddeb;font-size:16px}
+#welcome .lp-final{display:flex;align-items:center;justify-content:space-between;gap:22px;margin:28px 10px 0;padding:clamp(22px,4vw,38px);border:1px solid rgba(226,201,145,.2);border-radius:23px;background:radial-gradient(ellipse at 90% 0%,rgba(239,189,83,.11),transparent 46%),linear-gradient(110deg,rgba(24,42,55,.86),rgba(12,24,37,.86));box-shadow:0 18px 45px rgba(0,0,0,.2)}
+#welcome .lp-final h2{color:#eef6fc;font-size:clamp(25px,3.5vw,39px);letter-spacing:-.045em;line-height:1.15}
+#welcome .lp-final h2 strong{color:#f1ce81}
+#welcome .lp-final .lp-button{flex:none;min-width:245px}
+#welcome .lp-disclaimer{margin:18px 10px 0;padding:15px 12px;border-top:1px solid rgba(164,199,219,.12);color:#8299a9;font-size:10px;line-height:1.65;text-align:center}
+@media(max-width:980px){#welcome .lp-hero{grid-template-columns:minmax(0,1fr) minmax(350px,.9fr);gap:25px;padding:60px 12px 66px}#welcome .lp-visual-shell{padding:16px}#welcome .lp-feature-card{padding:19px}}
+@media(max-width:760px){body.marketing-mode .shell{padding:0 14px 25px}#welcome .lp-nav{top:7px;margin-top:8px;padding:9px 10px 9px 13px;border-radius:15px}#welcome .lp-logo img{width:155px}#welcome .lp-links{gap:8px}#welcome .lp-links>a:not(.lp-signin):not(.lp-nav-cta){display:none}#welcome .lp-links .lp-signin,#welcome .lp-links .lp-nav-cta{padding:9px 11px;font-size:11px}#welcome .lp-hero{grid-template-columns:1fr;gap:30px;min-height:0;padding:58px 8px 44px}#welcome .lp-hero-copy{max-width:680px}#welcome .lp-hero h1{max-width:650px;font-size:clamp(42px,8.4vw,64px)}#welcome .lp-subtitle{max-width:600px;font-size:16px}#welcome .lp-visual-shell{max-width:590px;width:100%;margin:0 auto}#welcome .lp-feature-grid{grid-template-columns:1fr;gap:10px}#welcome .lp-feature-card{min-height:0;padding:19px}#welcome .lp-feature-card h3{margin-top:16px}#welcome .lp-steps{grid-template-columns:repeat(2,minmax(0,1fr))}#welcome .lp-section{padding-top:45px}#welcome .lp-section-heading{display:block}#welcome .lp-section-intro{margin-top:10px}#welcome .lp-final{align-items:flex-start;flex-direction:column}#welcome .lp-final .lp-button{width:100%}}
+@media(max-width:540px){body.marketing-mode .shell{padding:0 10px 20px}#welcome.lp{padding-bottom:22px}#welcome .lp-nav{gap:8px}#welcome .lp-logo img{width:126px}#welcome .lp-links .lp-signin{padding:8px 9px}#welcome .lp-links .lp-nav-cta{padding:8px 9px;font-size:10px}#welcome .lp-hero{gap:24px;padding:42px 5px 34px}#welcome .lp-eyebrow{font-size:8px;letter-spacing:.1em}#welcome .lp-hero h1{font-size:clamp(38px,10.5vw,50px)}#welcome .lp-subtitle{margin-top:16px;font-size:14px;line-height:1.65}#welcome .lp-actions{display:grid;grid-template-columns:1fr;gap:9px;margin-top:22px}#welcome .lp-button{width:100%;min-height:52px;font-size:13px}#welcome .lp-proof{justify-content:center;gap:7px;margin-top:19px}#welcome .lp-proof span{padding:7px 8px;font-size:9px}#welcome .lp-visual-shell{padding:13px;border-radius:21px}#welcome .lp-visual-brand img{width:103px}#welcome .lp-visual-status{font-size:7px;padding:6px 7px}#welcome .lp-visual-heading{margin-top:17px}#welcome .lp-visual-option{grid-template-columns:35px minmax(0,1fr) 13px;gap:9px;padding:10px;border-radius:13px}#welcome .lp-visual-option-icon{width:35px;height:35px}#welcome .lp-visual-option p{font-size:9px}#welcome .lp-visual-footer{align-items:flex-start;flex-direction:column}#welcome .lp-visual-caption{text-align:left}#welcome .lp-section{padding:38px 3px 13px}#welcome .lp-section-title{font-size:27px}#welcome .lp-feature-card{padding:17px}#welcome .lp-feature-card h3{font-size:17px}#welcome .lp-feature-card p{font-size:11px}#welcome .lp-steps{grid-template-columns:1fr;gap:8px}#welcome .lp-step{min-height:0;padding:14px}#welcome .lp-plan-grid{grid-template-columns:1fr;max-width:400px}#welcome .lp-plan{padding:15px}#welcome .lp-faq-list summary{padding:13px;font-size:12px}#welcome .lp-faq-list details p{padding:0 13px 14px;font-size:11px}#welcome .lp-strip{grid-template-columns:1fr;margin:27px 2px 13px;padding:10px}#welcome .lp-strip>div+div{border-top:1px solid rgba(176,211,229,.13);border-left:0}#welcome .lp-final{gap:17px;margin:17px 2px 0;padding:21px;border-radius:18px}#welcome .lp-final .lp-button{min-width:0}#welcome .lp-disclaimer{margin:13px 2px 0;padding:13px 4px;font-size:9px}}
+@media(prefers-reduced-motion:reduce){#welcome .lp-button,#welcome .lp-feature-card{transition:none}#welcome .lp-button:hover,#welcome .lp-feature-card:hover{transform:none}}
 </style>
 </head>
 <body>
@@ -1600,80 +1714,81 @@ body:has(#dashboard:not(.hidden)) .nexora-logo-only .brand img{
 <main>
 <section id="welcome" class="lp hidden" aria-labelledby="landingHeading">
  <nav class="lp-nav" aria-label="Navegação inicial">
-  <a class="lp-logo" href="#inicio" aria-label="NEXORA IA, início"><img src="/brand/logo-nexora-v21.svg" alt="NEXORA IA — Robô Trader Automático"></a>
-  <div class="lp-links"><a href="#inicio">Início</a><a href="#recursos">Recursos</a><a href="#como-funciona">Como funciona</a><a href="#resultados">Resultados</a><a class="lp-signin" href="/auth/deriv/start">Entrar</a><a href="https://t.deriv.link/?t=HR6MZB6Q499Z" target="_blank" rel="noopener noreferrer sponsored" aria-label="Acessar corretora Deriv, link externo de indicação">Corretora ↗</a></div>
+  <a class="lp-logo" href="#inicio" aria-label="NEXORA IA, início"><img src="/brand/logo-nexora-v21.svg" alt="NEXORA IA"></a>
+  <div class="lp-links"><a href="#recursos">Recursos</a><a href="#como-funciona">Como funciona</a><a href="#acesso">Acesso</a><a class="lp-broker-link" href="https://t.deriv.link/?t=HR6MZB6Q499Z" target="_blank" rel="noopener noreferrer sponsored" aria-label="Abrir a corretora Deriv em nova aba">ACESSAR CORRETORA ↗</a><a class="lp-signin" href="/auth/deriv/start">Entrar</a><a id="lpNavTrialButton" class="lp-nav-cta" href="/auth/deriv/start" onclick="startNexoraTrial(event)">Começar grátis</a></div>
  </nav>
  <div id="inicio" class="lp-hero">
-  <div>
-   <div class="lp-eyebrow">Nexora - robô inteligente</div>
-   <h1 id="landingHeading">Automação e análise de mercado <em>sob seu controle</em></h1>
-   <p class="lp-subtitle">Conheça o NEXORA IA por <strong data-trial-label>24 horas</strong> grátis após seu primeiro login validado na Deriv. Escolha os ativos, configure a estratégia em etapas e decida quando ligar o robô.</p>
+  <div class="lp-hero-copy">
+   <div class="lp-eyebrow">Catalogador · automação · sinais manuais</div>
+   <h1 id="landingHeading">Mais clareza para analisar.<br><em>Mais controle para operar.</em></h1>
+   <p class="lp-subtitle">Explore o mercado com o Catalogador, deixe o Nexora Estratégias procurar oportunidades conforme suas regras ou agende sua própria lista no Nexora Manual. Você escolhe o ambiente, define os limites e decide quando ativar.</p>
    <div class="lp-actions">
-    <a id="lpHeroTrialButton" class="lp-button lp-button-primary" href="/auth/deriv/start" onclick="startNexoraTrial(event)">Teste grátis por <span data-trial-label>24 horas</span> <span aria-hidden="true">➜</span></a>
+    <a id="lpHeroTrialButton" class="lp-button lp-button-primary" href="/auth/deriv/start" onclick="startNexoraTrial(event)">Teste grátis por <span data-trial-label>24 horas</span><span class="lp-button-arrow" aria-hidden="true">↗</span></a>
+    <a class="lp-button lp-button-outline" href="#recursos">Conhecer a plataforma <span aria-hidden="true">↓</span></a>
    </div>
+   <p class="lp-trial-note">O acesso gratuito começa após o primeiro login validado na Deriv. O login não liga o robô automaticamente.</p>
    <p id="lpLoginNotice" class="lp-auth-notice hidden" role="status"></p>
-   <div class="lp-proof"><span><b aria-hidden="true">✓</b> Conexão oficial Deriv</span><span><b aria-hidden="true">ϟ</b> Ativação em poucos passos</span><span><b aria-hidden="true">▥</b> Gestão de risco</span></div>
+   <div class="lp-proof"><span><b aria-hidden="true">✓</b> Login oficial Deriv</span><span><b aria-hidden="true">✓</b> Treinamento e REAL</span><span><b aria-hidden="true">✓</b> Você decide quando ativar</span></div>
   </div>
-  <div class="lp-mockup" aria-label="Prévia ilustrativa do painel do NEXORA IA">
-   <div class="lp-mock-head"><img src="/brand/logo-nexora-v21.svg" alt="NEXORA IA"><span class="lp-mock-broker">ACESSAR CORRETORA ↗</span></div>
-   <div class="lp-mock-kicker">VISÃO GERAL</div><div class="lp-mock-title">Meu robô</div><p class="lp-mock-desc">O essencial para acompanhar suas operações.</p>
-   <div class="lp-mock-panel">
-    <div class="lp-mock-paneltop"><span>Nexora Robô Automático</span><span class="lp-mock-tag">PRONTO</span></div>
-    <div class="lp-mock-control"><div class="lp-mock-start">LIGAR ROBÔ</div><div class="lp-mock-status"><strong><span class="lp-mock-dot"></span>ROBÔ OFFLINE</strong><p>Análises pausadas. Ative quando desejar.</p></div></div>
+  <figure class="lp-visual-shell" aria-label="Prévia ilustrativa das ferramentas do painel NEXORA IA">
+   <div class="lp-visual-top"><div class="lp-visual-brand"><img src="/brand/logo-nexora-v21.svg" alt="NEXORA IA"><small>PLATAFORMA DE ANÁLISE E OPERAÇÃO</small></div><span class="lp-visual-status"><i aria-hidden="true"></i> ESCOLHA SEU FLUXO</span></div>
+   <div class="lp-visual-heading"><div><small>UM PAINEL · TRÊS FERRAMENTAS</small><h2>Seu jeito de operar.<br><span>Suas regras.</span></h2></div><span class="lp-visual-count">NEXORA / 01</span></div>
+   <div class="lp-visual-options">
+    <article class="lp-visual-option"><span class="lp-visual-option-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19V5m0 14h17"/><path d="m7 15 4-4 3 2 5-7"/><circle cx="7" cy="15" r="1"/><circle cx="11" cy="11" r="1"/><circle cx="14" cy="13" r="1"/></svg></span><div><small>01 · LEITURA DE MERCADO</small><strong>Catalogador</strong><p>Gere listas candidatas com base em candles históricos.</p></div><span class="lp-visual-option-arrow" aria-hidden="true">↗</span></article>
+    <article class="lp-visual-option"><span class="lp-visual-option-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 18h16M6 15l4-5 3 3 5-7"/><path d="M15 6h3v3"/></svg></span><div><small>02 · EXECUÇÃO AUTOMÁTICA</small><strong>Nexora Estratégias</strong><p>Procura confirmações conforme as estratégias escolhidas.</p></div><span class="lp-visual-option-arrow" aria-hidden="true">↗</span></article>
+    <article class="lp-visual-option"><span class="lp-visual-option-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M7 4h10l3 3v13H4V4z"/><path d="M8 11h8M8 15h8M8 8h3"/></svg></span><div><small>03 · SUA LISTA DE SINAIS</small><strong>Nexora Manual</strong><p>Revise e agende sinais informados por você.</p></div><span class="lp-visual-option-arrow" aria-hidden="true">↗</span></article>
    </div>
-   <div class="lp-mock-metrics" aria-label="Ambientes de operação">
-     <div class="lp-mock-metric lp-mock-environment"><small><span class="lp-mock-metric-symbol" aria-hidden="true">▥</span> Ambiente</small><strong>Treinamento</strong><p>Teste e ajuste suas estratégias</p></div>
-     <div class="lp-mock-metric lp-mock-environment"><small><span class="lp-mock-metric-symbol" aria-hidden="true">↗</span> Ambiente</small><strong>Conta Real</strong><p>Opere com seu próprio capital</p></div>
-   </div>
-   <div class="lp-mock-capabilities"><span>▥ Scanner IA</span><span>◎ Estratégias personalizadas</span></div>
-   <p class="lp-preview-disclaimer">Prévia ilustrativa do Robô Nexora</p>
-  </div>
+   <div class="lp-visual-footer"><span>Ambiente da conta</span><div class="lp-visual-modes"><span>Treinamento</span><span>Conta REAL</span></div></div>
+   <figcaption class="lp-visual-caption">Prévia ilustrativa. Não representa cotações, sinais ou resultados ao vivo.</figcaption>
+  </figure>
  </div>
  <section id="recursos" class="lp-section" aria-labelledby="lpFeaturesTitle">
-  <h2 class="lp-section-title" id="lpFeaturesTitle">Principais benefícios</h2>
-  <div class="lp-cards">
-   <article class="lp-card"><div class="lp-icon"><svg viewBox="0 0 48 48" width="42" height="42" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6v36M24 6v36M39 6v36"/><rect x="5" y="15" width="8" height="15" rx="2" fill="currentColor" fill-opacity=".18"/><rect x="20" y="9" width="8" height="18" rx="2" fill="currentColor" fill-opacity=".18"/><rect x="35" y="22" width="8" height="14" rx="2" fill="currentColor" fill-opacity=".18"/></svg></div><h3>Operações automáticas</h3><p>Monitore oportunidades e ative o Robô Nexora para operar na sua conta.</p></article>
-   <article class="lp-card"><div class="lp-icon"><svg viewBox="0 0 48 48" width="42" height="42" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 38h38M8 33l11-11 8 6 13-17M31 11h9v9"/><circle cx="19" cy="22" r="2" fill="currentColor"/><circle cx="27" cy="28" r="2" fill="currentColor"/></svg></div><h3>Análise em tempo real</h3><p>Acompanhe as condições do mercado e os sinais analisados pelo robô.</p></article>
-   <article class="lp-card"><div class="lp-icon"><svg viewBox="0 0 48 48" width="42" height="42" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M24 4l17 7v12c0 11-7 18-17 22C14 41 7 34 7 23V11z"/><path d="M15 24l6 6 13-14"/></svg></div><h3>Gestão de risco</h3><p>Personalize entradas, Stop Win e Stop Loss; operar envolve riscos.</p></article>
-   <article class="lp-card"><div class="lp-icon"><svg viewBox="0 0 48 48" width="42" height="42" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="24" cy="24" r="18"/><path d="M24 13v12l9 5"/><path d="M36 5v10M31 10h10"/></svg></div><h3>Acesso grátis por <span data-trial-label>24 horas</span></h3><p>O período começa no primeiro login validado na Deriv. Indicações válidas podem acrescentar 24 horas de acesso.</p></article>
+  <div class="lp-section-heading"><div><span class="lp-section-kicker">O ecossistema Nexora</span><h2 class="lp-section-title" id="lpFeaturesTitle">Três ferramentas.<br>Um só lugar para decidir.</h2></div><p class="lp-section-intro">Use cada recurso com clareza: análise para montar ideias, automação baseada em estratégia ou execução de uma lista que você já tem.</p></div>
+  <div class="lp-feature-grid">
+   <article class="lp-feature-card"><div class="lp-feature-top"><span class="lp-feature-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19V5m0 14h17"/><path d="m7 15 4-4 3 2 5-7"/></svg></span><span class="lp-feature-index">01 / ANALISAR</span></div><h3>Catalogador de sinais</h3><p>Escolha um mercado e um período de análise. O Catalogador percorre candles históricos e monta uma lista candidata para você avaliar e levar ao Nexora Manual.</p><span class="lp-feature-tag"><i aria-hidden="true"></i> Pesquisa antes da execução</span></article>
+   <article class="lp-feature-card"><div class="lp-feature-top"><span class="lp-feature-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 18h16M6 15l4-5 3 3 5-7"/><path d="M15 6h3v3"/><circle cx="10" cy="10" r="1"/></svg></span><span class="lp-feature-index">02 / AUTOMATIZAR</span></div><h3>Nexora Estratégias</h3><p>Selecione o mercado e as estratégias. O robô procura oportunidades que atendam aos critérios escolhidos e só opera quando você o ativa e a corretora aceita a proposta.</p><span class="lp-feature-tag"><i aria-hidden="true"></i> Você define limites e ativação</span></article>
+   <article class="lp-feature-card"><div class="lp-feature-top"><span class="lp-feature-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M7 4h10l3 3v13H4V4z"/><path d="M8 11h8M8 15h8M8 8h3"/></svg></span><span class="lp-feature-index">03 / AGENDAR</span></div><h3>Nexora Manual</h3><p>Informe ou cole sinais com horário, ativo e direção. Confira a prévia, agende a lista e acompanhe a execução no painel Manual.</p><span class="lp-feature-tag"><i aria-hidden="true"></i> Sua lista, com revisão antes</span></article>
   </div>
  </section>
  <section id="como-funciona" class="lp-section" aria-labelledby="lpStepsTitle">
-  <h2 class="lp-section-title" id="lpStepsTitle">Como funciona</h2>
+  <div class="lp-section-heading"><div><span class="lp-section-kicker">Do acesso à operação</span><h2 class="lp-section-title" id="lpStepsTitle">Você no comando,<br>em cada etapa.</h2></div><p class="lp-section-intro">Nada começa sozinho. Conecte sua conta, configure o painel e confira as proteções antes de autorizar qualquer operação.</p></div>
   <div class="lp-steps">
-   <article class="lp-step"><span class="lp-step-num" aria-hidden="true">1</span><div><h3>Conecte sua conta</h3><p>Entre com o login oficial da Deriv, sem compartilhar sua senha.</p></div></article>
-   <article class="lp-step"><span class="lp-step-num" aria-hidden="true">2</span><div><h3>Configure em 7 etapas</h3><p>Escolha conta, modo, ativos, estratégia e limites antes de salvar o perfil.</p></div></article>
-   <article class="lp-step"><span class="lp-step-num" aria-hidden="true">3</span><div><h3>Ative o Robô Nexora</h3><p>Ligue quando quiser e acompanhe os resultados.</p></div></article>
+   <article class="lp-step"><span class="lp-step-num" aria-hidden="true">01</span><div><h3>Conecte pela Deriv</h3><p>Use o login oficial. O Nexora não pede nem armazena sua senha da corretora.</p></div></article>
+   <article class="lp-step"><span class="lp-step-num" aria-hidden="true">02</span><div><h3>Escolha seu caminho</h3><p>Catalogador, estratégias automáticas ou lista de sinais manual.</p></div></article>
+   <article class="lp-step"><span class="lp-step-num" aria-hidden="true">03</span><div><h3>Defina seus limites</h3><p>Revise entrada, proteções e conta de treinamento ou REAL.</p></div></article>
+   <article class="lp-step"><span class="lp-step-num" aria-hidden="true">04</span><div><h3>Ative quando quiser</h3><p>Confira os dados salvos e confirme antes de iniciar o robô.</p></div></article>
   </div>
  </section>
  <section id="acesso" class="lp-section" aria-labelledby="lpAccessTitle">
-  <h2 class="lp-section-title" id="lpAccessTitle">Acesso ao NEXORA</h2>
-  <p class="lp-access-intro">Novos usuários têm <strong data-trial-label>24 horas</strong> gratuitas a partir do primeiro login confirmado com a Deriv. Depois, estes são os planos pré-pagos previstos, sem renovação automática:</p>
-  <div class="lp-plan-grid">
-   <article class="lp-plan"><span>15 dias</span><strong>R$ 29,90</strong><p>Acesso ao robô por 15 dias.</p></article>
-   <article class="lp-plan"><span>30 dias</span><strong>R$ 49,90</strong><p>Acesso ao robô por 30 dias.</p></article>
-   <article class="lp-plan"><span>90 dias</span><strong>R$ 99,00</strong><p>Acesso ao robô por 90 dias.</p></article>
+  <div class="lp-access-panel">
+   <div class="lp-section-heading"><div><span class="lp-section-kicker">Comece sem compromisso</span><h2 class="lp-section-title" id="lpAccessTitle">Experimente o Nexora<br>por <span data-trial-label>24 horas</span>.</h2></div><p class="lp-section-intro">O período gratuito começa depois que seu primeiro login na Deriv for validado. O tempo e a validade são controlados pelo sistema.</p></div>
+   <p class="lp-access-intro">Depois do período gratuito, há opções de acesso pré-pago, sem renovação automática:</p>
+   <div class="lp-plan-grid">
+    <article class="lp-plan"><span>15 dias</span><strong>R$ 29,90</strong><p>Acesso ao robô por 15 dias.</p></article>
+    <article class="lp-plan"><span>30 dias</span><strong>R$ 49,90</strong><p>Acesso ao robô por 30 dias.</p></article>
+    <article class="lp-plan"><span>90 dias</span><strong>R$ 99,00</strong><p>Acesso ao robô por 90 dias.</p></article>
+   </div>
+   <p class="lp-access-note">Os planos são compras únicas de acesso, não investimentos nem promessas de retorno. A disponibilidade da contratação é informada dentro do painel, quando os pagamentos estiverem habilitados.</p>
   </div>
-  <p class="lp-access-note">Os planos são compras únicas de acesso, não investimentos nem promessas de retorno. A disponibilidade da contratação é informada dentro do painel, quando os pagamentos estiverem habilitados.</p>
  </section>
  <section id="duvidas" class="lp-section" aria-labelledby="lpFaqTitle">
-  <h2 class="lp-section-title" id="lpFaqTitle">Dúvidas frequentes</h2>
+  <div class="lp-section-heading"><div><span class="lp-section-kicker">Transparência primeiro</span><h2 class="lp-section-title" id="lpFaqTitle">Dúvidas frequentes</h2></div></div>
   <div class="lp-faq-list">
-   <details><summary>Quando começa o teste gratuito?</summary><p>Para novos usuários, as <span data-trial-label>24 horas</span> começam após o primeiro login concluído com a Deriv, mesmo que você ainda não tenha ligado o robô. Quem já possui acesso recebe as condições e a validade exibidas em Minha Conta.</p></details>
-   <details><summary>Qual é a diferença entre DEMO e REAL?</summary><p>DEMO é o ambiente de treinamento, sem usar dinheiro real. REAL utiliza o capital de sua conta na Deriv, exige uma conta compatível, configuração de risco e confirmação explícita. Nunca é ligado automaticamente pelo simples login.</p></details>
-   <details><summary>O NEXORA precisa da minha senha da Deriv?</summary><p>Não. A autenticação é feita pelo sistema de login da Deriv. O NEXORA utiliza a autorização concedida para consultar as contas disponíveis, respeitando as permissões e sessões.</p></details>
-   <details><summary>Quem escolhe o valor de entrada e os limites?</summary><p>Você escolhe o valor por operação, Stop Win e Stop Loss na configuração do robô. Para ligar a conta REAL, o Stop Loss é obrigatório. Valores e tipos de contratos também precisam ser aceitos pela corretora.</p></details>
-   <details><summary>O robô opera sempre ou garante lucro?</summary><p>Não. O NEXORA procura sinais dentro dos critérios da estratégia selecionada e pode ficar sem operar quando não houver confirmação ou dados válidos. Resultados não são garantidos, e operações reais podem gerar perdas.</p></details>
-   <details><summary>O que acontece ao desligar o robô?</summary><p>Novas entradas são interrompidas. Um contrato já comprado permanece sujeito à sua duração e à liquidação da Deriv. O histórico registra os resultados confirmados pela corretora.</p></details>
+   <details><summary>O Nexora funciona em Treinamento e em conta REAL?</summary><p>Sim. Você pode escolher uma conta de Treinamento ou uma conta REAL compatível e vinculada. Treinamento usa saldo virtual; na conta REAL, as operações usam seu capital e podem gerar perdas. A modalidade REAL exige configuração e confirmação explícitas.</p></details>
+   <details><summary>O robô liga sozinho quando eu entro?</summary><p>Não. O login apenas conecta sua conta. Você escolhe o painel, configura os limites e precisa confirmar a ativação do robô. No Nexora Manual, também é necessário revisar e agendar a lista de sinais.</p></details>
+   <details><summary>O Catalogador envia operações automaticamente?</summary><p>Não. Ele analisa candles históricos e monta uma lista candidata. Você avalia os sinais e, se desejar, pode levá-los ao Nexora Manual para revisar e agendar.</p></details>
+   <details><summary>Quando começa o acesso gratuito?</summary><p>Para novos usuários, o período de <span data-trial-label>24 horas</span> começa depois do primeiro login validado com a Deriv. Quem já possui acesso pode conferir a validade em Minha Conta.</p></details>
+   <details><summary>O Nexora garante lucro?</summary><p>Não. Estratégias, análises e sinais não garantem resultados. O robô pode não encontrar oportunidades e operações em conta REAL podem causar perdas, inclusive do capital investido.</p></details>
+   <details><summary>O Nexora precisa da minha senha da Deriv?</summary><p>Não. A autenticação ocorre pelo sistema oficial de login da Deriv. O Nexora usa a autorização concedida para consultar suas contas e executar somente as ações permitidas.</p></details>
   </div>
  </section>
  <div id="resultados" class="lp-strip" aria-label="Mais vantagens">
-  <div><span aria-hidden="true">👥</span> Ganhe +24 horas por indicação</div>
-  <div><span aria-hidden="true">▥</span> Painel intuitivo</div>
-  <div><span aria-hidden="true">▥</span> Resultados registrados</div>
+  <div><span aria-hidden="true">◎</span> Treinamento ou conta REAL</div>
+  <div><span aria-hidden="true">↗</span> Estratégias ou lista manual</div>
+  <div><span aria-hidden="true">⌁</span> Você escolhe quando ativar</div>
  </div>
- <div class="lp-final"><h2>Comece agora com <br><strong><span data-trial-label>24 horas</span> grátis</strong></h2><a id="lpFinalTrialButton" class="lp-button lp-button-primary" href="/auth/deriv/start" onclick="startNexoraTrial(event)" aria-label="Iniciar teste gratuito do NEXORA IA">Quero testar o NEXORA IA <span aria-hidden="true">➜</span></a></div>
- <p class="lp-disclaimer">Operações financeiras envolvem riscos, inclusive a perda integral de capital em conta REAL. O NEXORA não garante lucros, não cancela contratos já comprados ao desligar o robô e não substitui uma avaliação independente de risco.</p>
+ <div class="lp-final"><h2>Conheça o Nexora com<br><strong><span data-trial-label>24 horas</span> grátis</strong></h2><a id="lpFinalTrialButton" class="lp-button lp-button-primary" href="/auth/deriv/start" onclick="startNexoraTrial(event)" aria-label="Iniciar teste gratuito do NEXORA IA">Quero testar o NEXORA IA <span class="lp-button-arrow" aria-hidden="true">↗</span></a></div>
+ <p class="lp-disclaimer">Operações financeiras envolvem riscos, inclusive a perda integral do capital em conta REAL. O Nexora não garante lucro. Ao desligar o robô, novas entradas são interrompidas; contratos já comprados seguem sujeitos à duração e à liquidação da Deriv.</p>
 </section>
 <section id="setup" class="robot-setup hidden" aria-labelledby="setupTitle">
   <div class="setup-heading"><div class="choose-overline"><span class="choose-overline-dot"></span> CONFIGURAÇÃO INICIAL · NEXORA ESTRATÉGIAS</div><h1 id="setupTitle">Escolha seu painel <span>para configurar.</span></h1><p>Manual e Estratégias têm perfis completos e independentes. Configure dentro do painel desejado; não há risco global.</p></div>

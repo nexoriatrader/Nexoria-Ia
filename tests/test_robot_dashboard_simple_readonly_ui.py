@@ -717,7 +717,10 @@ def test_premium_reference_skin_preserves_existing_controls():
     assert 'src="/brand/logo-nexora-v21.svg"' in HTML
     assert 'alt="NEXORA IA"' in HTML
     assert "radial-gradient" in header
-    assert "backdrop-filter" not in header.split("NEXORA Glass Signature", 1)[1]
+    landing_styles=header.split("/* Nexora landing refresh",1)[1]
+    assert "backdrop-filter" not in header.split("/* Nexora landing refresh",1)[0].split("NEXORA Glass Signature",1)[1]
+    assert "backdrop-filter" in landing_styles
+    assert "#dashboard" not in landing_styles
     assert 'class="nx-premium-footer">NEXORA IA' in panel
     assert 'id="robotButton"' in panel
     assert 'id="configureRobotButton"' in panel
