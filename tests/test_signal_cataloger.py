@@ -34,7 +34,7 @@ def candles_for_days(start: date, directions_by_day: dict[date, str | None],
 def test_walk_forward_excludes_doji_from_directional_denominators_and_exports_candidate():
     start = date(2025, 1, 1)
     directions = {}
-    for index in range(32):
+    for index in range(33):
         day = start + timedelta(days=index)
         if index < 24:
             # Four neutral candles are not directional observations. The 20
@@ -59,10 +59,10 @@ def test_walk_forward_excludes_doji_from_directional_denominators_and_exports_ca
     assert signal["train_samples"] == 20
     assert signal["train_hits"] == 15
     assert signal["train_rate"] == pytest.approx(0.75)
-    assert signal["walk_forward_samples"] == 8
-    assert signal["walk_forward_hits"] == 8
+    assert signal["walk_forward_samples"] == 9
+    assert signal["walk_forward_hits"] == 9
     assert signal["walk_forward_rate"] == pytest.approx(1.0)
-    assert signal["historical_samples"] == 28
+    assert signal["historical_samples"] == 29
     assert "não" in result["note"].lower()
 
 
@@ -107,7 +107,7 @@ def test_validation_outcomes_cannot_change_selected_candidate_or_exported_direct
 
 def test_insufficient_walk_forward_validation_produces_no_candidate():
     start = date(2025, 1, 1)
-    directions = {start + timedelta(days=i): "CALL" for i in range(30)}
+    directions = {start + timedelta(days=i): "CALL" for i in range(27)}
     result = cataloger.catalogue_time_slots(
         candles=candles_for_days(start, directions),
         granularity_seconds=900,
@@ -164,14 +164,42 @@ def test_today_keeps_future_slots_without_excluding_a_whole_timeframe():
 def test_catalogue_rejects_unsupported_request_values():
     with pytest.raises(ValueError, match="M5 ou M15"):
         cataloger.validate_request(
-            symbol="R_100", granularity_seconds=60, lookback_days=60,
+            symbol="R_100", granularity_seconds=60, lookback_days=30,
             target_day="today", timezone_name="UTC",
         )
     with pytest.raises(ValueError, match="Fuso"):
         cataloger.validate_request(
-            symbol="R_100", granularity_seconds=300, lookback_days=60,
+            symbol="R_100", granularity_seconds=300, lookback_days=30,
             target_day="today", timezone_name="Not/AZone",
         )
+    with pytest.raises(ValueError, match="7, 15 ou 30 dias"):
+        cataloger.validate_request(
+            symbol="R_100", granularity_seconds=300, lookback_days=60,
+            target_day="today", timezone_name="UTC",
+        )
+
+
+@pytest.mark.parametrize("lookback_days", (7, 15, 30))
+def test_supported_lookback_periods(lookback_days):
+    zone = cataloger.validate_request(
+        symbol="R_100", granularity_seconds=300, lookback_days=lookback_days,
+        target_day="today", timezone_name="UTC",
+    )
+    assert str(zone) == "UTC"
+
+
+def test_30_day_window_can_meet_fixed_minimums_for_continuous_market():
+    start = date(2025, 1, 1)
+    directions = {start + timedelta(days=i): "CALL" for i in range(30)}
+    result = cataloger.catalogue_time_slots(
+        candles=candles_for_days(start, directions),
+        granularity_seconds=900,
+        target_day="tomorrow",
+        timezone_name="UTC",
+        now=datetime(2026, 11, 25, 12, tzinfo=UTC),
+    )
+    assert result["signals"][0]["train_samples"] == 21
+    assert result["signals"][0]["walk_forward_samples"] == 9
 
 
 def test_forex_weekend_returns_clear_no_signal_result():
@@ -200,7 +228,8 @@ def test_fetch_history_pages_deduplicates_and_excludes_open_and_out_of_window_ca
     ]
     request = AsyncMock(side_effect=[{"candles": first}, {"candles": second}])
     monkeypatch.setattr(cataloger, "public_request", request)
-    monkeypatch.setattr(cataloger, "PAGE_SIZE", 4)
+    # A short page may reflect a market closure, not the lookback boundary.
+    monkeypatch.setattr(cataloger, "PAGE_SIZE", 5)
     cataloger._history_cache.clear()
 
     result = asyncio.run(cataloger.fetch_historical_candles(
@@ -211,6 +240,30 @@ def test_fetch_history_pages_deduplicates_and_excludes_open_and_out_of_window_ca
     assert [row["epoch"] for row in result] == [start, now - 900, now - 600, now - 300]
     assert request.await_count == 2
     assert request.await_args_list[1].args[0]["end"] == str(now - 901)
+
+
+def test_fetch_history_discards_valid_off_grid_session_reopen_candle(monkeypatch):
+    now = (1_800_000_000 // 900) * 900
+    start = now - 30 * 86400
+    response = {"candles": [
+        {"epoch": now, "open": 1, "close": 2},  # still open
+        {"epoch": now - 900, "open": 1, "close": 2},
+        {"epoch": now - 1800, "open": 2, "close": 1},
+        {"epoch": start + 331, "open": 1, "close": 2},  # session reopened off-grid
+        {"epoch": start, "open": 2, "close": 1},
+    ]}
+    request = AsyncMock(return_value=response)
+    monkeypatch.setattr(cataloger, "public_request", request)
+    monkeypatch.setattr(cataloger, "PAGE_SIZE", 5)
+    cataloger._history_cache.clear()
+
+    result = asyncio.run(cataloger.fetch_historical_candles(
+        symbol="frxEURUSD", granularity_seconds=900, lookback_days=30,
+        now_epoch=now,
+    ))
+
+    assert [row["epoch"] for row in result] == [start, now - 1800, now - 900]
+    assert request.await_count == 1
 
 
 def test_fetch_history_fails_closed_if_pagination_does_not_advance(monkeypatch):
@@ -321,15 +374,23 @@ def test_cataloger_endpoint_checks_catalog_membership_and_is_read_only(cataloger
 
     mismatch = client.post("/api/cataloger/generate", json={
         "market": "forex", "symbol": "R_100", "granularity_seconds": 900,
-        "lookback_days": 60, "target_day": "tomorrow",
+        "lookback_days": 30, "target_day": "tomorrow",
         "timezone_name": "America/Sao_Paulo",
     })
     assert mismatch.status_code == 422
     assert not history.called
 
-    response = client.post("/api/cataloger/generate", json={
+    too_long = client.post("/api/cataloger/generate", json={
         "market": "derived", "symbol": "R_100", "granularity_seconds": 900,
         "lookback_days": 60, "target_day": "tomorrow",
+        "timezone_name": "America/Sao_Paulo",
+    })
+    assert too_long.status_code == 422
+    assert not history.called
+
+    response = client.post("/api/cataloger/generate", json={
+        "market": "derived", "symbol": "R_100", "granularity_seconds": 900,
+        "lookback_days": 30, "target_day": "tomorrow",
         "timezone_name": "America/Sao_Paulo",
     })
     assert response.status_code == 200

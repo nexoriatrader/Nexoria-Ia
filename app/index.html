@@ -2042,7 +2042,7 @@ body:has(#dashboard:not(.hidden)) .nexora-logo-only .brand img{
         <div class="field"><label for="catalogerAsset">Ativo da Deriv</label><select id="catalogerAsset" required><option value="">Carregando ativos...</option></select></div>
         <div class="field"><label for="catalogerGranularity">Duração e timeframe</label><select id="catalogerGranularity"><option value="900">M15 · 15 minutos</option><option value="300">M5 · 5 minutos</option></select></div>
         <div class="field"><label for="catalogerTargetDay">Quando usar a lista</label><select id="catalogerTargetDay"><option value="tomorrow">Amanhã</option><option value="today">Hoje</option></select></div>
-        <div class="field"><label for="catalogerLookback">Histórico</label><select id="catalogerLookback"><option value="60">60 dias (recomendado)</option><option value="30">30 dias</option></select></div>
+        <div class="field"><label for="catalogerLookback">Histórico</label><select id="catalogerLookback"><option value="7">7 dias</option><option value="15">15 dias</option><option value="30" selected>30 dias (máximo; recomendado)</option></select></div>
         <div class="field"><label for="catalogerTimezone">Fuso horário</label><select id="catalogerTimezone"><option value="America/Sao_Paulo">Brasília (UTC−03:00) · padrão</option></select></div>
       </div>
       <button id="catalogerGenerateButton" class="gold cataloger-action" type="submit">ANALISAR HISTÓRICO E GERAR LISTA</button>
@@ -2455,7 +2455,9 @@ function renderCatalogerResults(data){
  $('catalogerSummary').textContent=`${data.asset_name||data.symbol} · ${data.target_date||''} · M${data.duration_minutes} · ${data.history_days||0} dias observados · ${data.history_candles||0} candles · ${data.slots_tested||0} horários avaliados`;
  $('catalogerNote').textContent=data.note||'';
  $('catalogerNoSignals').classList.toggle('hidden',signals.length>0);
- $('catalogerNoSignals').textContent=signals.length?'':(data.history_days<20?'Ainda não há dados suficientes para separar treino e validação. Tente 60 dias ou outro ativo.':'Nenhum horário passou pelos critérios mínimos da análise. Tente outro timeframe ou período, sem interpretar a ausência como recomendação de operar.');
+ const insufficient=String(data.note||'').toLowerCase().includes('histórico insuficiente');
+ const periodHint=Number(data.lookback_days)<30?'Selecione 30 dias ou tente outro ativo/timeframe.':'Mesmo no limite de 30 dias, este ativo pode não ter pregões suficientes; tente outro ativo/timeframe.';
+ $('catalogerNoSignals').textContent=signals.length?'':(insufficient?`A amostra não atingiu os mínimos de treino e validação; os critérios foram mantidos. ${periodHint}`:'Nenhum horário passou pelos critérios mínimos da análise. Tente outro timeframe ou período, sem interpretar a ausência como recomendação de operar.');
  for(const signal of signals){
   const card=document.createElement('article');card.className='cataloger-result';
   const top=document.createElement('div');top.className='cataloger-result-top';

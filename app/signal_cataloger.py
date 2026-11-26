@@ -16,7 +16,7 @@ from .market import MarketError, public_request
 from .manual_signals import TIMEZONES
 
 SUPPORTED_GRANULARITIES = frozenset((300, 900))
-SUPPORTED_LOOKBACK_DAYS = frozenset((30, 60))
+SUPPORTED_LOOKBACK_DAYS = frozenset((7, 15, 30))
 MIN_TRAIN_SAMPLES = 20
 MIN_WALK_FORWARD_SAMPLES = 8
 MIN_TRAIN_RATE = 0.70
@@ -39,7 +39,7 @@ def validate_request(*, symbol: str, granularity_seconds: int,
     if type(granularity_seconds) is not int or granularity_seconds not in SUPPORTED_GRANULARITIES:
         raise ValueError("Escolha M5 ou M15.")
     if type(lookback_days) is not int or lookback_days not in SUPPORTED_LOOKBACK_DAYS:
-        raise ValueError("O histórico deve ser de 30 ou 60 dias.")
+        raise ValueError("O histórico deve ser de 7, 15 ou 30 dias.")
     if target_day not in ("today", "tomorrow"):
         raise ValueError("Escolha hoje ou amanhã.")
     if timezone_name not in TIMEZONES:
@@ -57,8 +57,8 @@ def _parse_candle(item: dict, granularity_seconds: int) -> dict:
         close_price = float(item["close"])
     except (KeyError, ValueError, TypeError, OverflowError) as exc:
         raise MarketError("A Deriv retornou uma vela histórica inválida.") from exc
-    if (epoch < 0 or epoch % granularity_seconds != 0
-            or not math.isfinite(open_price) or not math.isfinite(close_price)):
+    if (epoch < 0 or not math.isfinite(open_price)
+            or not math.isfinite(close_price)):
         raise MarketError("A Deriv retornou dados de vela inválidos.")
     return {"epoch": epoch, "open": open_price, "close": close_price}
 
@@ -70,7 +70,7 @@ async def fetch_historical_candles(*, symbol: str, granularity_seconds: int,
     if type(granularity_seconds) is not int or granularity_seconds not in SUPPORTED_GRANULARITIES:
         raise MarketError("Timeframe inválido para o Catalogador.")
     if type(lookback_days) is not int or lookback_days not in SUPPORTED_LOOKBACK_DAYS:
-        raise MarketError("Período inválido para o Catalogador.")
+        raise MarketError("Período inválido para o Catalogador; use 7, 15 ou 30 dias.")
     if not isinstance(symbol, str) or _SYMBOL.fullmatch(symbol) is None:
         raise MarketError("Símbolo inválido para o Catalogador.")
 
@@ -124,9 +124,17 @@ async def fetch_historical_candles(*, symbol: str, granularity_seconds: int,
             for row in page_rows:
                 # Candle epoch denotes the interval opening. Exclude any bar
                 # whose close is not yet observable at the fixed request time.
+                # The first candle after a market-session reopen can have an
+                # off-grid epoch; it is valid market data but not a comparable
+                # clock-slot observation, so discard it without failing history.
+                if row["epoch"] % granularity_seconds:
+                    continue
                 if start_epoch <= row["epoch"] and row["epoch"] + granularity_seconds <= observed_now:
                     all_rows[row["epoch"]] = row
-            if oldest <= start_epoch or len(raw_candles) < PAGE_SIZE:
+            # Closed sessions and weekend gaps can make a valid page shorter
+            # than PAGE_SIZE. A short page is not proof that the requested
+            # calendar lookback is complete; keep paging until its boundary.
+            if oldest <= start_epoch:
                 history_complete = True
                 break
             if newest <= 0:
@@ -188,7 +196,7 @@ def catalogue_time_slots(*, candles: list[dict], granularity_seconds: int,
     """
     zone = validate_request(
         symbol="TEST", granularity_seconds=granularity_seconds,
-        lookback_days=60, target_day=target_day, timezone_name=timezone_name,
+        lookback_days=30, target_day=target_day, timezone_name=timezone_name,
     )
     if market not in ("forex", "derived", "commodities", "stocks_indices"):
         raise ValueError("Mercado inválido.")
@@ -221,7 +229,9 @@ def catalogue_time_slots(*, candles: list[dict], granularity_seconds: int,
         by_slot.setdefault(slot, {})[local_date] = _direction(candle)
 
     ordered_dates = sorted(all_dates)
-    split = max(MIN_TRAIN_SAMPLES, math.ceil(len(ordered_dates) * 0.75))
+    # Reserve enough of a 30-day continuous-market window for the fixed
+    # 8-observation walk-forward minimum, without reducing either minimum.
+    split = max(MIN_TRAIN_SAMPLES, math.ceil(len(ordered_dates) * 0.70))
     training_dates = ordered_dates[:split]
     validation_dates = ordered_dates[split:]
     if len(training_dates) < MIN_TRAIN_SAMPLES or len(validation_dates) < MIN_WALK_FORWARD_SAMPLES:
@@ -229,7 +239,9 @@ def catalogue_time_slots(*, candles: list[dict], granularity_seconds: int,
             "signals": [], "target_date": target_date.isoformat(),
             "history_candles": len(candles), "history_days": len(ordered_dates),
             "slots_tested": len(by_slot),
-            "note": "Histórico insuficiente para separar treino e validação walk-forward. Tente 60 dias ou outro timeframe.",
+            "note": ("Histórico insuficiente para separar treino e validação walk-forward "
+                     "com os mínimos de 20 observações de treino e 8 de validação. "
+                     "Os critérios não foram reduzidos."),
         }
 
     candidates = []

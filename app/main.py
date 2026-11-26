@@ -1899,7 +1899,7 @@ class CatalogerGenerateRequest(BaseModel):
     market:str
     symbol:str
     granularity_seconds:int=900
-    lookback_days:int=60
+    lookback_days:int=30
     target_day:str='tomorrow'
     timezone_name:str=manual.DEFAULT_TIMEZONE
 
