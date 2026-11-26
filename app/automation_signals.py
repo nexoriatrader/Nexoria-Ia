@@ -294,15 +294,18 @@ async def confirmed_automation_signal(profile, scan_event=None, excluded_symbols
     # Legacy profiles may contain a forced CALL/PUT filter. Strategy panels
     # now derive direction from the selected strategy, so ignore that value.
     direction='AUTO'
+    # Forex contracts in Nexora require M15, including legacy profiles whose
+    # stored duration was M1, M3, M5, or automatic.
+    expiry_minutes=15 if profile.market=='forex' else profile.expiry_minutes
     if profile.strategy=='pulso_v2':
-        return await confirmed_pulso_signal(symbols,direction=direction,minutes=profile.expiry_minutes,scan_event=scan_event)
+        return await confirmed_pulso_signal(symbols,direction=direction,minutes=expiry_minutes,scan_event=scan_event)
 
     now=time.time()
     if now%60>12:
         if scan_event: scan_event('window',None,len(symbols),'aguardando_fechamento_m1')
         return None
     bucket=int(now//60)*60
-    key=(profile.strategy,profile.expiry_minutes,direction,tuple(symbols))
+    key=(profile.market,profile.strategy,expiry_minutes,direction,tuple(symbols))
     async with _scan_lock:
         cached=_scan_cache.get(key)
         if cached and cached[0]==bucket:
@@ -351,7 +354,7 @@ async def confirmed_automation_signal(profile, scan_event=None, excluded_symbols
                     # Broker proposal checks determine supported expirations,
                     # rather than spending the limited signal window querying
                     # contracts_for four times for every candidate.
-                    expiry_options=[1,3,5,15] if profile.expiry_minutes==0 else [profile.expiry_minutes]
+                    expiry_options=[1,3,5,15] if expiry_minutes==0 else [expiry_minutes]
                     reason='sinal_confirmado'
                     return {
                         'strategy':'nexora_'+profile.strategy+'_m1_auto',

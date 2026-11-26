@@ -10,13 +10,15 @@ import pytest
 from app import automation_signals, pulso_live
 
 
-def make_profile(strategy, indicators_json='["ATR","EMA","RSI"]', direction="AUTO"):
+def make_profile(strategy, indicators_json='["ATR","EMA","RSI"]', direction="AUTO",
+                 market="derived", expiry_minutes=5, symbols_json='["R_100"]'):
     return SimpleNamespace(
-        symbols_json='["R_100"]',
+        symbols_json=symbols_json,
         indicators_json=indicators_json,
         direction=direction,
         strategy=strategy,
-        expiry_minutes=5,
+        market=market,
+        expiry_minutes=expiry_minutes,
     )
 
 
@@ -42,10 +44,10 @@ def test_profile_response_hides_legacy_indicator_choices():
 
     profile = SimpleNamespace(
         account_mode="demo",
-        market="volatility",
+        market="forex",
         symbols_json='["R_100"]',
         strategy="pulso_v2",
-        expiry_minutes=0,
+        expiry_minutes=5,
         news_filter=False,
         news_minutes_before=30,
         news_minutes_after=30,
@@ -60,6 +62,7 @@ def test_profile_response_hides_legacy_indicator_choices():
     result = automation_profile_result(profile)
     assert result["indicators"] == []
     assert result["direction"] == "AUTO"
+    assert result["expiry_minutes"] == 15
 
 
 def test_saving_legacy_indicator_selections_clears_persisted_values(monkeypatch):
@@ -152,6 +155,27 @@ def test_legacy_indicators_are_not_forwarded_to_pulso(monkeypatch):
     }
 
 
+def test_legacy_forex_pulso_duration_is_pinned_to_m15(monkeypatch):
+    received = {}
+
+    async def fake_pulso(symbols, *, direction, minutes, scan_event):
+        received.update(symbols=symbols, direction=direction, minutes=minutes)
+        return {"strategy": "pulso_v2", "minutes": minutes}
+
+    monkeypatch.setattr(automation_signals, "confirmed_pulso_signal", fake_pulso)
+    profile = make_profile(
+        "pulso_v2", market="forex", expiry_minutes=5,
+        symbols_json='["frxEURUSD"]',
+    )
+
+    result = asyncio.run(automation_signals.confirmed_automation_signal(profile))
+
+    assert result["minutes"] == 15
+    assert received == {
+        "symbols": ["frxEURUSD"], "direction": "AUTO", "minutes": 15,
+    }
+
+
 @pytest.mark.parametrize("strategy", ["trend", "rsi"])
 def test_legacy_indicators_do_not_filter_strategy_owned_signal(monkeypatch, strategy):
     now = 126.0
@@ -183,7 +207,10 @@ def test_legacy_indicators_do_not_filter_strategy_owned_signal(monkeypatch, stra
         lambda candle_rows, selected_strategy: "CALL",
     )
     automation_signals._scan_cache.clear()
-    profile = make_profile(strategy, '["ATR","BOLLINGER","CANDLE_PATTERNS"]', direction="PUT")
+    profile = make_profile(
+        strategy, '["ATR","BOLLINGER","CANDLE_PATTERNS"]', direction="PUT",
+        market="forex", expiry_minutes=5, symbols_json='["frxEURUSD"]',
+    )
 
     try:
         result = asyncio.run(automation_signals.confirmed_automation_signal(profile))
@@ -192,6 +219,8 @@ def test_legacy_indicators_do_not_filter_strategy_owned_signal(monkeypatch, stra
 
     assert result is not None
     assert result["direction"] == "CALL"
+    assert result["minutes"] == 15
+    assert result["expiry_options"] == [15]
     assert result["reason"] == strategy + " · fechamento M1"
 
 

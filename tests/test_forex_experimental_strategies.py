@@ -411,7 +411,8 @@ def test_forex_experimental_choices_are_real_visible_and_clearly_disclosed():
 
     html = (Path(__file__).resolve().parents[1] / "app" / "index.html").read_text(encoding="utf-8")
     assert 'data-forex-experimental-strategy' in html
-    assert "const eligible=automationRadio('autoMarket')==='forex';" in html
+    assert "const forex=automationRadio('autoMarket')==='forex';" in html
+    assert "const eligible=forex;" in html
     assert "Treinamento/DEMO e REAL" in html
     assert "Em REAL, contratos podem gerar perdas financeiras" in html
     assert "isForexExperimentalStrategy" in html

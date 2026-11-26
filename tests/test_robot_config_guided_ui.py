@@ -122,6 +122,57 @@ def test_visual_skin_scoped_and_broker_guards_remain():
     assert "if(!health.real_orders_enabled)" in SOURCE
 
 
+def test_forex_expiry_control_only_exposes_fixed_m15():
+    if not shutil.which("node"):
+        return
+    source = SOURCE.split("function isForexExperimentalStrategy", 1)[1].split(
+        "async function changeAutomationAccount", 1
+    )[0]
+    script = "function isForexExperimentalStrategy" + source
+    runtime = r"""
+const radios={autoMarket:'derived',autoStrategy:'pulso_v2',autoMode:'demo'};
+const options=['0','1','3','5','15'].map(value=>({value,hidden:false,disabled:false}));
+const nodes={
+ autoExpiry:{value:'5',disabled:false,options},
+ forexStrategyDisclosure:{hidden:true},
+ autoExpiryLabel:{textContent:''},autoExpiryHelp:{textContent:''}
+};
+const strategyLabels=[{classList:{toggle(name,value){this.hidden=value}}}];
+const $=id=>nodes[id];
+const automationRadio=name=>radios[name];
+function setAutomationRadio(name,value){radios[name]=value}
+const document={
+ querySelectorAll(selector){
+  if(selector==='[data-forex-experimental-strategy]')return strategyLabels;
+  throw Error('Unexpected selector '+selector);
+ }
+};
+"""
+    checks = r"""
+syncAutomationStrategyChoices();
+if(nodes.autoExpiry.disabled||options.some(option=>option.hidden||option.disabled))
+ throw Error('Non-Forex durations should stay available');
+radios.autoMarket='forex';syncAutomationStrategyChoices();
+if(nodes.autoExpiry.value!=='15'||!nodes.autoExpiry.disabled)
+ throw Error('Forex must be locked to M15');
+if(options.filter(option=>!option.hidden).map(option=>option.value).join(',')!=='15')
+ throw Error('Forex must expose only M15');
+if(options.some(option=>option.value!=='15'&&!option.disabled))
+ throw Error('Other Forex durations must be disabled');
+if(!nodes.autoExpiryLabel.textContent.includes('Forex')||
+   !nodes.autoExpiryHelp.textContent.includes('M15'))
+ throw Error('Forex fixed-duration explanation missing');
+radios.autoMarket='derived';syncAutomationStrategyChoices();
+if(nodes.autoExpiry.disabled||options.some(option=>option.hidden||option.disabled))
+ throw Error('Non-Forex duration choices were not restored');
+"""
+    result = subprocess.run(
+        ["node", "-e", runtime + script + checks],
+        capture_output=True, text=True, timeout=15, check=False,
+    )
+    assert result.returncode == 0, result.stderr
+
+
 def test_navigation_updates_only_visual_progress_with_correct_bounds():
     if not shutil.which("node"):
         return

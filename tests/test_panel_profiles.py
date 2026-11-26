@@ -157,6 +157,36 @@ def test_strategy_profile_automatically_uses_up_to_five_market_assets(tmp_path, 
         cleanup(engine)
 
 
+def test_forex_strategy_profile_requires_and_persists_m15(tmp_path, monkeypatch):
+    client, factory, engine, uid = prepare(tmp_path, monkeypatch)
+    monkeypatch.setattr(main, "featured_instruments_by_group", AsyncMock(return_value=[
+        {"symbol": "frxEURUSD", "name": "EUR/USD", "group": "forex"},
+    ]))
+    payload = {
+        "panel_mode": "strategies", "operation_mode": "strategies",
+        "account_mode": "demo", "market": "forex", "symbols": [],
+        "strategy": "trend", "expiry_minutes": 5,
+        "stake": "1.00", "stop_win": "0.00", "stop_loss": "0.00",
+        "martingale": False, "gale_count": 0, "cycles": 0,
+        "multiplier": "2.00", "cycle_multiplier": "2.00",
+    }
+    try:
+        for invalid_duration in (0, 1, 3, 5):
+            payload["expiry_minutes"] = invalid_duration
+            response = client.post("/api/automation/profile", json=payload)
+            assert response.status_code == 422
+            assert "M15" in response.json()["detail"]
+
+        payload["expiry_minutes"] = 15
+        response = client.post("/api/automation/profile", json=payload)
+        assert response.status_code == 200, response.text
+        saved = client.get("/api/automation/profile?panel_mode=strategies").json()
+        assert saved["expiry_minutes"] == 15
+        assert saved["symbols"] == ["frxEURUSD"]
+    finally:
+        cleanup(engine)
+
+
 def test_risk_summary_only_counts_orders_from_requested_panel(tmp_path, monkeypatch):
     client, factory, engine, uid = prepare(tmp_path, monkeypatch)
     with factory() as session:

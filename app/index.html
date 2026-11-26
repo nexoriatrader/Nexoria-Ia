@@ -3787,7 +3787,8 @@ function isForexExperimentalStrategy(strategy){
  return strategy==='fx_pullback_m15'||strategy==='fx_breakout_m15';
 }
 function syncAutomationStrategyChoices(){
- const eligible=automationRadio('autoMarket')==='forex';
+ const forex=automationRadio('autoMarket')==='forex';
+ const eligible=forex;
  document.querySelectorAll('[data-forex-experimental-strategy]').forEach(label=>
   label.classList.toggle('hidden',!eligible));
  const selected=automationRadio('autoStrategy');
@@ -3796,15 +3797,22 @@ function syncAutomationStrategyChoices(){
   automationProfileSaved=false;
  }
  const fixed=isForexExperimentalStrategy(automationRadio('autoStrategy'));
+ const m15Only=forex||fixed;
  const expiry=$('autoExpiry');
  if(expiry){
-  if(fixed)expiry.value='15';
-  expiry.disabled=fixed;
+  [...expiry.options].forEach(option=>{
+   const unavailable=m15Only&&option.value!=='15';
+   option.hidden=unavailable;option.disabled=unavailable;
+  });
+  if(m15Only)expiry.value='15';
+  expiry.disabled=m15Only;
  }
  $('forexStrategyDisclosure').hidden=!eligible;
  const real=automationRadio('autoMode')==='real';
- $('autoExpiryLabel').textContent=fixed?'Expiração fixa da estratégia':'Expiração';
- $('autoExpiryHelp').textContent=fixed
+ $('autoExpiryLabel').textContent=forex?'Expiração fixa do Forex':fixed?'Expiração fixa da estratégia':'Expiração';
+ $('autoExpiryHelp').textContent=forex
+  ?'Forex opera somente em M15 (15 minutos), a duração mínima necessária para este mercado. M1, M3, M5 e a opção automática ficam indisponíveis.'
+  :fixed
   ?'Esta estratégia usa contrato de 15 minutos (M15). A Deriv ainda precisa aceitar a proposta; indisponibilidade ou payout abaixo do mínimo impedem a entrada.'
   :expiry?.value==='0'
    ?'No modo automático, o NEXORA compara as durações disponíveis e seleciona uma proposta que atenda ao payout mínimo. Sem proposta válida, não opera.'

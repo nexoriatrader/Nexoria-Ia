@@ -1799,11 +1799,14 @@ def automation_profile_result(profile, panel_mode=None):
             'cycle_multiplier':'2.00','panel_mode':panel_mode or 'strategies',
             'configured':False,'execution':'DERIV_DEMO_ONLY'
         }
+    strategy_profile=(panel_mode or getattr(profile,'panel_mode','strategies'))!='manual' and \
+        getattr(profile,'operation_mode','strategies')!='manual'
+    expiry_minutes=15 if strategy_profile and profile.market=='forex' else profile.expiry_minutes
     return {
         'operation_mode':getattr(profile,'operation_mode','strategies'),
         'account_mode':profile.account_mode,'market':profile.market,
         'symbols':json.loads(profile.symbols_json),
-        'strategy':profile.strategy,'expiry_minutes':profile.expiry_minutes,
+        'strategy':profile.strategy,'expiry_minutes':expiry_minutes,
         'news_filter':profile.news_filter,
         'news_minutes_before':profile.news_minutes_before,
         'news_minutes_after':profile.news_minutes_after,
@@ -1866,6 +1869,8 @@ async def save_automation_profile(request:Request,payload:AutomationProfileReque
     if not manual_mode:
         if payload.expiry_minutes not in (0,1,3,5,15):
             raise HTTPException(422,'Expiração inválida')
+        if payload.market=='forex' and payload.expiry_minutes!=15:
+            raise HTTPException(422,'Forex exige expiração fixa M15 (15 minutos)')
         if payload.strategy in FOREX_MTF_STRATEGIES and payload.expiry_minutes!=15:
             raise HTTPException(422,'Esta estratégia Forex exige expiração fixa M15')
     if payload.news_minutes_before not in (0,15,30,60) or payload.news_minutes_after not in (0,15,30,60):
