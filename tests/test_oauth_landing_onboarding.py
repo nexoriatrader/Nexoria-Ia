@@ -218,19 +218,32 @@ def test_successful_oauth_followed_by_refresh_does_not_show_login_error(tmp_path
 
 def test_landing_offers_24h_and_new_configuration_wizard():
     html=(Path(__file__).resolve().parents[1]/"app"/"index.html").read_text(encoding="utf-8")
-    welcome=html.split('<section id="welcome"',1)[1].split('<section id="setup"',1)[0]
+    welcome=html.split('<section id="welcome"',1)[1].split('<section id="auth-guide"',1)[0]
     assert 'Teste grátis por <span data-trial-label>24 horas</span>' in html
     assert '<strong><span data-trial-label>24 horas</span> grátis</strong>' in html
     assert 'id="lpLoginNotice"' in html
-    assert "if(loginResult==='ok'){" in html
-    assert "go('robot-config');" in html
+    assert "if(loginResult==='ok'||window.location.pathname==='/boas-vindas'){" in html
+    assert "go('app-home');" in html
     assert "go('setup')" not in html
     assert "showLandingLoginNotice(loginResult);" in html
+    assert "window.location.pathname==='/boas-vindas'" in html
     assert "const data=await req('/api/public/offer');" in html
     assert "R$ 29,90" in html and "R$ 49,90" in html and "R$ 99,00" in html
     assert "O Nexora não garante lucro." in welcome
     assert "funciona em Treinamento e em conta REAL" in welcome
     assert "apenas em DEMO" not in welcome
+
+
+def test_public_welcome_route_serves_the_educational_auth_page(tmp_path,monkeypatch):
+    client,factory,engine=local_client(tmp_path,monkeypatch)
+    try:
+        response=client.get('/boas-vindas')
+        assert response.status_code==200
+        assert '<section id="auth-guide"' in response.text
+        assert 'Depois de concluir o cadastro ou login e a autorização' in response.text
+        assert 'Já tenho conta — entrar' in response.text
+    finally:
+        client.close();engine.dispose()
 
 
 def test_inline_browser_script_has_valid_javascript_syntax(tmp_path):

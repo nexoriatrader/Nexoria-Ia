@@ -87,10 +87,10 @@ def test_inline_javascript_syntax_is_valid(tmp_path):
 
 def test_landing_preserves_explicit_deriv_oauth_and_no_auto_start():
     html=load_ui()
-    welcome=html.split('<section id="welcome"',1)[1].split('<section id="setup"',1)[0]
+    welcome=html.split('<section id="welcome"',1)[1].split('<section id="auth-guide"',1)[0]
     assert 'href="/auth/deriv/start"' in welcome
     assert 'id="lpHeroTrialButton"' in welcome
-    assert 'onclick="startNexoraTrial(event)"' in welcome
+    assert 'data-auth-guide href="/boas-vindas" onclick="openAuthGuide(event)"' in welcome
     assert 'data-trial-label>24 horas</span>' in welcome
     assert 'Login oficial Deriv' in welcome
     assert 'Catalogador de sinais' in welcome
@@ -103,6 +103,10 @@ def test_landing_preserves_explicit_deriv_oauth_and_no_auto_start():
     assert 'somente em DEMO' not in welcome
     assert '/api/autopilot/start' not in welcome
     assert 'id="robotButton"' in html
+    assert 'id="auth-guide"' in html
+    assert 'Criar conta na Deriv' in html
+    assert 'Já tenho conta — entrar' in html
+    assert "startNexoraTrial(event,true)" in html
 
 
 def test_premium_landing_mobile_and_accessibility():
@@ -117,17 +121,27 @@ def test_premium_landing_mobile_and_accessibility():
     assert 'onclick="go(\'robot-config\',\'manual\')"' in html
 
 
-def test_authenticated_oauth_requires_initial_setup_before_user_starts_robot():
+def test_authenticated_oauth_opens_tool_home_without_starting_robot():
     html=load_ui()
     assert 'id="setupForm"' not in html
     assert 'CONFIGURAR NEXORA ESTRATÉGIAS' in html
     assert 'CONFIGURAR NEXORA MANUAL' in html
     assert "const loginResult=params.get('login');" in html
-    assert "go('robot-config');" in html
+    assert "go('app-home');" in html
     assert "go('setup')" not in html
-    assert "page('dashboard')" in html
+    assert "data-view=\"app-home\"" in html
+    assert "id=\"app-home\"" in html
     assert 'history.replaceState' in html
     assert 'id="robotButton"' in html
+
+
+def test_authenticated_home_cards_open_all_requested_tools():
+    html=load_ui()
+    home=html.split('<section id="app-home"',1)[1].split('</section>',1)[0]
+    for label in ('Catalogador','Nexora Estratégias','Nexora Manual','Histórico de operações','Minha conta'):
+        assert label in home
+    for target in ("go('cataloger')","go('dashboard')","go('manual-dashboard')","go('results')","go('account')"):
+        assert target in home
 
 
 def test_real_account_selection_is_separate_from_order_authorization():

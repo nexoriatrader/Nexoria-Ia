@@ -117,6 +117,8 @@ def test_configuration_is_panel_scoped_and_wizard_is_reached_from_each_panel():
     html=(Path(__file__).resolve().parents[1]/'app'/'index.html').read_text()
     nav=html.split('<nav id="primaryNavigation"',1)[1].split('</nav>',1)[0]
     assert 'Nexora Manual' in nav and 'Nexora Estratégias' in nav
+    assert 'data-view="app-home"' in nav
+    assert "go('app-home')" in nav
     assert 'data-view="robot-config"' not in nav
     assert "go('robot-config','manual')" in html
     assert "go('robot-config','strategies')" in html
