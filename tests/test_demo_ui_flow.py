@@ -135,13 +135,20 @@ def test_authenticated_oauth_opens_tool_home_without_starting_robot():
     assert 'id="robotButton"' in html
 
 
-def test_authenticated_home_cards_open_all_requested_tools():
+def test_authenticated_home_shows_four_requested_cards_and_account_shortcut():
     html=load_ui()
     home=html.split('<section id="app-home"',1)[1].split('</section>',1)[0]
-    for label in ('Catalogador','Nexora Estratégias','Nexora Manual','Histórico de operações','Minha conta'):
+    assert home.count('class="app-home-card"')==4
+    order=('Nexora Estratégias','Nexora Manual · Sinais','Catalogador','Resultados')
+    assert [home.index(label) for label in order]==sorted(home.index(label) for label in order)
+    for label in order:
         assert label in home
-    for target in ("go('cataloger')","go('dashboard')","go('manual-dashboard')","go('results')","go('account')"):
+    for target in ("go('cataloger')","go('dashboard')","go('manual-dashboard')","go('results')"):
         assert target in home
+    assert 'grid-template-columns:repeat(2,minmax(0,1fr))' in html
+    assert 'id="topAccessSummary"' in html and 'id="topAccessCountdown"' in html
+    assert "go('account')" in html
+    assert "if(v==='app-home')loadRobotAccess();" in html
 
 
 def test_real_account_selection_is_separate_from_order_authorization():
