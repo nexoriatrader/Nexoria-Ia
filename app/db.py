@@ -292,6 +292,29 @@ class PaperTrade(Base):
     __table_args__ = (Index('ix_paper_user_time','user_id','settled_at'),)
 
 
+class CatalogerCandle(Base):
+    """Public, user-independent Deriv candle cache, shared by all accounts."""
+    __tablename__ = 'cataloger_candles'
+    symbol = Column(String(30), primary_key=True)
+    granularity_seconds = Column(Integer, primary_key=True)
+    epoch = Column(Integer, primary_key=True)
+    open_price = Column(String(40), nullable=False)
+    high_price = Column(String(40), nullable=True)
+    low_price = Column(String(40), nullable=True)
+    close_price = Column(String(40), nullable=False)
+    __table_args__ = (Index('ix_cataloger_candles_epoch', 'epoch'),)
+
+
+class CatalogerHistoryState(Base):
+    """Shared sync cursor and freshness marker for one symbol/timeframe."""
+    __tablename__ = 'cataloger_history_states'
+    symbol = Column(String(30), primary_key=True)
+    granularity_seconds = Column(Integer, primary_key=True)
+    synchronized_at = Column(DateTime(timezone=True), nullable=True)
+    oldest_epoch = Column(Integer, nullable=True)
+    newest_epoch = Column(Integer, nullable=True)
+
+
 def init_db():
     Base.metadata.create_all(engine)
     # Backwards-compatible additive migration. Never fabricate official times

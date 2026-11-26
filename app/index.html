@@ -1566,6 +1566,7 @@ body:has(#dashboard:not(.hidden)) .nexora-logo-only .brand img{
 @media(max-width:650px){.operation-mode-options{grid-template-columns:1fr}.manual-signals-fields{grid-template-columns:1fr}.manual-capacity span:last-child{margin-left:0;width:100%}.manual-signals-head{align-items:flex-start}.manual-signals-card{padding:17px}}
 .cataloger-card{max-width:960px;margin-inline:auto}.cataloger-intro{max-width:660px;color:#a9bfd0;font-size:13px;line-height:1.65;margin:8px 0 20px}
 .cataloger-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}.cataloger-fields .field select{min-height:48px}
+.cataloger-progress{margin-top:14px;border:1px solid #31546b;border-radius:12px;padding:12px;background:#0b1b2a}.cataloger-progress[hidden]{display:none}.cataloger-progress progress{width:100%;height:12px;accent-color:#d8ad59}.cataloger-asset-group{margin-top:14px;border:1px solid #29455a;border-radius:13px;padding:12px;background:#0c1c2c}.cataloger-asset-heading{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px}.cataloger-asset-heading strong{color:#f0cf85}.cataloger-asset-empty{color:#a9bfd0;font-size:12px;margin:8px 0}.cataloger-scan-actions{display:flex;gap:10px}.cataloger-scan-actions button{flex:1}
 .cataloger-action{width:100%;min-height:54px;margin-top:18px;font-size:14px}.cataloger-feedback{min-height:22px;margin-top:12px;color:#b9d0df;font-size:12px}
 .cataloger-results{max-width:960px;margin:15px auto 0}.cataloger-results-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:14px}.cataloger-results-head h2{font-size:19px}.cataloger-result-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
 .cataloger-result{border:1px solid #31546b;border-radius:14px;padding:14px;background:linear-gradient(145deg,#132b40,#0d1d2e)}.cataloger-result-top{display:flex;align-items:center;justify-content:space-between;gap:8px}.cataloger-result-time{font-size:19px;font-weight:900;color:#f4d28c}.cataloger-result-dir{border:1px solid #38725f;background:#12372e;color:#a4efd0;border-radius:999px;padding:5px 10px;font-size:11px;font-weight:900}.cataloger-result-dir.put{border-color:#73515a;background:#38252c;color:#ffc5c9}
@@ -2033,19 +2034,19 @@ body:has(#dashboard:not(.hidden)) .nexora-logo-only .brand img{
   </div>
   <div class="card cataloger-card">
     <div class="surface-heading">Monte sua análise</div>
-    <p class="cataloger-intro">O Nexora procura direções que se repetiram no mesmo horário local e verifica o método em dados posteriores, sem os usar para escolher os candidatos. A estratégia é fixa nesta versão: Viés histórico por horário.</p>
+    <p class="cataloger-intro">Escolha um mercado para analisar todos os ativos dele, um por vez. A estratégia é fixa nesta versão: Viés histórico por horário. A primeira coleta guarda até 60 dias de candles públicos para reutilização por todos os usuários; janelas menores aproveitam os mesmos dados.</p>
     <form id="catalogerForm" onsubmit="generateCataloger(event)">
       <div class="cataloger-fields">
         <div class="field"><label for="catalogerMarket">Mercado</label><select id="catalogerMarket" required>
           <option value="derived">Derivados</option><option value="forex">Forex</option><option value="commodities">Matérias-primas</option><option value="stocks_indices">Ações e índices</option>
         </select></div>
-        <div class="field"><label for="catalogerAsset">Ativo da Deriv</label><select id="catalogerAsset" required><option value="">Carregando ativos...</option></select></div>
-        <div class="field"><label for="catalogerGranularity">Duração e timeframe</label><select id="catalogerGranularity"><option value="900">M15 · 15 minutos</option><option value="300">M5 · 5 minutos</option></select></div>
+        <div class="field"><label for="catalogerGranularity">Timeframe</label><select id="catalogerGranularity"><option value="900">M15 · 15 minutos</option><option value="300">M5 · 5 minutos</option></select></div>
         <div class="field"><label for="catalogerTargetDay">Quando usar a lista</label><select id="catalogerTargetDay"><option value="tomorrow">Amanhã</option><option value="today">Hoje</option></select></div>
-        <div class="field"><label for="catalogerLookback">Histórico</label><select id="catalogerLookback"><option value="7">7 dias</option><option value="15">15 dias</option><option value="30" selected>30 dias (máximo; recomendado)</option></select></div>
+        <div class="field"><label for="catalogerLookback">Período da análise</label><select id="catalogerLookback"><option value="7">7 dias</option><option value="15">15 dias</option><option value="30" selected>30 dias</option><option value="60">60 dias</option></select></div>
         <div class="field"><label for="catalogerTimezone">Fuso horário</label><select id="catalogerTimezone"><option value="America/Sao_Paulo">Brasília (UTC−03:00) · padrão</option></select></div>
       </div>
-      <button id="catalogerGenerateButton" class="gold cataloger-action" type="submit">ANALISAR HISTÓRICO E GERAR LISTA</button>
+      <div class="cataloger-scan-actions"><button id="catalogerGenerateButton" class="gold cataloger-action" type="submit">ANALISAR TODOS OS ATIVOS</button><button id="catalogerCancelButton" class="outline cataloger-action" type="button" hidden onclick="cancelCatalogerScan()">CANCELAR VARREDURA</button></div>
+      <div id="catalogerProgressBox" class="cataloger-progress" hidden><progress id="catalogerProgress" max="100" value="0" aria-label="Progresso da varredura"></progress><p id="catalogerProgressText" class="helper" role="status" aria-live="polite"></p></div>
     </form>
     <p id="catalogerFeedback" class="cataloger-feedback" role="status" aria-live="polite">Somente análise. Nenhum sinal será agendado ou executado por esta página.</p>
   </div>
@@ -2256,6 +2257,8 @@ const $=id=>document.getElementById(id);
 let activePage='welcome',demoOrders=[],demoBalance=null,refreshTimer=null,resultsRefreshTimer=null,resultsRequestBusy=false,lastRequestKey=null,robotRunning=false,robotStatusConfirmed=false,robotConfiguredMode='demo';
 let catalogerAssetsByMarket={};
 let catalogerAssetRequest=0;
+let catalogerScanController=null;
+let catalogerLastMarket=null;
 let dashboardStatusSequence=0;
 let accessExpiresMs=null,accessServerDelta=0,accessMode='UNKNOWN',accessTrialSeconds=24*3600;
 const durationString=seconds=>{
@@ -2423,80 +2426,143 @@ function updateResultsPolling(){
 function go(v){page(v);updateResultsPolling();window.scrollTo({top:0,behavior:'smooth'});if(v==='setup')loadOnboarding();if(v==='dashboard'){refreshDashboard();loadDemoOrders().catch(()=>{});loadDailyResults().catch(()=>{});loadManualSignalsState();}if(v==='robot-config'){initAutomationWizard();setAutomationWizardStep(operationMode()==='manual'?autoWizardStep:2);loadAutomationProfile();}if(v==='results'){loadDemoOrders();}if(v==='cataloger')loadCatalogerAssets();if(v==='account'){loadRobotAccess();loadBillingPlans()}if(v==='settings')loadSettings()}
 function fail(msg){$('error').textContent=msg||''}
 async function req(path,opts={}){const r=await fetch(path,{credentials:'same-origin',...opts});let data;try{data=await r.json()}catch{throw Error('Resposta inválida do servidor')}if(!r.ok)throw Error(data.detail||'Falha na conexão');return data}
+function updateCatalogerMarketControls(){
+ const market=$('catalogerMarket').value,granularity=$('catalogerGranularity'),lookback=$('catalogerLookback');
+ if(market==='forex'){
+  granularity.value='900';granularity.disabled=true;
+  if(!lookback.dataset.userAdjusted)lookback.value='60';
+ }else{
+  granularity.disabled=false;
+  if(catalogerLastMarket==='forex'&&!lookback.dataset.userAdjusted)lookback.value='30';
+ }
+ catalogerLastMarket=market;
+}
 async function loadCatalogerAssets(force=false){
- const market=$('catalogerMarket').value,assetSelect=$('catalogerAsset'),requestId=++catalogerAssetRequest;
- if(!force&&catalogerAssetsByMarket[market]){fillCatalogerAssets(catalogerAssetsByMarket[market]);return}
- assetSelect.replaceChildren(new Option('Carregando ativos da Deriv...',''));
+ const market=$('catalogerMarket').value,requestId=++catalogerAssetRequest;
+ updateCatalogerMarketControls();
+ if(!force&&catalogerAssetsByMarket[market]){
+  const items=catalogerAssetsByMarket[market];
+  $('catalogerFeedback').textContent=`Catálogo Deriv: ${items.length} ativos disponíveis neste mercado. A análise não agenda nem executa operações.`;
+  return items;
+ }
  $('catalogerFeedback').textContent='Consultando os ativos disponíveis no catálogo Deriv...';
  try{
   const data=await req('/api/cataloger/assets?market='+encodeURIComponent(market));
-  if(requestId!==catalogerAssetRequest||$('catalogerMarket').value!==market)return;
+  if(requestId!==catalogerAssetRequest||$('catalogerMarket').value!==market)return [];
   catalogerAssetsByMarket[market]=data.items||[];
-  fillCatalogerAssets(catalogerAssetsByMarket[market]);
   const timezoneSelect=$('catalogerTimezone'),selected=timezoneSelect.value;
   timezoneSelect.replaceChildren();
   for(const [value,label] of Object.entries(data.timezones||{})){
    const option=document.createElement('option');option.value=value;option.textContent=label;timezoneSelect.appendChild(option);
   }
   timezoneSelect.value=selected&&data.timezones?.[selected]?selected:'America/Sao_Paulo';
-  $('catalogerFeedback').textContent='Ativos atualizados pela Deriv. A análise não agenda nem executa operações.';
- }catch(error){if(requestId===catalogerAssetRequest){assetSelect.replaceChildren(new Option('Não foi possível carregar ativos',''));$('catalogerFeedback').textContent='Não foi possível carregar o catálogo Deriv: '+error.message;}}
-}
-function fillCatalogerAssets(items){
- const select=$('catalogerAsset'),previous=select.value;select.replaceChildren();
- if(!items.length){select.appendChild(new Option('Nenhum ativo disponível',''));return}
- for(const item of items){const option=document.createElement('option');option.value=item.symbol;option.textContent=item.name+' · '+item.symbol;select.appendChild(option)}
- if(items.some(item=>item.symbol===previous))select.value=previous;
+  $('catalogerFeedback').textContent=`Catálogo Deriv atualizado: ${catalogerAssetsByMarket[market].length} ativos neste mercado. A análise não agenda nem executa operações.`;
+  return catalogerAssetsByMarket[market];
+ }catch(error){
+  if(requestId===catalogerAssetRequest)$('catalogerFeedback').textContent='Não foi possível carregar o catálogo Deriv: '+error.message;
+  return [];
+ }
 }
 function percent(value){const number=Number(value);return Number.isFinite(number)?(number*100).toLocaleString('pt-BR',{minimumFractionDigits:1,maximumFractionDigits:1})+'%':'—'}
-function renderCatalogerResults(data){
- const signals=Array.isArray(data.signals)?data.signals:[],container=$('catalogerSignalCards');container.replaceChildren();
+function appendCatalogerSignalCard(container,signal){
+ const card=document.createElement('article');card.className='cataloger-result';
+ const top=document.createElement('div');top.className='cataloger-result-top';
+ const time=document.createElement('strong');time.className='cataloger-result-time';time.textContent=signal.time;
+ const dir=document.createElement('span');dir.className='cataloger-result-dir'+(signal.direction==='PUT'?' put':'');dir.textContent=signal.direction;
+ top.append(time,dir);card.appendChild(top);
+ const stats=document.createElement('div');stats.className='cataloger-stats';
+ const values=[
+  ['Treino histórico',`${signal.train_hits}/${signal.train_samples} · ${percent(signal.train_rate)}`],
+  ['Validação walk-forward',`${signal.walk_forward_hits}/${signal.walk_forward_samples} · ${percent(signal.walk_forward_rate)}`],
+  ['Amostras totais do horário',String(signal.historical_samples)],
+  ['Ativo',`${signal.asset_name||signal.symbol} · M${signal.duration_minutes}`],
+ ];
+ for(const [label,value] of values){const stat=document.createElement('div');stat.className='cataloger-stat';const small=document.createElement('small');small.textContent=label;const strong=document.createElement('strong');strong.textContent=value;stat.append(small,strong);stats.appendChild(stat)}
+ card.appendChild(stats);container.appendChild(card);
+}
+function renderCatalogerResults(outcomes,scan){
+ const container=$('catalogerSignalCards');container.replaceChildren();
+ const signals=outcomes.flatMap(item=>Array.isArray(item.signals)?item.signals:[]);
+ const candidates=outcomes.filter(item=>Array.isArray(item.signals)&&item.signals.length);
+ const emptyCount=outcomes.length-candidates.length;
  $('catalogerResults').classList.remove('hidden');
- $('catalogerSummary').textContent=`${data.asset_name||data.symbol} · ${data.target_date||''} · M${data.duration_minutes} · ${data.history_days||0} dias observados · ${data.history_candles||0} candles · ${data.slots_tested||0} horários avaliados`;
- $('catalogerNote').textContent=data.note||'';
+ $('catalogerSummary').textContent=`${scan.processed}/${scan.total} ativos processados · ${candidates.length} com candidatos · ${emptyCount} sem candidatos · ${signals.length} sinais · M${scan.durationMinutes} · janela de ${scan.lookbackDays} dias`;
  $('catalogerNoSignals').classList.toggle('hidden',signals.length>0);
- const insufficient=String(data.note||'').toLowerCase().includes('histórico insuficiente');
- const periodHint=Number(data.lookback_days)<30?'Selecione 30 dias ou tente outro ativo/timeframe.':'Mesmo no limite de 30 dias, este ativo pode não ter pregões suficientes; tente outro ativo/timeframe.';
- $('catalogerNoSignals').textContent=signals.length?'':(insufficient?`A amostra não atingiu os mínimos de treino e validação; os critérios foram mantidos. ${periodHint}`:'Nenhum horário passou pelos critérios mínimos da análise. Tente outro timeframe ou período, sem interpretar a ausência como recomendação de operar.');
- for(const signal of signals){
-  const card=document.createElement('article');card.className='cataloger-result';
-  const top=document.createElement('div');top.className='cataloger-result-top';
-  const time=document.createElement('strong');time.className='cataloger-result-time';time.textContent=signal.time;
-  const dir=document.createElement('span');dir.className='cataloger-result-dir'+(signal.direction==='PUT'?' put':'');dir.textContent=signal.direction;
-  top.append(time,dir);card.appendChild(top);
-  const stats=document.createElement('div');stats.className='cataloger-stats';
-  const values=[
-   ['Treino histórico',`${signal.train_hits}/${signal.train_samples} · ${percent(signal.train_rate)}`],
-   ['Validação walk-forward',`${signal.walk_forward_hits}/${signal.walk_forward_samples} · ${percent(signal.walk_forward_rate)}`],
-   ['Amostras totais do horário',String(signal.historical_samples)],
-   ['Ativo',`${signal.asset_name||signal.symbol} · M${signal.duration_minutes}`],
-  ];
-  for(const [label,value] of values){const stat=document.createElement('div');stat.className='cataloger-stat';const small=document.createElement('small');small.textContent=label;const strong=document.createElement('strong');strong.textContent=value;stat.append(small,strong);stats.appendChild(stat)}
-  card.appendChild(stats);container.appendChild(card);
+ $('catalogerNoSignals').textContent=signals.length?'':'Nenhum ativo produziu candidatos nesta janela. Os mínimos estatísticos foram mantidos; veja os motivos por ativo.';
+ for(const outcome of outcomes){
+  const group=document.createElement('section');group.className='cataloger-asset-group';
+  const heading=document.createElement('div');heading.className='cataloger-asset-heading';
+  const name=document.createElement('strong');name.textContent=`${outcome.asset_name||outcome.symbol} · ${outcome.symbol}`;
+  const status=document.createElement('span');status.className='helper';status.textContent=`${(outcome.signals||[]).length} candidato(s)`;
+  heading.append(name,status);group.appendChild(heading);
+  if(outcome.signals?.length){
+   const grid=document.createElement('div');grid.className='cataloger-result-grid';
+   for(const signal of outcome.signals)appendCatalogerSignalCard(grid,signal);
+   group.appendChild(grid);
+  }else{
+   const note=document.createElement('p');note.className='cataloger-asset-empty';note.textContent=outcome.note||'Nenhum horário passou pelos critérios mínimos nesta análise.';group.appendChild(note);
+  }
+  container.appendChild(group);
  }
+ const errorText=scan.failures.length?`Falhas em ${scan.failures.length} ativo(s): `+scan.failures.slice(0,8).map(item=>`${item.symbol}: ${item.message}`).join(' · ')+(scan.failures.length>8?' · e outras.':''):'';
+ $('catalogerNote').textContent=[scan.cancelled?'Varredura interrompida; os resultados parciais foram preservados.':'',errorText].filter(Boolean).join(' ');
  $('catalogerExportText').value=signals.map(signal=>signal.formatted).join('\n');
  $('catalogerCopyStatus').textContent=signals.length?'Revise os horários e as métricas antes de copiar. A lista não será agendada automaticamente.':'';
 }
+function cancelCatalogerScan(){
+ if(catalogerScanController){catalogerScanController.abort();$('catalogerFeedback').textContent='Cancelando após a solicitação atual...';}
+}
 async function generateCataloger(event){
- event.preventDefault();const button=$('catalogerGenerateButton');button.disabled=true;
- $('catalogerFeedback').textContent='Buscando candles públicos e validando os horários…';$('catalogerResults').classList.add('hidden');
- const controller=new AbortController(),timeout=setTimeout(()=>controller.abort(),90000);
+ event.preventDefault();if(catalogerScanController)return;
+ const button=$('catalogerGenerateButton'),cancelButton=$('catalogerCancelButton'),progressBox=$('catalogerProgressBox');
+ const formSelects=[...$('catalogerForm').querySelectorAll('select')],disabledBefore=formSelects.map(select=>select.disabled);
+ const market=$('catalogerMarket').value,granularitySeconds=Number($('catalogerGranularity').value);
+ const lookbackDays=Number($('catalogerLookback').value),targetDay=$('catalogerTargetDay').value,timezoneName=$('catalogerTimezone').value;
+ const durationMinutes=granularitySeconds/60,controller=new AbortController(),outcomes=[],failures=[];
+ catalogerScanController=controller;button.disabled=true;cancelButton.hidden=false;progressBox.hidden=false;
+ $('catalogerResults').classList.add('hidden');$('catalogerProgress').value=0;
+ for(const select of formSelects)select.disabled=true;
  try{
-  const data=await req('/api/cataloger/generate',{method:'POST',headers:{'Content-Type':'application/json'},signal:controller.signal,body:JSON.stringify({
-   market:$('catalogerMarket').value,symbol:$('catalogerAsset').value,
-   granularity_seconds:Number($('catalogerGranularity').value),lookback_days:Number($('catalogerLookback').value),
-   target_day:$('catalogerTargetDay').value,timezone_name:$('catalogerTimezone').value,
-  })});
-  renderCatalogerResults(data);$('catalogerFeedback').textContent='Análise concluída. Confira a amostra e a validação antes de usar qualquer lista.';
- }catch(error){$('catalogerFeedback').textContent=error.name==='AbortError'?'A consulta demorou mais que o esperado. Tente novamente em instantes.':'Não foi possível gerar a lista: '+error.message;}
- finally{clearTimeout(timeout);button.disabled=false;}
+  const assets=await loadCatalogerAssets(true);
+  if(!assets.length)throw new Error($('catalogerFeedback').textContent||'Nenhum ativo disponível no catálogo deste mercado.');
+  $('catalogerProgressText').textContent=`0 de ${assets.length} ativos analisados.`;
+  for(let index=0;index<assets.length;index++){
+   if(controller.signal.aborted)break;
+   const asset=assets[index];
+   $('catalogerProgressText').textContent=`Analisando ${index+1} de ${assets.length}: ${asset.name} · ${asset.symbol}`;
+   $('catalogerFeedback').textContent=`Buscando ou reutilizando candles para ${asset.symbol}...`;
+   try{
+    const data=await req('/api/cataloger/generate',{method:'POST',headers:{'Content-Type':'application/json'},signal:controller.signal,body:JSON.stringify({
+     market,symbol:asset.symbol,granularity_seconds:granularitySeconds,lookback_days:lookbackDays,
+     target_day:targetDay,timezone_name:timezoneName,
+    })});
+    outcomes.push(data);
+   }catch(error){
+    if(error.name==='AbortError')break;
+    failures.push({symbol:asset.symbol,message:error.message});
+   }
+   const processed=index+1;
+   $('catalogerProgress').value=Math.round(processed/assets.length*100);
+   $('catalogerProgressText').textContent=`${processed} de ${assets.length} ativos processados.`;
+  }
+  const processed=outcomes.length+failures.length,cancelled=controller.signal.aborted;
+  const scan={total:assets.length,processed,failures,cancelled,durationMinutes,lookbackDays};
+  renderCatalogerResults(outcomes,scan);
+  $('catalogerFeedback').textContent=cancelled?`Varredura interrompida: ${processed} de ${assets.length} ativos processados.`:`Varredura concluída: ${processed} de ${assets.length} ativos; ${failures.length} falha(s).`;
+ }catch(error){$('catalogerFeedback').textContent='Não foi possível iniciar a varredura: '+error.message;}
+ finally{
+  for(let index=0;index<formSelects.length;index++)formSelects[index].disabled=disabledBefore[index];
+  updateCatalogerMarketControls();button.disabled=false;cancelButton.hidden=true;catalogerScanController=null;
+ }
 }
 async function copyCatalogerList(){
  const text=$('catalogerExportText').value;if(!text){$('catalogerCopyStatus').textContent='Não há sinais para copiar.';return}
  try{await navigator.clipboard.writeText(text);$('catalogerCopyStatus').textContent='Lista copiada. Cole-a na prévia do Nexora Manual e confira os sinais antes de confirmar.';}
  catch{$('catalogerExportText').focus();$('catalogerExportText').select();$('catalogerCopyStatus').textContent='Selecione e copie o texto da lista; o navegador não autorizou a cópia automática.';}
 }
-document.getElementById('catalogerMarket').addEventListener('change',()=>loadCatalogerAssets(true));
+document.getElementById('catalogerMarket').addEventListener('change',()=>{updateCatalogerMarketControls();loadCatalogerAssets(true)});
+document.getElementById('catalogerLookback').addEventListener('change',event=>{event.target.dataset.userAdjusted='true'});
+updateCatalogerMarketControls();
 async function refreshLandingOffer(){
   // Public server policy is authoritative; the 24h HTML is only a fallback.
   try{

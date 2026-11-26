@@ -50,6 +50,7 @@ from .strategy_registry import FOREX_MTF_STRATEGIES, strategy_allowed
 from .progression import next_entry, ProgressionHalt, NextEntry
 from .expiry_policy import proposal_durations
 from . import signal_cataloger
+from . import cataloger_storage
 from .security import CLIENT_ID, REDIRECT, TOKEN_URL, build_authorize_url, make_login, make_session_id, hashsecret, encrypt, decrypt, cookie_options
 
 log=logging.getLogger('nexora')
@@ -1266,6 +1267,8 @@ async def lifespan(app):
     if os.getenv('NEXORA_PUBLIC_URL','').startswith('https://') and db.DB_URL.startswith('sqlite:'):
         raise RuntimeError('Não usar SQLite efêmero em implantação pública: configure DATABASE_URL de Postgres')
     db.init_db()
+    cataloger_retention_task=asyncio.create_task(
+        cataloger_storage.retention_loop(),name='cataloger-candle-retention')
     pause_manual_sessions_after_restart()
     pause_demo_autopilot_after_restart()
     market_task=asyncio.create_task(feed())
@@ -1279,7 +1282,7 @@ async def lifespan(app):
     yield
     autopilot_enabled.clear()
     real_runtime.running.clear()
-    tasks=[task for task in (market_task,reconcile_task,autopilot_task,market_selfcheck_task,research_worker_task,m1_research_task,real_task,real_reconciliation_task) if task]
+    tasks=[task for task in (market_task,reconcile_task,autopilot_task,market_selfcheck_task,research_worker_task,m1_research_task,real_task,real_reconciliation_task,cataloger_retention_task) if task]
     for task in tasks:
         task.cancel()
     await asyncio.gather(*tasks,return_exceptions=True)
@@ -1903,6 +1906,17 @@ class CatalogerGenerateRequest(BaseModel):
     target_day:str='tomorrow'
     timezone_name:str=manual.DEFAULT_TIMEZONE
 
+_CATALOGER_VOLATILITY_SYMBOL = re.compile(r"(?:R_\d+|1HZ\d+V)\Z", re.IGNORECASE)
+
+
+async def cataloger_instruments_by_group(group: str):
+    items = await instruments_by_group(group)
+    if group == 'derived':
+        return [item for item in items
+                if _CATALOGER_VOLATILITY_SYMBOL.fullmatch(item.get('symbol', ''))]
+    return items
+
+
 @app.get('/api/cataloger/assets')
 async def cataloger_assets(request:Request,market:str='derived',
                            nexora_sid:str|None=Cookie(default=None)):
@@ -1910,7 +1924,7 @@ async def cataloger_assets(request:Request,market:str='derived',
     if market not in AUTOMATION_GROUPS:
         raise HTTPException(422,'Mercado inválido')
     try:
-        items=await instruments_by_group(market)
+        items=await cataloger_instruments_by_group(market)
     except (MarketError,TimeoutError,OSError):
         raise HTTPException(503,'Não foi possível consultar o catálogo atual da Deriv') from None
     return {'market':market,'market_label':AUTOMATION_GROUPS[market],
@@ -1928,17 +1942,18 @@ async def cataloger_generate(payload:CatalogerGenerateRequest,request:Request,
             lookback_days=payload.lookback_days,
             target_day=payload.target_day,
             timezone_name=payload.timezone_name,
+            market=payload.market,
         )
     except ValueError as exc:
         raise HTTPException(422,str(exc)) from None
     if payload.market not in AUTOMATION_GROUPS:
         raise HTTPException(422,'Mercado inválido')
     try:
-        items=await instruments_by_group(payload.market)
+        items=await cataloger_instruments_by_group(payload.market)
         selected=next((item for item in items if item['symbol']==payload.symbol),None)
         if selected is None:
             raise HTTPException(422,'O ativo não pertence ao mercado escolhido ou não está no catálogo atual da Deriv')
-        candles=await signal_cataloger.fetch_historical_candles(
+        candles=await cataloger_storage.fetch_historical_candles(
             symbol=payload.symbol,
             granularity_seconds=payload.granularity_seconds,
             lookback_days=payload.lookback_days,

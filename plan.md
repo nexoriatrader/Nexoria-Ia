@@ -15,19 +15,23 @@ Remover da interface a ação “Reativar execução pausada” e o fluxo JavaSc
 A execução DEMO passará exclusivamente por `perform_demo_buy()` e `demo_ledger`; a execução REAL reutilizará a ativação/consentimento existentes, os limites e reservas de `real_ledger`, a validação de proposta e `buy_real_contract()` e a reconciliação REAL. Prévia e agendamento não enviam ordens. Testes usarão mocks e não contactarão as APIs de compra.
 
 ## Escopo — Catalogador de Sinais
-Adicionar uma página autenticada “Catalogador” à navegação desktop e móvel. A primeira versão será de pesquisa, somente leitura, sem iniciar operações. O fluxo principal deve exigir poucos cliques: escolher mercado e ativo Deriv, duração/candle M5 ou M15 e hoje/amanhã; usar Brasília UTC−03:00 como fuso inicial e permitir fuso disponível do módulo Manual. No modo Hoje, listar somente horários ainda futuros. O histórico padrão será 60 dias, selecionável para 30 dias.
+Manter a página autenticada “Catalogador” como ferramenta de pesquisa somente leitura, sem iniciar operações. A pessoa escolhe apenas o mercado, não um ativo individual, e a página percorre sequencialmente todos os ativos ativos do catálogo Deriv desse mercado. Em Derivados, incluir somente Volatility clássicos (`R_<valor>`) e de 1 segundo (`1HZ<valor>V`), excluindo Boom/Crash e outros derivados. Forex opera exclusivamente em M15; os demais mercados mantêm M5 e M15. A análise oferece janelas de 7, 15, 30 ou 60 dias; a primeira carga de cada ativo/timeframe busca e armazena até 60 dias, independentemente da janela escolhida. Forex inicia em M15 e 60 dias, e permite selecionar janelas menores. Manter Brasília UTC−03:00 como fuso padrão e os demais fusos já disponíveis no módulo Manual. A varredura exibe ativo atual e progresso, preservando resultados de ativos válidos se outro falhar.
+
+Persistir os candles públicos fechados em armazenamento compartilhado, indexados por símbolo, timeframe e epoch, para reaproveitamento entre usuários. A primeira consulta de cada combinação ativo/timeframe pagina e guarda até 60 dias; análises seguintes retiram a janela escolhida do armazenamento, sem refazer a consulta completa. Quando desatualizado, sincronizar incrementalmente somente candles recentes que faltam, serializar consultas históricas e limpar globalmente candles vencidos, inclusive de ativos sem novas consultas, com uma rotina periódica. Consultar somente o mercado/timeframe selecionado.
 
 A primeira estratégia será denominada **Viés histórico por horário**. Para cada horário local e candle fechado, a ferramenta observa direções históricas do candle seguinte/slot equivalente; a direção candidata é a maioria histórica desse horário no segmento de treino. Candidatos são selecionados apenas no segmento de treino (mínimo de 20 observações direcionais e taxa histórica mínima de 70%), e a direção exportada também é calculada exclusivamente com esses dados. A validação walk-forward usa, em cada dia testado, somente observações anteriores; exige ao menos 8 observações para reportar uma taxa. Esse piso fixo de suficiência de dados não depende do desempenho: a taxa walk-forward não escolhe, ordena, elimina nem altera a direção dos candidatos — isso impede vazamento do próprio bloco fora-da-amostra para a lista. Não usar velas incompletas. Padrões doji/neutros ficam fora do denominador direcional. Limitar a 5 candidatos por dia; se não houver amostra ou candidatos que atendam aos critérios, explicar o motivo em vez de inventar sinais. Mostrar por sinal os números de amostras, acertos e taxas históricas/validação; a interface deve esclarecer que isso não é garantia nem probabilidade calibrada.
 
-A saída deve poder ser copiada como linhas `M5 <ativo> HH:MM CALL/PUT` ou `M15 ...`, compatíveis com o pré-visualizador manual. O botão copia texto; não agenda nem envia sinais automaticamente. Todos os símbolos e dados vêm do catálogo e do endpoint histórico público da Deriv, com janela de consultas limitada, paginação e cache para evitar excesso de chamadas. A simulação de retorno financeiro/payout líquido não faz parte deste MVP: o resultado mede direção de candles, não lucro de contrato.
+A saída deve poder ser copiada como linhas `M5 <ativo> HH:MM CALL/PUT` ou `M15 ...`, compatíveis com o pré-visualizador manual e agrupadas por ativo. O botão copia texto; não agenda nem envia sinais automaticamente. Todos os símbolos e dados vêm do catálogo e do endpoint histórico público da Deriv. A simulação de retorno financeiro/payout líquido não faz parte deste MVP: o resultado mede direção de candles, não lucro de contrato.
 
 ## Estrutura do projeto
-- `app/index.html`: navegação para a página Catalogador, formulário simples, resultados auditáveis, cópia de lista e responsividade móvel.
-- `app/main.py`: endpoints autenticados de listagem de ativos e geração; ambos somente leitura e separados do executor/ledger.
-- `app/signal_cataloger.py`: busca paginada e limitada de candles públicos, agregado por hora/fuso e avaliação walk-forward, sem dependência da execução de ordens.
+- `app/index.html`: navegação para a página Catalogador, seleção de mercado/timeframe/período, progresso sequencial, resultados agrupados por ativo, cópia de lista e responsividade móvel.
+- `app/main.py`: endpoints autenticados de listagem e geração por ativo; aplica o filtro de Volatility e valida Forex M15. As rotas permanecem somente leitura e separadas do executor/ledger.
+- `app/signal_cataloger.py`: consulta pública paginada de candles, validação e análise walk-forward, sem dependência da execução de ordens.
+- `app/cataloger_storage.py`: leitura/escrita do histórico compartilhado, retenção de 60 dias e sincronização incremental.
+- `app/db.py`: tabelas persistentes de candles e estado de sincronização, criadas pelo bootstrap aditivo existente.
 - `app/market.py` e `app/automation_markets.py`: cliente e catálogo Deriv existentes, reutilizados.
 - `app/manual_signals.py`: gramática vigente de listas manuais para validar o formato exportado.
-- `tests/`: testes isolados de algoritmo, timezones, paginação/limites, endpoint autenticado e regressão das rotas manuais.
+- `tests/`: testes isolados de algoritmo, timezones, paginação, filtros por mercado, reuso/atualização do cache e endpoints autenticados.
 
 ## Interface e estilo
 Reutilizar o painel Nexora existente: cartões escuros em azul-marinho, bordas azul-petróleo, destaque dourado para ações principais, hierarquia tipográfica e componentes responsivos já presentes. O card prioriza estados legíveis, explicações por linha e confirmação inequívoca de conta REAL; não introduzir imagens ou dependências visuais novas.
@@ -35,6 +39,7 @@ Reutilizar o painel Nexora existente: cartões escuros em azul-marinho, bordas a
 ## Restrições materiais
 - Sem novas dependências externas e sem alteração destrutiva dos ledgers ou da agenda de estudo.
 - Nenhuma tentativa antes de confirmar a lista; nenhum envio de ordem durante testes.
+- O cache compartilhado contém somente candles públicos, sem tokens ou dados por usuário, e retém no máximo 60 dias por ativo/timeframe. Não executar smoke tests em produção.
 - Estado do robô e capacidade da fila devem vir do banco, não apenas de memória de processo.
 - A agenda não pode transformar sinal vencido em compra tardia ou duplicada.
 - O Catalogador não chama endpoints de compra, não altera o modo/conta do usuário e não se anuncia como previsão garantida.

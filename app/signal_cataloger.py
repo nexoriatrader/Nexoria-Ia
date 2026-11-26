@@ -16,7 +16,7 @@ from .market import MarketError, public_request
 from .manual_signals import TIMEZONES
 
 SUPPORTED_GRANULARITIES = frozenset((300, 900))
-SUPPORTED_LOOKBACK_DAYS = frozenset((7, 15, 30))
+SUPPORTED_LOOKBACK_DAYS = frozenset((7, 15, 30, 60))
 MIN_TRAIN_SAMPLES = 20
 MIN_WALK_FORWARD_SAMPLES = 8
 MIN_TRAIN_RATE = 0.70
@@ -33,13 +33,17 @@ _CACHE_MAX_ITEMS = 8
 
 def validate_request(*, symbol: str, granularity_seconds: int,
                      lookback_days: int, target_day: str,
-                     timezone_name: str) -> ZoneInfo:
+                     timezone_name: str, market: str | None = None) -> ZoneInfo:
     if not isinstance(symbol, str) or _SYMBOL.fullmatch(symbol) is None:
         raise ValueError("Código de ativo inválido.")
     if type(granularity_seconds) is not int or granularity_seconds not in SUPPORTED_GRANULARITIES:
         raise ValueError("Escolha M5 ou M15.")
+    if market is not None and market not in ("forex", "derived", "commodities", "stocks_indices"):
+        raise ValueError("Mercado inválido.")
+    if market == "forex" and granularity_seconds != 900:
+        raise ValueError("Forex aceita somente M15.")
     if type(lookback_days) is not int or lookback_days not in SUPPORTED_LOOKBACK_DAYS:
-        raise ValueError("O histórico deve ser de 7, 15 ou 30 dias.")
+        raise ValueError("O histórico deve ser de 7, 15, 30 ou 60 dias.")
     if target_day not in ("today", "tomorrow"):
         raise ValueError("Escolha hoje ou amanhã.")
     if timezone_name not in TIMEZONES:
@@ -60,7 +64,14 @@ def _parse_candle(item: dict, granularity_seconds: int) -> dict:
     if (epoch < 0 or not math.isfinite(open_price)
             or not math.isfinite(close_price)):
         raise MarketError("A Deriv retornou dados de vela inválidos.")
-    return {"epoch": epoch, "open": open_price, "close": close_price}
+    result = {"epoch": epoch, "open": open_price, "close": close_price}
+    for key in ("high", "low"):
+        try:
+            value = float(item[key]) if item.get(key) is not None else None
+        except (ValueError, TypeError, OverflowError):
+            value = None
+        result[key] = value if value is not None and math.isfinite(value) else None
+    return result
 
 
 async def fetch_historical_candles(*, symbol: str, granularity_seconds: int,
@@ -70,7 +81,7 @@ async def fetch_historical_candles(*, symbol: str, granularity_seconds: int,
     if type(granularity_seconds) is not int or granularity_seconds not in SUPPORTED_GRANULARITIES:
         raise MarketError("Timeframe inválido para o Catalogador.")
     if type(lookback_days) is not int or lookback_days not in SUPPORTED_LOOKBACK_DAYS:
-        raise MarketError("Período inválido para o Catalogador; use 7, 15 ou 30 dias.")
+        raise MarketError("Período inválido para o Catalogador; use 7, 15, 30 ou 60 dias.")
     if not isinstance(symbol, str) or _SYMBOL.fullmatch(symbol) is None:
         raise MarketError("Símbolo inválido para o Catalogador.")
 
@@ -154,6 +165,65 @@ async def fetch_historical_candles(*, symbol: str, granularity_seconds: int,
     return result
 
 
+async def fetch_incremental_candles(*, symbol: str, granularity_seconds: int,
+                                    after_epoch: int, now_epoch: int | None = None) -> list[dict]:
+    """Fetch closed, aligned candles back to the most recent stored epoch."""
+    if type(granularity_seconds) is not int or granularity_seconds not in SUPPORTED_GRANULARITIES:
+        raise MarketError("Timeframe inválido para o Catalogador.")
+    if not isinstance(symbol, str) or _SYMBOL.fullmatch(symbol) is None:
+        raise MarketError("Símbolo inválido para o Catalogador.")
+    if type(after_epoch) is not int or after_epoch < 0:
+        raise MarketError("Cursor inválido para sincronização do histórico.")
+
+    observed_now = int(time.time() if now_epoch is None else now_epoch)
+    rows: dict[int, dict] = {}
+    end: str | int = "latest"
+    prior_oldest: int | None = None
+    history_complete = False
+    missing_seconds = max(0, observed_now - after_epoch)
+    expected_pages = math.ceil(missing_seconds / granularity_seconds / PAGE_SIZE) + 2
+    page_limit = min(MAX_PAGES, max(2, expected_pages))
+    async with _history_fetch_lock:
+        for page_index in range(page_limit):
+            response = await public_request({
+                "ticks_history": symbol,
+                "style": "candles",
+                "granularity": granularity_seconds,
+                "count": PAGE_SIZE,
+                "end": str(end),
+            }, expected="candles", timeout=15.0)
+            raw_candles = response.get("candles")
+            if not isinstance(raw_candles, list):
+                raise MarketError("A Deriv retornou uma página de velas inválida.")
+            if not raw_candles:
+                history_complete = True
+                break
+            if any(not isinstance(item, dict) for item in raw_candles):
+                raise MarketError("A Deriv retornou uma página de velas inválida.")
+            page_rows = [_parse_candle(item, granularity_seconds) for item in raw_candles]
+            oldest = min(row["epoch"] for row in page_rows)
+            newest = max(row["epoch"] for row in page_rows)
+            if prior_oldest is not None and oldest >= prior_oldest:
+                raise MarketError("A paginação do histórico da Deriv não avançou.")
+            prior_oldest = oldest
+            for row in page_rows:
+                if (row["epoch"] % granularity_seconds == 0
+                        and row["epoch"] >= after_epoch
+                        and row["epoch"] + granularity_seconds <= observed_now):
+                    rows[row["epoch"]] = row
+            if oldest <= after_epoch:
+                history_complete = True
+                break
+            if newest <= 0:
+                break
+            end = oldest - 1
+            if page_index + 1 < page_limit:
+                await asyncio.sleep(0.12)
+        if not history_complete:
+            raise MarketError("A sincronização incremental excedeu o limite de páginas da consulta.")
+    return [rows[key] for key in sorted(rows)]
+
+
 def _direction(candle: dict) -> str | None:
     if candle["close"] > candle["open"]:
         return "CALL"
@@ -196,7 +266,8 @@ def catalogue_time_slots(*, candles: list[dict], granularity_seconds: int,
     """
     zone = validate_request(
         symbol="TEST", granularity_seconds=granularity_seconds,
-        lookback_days=30, target_day=target_day, timezone_name=timezone_name,
+        lookback_days=60, target_day=target_day, timezone_name=timezone_name,
+        market=market,
     )
     if market not in ("forex", "derived", "commodities", "stocks_indices"):
         raise ValueError("Mercado inválido.")

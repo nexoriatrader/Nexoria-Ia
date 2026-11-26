@@ -172,18 +172,31 @@ def test_catalogue_rejects_unsupported_request_values():
             symbol="R_100", granularity_seconds=300, lookback_days=30,
             target_day="today", timezone_name="Not/AZone",
         )
-    with pytest.raises(ValueError, match="7, 15 ou 30 dias"):
+    with pytest.raises(ValueError, match="7, 15, 30 ou 60 dias"):
         cataloger.validate_request(
-            symbol="R_100", granularity_seconds=300, lookback_days=60,
+            symbol="R_100", granularity_seconds=300, lookback_days=90,
             target_day="today", timezone_name="UTC",
         )
 
 
-@pytest.mark.parametrize("lookback_days", (7, 15, 30))
+@pytest.mark.parametrize("lookback_days", (7, 15, 30, 60))
 def test_supported_lookback_periods(lookback_days):
     zone = cataloger.validate_request(
         symbol="R_100", granularity_seconds=300, lookback_days=lookback_days,
         target_day="today", timezone_name="UTC",
+    )
+    assert str(zone) == "UTC"
+
+
+def test_forex_cataloger_is_fixed_to_m15():
+    with pytest.raises(ValueError, match="Forex aceita somente M15"):
+        cataloger.validate_request(
+            symbol="frxEURUSD", granularity_seconds=300, lookback_days=60,
+            target_day="today", timezone_name="UTC", market="forex",
+        )
+    zone = cataloger.validate_request(
+        symbol="frxEURUSD", granularity_seconds=900, lookback_days=60,
+        target_day="today", timezone_name="UTC", market="forex",
     )
     assert str(zone) == "UTC"
 
@@ -210,6 +223,21 @@ def test_forex_weekend_returns_clear_no_signal_result():
     )
     assert result["signals"] == []
     assert "fechado" in result["note"].lower()
+
+
+def test_cataloger_derivatives_include_only_volatility_families(monkeypatch):
+    listed = [
+        {"symbol": "R_25", "name": "Volatility 25", "group": "derived"},
+        {"symbol": "1HZ50V", "name": "Volatility 50 (1s)", "group": "derived"},
+        {"symbol": "BOOM500", "name": "Boom 500", "group": "derived"},
+        {"symbol": "CRASH1000", "name": "Crash 1000", "group": "derived"},
+        {"symbol": "JD100", "name": "Jump 100", "group": "derived"},
+    ]
+    monkeypatch.setattr(main, "instruments_by_group", AsyncMock(return_value=listed))
+
+    result = asyncio.run(main.cataloger_instruments_by_group("derived"))
+
+    assert [item["symbol"] for item in result] == ["R_25", "1HZ50V"]
 
 
 def test_fetch_history_pages_deduplicates_and_excludes_open_and_out_of_window_candles(monkeypatch):
@@ -264,6 +292,33 @@ def test_fetch_history_discards_valid_off_grid_session_reopen_candle(monkeypatch
 
     assert [row["epoch"] for row in result] == [start, now - 1800, now - 900]
     assert request.await_count == 1
+
+
+def test_fetch_incremental_history_paginates_until_cached_cursor(monkeypatch):
+    now = (1_800_000_000 // 300) * 300
+    after = now - 1800
+    first = {"candles": [
+        {"epoch": now - 300, "open": 1, "close": 2},
+        {"epoch": now - 600, "open": 1, "close": 2},
+        {"epoch": now - 900, "open": 2, "close": 1},
+    ]}
+    second = {"candles": [
+        {"epoch": now - 900, "open": 2, "close": 1},
+        {"epoch": now - 1200, "open": 1, "close": 2},
+        {"epoch": after, "open": 1, "close": 2},
+    ]}
+    request = AsyncMock(side_effect=[first, second])
+    monkeypatch.setattr(cataloger, "public_request", request)
+    monkeypatch.setattr(cataloger, "PAGE_SIZE", 3)
+
+    result = asyncio.run(cataloger.fetch_incremental_candles(
+        symbol="R_100", granularity_seconds=300, after_epoch=after,
+        now_epoch=now,
+    ))
+
+    assert [row["epoch"] for row in result] == [after, now - 1200, now - 900, now - 600, now - 300]
+    assert request.await_count == 2
+    assert request.await_args_list[1].args[0]["end"] == str(now - 901)
 
 
 def test_fetch_history_fails_closed_if_pagination_does_not_advance(monkeypatch):
@@ -359,7 +414,7 @@ def test_cataloger_endpoint_checks_catalog_membership_and_is_read_only(cataloger
     history_start = date(2025, 1, 1)
     historical = {history_start + timedelta(days=i): "CALL" for i in range(32)}
     history = AsyncMock(return_value=candles_for_days(history_start, historical))
-    monkeypatch.setattr(main.signal_cataloger, "fetch_historical_candles", history)
+    monkeypatch.setattr(main.cataloger_storage, "fetch_historical_candles", history)
     demo_buy = AsyncMock(side_effect=AssertionError("Cataloger must never buy"))
     demo_adapter = AsyncMock(side_effect=AssertionError("Cataloger must never execute DEMO"))
     real_adapter = AsyncMock(side_effect=AssertionError("Cataloger must never execute REAL"))
@@ -382,7 +437,7 @@ def test_cataloger_endpoint_checks_catalog_membership_and_is_read_only(cataloger
 
     too_long = client.post("/api/cataloger/generate", json={
         "market": "derived", "symbol": "R_100", "granularity_seconds": 900,
-        "lookback_days": 60, "target_day": "tomorrow",
+        "lookback_days": 90, "target_day": "tomorrow",
         "timezone_name": "America/Sao_Paulo",
     })
     assert too_long.status_code == 422
@@ -415,7 +470,7 @@ def test_cataloger_endpoint_maps_public_history_failure_to_gateway_error(catalog
     monkeypatch.setattr(main, "instruments_by_group", AsyncMock(return_value=[
         {"symbol": "R_100", "name": "Volatility 100", "group": "derived"},
     ]))
-    monkeypatch.setattr(main.signal_cataloger, "fetch_historical_candles",
+    monkeypatch.setattr(main.cataloger_storage, "fetch_historical_candles",
                         AsyncMock(side_effect=MarketError("Deriv unavailable")))
 
     response = client.post("/api/cataloger/generate", json={
