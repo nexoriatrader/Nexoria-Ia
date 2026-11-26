@@ -202,13 +202,12 @@ def test_scanner_historical_comparison_rejects_short_history_and_gaps():
     assert result['payout_adjusted'] is False
 
 
-def test_strategy_education_explains_indicators_without_guaranteeing_profits():
+def test_operational_strategy_selector_remains_after_education_views_are_removed():
     from pathlib import Path
-    html=(Path(__file__).resolve().parents[1]/'app'/'index.html').read_text()
-    assert 'id="strategies"' in html
-    assert 'Índice de Força Relativa' in html
-    assert 'Média Móvel Exponencial' in html
-    assert 'EMA 20' in html
-    assert 'Indicadores e estratégias não garantem resultados' in html
-    assert 'Operações financeiras envolvem riscos' in html
+    html=(Path(__file__).resolve().parents[1]/'app'/'index.html').read_text(encoding='utf-8')
+    assert '<section id="robot-config"' in html
+    assert 'name="autoStrategy"' in html
+    assert 'value="pulso_v2"' in html
+    assert 'data-view="strategies"' not in html
+    assert '<section id="strategies"' not in html
 

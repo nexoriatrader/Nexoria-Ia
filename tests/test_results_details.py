@@ -72,7 +72,7 @@ def test_recovery_only_in_next_candle_opening_window():
 def test_results_table_contains_official_columns_and_autorefresh():
     from pathlib import Path
     html=(Path(__file__).resolve().parents[1]/'app'/'index.html').read_text()
-    section=html.split('<section id="results"',1)[1].split('<section id="features"',1)[0]
+    section=html.split('<section id="results"',1)[1].split('<section id="settings"',1)[0]
     for title in ('Data da compra (Deriv · Brasília)', 'Horário da compra (Deriv)',
                   'Conta', 'Ativo', 'Direção', 'Entrada', 'Expiração',
                   'Etapa', 'Situação', 'WIN / LOSS', 'Resultado'):
@@ -84,4 +84,3 @@ def test_results_table_contains_official_columns_and_autorefresh():
     assert 'America/Sao_Paulo' in html
     assert "p.cycle===null" in html
     assert "p.martingale===null" in html
-

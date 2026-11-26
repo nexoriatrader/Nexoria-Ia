@@ -28,6 +28,99 @@ def add_manual_user(factory,*,account_mode='demo'):
         s.commit();uid=user.id
     return sid,uid
 
+def test_manual_demo_cycle_uses_official_legacy_loss_for_next_scheduled_signal(api,monkeypatch):
+    _,factory=api;_,uid=add_manual_user(factory)
+    now=db.utcnow()
+    with factory() as s:
+        run=db.ManualSignalRun(user_id=uid,session_number=1,status='RUNNING',account_mode='demo')
+        plan=db.RobotPlan(user_id=uid,requested_martingale=False,gale_count=0,
+            requested_multiplier='2.00',cycles_limit=2,updated_at=now-timedelta(minutes=20))
+        cycle_cfg=db.RobotCycleParams(user_id=uid,multiplier='2.50')
+        loss=db.DemoOrder(user_id=uid,request_key='manual-loss-before-cycle-fix',
+            state='SETTLED',symbol='frxEURUSD',direction='CALL',duration_minutes=15,
+            stake='2.00',pnl='-2.00',created_at=now-timedelta(minutes=10))
+        s.add_all([run,plan,cycle_cfg,loss]);s.flush()
+        s.add_all([
+            db.ManualSignal(user_id=uid,session_number=1,capacity_slot=None,line_number=1,
+                raw_line='M15 EURUSD 19:00 CALL',market='forex',timezone_name='UTC',
+                local_date=now.date().isoformat(),local_time='19:00',
+                scheduled_at=now-timedelta(minutes=15),symbol='frxEURUSD',direction='CALL',
+                duration_minutes=15,status='COMPLETED',request_key=loss.request_key,
+                ledger_mode='demo',ledger_order_id=loss.id,created_at=now-timedelta(minutes=11)),
+            db.ManualSignal(user_id=uid,session_number=1,capacity_slot=1,line_number=2,
+                raw_line='M15 EURUSD 19:15 PUT',market='forex',timezone_name='UTC',
+                local_date=now.date().isoformat(),local_time='19:15',
+                scheduled_at=now-timedelta(seconds=5),symbol='frxEURUSD',direction='PUT',
+                duration_minutes=15,status='SCHEDULED',request_key='manual-next-after-loss',
+                created_at=now-timedelta(minutes=11)),
+        ])
+        s.commit()
+
+    monkeypatch.setattr(main,'autopilot_allowed',lambda:True)
+    buy=AsyncMock(return_value={'id':987654})
+    monkeypatch.setattr(main,'perform_demo_buy',buy)
+    main.autopilot_enabled.add(uid)
+    try:
+        asyncio.run(main._run_manual_demo_signal(uid))
+        assert buy.await_count==1
+        args=buy.await_args
+        assert args.args[2].direction=='PUT'
+        assert str(args.kwargs['stake_override'])=='5.00'
+        assert args.kwargs['attribution']['source']=='manual'
+        assert args.kwargs['attribution']['cycle_index']==1
+        with factory() as s:
+            signal=s.query(db.ManualSignal).filter_by(request_key='manual-next-after-loss').one()
+            assert signal.status=='EXECUTED' and signal.ledger_mode=='demo'
+    finally:
+        main.autopilot_enabled.discard(uid)
+
+def test_manual_demo_cycle_waits_for_unknown_official_order(api,monkeypatch):
+    _,factory=api;_,uid=add_manual_user(factory)
+    now=db.utcnow()
+    with factory() as s:
+        s.add(db.ManualSignalRun(user_id=uid,session_number=1,status='RUNNING',account_mode='demo'))
+        order=db.DemoOrder(user_id=uid,request_key='manual-uncertain-order',state='UNKNOWN',
+            symbol='frxEURUSD',direction='CALL',duration_minutes=15,stake='2.00')
+        s.add(order);s.flush()
+        s.add_all([
+            db.ManualSignal(user_id=uid,session_number=1,capacity_slot=1,line_number=1,
+                raw_line='M15 EURUSD 19:00 CALL',market='forex',timezone_name='UTC',
+                local_date=now.date().isoformat(),local_time='19:00',scheduled_at=now,
+                symbol='frxEURUSD',direction='CALL',duration_minutes=15,status='UNKNOWN',
+                request_key=order.request_key,ledger_mode='demo',ledger_order_id=order.id),
+            db.ManualSignal(user_id=uid,session_number=1,capacity_slot=2,line_number=2,
+                raw_line='M15 EURUSD 19:15 PUT',market='forex',timezone_name='UTC',
+                local_date=now.date().isoformat(),local_time='19:15',
+                scheduled_at=now-timedelta(seconds=5),symbol='frxEURUSD',direction='PUT',
+                duration_minutes=15,status='SCHEDULED',request_key='manual-after-unknown'),
+        ])
+        s.commit()
+    monkeypatch.setattr(main,'autopilot_allowed',lambda:True)
+    buy=AsyncMock(side_effect=AssertionError('uncertain official order must block another entry'))
+    monkeypatch.setattr(main,'perform_demo_buy',buy)
+    main.autopilot_enabled.add(uid)
+    main.autopilot_reasons.pop(uid,None)
+    try:
+        asyncio.run(main._run_manual_demo_signal(uid))
+        assert not buy.called
+        with factory() as s:
+            assert s.get(db.DemoOrder,order.id).state=='UNKNOWN'
+            assert s.query(db.ManualSignal).filter_by(status='SCHEDULED').one().status=='SCHEDULED'
+    finally:
+        main.autopilot_enabled.discard(uid)
+
+def test_manual_real_cycles_are_rejected_before_any_broker_query(api,monkeypatch):
+    client,factory=api;sid,uid=add_manual_user(factory,account_mode='real')
+    client.cookies.set('nexora_sid',sid)
+    with factory() as s:
+        s.add(db.RobotPlan(user_id=uid,requested_martingale=False,gale_count=0,
+            requested_multiplier='2.00',cycles_limit=1))
+        s.commit()
+    monkeypatch.setattr(real_runtime,'real_available',lambda:True)
+    response=client.post('/api/autopilot/start',json={'confirm':'START_REAL_AUTOPILOT'})
+    assert response.status_code==409
+    assert 'ciclos desativados' in response.json()['detail']
+
 def test_manual_profile_needs_no_strategy_assets_and_preview_is_read_only(api,monkeypatch):
     client,factory=api;sid,uid=add_manual_user(factory);client.cookies.set('nexora_sid',sid)
     catalog=[{'symbol':'frxEURUSD','name':'EUR/USD','group':'forex'},

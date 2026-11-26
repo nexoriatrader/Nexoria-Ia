@@ -103,7 +103,8 @@ def test_premium_landing_mobile_and_accessibility():
     assert '@media(prefers-reduced-motion:reduce)' in html
     assert '.landing-cta:focus-visible' in html
     assert 'id="landingHeading"' in html
-    assert 'id="strategies"' in html
+    assert 'id="robot-config"' in html
+    assert 'data-view="robot-config"' in html
 
 
 def test_authenticated_oauth_requires_initial_setup_before_user_starts_robot():

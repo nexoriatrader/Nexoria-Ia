@@ -462,6 +462,51 @@ def m1_recovery_window_open(settled_at, now=None):
     return candle_start>=next_after_settlement and 0<=current_ts-candle_start<=8
 
 
+def _manual_demo_cycle_entry(session,user,run,signals,plan,cycle_cfg):
+    """Compute the next Manual stake from settled DEMO signals in this run.
+
+    Manual entries made before cycle execution was wired in always used the
+    configured base stake. Their official outcomes remain usable, but only
+    orders opened after the current risk plan was saved are in this sequence.
+    """
+    if not plan or not plan.cycles_limit:
+        return None
+    configured_at=plan.updated_at
+    if configured_at is not None and configured_at.tzinfo is None:
+        configured_at=configured_at.replace(tzinfo=timezone.utc)
+    history=[]
+    for signal in signals:
+        if signal.ledger_mode not in (None,'demo'):
+            continue
+        order=session.get(db.DemoOrder,signal.ledger_order_id) if signal.ledger_order_id else None
+        if order is None:
+            order=session.scalar(select(db.DemoOrder).where(
+                db.DemoOrder.user_id==user.id,db.DemoOrder.request_key==signal.request_key))
+        if order is None:
+            if signal.status in ('EXECUTED','COMPLETED'):
+                signal_at=signal.created_at
+                if signal_at and signal_at.tzinfo is None:
+                    signal_at=signal_at.replace(tzinfo=timezone.utc)
+                if configured_at is None or (signal_at and signal_at>=configured_at):
+                    raise ProgressionHalt('Sinal Manual sem liquidação oficial vinculada; progressão bloqueada')
+            continue
+        order_at=order.created_at
+        if order_at and order_at.tzinfo is None:
+            order_at=order_at.replace(tzinfo=timezone.utc)
+        if configured_at and order_at and order_at<configured_at:
+            continue
+        if order.state=='CANCELLED':
+            continue
+        history.append({'id':order.id,'state':order.state,'pnl':order.pnl,
+                        'direction':order.direction,'symbol':order.symbol,
+                        'strategy':'manual','stake':order.stake})
+    history.sort(key=lambda row:row['id'])
+    return next_entry(base=user.stake,gale_enabled=False,gales=0,
+        gale_multiplier='1',cycles=plan.cycles_limit,cycles_enabled=True,
+        cycle_multiplier=cycle_cfg.multiplier if cycle_cfg else '2',
+        orders=history,validate_stakes=False)
+
+
 async def _run_manual_demo_signal(uid):
     """Dispatch at most one due Manual DEMO signal through the guarded official ledger."""
     if uid not in autopilot_enabled or not autopilot_allowed():return
@@ -482,14 +527,16 @@ async def _run_manual_demo_signal(uid):
         if not token:
             run.status='PAUSED';run.pause_reason='Sessão Deriv expirada; reconecte e confirme uma nova lista ou desagende a fila';run.paused_at=db.utcnow();session.commit()
             autopilot_enabled.discard(uid);autopilot_reasons[uid]=run.pause_reason;return
-        signals=session.scalars(select(db.ManualSignal).where(db.ManualSignal.user_id==uid,
-            db.ManualSignal.session_number==run.session_number,
-            db.ManualSignal.status.in_(('SCHEDULED','CLAIMED','UNKNOWN')))
-            .order_by(db.ManualSignal.scheduled_at,db.ManualSignal.id)).all()
+        all_signals=manual_lifecycle.list_session_signals(session,run)
+        signals=[sig for sig in all_signals
+                 if sig.status in ('SCHEDULED','CLAIMED','UNKNOWN')]
         # Reconcile signal capacity only from durable official ledger states.
-        for sig in signals:
+        for sig in all_signals:
             order=session.get(db.DemoOrder,sig.ledger_order_id) if sig.ledger_order_id else None
-            if sig.status=='UNKNOWN' and order and order.state in ('SETTLED','CANCELLED'):
+            if order is None:
+                order=session.scalar(select(db.DemoOrder).where(
+                    db.DemoOrder.user_id==uid,db.DemoOrder.request_key==sig.request_key))
+            if sig.status in ('CLAIMED','UNKNOWN') and order and order.state in ('SETTLED','CANCELLED'):
                 sig.status='COMPLETED' if order.state=='SETTLED' else 'FAILED'
                 sig.reason='Reconciliação oficial concluída';sig.capacity_slot=None
             due=sig.scheduled_at.replace(tzinfo=timezone.utc) if sig.scheduled_at.tzinfo is None else sig.scheduled_at
@@ -500,20 +547,37 @@ async def _run_manual_demo_signal(uid):
         active=session.scalar(select(db.DemoOrder.id).where(db.DemoOrder.user_id==uid,
             db.DemoOrder.state.in_(('PENDING','CONFIRMED','UNKNOWN'))).limit(1))
         if active:return
+        if any(sig.status in ('CLAIMED','UNKNOWN') for sig in all_signals):
+            autopilot_reasons[uid]='Sinal Manual incerto; aguardando reconciliação oficial'
+            return
         signal=next((x for x in signals if x.status=='SCHEDULED' and
             (x.scheduled_at.replace(tzinfo=timezone.utc) if x.scheduled_at.tzinfo is None else x.scheduled_at)<=now),None)
         if not signal:return
         due=signal.scheduled_at.replace(tzinfo=timezone.utc) if signal.scheduled_at.tzinfo is None else signal.scheduled_at
         if now>=due+timedelta(seconds=60):return
+        plan=session.get(db.RobotPlan,uid)
+        cycle_cfg=session.get(db.RobotCycleParams,uid)
+        try:
+            progression=_manual_demo_cycle_entry(session,user,run,all_signals,plan,cycle_cfg)
+        except ProgressionHalt as exc:
+            autopilot_reasons[uid]=str(exc)
+            return
         signal.status='CLAIMED';signal.claim_token=secrets.token_hex(16);signal.claimed_at=db.utcnow();session.commit()
         signal_id=signal.id;key=signal.request_key
         user=session.get(db.User,uid)
         payload=DemoBuy(symbol=signal.symbol,direction=signal.direction,minutes=signal.duration_minutes,
                         confirm='DEMO_ONLY',request_key=key)
         deadline=due.timestamp()+60-0.001
+        attribution={'strategy':'manual','reason':'Sinal manual confirmado · duração a partir da aceitação'}
+        stake_override=None
+        if progression is not None:
+            attribution.update({'source':'manual','cycle_index':progression.cycle,
+                'gale_index':0,'gale_multiplier':'1',
+                'cycle_multiplier':cycle_cfg.multiplier if cycle_cfg else '2'})
+            stake_override=progression.stake
     try:
         result=await perform_demo_buy(user,token,payload,
-            attribution={'strategy':'manual','reason':'Sinal manual confirmado · duração a partir da aceitação'},
+            attribution=attribution,stake_override=stake_override,
             latest_buy_send_epoch=deadline)
         with db.SessionLocal() as session:
             sig=session.get(db.ManualSignal,signal_id)
@@ -1257,10 +1321,6 @@ async def headers(request:Request, call_next):
 
 @app.get('/')
 async def index(): return FileResponse(Path(__file__).parent/'index.html')
-
-@app.get('/configuracao-educativa', include_in_schema=False)
-async def configuracao_educativa():
-    return FileResponse(Path(__file__).parent/'configuracao_educativa.html', media_type='text/html')
 
 @app.get('/i/{slug}')
 async def short_referral_redirect(slug:str):
@@ -2423,14 +2483,6 @@ class AdminCredentials(BaseModel):
     password:str
 
 
-@app.get('/nexora2')
-async def nexora2_workspace(request:Request,nexora_sid:str|None=Cookie(default=None)):
-    """Authenticated research workspace; no order execution or mutation."""
-    active_user(request,nexora_sid)
-    return FileResponse(Path(__file__).parent/'nexora2.html',media_type='text/html',
-                        headers={'Cache-Control':'no-store'})
-
-
 @app.get('/admin')
 async def admin_home():
     return FileResponse(Path(__file__).parent/'admin.html')
@@ -2716,9 +2768,9 @@ async def start_real_autopilot(request:Request,nexora_sid:str|None=None):
         manual_mode=getattr(profile,'operation_mode','strategies')=='manual'
         if not manual_mode and profile.news_filter:
             raise HTTPException(409,'Filtro de notícias indisponível; desative para usar REAL')
-        if not manual_mode and plan and (plan.requested_martingale or plan.cycles_limit):
+        if plan and (plan.requested_martingale or plan.cycles_limit):
             raise HTTPException(409,'Conta REAL beta exige Martingale e ciclos desativados')
-        if not manual_mode and user.martingale:
+        if user.martingale:
             raise HTTPException(409,'Desative Martingale nas configurações atuais')
         if not access_status(sess,user.id)['allowed']:
             raise HTTPException(403,'Acesso ao robô expirado ou suspenso')
@@ -3468,12 +3520,15 @@ async def perform_demo_buy(user, token, payload:DemoBuy, *, attribution:dict|Non
                        strategy=strategy,direction=payload.direction,
                        reason=str(attribution['reason'])[:255]))
                 if 'cycle_index' in attribution and 'gale_index' in attribution:
+                    progression_source=attribution.get('source','autopilot')
+                    if progression_source not in ('manual','autopilot'):
+                        raise ValueError('Origem de progressão inválida')
                     s.add(db.DemoOrderProgression(order_id=order_id,user_id=user.id,
                         cycle_index=int(attribution['cycle_index']),
                         gale_index=int(attribution['gale_index']),
                         gale_multiplier=str(attribution['gale_multiplier']),
                         cycle_multiplier=str(attribution['cycle_multiplier']),
-                        source='autopilot',account_mode='demo'))
+                        source=progression_source,account_mode='demo'))
                 s.commit()
             except Exception:
                 s.rollback()

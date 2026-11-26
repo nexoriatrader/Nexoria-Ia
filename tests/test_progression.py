@@ -80,6 +80,19 @@ def test_cycles_disabled_stay_flat_after_exhausted_gale():
     assert a.stake==Decimal('2.00')
 
 
+def test_manual_legacy_fixed_stakes_can_use_official_outcomes_without_weakening_default():
+    config=dict(base='2.00',gale_enabled=False,gales=0,gale_multiplier='1',
+                cycles=2,cycles_enabled=True,cycle_multiplier='2.50')
+    legacy_loss=row(1,3,-3)
+    with pytest.raises(ProgressionHalt,match='histórico diferente'):
+        next_entry(orders=[legacy_loss],**config)
+    manual=next_entry(orders=[legacy_loss],validate_stakes=False,**config)
+    assert (manual.stake,manual.cycle,manual.gale)==(Decimal('5.00'),1,0)
+    unsettled=dict(legacy_loss,state='UNKNOWN',pnl=None)
+    with pytest.raises(ProgressionHalt,match='não liquidado'):
+        next_entry(orders=[unsettled],validate_stakes=False,**config)
+
+
 def test_cycles_work_without_martingale():
     # With no gales, a LOSS completes the current cycle and increases the
     # next cycle's stake; a WIN still returns to the original amount.

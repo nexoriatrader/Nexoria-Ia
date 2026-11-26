@@ -78,7 +78,7 @@ def test_advanced_and_new_options_are_retained_without_becoming_default():
     assert 'id="autoIndicators"' not in panel
     assert "Indicadores selecionados" not in panel
     assert "O que significam os indicadores?" not in panel
-    assert 'id="learningIndicatorsSection"' in SOURCE
+    assert 'id="learningIndicatorsSection"' not in SOURCE
     assert 'input type="radio" name="autoMode" value="demo" checked' in panel
     assert 'input type="radio" name="autoMode" value="real"' in panel
     assert 'onclick="saveAutomationProfile()"' in panel

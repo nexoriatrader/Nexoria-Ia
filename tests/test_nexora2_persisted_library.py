@@ -1,11 +1,10 @@
-"""Existing PostgreSQL research archive surfaced inside NEXORA 2.0.
+"""Existing PostgreSQL research archive remains available through read-only APIs.
 
 Tests explicitly check unauthorized reads, allowed research keys, bounded output,
 database-backed recovery after a new session, and zero financial mutations.
 """
 import json
 from datetime import datetime,timedelta,timezone
-from pathlib import Path
 
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine,event
@@ -102,16 +101,3 @@ def test_persisted_archive_never_writes_or_loads_unbounded_payload(tmp_path,monk
     finally:
         event.remove(engine,'before_cursor_execute',record)
         engine.dispose()
-
-
-def test_persisted_library_ui_is_lazy_and_readonly():
-    html=(Path(__file__).resolve().parents[1]/'app'/'nexora2.html').read_text()
-    assert 'id="persistedResearchLibrary"' in html
-    assert 'id="loadLibraryButton"' in html
-    assert "loadResearchLibrary()" in html
-    assert "checkedResearch('/api/nexora2/research/library')" in html
-    assert 'A retenção automática poderá remover pesquisas antigas.' in html
-    assert 'Não é histórico PostgreSQL' in html
-    for forbidden in ('/api/demo/buy','/api/real/buy','/api/autopilot/start',
-                      '/api/autopilot/stop','START_REAL_AUTOPILOT'):
-        assert forbidden not in html

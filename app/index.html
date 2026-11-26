@@ -1583,12 +1583,8 @@ body:has(#dashboard:not(.hidden)) .nexora-logo-only .brand img{
   <button class="nav-link" data-view="account" type="button" onclick="go('account')">Minha Conta</button>
   <button class="nav-link" data-view="dashboard" type="button" onclick="go('dashboard')">Painel do Robô</button>
   <button class="nav-link" data-view="robot-config" type="button" onclick="go('robot-config')">Configurar Robô</button>
-  <a class="nav-link" href="/configuracao-educativa">Configuração educativa (6 etapas)</a>
   <button class="nav-link" data-view="results" type="button" onclick="go('results')">Resultados do Robô</button>
   <button class="nav-link" data-view="cataloger" type="button" onclick="go('cataloger')">Catalogador</button>
-  <a class="nav-link" href="/nexora2" aria-label="Abrir NEXORA 2.0: pesquisa e treinamento">NEXORA 2.0</a>
-  <button class="nav-link" data-view="features" type="button" onclick="go('features')">Entenda as Funcionalidades</button>
-  <button class="nav-link" data-view="strategies" type="button" onclick="go('strategies')">Conheça os Indicadores e Estratégias</button>
   <a class="nav-link nav-broker-link" href="https://t.deriv.link/?t=HR6MZB6Q499Z" target="_blank" rel="noopener noreferrer sponsored" aria-label="Abrir a corretora Deriv (link de indicação externo)">Acessar Corretora ↗</a>
 </nav>
 
@@ -2183,129 +2179,6 @@ body:has(#dashboard:not(.hidden)) .nexora-logo-only .brand img{
     <div class="table-wrap"><table><thead><tr><th>Data da compra (Deriv · Brasília)</th><th>Horário da compra (Deriv)</th><th>Conta</th><th>Ativo</th><th>Direção</th><th>Entrada</th><th>Expiração</th><th>Etapa</th><th>Situação</th><th>WIN / LOSS</th><th>Resultado</th></tr></thead><tbody id="ordersBody"><tr><td colspan="11" class="empty">Carregando contratos...</td></tr></tbody></table></div>
   </div>
 </section>
-<section id="features" class="hidden">
-  <div class="section-heading"><div><div class="eyebrow">GUIA DO NEXORA</div><h1>Funcionalidades do Robô</h1><p>Entenda os recursos, limitações e o que já está disponível.</p></div></div>
-  <div class="auto-guide">
-    <div class="card"><div class="surface-heading">Ligar e desligar</div><p>Ativa ou interrompe novas entradas. Desligar não cancela contratos que já foram comprados.</p><p class="helper">Disponível na DEMO</p></div>
-    <div class="card"><div class="surface-heading">Ativos personalizados</div><p>Escolha pares Forex, índices derivados, ações, índices de bolsa e matérias-primas no catálogo da Deriv.</p></div>
-    <div class="card"><div class="surface-heading">Valor por entrada</div><p>Define o valor fixo da compra de cada contrato, sujeito aos limites do NEXORA e da corretora.</p><p class="helper">Disponível · DEMO</p></div>
-    <div class="card"><div class="surface-heading">Stop Win e Stop Loss</div><p>Interrompem novas entradas quando os limites definidos forem atingidos a partir dos resultados liquidados da sessão. Não garantem perda máxima exata.</p><p class="helper">Disponível · DEMO</p></div>
-    <div class="card"><div class="surface-heading">Martingale</div><p>Defina a quantidade de tentativas após um LOSS e o multiplicador aplicado à entrada seguinte. Valores maiores aumentam a exposição.</p></div>
-    <div class="card"><div class="surface-heading">Ciclos</div><p>Configure o número de ciclos adicionais e o multiplicador entre sequências.</p></div>
-    <div class="card"><div class="surface-heading">Filtro de notícias</div><p>Escolha o tempo de pausa antes e depois de eventos econômicos, principalmente para Forex e mercados financeiros.</p></div>
-    <div class="card"><div class="surface-heading">Integração Deriv</div><p>O NEXORA consulta ativos, tipos de contratos, propostas e liquidações por meio da API. Novos recursos devem ser liberados após validação.</p><p class="helper">Integração parcial ativa · DEMO</p></div>
-  </div><div class="actions"><button class="gold" onclick="go('dashboard')">VOLTAR PARA MINHA AUTOMAÇÃO</button></div>
-</section>
-<section id="strategies" class="hidden">
-  <div class="learning-hero">
-    <div class="learning-hero-text">
-      <div class="eyebrow">CENTRAL DE CONHECIMENTO · NEXORA IA</div>
-      <h1>Conheça os Indicadores e Estratégias</h1>
-      <p>Conheça as três estratégias e alguns conceitos de análise técnica. Cada estratégia usa regras próprias, sem filtros genéricos adicionais.</p>
-      <div class="learning-quickfacts"><span>◈ 3 estratégias</span><span>◈ 10 conceitos de indicadores</span><span>◈ Exemplos CALL e PUT</span></div>
-    </div>
-    <div class="learning-hero-graphic" aria-hidden="true">
-      <div class="learning-mini-graph">
-        <svg viewBox="0 0 260 130" role="presentation" preserveAspectRatio="xMidYMid meet">
-          <defs><linearGradient id="learningLine" x1="0" y1="1" x2="1" y2="0"><stop stop-color="#43a5fb"/><stop offset="1" stop-color="#5ae2b5"/></linearGradient></defs>
-          <path d="M0 30H260M0 65H260M0 100H260" stroke="#39617a" stroke-width="1" stroke-dasharray="4 7" opacity=".45"/>
-          <path d="M10 105L35 91L59 102L83 71L109 81L134 64L158 68L181 45L204 54L229 27L250 17" fill="none" stroke="url(#learningLine)" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
-          <path d="M10 105L35 91L59 102L83 71L109 81L134 64L158 68L181 45L204 54L229 27L250 17L250 130L10 130Z" fill="#48c7d9" opacity=".09"/>
-          <circle cx="229" cy="27" r="6" fill="#62e5b5" stroke="#102a3c" stroke-width="3"/>
-        </svg>
-      </div>
-      <span>ANÁLISE DE MERCADO</span>
-    </div>
-  </div>
-  <div class="learning-tabs" role="group" aria-label="Conteúdo educativo">
-    <button type="button" class="learning-tab active" data-education-tab="all" aria-pressed="true" onclick="setEducationTab('all')">Visão geral</button>
-    <button type="button" class="learning-tab" data-education-tab="strategies" aria-pressed="false" onclick="setEducationTab('strategies')">Estratégias</button>
-    <button type="button" class="learning-tab" data-education-tab="indicators" aria-pressed="false" onclick="setEducationTab('indicators')">Indicadores</button>
-    <button type="button" class="learning-tab" data-education-tab="howto" aria-pressed="false" onclick="setEducationTab('howto')">Como configurar</button>
-  </div>
-  <div id="learningStrategiesSection" class="learning-section">
-    <div class="learning-section-head"><div><div class="eyebrow">REGRAS DE ANÁLISE</div><h2>Estratégias do Robô</h2><p>Cada estratégia usa critérios diferentes para encontrar possíveis entradas.</p></div></div>
-    <div class="learning-cards">
-      <article class="learning-card">
-        <div class="learning-card-top"><span class="learning-emoji" aria-hidden="true">〽</span><span class="learning-category">VOLATILIDADE E PRESSÃO</span></div>
-        <h3>PULSO V2</h3>
-        <p>Analisa velas de um minuto já fechadas, procurando pressão direcional combinada com condições de volatilidade estável.</p>
-        <div class="learning-example">
-          <span>Como o sinal é formado</span>
-          <strong>Pressão + volatilidade estável + fechamento confirmado</strong>
-        </div>
-        <div class="learning-meta"><span>Velas M1</span><span>Direção AUTO / CALL / PUT</span><span>Expiração automática · M1 / M3 / M5 / M15</span></div>
-        <details class="learning-details"><summary>Entender esta estratégia <span aria-hidden="true">⌄</span></summary>
-          <div><p>O robô consulta uma sequência de velas, calcula as condições de pressão e compara a estabilidade do movimento. Quando o conjunto de regras é atendido, gera um sinal na direção configurada.</p>
-          <p><strong>Exemplo:</strong> se houver pressão compradora suficiente e o cenário de volatilidade estiver dentro dos critérios, pode surgir um sinal CALL. Na direção PUT, as condições são avaliadas para movimento de baixa.</p></div>
-        </details>
-      </article>
-      <article class="learning-card">
-        <div class="learning-card-top"><span class="learning-emoji" aria-hidden="true">↗</span><span class="learning-category">SEGUIR TENDÊNCIAS</span></div>
-        <h3>Tendência + Pullback</h3>
-        <p>Usa médias móveis exponenciais de 20 e 50 períodos para identificar o sentido predominante e esperar um recuo com confirmação.</p>
-        <div class="learning-example">
-          <span>Como o sinal é formado</span>
-          <strong>EMA 20 / EMA 50 + recuo até EMA 20 + vela de confirmação</strong>
-        </div>
-        <div class="learning-meta"><span>EMA 20/50</span><span>CALL / PUT</span><span>Velas fechadas</span></div>
-        <details class="learning-details"><summary>Entender esta estratégia <span aria-hidden="true">⌄</span></summary>
-          <div><p><strong>Exemplo CALL:</strong> EMA 20 acima da EMA 50, preço recua até a EMA 20 e uma vela compradora fecha novamente acima dessa média.</p>
-          <p><strong>Exemplo PUT:</strong> EMA 20 abaixo da EMA 50, preço sobe temporariamente até a média rápida e uma vela vendedora fecha abaixo dela.</p></div>
-        </details>
-      </article>
-      <article class="learning-card">
-        <div class="learning-card-top"><span class="learning-emoji" aria-hidden="true">↺</span><span class="learning-category">REVERSÃO DE MOVIMENTO</span></div>
-        <h3>Reversão com RSI</h3>
-        <p>Observa o Índice de Força Relativa (RSI), buscando saídas das regiões extremas acompanhadas por confirmação do movimento do preço.</p>
-        <div class="learning-example">
-          <span>Como o sinal é formado</span>
-          <strong>RSI cruza 30 ou 70 + vela confirma direção</strong>
-        </div>
-        <div class="learning-meta"><span>RSI 14</span><span>Níveis 30/70</span><span>CALL / PUT</span></div>
-        <details class="learning-details"><summary>Entender esta estratégia <span aria-hidden="true">⌄</span></summary>
-          <div><p><strong>Exemplo CALL:</strong> RSI estava em 30 ou menos, volta acima de 30 e a vela fecha em alta.</p>
-          <p><strong>Exemplo PUT:</strong> RSI estava em 70 ou mais, cai abaixo de 70 e a vela fecha em baixa.</p></div>
-        </details>
-      </article>
-    </div>
-  </div>
-  <div id="learningIndicatorsSection" class="learning-section">
-    <div class="learning-section-head">
-      <div><div class="eyebrow">CONCEITOS DE ANÁLISE TÉCNICA</div><h2>Conheça os Indicadores</h2><p>Aprenda conceitos de análise técnica. No configurador, cada estratégia já possui seus próprios critérios; não há filtros genéricos para selecionar.</p></div>
-    </div>
-    <div class="learning-indicators">
-      <article class="learning-indicator"><span class="learning-indicator-mark trend">EMA</span><div><h3>Média Móvel Exponencial</h3><p>Dá maior peso aos preços recentes. A comparação entre EMA 20 e EMA 50 ajuda a identificar a direção da tendência.</p><small>Categoria: tendência</small></div></article>
-      <article class="learning-indicator"><span class="learning-indicator-mark trend">SMA</span><div><h3>Média Móvel Simples</h3><p>Calcula a média dos preços de determinado período. A SMA 20 comparada à SMA 50 oferece outra referência de tendência.</p><small>Categoria: tendência</small></div></article>
-      <article class="learning-indicator"><span class="learning-indicator-mark momentum">RSI</span><div><h3>Índice de Força Relativa</h3><p>Oscila de 0 a 100 e mede o impulso recente. Níveis 30, 50 e 70 ajudam a acompanhar mudanças de pressão.</p><small>Categoria: momentum</small></div></article>
-      <article class="learning-indicator"><span class="learning-indicator-mark momentum">MACD</span><div><h3>Convergência e Divergência</h3><p>Compara médias exponenciais de 12 e 26 períodos para avaliar o sentido do impulso do preço.</p><small>Categoria: tendência e momentum</small></div></article>
-      <article class="learning-indicator"><span class="learning-indicator-mark vol">BB</span><div><h3>Bandas de Bollinger</h3><p>Formam uma região dinâmica ao redor da média do preço. A largura das bandas acompanha a dispersão recente.</p><small>Categoria: volatilidade</small></div></article>
-      <article class="learning-indicator"><span class="learning-indicator-mark vol">ATR</span><div><h3>Average True Range</h3><p>Mede a amplitude média das oscilações, sem indicar sozinho se o preço vai subir ou cair.</p><small>Categoria: volatilidade</small></div></article>
-      <article class="learning-indicator"><span class="learning-indicator-mark trend">ADX</span><div><h3>Índice Direcional Médio</h3><p>Ajuda a observar a intensidade de uma tendência, sem indicar por si só se o preço vai subir ou cair.</p><small>Categoria: força do movimento</small></div></article>
-      <article class="learning-indicator"><span class="learning-indicator-mark momentum">STO</span><div><h3>Estocástico</h3><p>Compara o fechamento com a faixa recente de máximas e mínimas, mostrando a posição do preço dentro desse intervalo.</p><small>Categoria: momentum</small></div></article>
-      <article class="learning-indicator"><span class="learning-indicator-mark price">S/R</span><div><h3>Suporte e Resistência</h3><p>Identifica regiões de máximas e mínimas anteriores, que podem servir de referência para rompimentos e reação do preço.</p><small>Categoria: ação do preço</small></div></article>
-      <article class="learning-indicator"><span class="learning-indicator-mark price">M1</span><div><h3>Padrões de Velas</h3><p>Analisa a relação entre abertura e fechamento; o engolfo é um exemplo de padrão que compara duas velas consecutivas.</p><small>Categoria: ação do preço</small></div></article>
-    </div>
-    <div class="learning-tip"><span aria-hidden="true">✧</span><p><strong>Como funciona a análise do robô?</strong> Os critérios de entrada e confirmação vêm da estratégia selecionada. PULSO V2, Tendência + Pullback e Reversão RSI seguem regras próprias, sem combinações avulsas de filtros genéricos.</p></div>
-  </div>
-  <div id="learningHowtoSection" class="learning-section">
-    <div class="learning-section-head"><div><div class="eyebrow">SEU CONTROLE</div><h2>Como configurar o NEXORA</h2><p>Escolha o mercado, os ativos e uma estratégia com critérios de análise definidos.</p></div></div>
-    <div class="learning-steps">
-      <div class="learning-step"><span>01</span><div><h3>Escolha a conta e o mercado</h3><p>Selecione DEMO ou REAL e escolha Forex, Derivados, Ações e Índices ou Matérias-primas.</p></div></div>
-      <div class="learning-step"><span>02</span><div><h3>Selecione os ativos</h3><p>Escolha os instrumentos específicos que o NEXORA deverá acompanhar dentro do mercado selecionado.</p></div></div>
-      <div class="learning-step"><span>03</span><div><h3>Defina a estratégia</h3><p>Escolha PULSO V2, Tendência + Pullback ou Reversão RSI. Cada estratégia aplica seus próprios critérios de análise.</p></div></div>
-      <div class="learning-step"><span>04</span><div><h3>Personalize as operações</h3><p>Informe direção, entrada, expiração, payout mínimo, stops e suas preferências de Martingale, ciclos e notícias.</p></div></div>
-      <div class="learning-step"><span>05</span><div><h3>Salve sua configuração</h3><p>Revise as opções no painel, salve seu perfil e utilize os controles de automação da conta escolhida.</p></div></div>
-    </div>
-    <div class="learning-faq">
-      <details><summary>Qual a diferença entre estratégia e indicador?</summary><p>A estratégia reúne regras para identificar o momento de uma possível entrada. O indicador mede um aspecto do mercado, como tendência, impulso ou volatilidade, e pode ajudar a confirmar essas regras.</p></details>
-      <details><summary>Posso escolher vários indicadores?</summary><p>Não no configurador. Você escolhe a estratégia, e ela já aplica seus próprios critérios; assim, não há combinação de filtros genéricos que possa bloquear sinais.</p></details>
-      <details><summary>O que significa CALL e PUT?</summary><p>CALL representa uma operação que depende de o preço subir conforme as condições do contrato. PUT representa uma operação que depende de o preço cair.</p></details>
-      <details><summary>O que é expiração?</summary><p>É o prazo estabelecido para o encerramento do contrato. No configurador você escolhe a duração disponível para sua automação.</p></details>
-    </div>
-  </div>
-  <div class="learning-cta"><div><strong>Pronto para personalizar seu robô?</strong><p>Escolha seus ativos e a estratégia que deseja utilizar no painel principal.</p></div><button type="button" class="gold" onclick="go('robot-config')">CONFIGURAR MEU ROBÔ</button></div>
-</section>
 <section id="settings" class="hidden">
   <div class="section-heading"><div><div class="eyebrow">SEU CONTROLE</div><h1>Configurações</h1><p>Personalize entradas, stop e progressões. O AutoPilot deve estar desligado para salvar.</p></div></div>
   <div class="card">
@@ -2481,7 +2354,8 @@ async function saveOnboarding(event){
  }catch(e){$('setupFeedback').textContent='Não foi possível salvar: '+e.message;fail('')}
  finally{btn.disabled=false}
 }
-function page(v){document.body.classList.toggle('marketing-mode',v==='welcome');$('primaryNavigation').classList.toggle('hidden',v==='welcome'||v==='setup');for(const name of ['welcome','setup','dashboard','robot-config','results','settings','account','features','strategies','cataloger'])$(name).classList.toggle('hidden',name!==v);activePage=v;document.querySelectorAll('.nav-link[data-view]').forEach(b=>b.classList.toggle('active',b.dataset.view===v))}
+const APP_PAGES=new Set(['welcome','setup','dashboard','robot-config','results','settings','account','cataloger']);
+function page(v){if(!APP_PAGES.has(v))v='dashboard';document.body.classList.toggle('marketing-mode',v==='welcome');$('primaryNavigation').classList.toggle('hidden',v==='welcome'||v==='setup');for(const name of APP_PAGES)$(name).classList.toggle('hidden',name!==v);activePage=v;document.querySelectorAll('.nav-link[data-view]').forEach(b=>b.classList.toggle('active',b.dataset.view===v))}
 
 let dailyResultsLoading=false;
 async function loadDailyResults(){
@@ -3512,17 +3386,6 @@ async function loadRobotAccess(){
   }catch(e){target.textContent='Não foi possível consultar a validade do acesso'}
 }
 async function loadDemoBalance(){try{const b=await req('/api/demo/balance');demoBalance=b;$('balanceMetric').textContent=money(b.balance,b.currency);return b}catch(e){$('balanceMetric').textContent='Indisponível';throw e}}
-function setEducationTab(tab){
- const groups={all:['learningStrategiesSection','learningIndicatorsSection','learningHowtoSection'],
-  strategies:['learningStrategiesSection'],indicators:['learningIndicatorsSection'],howto:['learningHowtoSection']};
- if(!groups[tab])tab='all';
- document.querySelectorAll('.learning-tab').forEach(button=>{
-  const active=button.dataset.educationTab===tab;
-  button.classList.toggle('active',active);
-  button.setAttribute('aria-pressed',String(active));
- });
- for(const id of groups.all)$(id).classList.toggle('hidden',!groups[tab].includes(id));
-}
 const hiddenResolvedMemory=new Map();
 function hiddenResolvedKey(mode){return 'nexora-hidden-results-v1:'+String(mode||'demo');}
 function hiddenResolvedIDs(mode){

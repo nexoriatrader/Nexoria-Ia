@@ -174,7 +174,7 @@ def test_robot_wizard_has_exactly_seven_main_steps_and_cycles_stay_in_step_six()
 def test_results_screen_has_no_pulso_audit_button_or_panel():
     from pathlib import Path
     html=(Path(__file__).resolve().parents[1]/'app'/'index.html').read_text()
-    results=html.split('<section id="results"',1)[1].split('<section id="features"',1)[0]
+    results=html.split('<section id="results"',1)[1].split('<section id="settings"',1)[0]
     assert 'AUDITORIA PULSO' not in results
     assert 'pulsoAuditCard' not in results
     assert 'loadPulsoAudit' not in html

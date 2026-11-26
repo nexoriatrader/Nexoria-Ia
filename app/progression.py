@@ -38,10 +38,12 @@ def decimal(value, *, min_value=Decimal('1')):
     return d
 
 
-def next_entry(*, base, gale_enabled, gales, gale_multiplier, cycles, cycle_multiplier, orders, cycles_enabled=False):
+def next_entry(*, base, gale_enabled, gales, gale_multiplier, cycles, cycle_multiplier, orders,
+               cycles_enabled=False, validate_stakes=True):
     """Orders MUST be ordered by ID and scoped to this run via a persisted anchor.
 
-    Each row: {state, pnl, direction, symbol, strategy, stake}.
+    Each row: {state, pnl, direction, symbol, strategy, stake}. Manual legacy
+    runs may disable stake matching while still requiring official settlements.
     The result is a plan. DB and broker purchase checks execute independently.
     """
     base=decimal(base,min_value=Decimal('0.50'))
@@ -70,7 +72,7 @@ def next_entry(*, base, gale_enabled, gales, gale_multiplier, cycles, cycle_mult
         expected=(base*((cycle_multiplier*(gale_multiplier**gales))**cycle)*(gale_multiplier**gale)).quantize(
             Decimal('0.01'),rounding=ROUND_HALF_UP)
         actual=decimal(row['stake'],min_value=Decimal('0.50'))
-        if actual!=expected:
+        if validate_stakes and actual!=expected:
             raise ProgressionHalt('Entrada do histórico diferente da progressão planejada')
         try:
             pnl=Decimal(str(row['pnl']))
