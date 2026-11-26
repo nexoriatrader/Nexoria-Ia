@@ -43,7 +43,7 @@ def public_order(o):
             'broker_purchase_at':o.broker_purchase_at.isoformat() if o.broker_purchase_at else None}
 
 def order_guard(user, orders, stake, *, after_order_id=0,
-                parallel=False, symbol=None):
+                parallel=False, symbol=None, risk_config=None, panel_mode=None):
     """Official DEMO risk guard, including exposure reserved in open contracts."""
     active=[o for o in orders if o.state in ACTIVE]
     stake=money(stake)
@@ -57,12 +57,15 @@ def order_guard(user, orders, stake, *, after_order_id=0,
             raise OrderGuardError('Contrato antigo exige liquidação antes do modo paralelo')
     elif active:
         raise OrderGuardError('Contrato demo em andamento ou pendente de reconciliação')
-    pnl=sum((money(o.pnl) for o in orders if o.state=='SETTLED' and o.pnl is not None
+    panel_orders=(orders if panel_mode is None else
+                  [o for o in orders if getattr(o,'source_panel_mode',None)==panel_mode])
+    pnl=sum((money(o.pnl) for o in panel_orders if o.state=='SETTLED' and o.pnl is not None
              and (after_order_id==0 or (getattr(o,'id',None) or 0)>after_order_id)),Decimal('0'))
     if stake < Decimal('0.50'):
         raise OrderGuardError('Valor da entrada abaixo do mínimo permitido pela conta DEMO')
-    stop_win=money(user.stop_win)
-    stop_loss=money(user.stop_loss)
+    limits=risk_config or user
+    stop_win=money(limits.stop_win)
+    stop_loss=money(limits.stop_loss)
     if stop_loss<0 or stop_win<0:
         raise OrderGuardError('Stops não podem ser negativos')
     # Exposure is still considered by an explicitly configured Stop Loss,
@@ -72,7 +75,7 @@ def order_guard(user, orders, stake, *, after_order_id=0,
         raise OrderGuardError('Stop Win atingido')
     if stop_loss>0 and (pnl<=-stop_loss or pnl-exposure-stake < -stop_loss):
         raise OrderGuardError('A exposição máxima excederia o Stop Loss')
-    if user.martingale:
+    if getattr(user,'martingale',False) and risk_config is None:
         raise OrderGuardError('Martingale indisponível para compras demo na configuração antiga')
     return pnl
 
@@ -87,7 +90,7 @@ def _symbol_slot(user_id:int, symbol:str)->int:
 
 
 def reserve(session, user, *, request_key, symbol, direction, minutes,
-            stake_override=None, parallel=False):
+            stake_override=None, parallel=False, panel_mode=None, risk_config=None):
     if not isinstance(request_key,str) or not 8<=len(request_key)<=64 or not all(c.isalnum() or c in '-_' for c in request_key):
         raise OrderGuardError('Identificador de tentativa inválido')
     if direction not in {'CALL','PUT'} or minutes not in {1,3,5,15}:
@@ -105,15 +108,22 @@ def reserve(session, user, *, request_key, symbol, direction, minutes,
         return previous,False
     entries=session.scalars(select(db.DemoOrder).where(
         db.DemoOrder.user_id==user.id)).all()
-    chosen_stake=user.stake if stake_override is None else str(stake_override)
-    boundary=session.scalars(select(db.RiskSession).where(
-        db.RiskSession.user_id==user.id).order_by(db.RiskSession.id.desc()).limit(1)).first()
+    chosen_stake=(getattr(risk_config,'stake',user.stake) if stake_override is None
+                  else str(stake_override))
+    boundary_query=select(db.RiskSession).where(db.RiskSession.user_id==user.id)
+    boundary_query=(boundary_query.where(db.RiskSession.panel_mode.is_(None))
+                    if panel_mode is None else
+                    boundary_query.where(db.RiskSession.panel_mode==panel_mode))
+    boundary=session.scalars(boundary_query.order_by(
+        db.RiskSession.id.desc()).limit(1)).first()
     order_guard(locked_user,entries,chosen_stake,
                 after_order_id=boundary.after_order_id if boundary else 0,
-                parallel=parallel,symbol=symbol)
+                parallel=parallel,symbol=symbol,risk_config=risk_config,
+                panel_mode=panel_mode)
     slot=_symbol_slot(user.id,symbol) if parallel else user.id
     order=db.DemoOrder(user_id=user.id,request_key=request_key,active_slot=slot,
-        state='PENDING',symbol=symbol,direction=direction,duration_minutes=minutes,stake=chosen_stake)
+        state='PENDING',symbol=symbol,direction=direction,duration_minutes=minutes,stake=chosen_stake,
+        source_panel_mode=panel_mode)
     session.add(order)
     try:
         session.commit()

@@ -55,7 +55,8 @@ def test_engine_respects_zero_limits():
 def test_setup_explains_zero_limit():
     from pathlib import Path
     html=(Path(__file__).resolve().parents[1]/'app'/'index.html').read_text()
-    assert 'id="setupWin"' in html and 'value="0.00"' in html
-    assert 'id="setupLoss"' in html
-    assert 'ambos em zero' in html
+    assert 'id="autoWin"' in html and 'value="0"' in html
+    assert 'id="autoLoss"' in html
+    assert 'Com ambos em zero' in html
     assert 'desligá-lo manualmente' in html
+    assert 'os demais bloqueios de segurança e limites da corretora continuam ativos' in html

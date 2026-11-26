@@ -15,11 +15,14 @@ def test_combined_martingale_and_cycles_never_authorizes_demo_buys(tmp_path,monk
     monkeypatch.setattr(main,'demo_buy',buy)
     try:
         with factory() as sess:
-            sess.add(db.RobotPlan(user_id=uid,requested_martingale=True,
-                gale_count=1,requested_multiplier='2.0',cycles_limit=1))
-            sess.add(db.RobotCycleParams(user_id=uid,multiplier='2.0'))
+            profile=sess.get(db.AutomationPanelProfile,(uid,'strategies'))
+            profile.requested_martingale=True
+            profile.gale_count=1
+            profile.requested_multiplier='2.0'
+            profile.cycles_limit=1
+            profile.cycle_multiplier='2.0'
             sess.commit()
-        response=client.post('/api/autopilot/start',json={'confirm':'START_DEMO_AUTOPILOT'})
+        response=client.post('/api/autopilot/start',json={'confirm':'START_DEMO_AUTOPILOT','panel_mode':'strategies'})
         assert response.status_code==409,response.text
         assert 'Martingale OU ciclos' in response.json()['detail']
         assert uid not in main.autopilot_enabled
@@ -32,18 +35,18 @@ def test_combined_martingale_and_cycles_never_authorizes_demo_buys(tmp_path,monk
 def test_restart_is_detected_not_automatically_rearmed(tmp_path,monkeypatch):
     client,factory,engine,uid=prepare(tmp_path,monkeypatch)
     try:
-        assert client.post('/api/autopilot/start',json={'confirm':'START_DEMO_AUTOPILOT'}).status_code==200
+        assert client.post('/api/autopilot/start',json={'confirm':'START_DEMO_AUTOPILOT','panel_mode':'strategies'}).status_code==200
         assert uid in main.autopilot_enabled
         main.autopilot_enabled.clear()
         main.autopilot_reasons.clear()
         main.pause_demo_autopilot_after_restart()  # Render startup revokes durable consent.
-        status=client.get('/api/status')
+        status=client.get('/api/status?panel_mode=strategies')
         assert status.status_code==200
         assert status.json()['running'] is False
         assert status.json()['interrupted_after_restart'] is True
         assert 'reative manualmente' in status.json()['reason']
-        assert client.post('/api/autopilot/stop').status_code==200
-        assert client.get('/api/status').json()['interrupted_after_restart'] is False
+        assert client.post('/api/autopilot/stop',json={'panel_mode':'strategies'}).status_code==200
+        assert client.get('/api/status?panel_mode=strategies').json()['interrupted_after_restart'] is False
     finally:cleanup(engine)
 
 

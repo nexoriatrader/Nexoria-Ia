@@ -28,7 +28,7 @@ def _money(value, label):
     return result
 
 
-def _risk_check(orders, stake, stop_loss, max_stake, stop_win='0'):
+def _risk_check(orders, stake, stop_loss, max_stake, stop_win='0', panel_mode=None):
     # Daily limits roll over at midnight America/Sao_Paulo, but unresolved
     # contracts from a previous day still block new REAL buys.
     local_zone=ZoneInfo('America/Sao_Paulo')
@@ -50,7 +50,8 @@ def _risk_check(orders, stake, stop_loss, max_stake, stop_win='0'):
             instant=instant.replace(tzinfo=timezone.utc)
         return instant.astimezone(local_zone).date()==current_day
     pnl = sum((_money(row.pnl, 'Resultado')
-               for row in orders if row.state == 'SETTLED'
+               for row in orders if (panel_mode is None or getattr(row,'source_panel_mode',None)==panel_mode)
+               and row.state == 'SETTLED'
                and row.pnl is not None and same_local_day(row)), Decimal('0'))
     win = _money(stop_win, 'Stop Win')
     if win < 0:
@@ -64,7 +65,8 @@ def _risk_check(orders, stake, stop_loss, max_stake, stop_win='0'):
 
 
 def reserve_real_order(session, user, *, account_id, request_key,
-                       symbol, direction, duration, stake, currency):
+                       symbol, direction, duration, stake, currency,
+                       panel_mode=None, risk_config=None):
     """Reserve before any broker I/O; user row lock serializes concurrent requests.
 
     Account ID must already be validated from the authenticated Deriv account
@@ -88,6 +90,8 @@ def reserve_real_order(session, user, *, account_id, request_key,
     if (consent is None or consent.revoked_at is not None
         or consent.account_id != account_id):
         raise RealOrderGuardError('Autorização REAL ausente ou revogada')
+    if consent.panel_mode!=panel_mode:
+        raise RealOrderGuardError('Consentimento REAL não pertence a este painel')
     previous = session.scalar(select(db.RealOrder).where(
         db.RealOrder.account_id == account_id,
         db.RealOrder.request_key == request_key))
@@ -95,12 +99,17 @@ def reserve_real_order(session, user, *, account_id, request_key,
         return previous, False
     orders = session.scalars(select(db.RealOrder).where(
         db.RealOrder.account_id == account_id)).all()
-    amount = _risk_check(orders, stake, consent.stop_loss, consent.max_stake, locked.stop_win)
+    limits=risk_config
+    stop_loss=consent.stop_loss if limits is None else min(
+        _money(consent.stop_loss,'Stop Loss autorizado'),_money(limits.stop_loss,'Stop Loss do painel'))
+    stop_win=locked.stop_win if limits is None else limits.stop_win
+    amount = _risk_check(orders, stake, stop_loss, consent.max_stake, stop_win,
+                         panel_mode=panel_mode)
     order = db.RealOrder(
         user_id=user.id, account_id=account_id, request_key=request_key,
         active_slot=account_id, state='PENDING', symbol=symbol,
         direction=direction, duration_minutes=duration,
-        stake=str(amount), currency=currency)
+        stake=str(amount), currency=currency,source_panel_mode=panel_mode)
     session.add(order)
     try:
         session.commit()

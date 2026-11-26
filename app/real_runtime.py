@@ -84,6 +84,10 @@ def disarm_real(uid,why):
         consent=sess.get(db.RealRobotConsent,uid)
         if consent and consent.revoked_at is None:
             consent.revoked_at=db.utcnow()
+        lease=sess.get(db.AutomationExecutionState,uid)
+        if lease and lease.active_panel_mode=='strategies':
+            lease.active_panel_mode=None;lease.account_mode=None;lease.reserved_at=None
+            lease.updated_at=db.utcnow()
         sess.commit()
 
 
@@ -121,13 +125,13 @@ async def _manual_real_signal(uid, user, profile, consent, token):
         signal.ledger_mode='real';sess.commit()
         signal_id=signal.id;request_key=signal.request_key;account_id=consent.account_id
         symbol,direction,duration=signal.symbol,signal.direction,signal.duration_minutes
-        deadline=due.timestamp()+60-0.001;stake=user.stake;min_ratio=str(Decimal('1')+Decimal(profile.min_payout)/Decimal('100'))
+        deadline=due.timestamp()+60-0.001;stake=profile.stake;min_ratio=str(Decimal('1')+Decimal(profile.min_payout)/Decimal('100'))
     with db.SessionLocal() as sess:
         fresh_user=sess.get(db.User,uid)
         try:
             order,created=reserve_real_order(sess,fresh_user,account_id=account_id,
                 request_key=request_key,symbol=symbol,direction=direction,duration=duration,
-                stake=stake,currency='USD')
+                stake=stake,currency='USD',panel_mode='manual',risk_config=profile)
         except RealOrderGuardError as exc:
             with db.SessionLocal() as update:
                 row=update.get(db.ManualSignal,signal_id)
@@ -205,18 +209,23 @@ async def _user_scan(uid):
         # when the latest strategy candle has not changed.
         loop_time=asyncio.get_running_loop().time()
         with db.SessionLocal() as initial:
-            initial_profile=initial.get(db.AutomationProfile,uid)
-            manual_mode=bool(initial_profile and getattr(initial_profile,'operation_mode','strategies')=='manual')
+            lease=initial.get(db.AutomationExecutionState,uid)
+            panel_mode=lease.active_panel_mode if lease else None
+            initial_profile=initial.get(db.AutomationPanelProfile,(uid,panel_mode)) if panel_mode in ('manual','strategies') else None
+            manual_mode=panel_mode=='manual'
         if not manual_mode:
             if loop_time-last_scan.get(uid,-1e12)<4:
                 return
             last_scan[uid]=loop_time
         with db.SessionLocal() as sess:
             user=sess.get(db.User,uid)
-            profile=sess.get(db.AutomationProfile,uid)
+            lease=sess.get(db.AutomationExecutionState,uid)
+            panel_mode=lease.active_panel_mode if lease else None
+            profile=sess.get(db.AutomationPanelProfile,(uid,panel_mode)) if panel_mode in ('manual','strategies') else None
             consent=sess.get(db.RealRobotConsent,uid)
             if (not user or not profile or not consent
                 or consent.revoked_at is not None
+                or consent.panel_mode!=panel_mode
                 or profile.account_mode!='real'
                 or profile.real_account_id!=consent.account_id):
                 disarm_real(uid,'Conta ou autorização REAL inválida')
@@ -224,7 +233,7 @@ async def _user_scan(uid):
             if not access_status(sess,uid)['allowed']:
                 disarm_real(uid,'Acesso ao robô expirado')
                 return
-            if getattr(profile,'operation_mode','strategies')=='manual':
+            if panel_mode=='manual':
                 token=latest_token(sess,uid)
                 if not token:
                     disarm_real(uid,'Sessão Deriv expirada; reconecte a conta REAL');return
@@ -258,7 +267,7 @@ async def _user_scan(uid):
                 return
             # Snapshot immutable values before broker network requests.
             account_id=consent.account_id
-            stake=user.stake
+            stake=profile.stake
             min_ratio=str(Decimal('1')+Decimal(profile.min_payout)/Decimal('100'))
             stop_loss=consent.stop_loss
             selected_symbols=list(json.loads(profile.symbols_json))
@@ -304,7 +313,8 @@ async def _user_scan(uid):
                     sess,user,account_id=account_id,
                     request_key='real-'+secrets.token_hex(16),
                     symbol=candidate['symbol'],direction=candidate['direction'],
-                    duration=expiry,stake=stake,currency='USD')
+                    duration=expiry,stake=stake,currency='USD',
+                    panel_mode='strategies',risk_config=profile)
             except RealOrderGuardError as exc:
                 reasons[uid]=str(exc)
                 if 'Stop Loss' in str(exc) or 'Stop Win' in str(exc):

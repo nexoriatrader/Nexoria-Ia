@@ -10,6 +10,12 @@ HTML = (Path(__file__).resolve().parents[1] / "app" / "index.html").read_text(
 )
 
 
+def _dashboard_panel():
+    return HTML.split('<section id="dashboard"', 1)[1].split(
+        '<section id="robot-config"', 1
+    )[0]
+
+
 class _IndexTags(HTMLParser):
     def __init__(self):
         super().__init__()
@@ -62,10 +68,10 @@ def test_robot_dashboard_plain_language_overview_is_accessible_and_read_only():
     assert "function renderRobotEasyOverview(status)" in HTML
     assert "function reportRobotEasyUncertainty()" in HTML
     assert "function refreshRobotEasyOverview()" in HTML
-    assert "renderRobotEasyOverview(status);" in HTML
+    assert "renderRobotEasyOverview({...status,running:robotRunning});" in HTML
     assert "reportRobotEasyUncertainty();" in HTML
     assert "Não presuma que o robô foi desligado." in HTML
-    assert "const status=await req('/api/status')" in HTML
+    assert "const status=await req('/api/status?panel_mode=strategies')" in HTML
     assert "const sequence=++dashboardStatusSequence" in HTML
 
 
@@ -252,9 +258,7 @@ def test_new_studio_dashboard_is_a_real_visual_template():
                        "nxNeoChecked", "nxNeoChartTitle", "nxNeoChartNote",
                        "nxNeoMore"):
         assert parsed.ids.count(element_id) == 1, element_id
-    panel = HTML.split('<section id="dashboard" class="hidden nx-neo-dashboard nx-calm-dashboard">', 1)[1].split(
-        '<section id="robot-config" class="hidden">', 1
-    )[0]
+    panel = _dashboard_panel()
     assert '<h1>Visão geral' in panel
     assert "nx-neo-metrics" in panel
     assert panel.count('class="nx-neo-metric') >= 4
@@ -282,7 +286,7 @@ def test_new_studio_dashboard_is_a_real_visual_template():
     assert 'aria-label="Navegação rápida do painel"' not in panel
     assert 'aria-label="Atualizar dados do painel"' in panel
     assert "function renderNxNeoScannerChart(status)" in HTML
-    assert "renderNxNeoScannerChart(status);" in HTML
+    assert "renderNxNeoScannerChart(strategyStatus);" in HTML
     assert "markNxNeoScannerUncertain();" in HTML
     assert "function renderRobotEasyDiagnosis(status)" in HTML
     start = HTML.index('const nxNeoScanSamples=[];')
@@ -365,9 +369,7 @@ def test_command_bar_prioritizes_stop_only_and_preserves_existing_controls():
     for key in ("nxNeoCommandTitle", "nxNeoRunStatus", "nxNeoRunHelp",
                 "nxNeoQuickStop", "nxNeoControls"):
         assert parsed.ids.count(key) == 1, key
-    section = HTML.split(
-        '<section id="dashboard" class="hidden nx-neo-dashboard nx-calm-dashboard">', 1
-    )[1].split('<section id="robot-config" class="hidden">', 1)[0]
+    section = _dashboard_panel()
     assert section.index('class="nx-neo-command"') < section.index(
         'id="robotEasyOverview"'
     )
@@ -389,7 +391,7 @@ def test_command_bar_prioritizes_stop_only_and_preserves_existing_controls():
     assert 'id="balanceMetric"' in section
     assert "if(!health.real_orders_enabled)" in HTML
     assert 'function markNxNeoTopUncertain()' in HTML
-    assert 'renderNxNeoTopCommand(status);' in HTML
+    assert 'renderNxNeoTopCommand(strategyStatus);' in HTML
     assert 'markNxNeoTopUncertain();' in HTML
     assert "#dashboard .nx-neo-stop[hidden]{display:none!important}" in HTML
     style_head = HTML.split("</head>", 1)[0]
@@ -470,9 +472,7 @@ async function refreshDashboard(){refreshed++;}
 
 def test_minimal_robot_home_keeps_only_two_visible_surfaces():
     """The initial dashboard must be easy to scan without losing legacy DOM bindings."""
-    panel = HTML.split(
-        '<section id="dashboard" class="hidden nx-neo-dashboard nx-calm-dashboard">', 1
-    )[1].split('<section id="robot-config" class="hidden">', 1)[0]
+    panel = _dashboard_panel()
     assert '<section class="nx-neo-command"' in panel
     assert 'id="nxNeoQuickStop"' in panel
     assert 'class="nx-calm-activity"' in panel
@@ -504,7 +504,7 @@ def test_minimal_robot_home_keeps_only_two_visible_surfaces():
     assert 'onclick="nxNeoStopRunningRobot()"' in panel
     assert "function renderNxCalmActivity(status)" in HTML
     assert "function markNxCalmActivityUnknown()" in HTML
-    assert "renderNxCalmActivity(status);" in HTML
+    assert "renderNxCalmActivity(strategyStatus);" in HTML
     assert "markNxCalmActivityUnknown();" in HTML
     assert "if(!health.real_orders_enabled)" in HTML
     assert "wasRunning?'/api/autopilot/stop':'/api/autopilot/start'" in HTML
@@ -566,9 +566,7 @@ if(!$('nxCalmActivityDescription').textContent.includes('desatualizada'))
 
 def test_activation_link_is_top_level_and_requires_existing_confirmation():
     """A visible top shortcut only expands the original safeguarded controls."""
-    panel = HTML.split(
-        '<section id="dashboard" class="hidden nx-neo-dashboard nx-calm-dashboard">', 1
-    )[1].split('<section id="robot-config" class="hidden">', 1)[0]
+    panel = _dashboard_panel()
     top = panel.split('<section class="nx-calm-activity"', 1)[0]
     assert top.index('id="nxNeoQuickStop"') < top.index('id="nxNeoControls"')
     assert top.index('id="nxNeoControls"') < top.index('id="robotButton"')
@@ -595,9 +593,7 @@ def test_activation_link_is_top_level_and_requires_existing_confirmation():
 
 def test_compact_always_visible_controls_do_not_enable_unguarded_start():
     """User sees the two states on mobile; only stopping an active process is actionable."""
-    panel = HTML.split(
-        '<section id="dashboard" class="hidden nx-neo-dashboard nx-calm-dashboard">', 1
-    )[1].split('<section class="nx-calm-activity"', 1)[0]
+    panel = _dashboard_panel().split('<section class="nx-calm-activity"', 1)[0]
     assert 'id="nxNeoStartDisplay"' in panel
     assert 'id="nxNeoQuickStop"' in panel
     assert panel.index('id="nxNeoStartDisplay"') < panel.index('id="nxNeoQuickStop"')
@@ -632,9 +628,7 @@ def test_compact_always_visible_controls_do_not_enable_unguarded_start():
 
 def test_mobile_controls_no_fake_start_and_no_overflow():
     """Regression for the mobile screenshot: no duplicate fake button or stretched grid."""
-    panel = HTML.split(
-        '<section id="dashboard" class="hidden nx-neo-dashboard nx-calm-dashboard">', 1
-    )[1].split('<section class="nx-calm-activity"', 1)[0]
+    panel = _dashboard_panel().split('<section class="nx-calm-activity"', 1)[0]
     top = panel.split('<details class="nx-neo-controls"', 1)[0]
     assert 'id="nxNeoStartDisplay"' in top
     assert 'role="note"' in top
@@ -669,9 +663,7 @@ def test_mobile_controls_no_fake_start_and_no_overflow():
 
 def test_only_reference_control_card_is_visible_at_dashboard_entry():
     """User reference: one original NEXORA control card, no extra dashboard sections."""
-    panel = HTML.split(
-        '<section id="dashboard" class="hidden nx-neo-dashboard nx-calm-dashboard">', 1
-    )[1].split('<section id="robot-config" class="hidden">', 1)[0]
+    panel = _dashboard_panel()
     assert '<details class="nx-neo-controls" id="nxNeoControls" open>' in panel
     assert '<details class="nx-neo-account" id="nxNeoAccountDetails" open>' in panel
     assert panel.count('class="card dash-control-card"') == 1
@@ -682,7 +674,7 @@ def test_only_reference_control_card_is_visible_at_dashboard_entry():
                        "dashboardAccessCountdown", "balanceMetric", "realBalanceMetric",
                        "robotStartNotice", "robotNoticeTitle", "robotNoticeText"):
         assert 'id="' + element_id + '"' in card
-    for caption in ("NEXORA IA", "CONSULTANDO ESTADO DO ROBÔ…", "CONFIGURAR ROBÔ",
+    for caption in ("NEXORA IA", "CONSULTANDO ESTADO DO ROBÔ…", "CONFIGURAR ESTRATÉGIAS",
                     "Tempo disponível Robô", "Saldo conta DEMO", "Saldo conta REAL"):
         assert caption in card
     assert panel.count('id="robotButton"') == 1
@@ -718,9 +710,7 @@ def test_only_reference_control_card_is_visible_at_dashboard_entry():
 
 def test_premium_reference_skin_preserves_existing_controls():
     """Approved premium reference changes visual presentation, not execution."""
-    panel = HTML.split(
-        '<section id="dashboard" class="hidden nx-neo-dashboard nx-calm-dashboard">', 1
-    )[1].split('<section id="robot-config" class="hidden">', 1)[0]
+    panel = _dashboard_panel()
     header = HTML.split("</head>", 1)[0]
     assert "NEXORA Glass Signature" in header
     assert "body:has(#dashboard:not(.hidden)) .nexora-logo-only" in header
@@ -769,10 +759,10 @@ def test_premium_skin_only_adds_css_and_nonoperational_status_state():
                       "/api/autopilot/start", "/api/autopilot/stop"):
         assert forbidden not in skin
     assert "LIGAR ROBÔ" in HTML and "DESLIGAR ROBÔ" in HTML
-    assert "robotRunning?'DESLIGAR ROBÔ':'LIGAR ROBÔ'" in HTML
-    assert "$('robotButton').dataset.visualState=robotRunning?'active':'inactive';" in HTML
+    assert "robotRunning?'DESLIGAR NEXORA ESTRATÉGIAS'" in HTML
+    assert "$('robotButton').dataset.visualState=robotRunning?'active':activePanelMode==='manual'?'blocked'" in HTML
     assert '.hero-action[data-visual-state="active"]' in HTML
-    assert "$('robotButton').disabled=(!robotRunning&&!available)" in HTML
+    assert "$('robotButton').disabled=(!robotRunning&&(!available||activePanelMode==='manual'||(status.running&&!activePanelMode)))" in HTML
     assert "if(!health.real_orders_enabled)" in HTML
     assert "if(!await askRobotStartConfirmation(profile,risk,catalogue))return;" in HTML
     assert "wasRunning?'/api/autopilot/stop':'/api/autopilot/start'" in HTML
@@ -784,8 +774,8 @@ def test_review_optional_catalogue_timeout_prevents_long_wait():
     code = "async function toggleRobot(){" + html.split(
         "async function toggleRobot(){", 1
     )[1].split("async function loadRealBalance(){", 1)[0]
-    assert "const [profile,risk]=await Promise.all([" in code
-    assert "req('/api/automation/profile'),req('/api/onboarding/config')" in code
+    assert "const profile=await req('/api/automation/profile?panel_mode=strategies')" in code
+    assert "const risk=profile" in code
     assert "if(!profile.configured)" in code
     assert "if(!health.real_orders_enabled)" in code
     assert "if(!await askRobotStartConfirmation(profile,risk,catalogue))return;" in code
@@ -808,13 +798,12 @@ function showRobotNotice(msg){notices.push(msg);}
 async function refreshDashboard(){throw Error('Unexpected POST path');}
 async function req(path,opts={}){
 	 requests.push(path);
-	 if(path==='/api/status')return {running:false};
-	 if(path==='/api/automation/profile')
-	  return {configured:true,account_mode:scenario==='real'?'real':'demo',market:'derived'};
- if(path==='/api/onboarding/config'){
-  if(scenario==='bad_risk')throw Error('Unavailable');
-  return {stake:1,stop_loss:2,cycles:0,martingale:false};
- }
+	 if(path.startsWith('/api/status?panel_mode='))return {running:false,active_panel_mode:null};
+	 if(path==='/api/automation/profile?panel_mode=strategies'){
+	  if(scenario==='bad_risk')throw Error('Unavailable');
+	  return {configured:true,account_mode:scenario==='real'?'real':'demo',market:'derived',
+	   stake:1,stop_loss:2,cycles:0,martingale:false};
+	 }
  if(path==='/healthz')return {real_orders_enabled:false};
  if(path.startsWith('/api/automation/catalogue?')){
   if(scenario==='fast')return {items:[{symbol:'TEST',name:'Label'}]};

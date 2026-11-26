@@ -106,9 +106,12 @@ def test_visual_skin_scoped_and_broker_guards_remain():
     for forbidden in ("fetch(", "onclick=", "/api/autopilot/start",
                       "/api/autopilot/stop"):
         assert forbidden not in skin
-    for path in ("/api/automation/profile", "/api/onboarding/config",
-                 "/api/autopilot/start", "/api/autopilot/stop"):
+    for path in ("/api/automation/profile", "/api/autopilot/start",
+                 "/api/autopilot/stop"):
         assert path in SOURCE
+    assert "/api/onboarding/config" not in SOURCE
+    assert "panel_mode:'strategies'" in SOURCE
+    assert "panel_mode:'manual'" in SOURCE
     assert "if(!await askRobotStartConfirmation(profile,risk,catalogue))return;" in SOURCE
     assert "if(!health.real_orders_enabled)" in SOURCE
 
@@ -195,10 +198,12 @@ def test_review_explains_existing_parameters_without_saving_automatically():
 
 def test_manual_mode_reuses_risk_settings_but_skips_strategy_asset_steps():
     panel = config_source()
-    assert 'value="strategies" checked' in panel
-    assert 'Nexora IA Estratégias' in panel
-    assert 'Nexora Manual (lista de sinais)' in panel
-    assert 'operation_mode:manual?\'manual\':\'strategies\'' in SOURCE
+    assert 'name="operationMode"' not in panel
+    assert 'id="configPanelTitle"' in panel
+    assert 'Nexora Estratégias · configuração completa' in SOURCE
+    assert 'Nexora Manual · configuração completa' in SOURCE
+    assert 'operation_mode:panelMode' in SOURCE
+    assert "req('/api/automation/profile?panel_mode='+encodeURIComponent(panelMode))" in SOURCE
     assert "if(operationMode()!=='manual')check('automationSymbols'" in SOURCE
     profile_loader = SOURCE.split("async function loadAutomationProfile(){", 1)[1].split(
         "async function saveAutomationProfile(){", 1
@@ -210,6 +215,8 @@ def test_manual_mode_reuses_risk_settings_but_skips_strategy_asset_steps():
     assert 'req(\'/api/automation/catalogue?' not in manual_load
     assert 'autoStake' in panel and 'autoWin' in panel and 'autoLoss' in panel
     assert 'id="autoMg"' in panel and 'id="autoCycles"' in panel
+    assert '#robot-config.manual-mode [data-strategy-only]' in SOURCE
+    assert "...(operationMode()==='manual'?[]:[['autoPayout',0,200,'Payout mínimo']])" in SOURCE
     assert 'data-wizard-step="3"' in SOURCE
     assert 'data-wizard-step="4"' in SOURCE
     assert 'data-wizard-step="5"' in SOURCE
@@ -234,7 +241,8 @@ def test_manual_signal_card_uses_readonly_preview_and_explicit_queue_transitions
     assert 'item.timezone_name,marketLabel' in SOURCE
     assert 'SCHEDULE_DEMO_MANUAL_SIGNALS' not in SOURCE
     assert "req('/api/autopilot/start'" in SOURCE
-    assert "req('/api/autopilot/stop',{method:'POST'})" in SOURCE
+    assert "body:JSON.stringify({panel_mode:'manual'})" in SOURCE
+    assert "body:JSON.stringify({panel_mode:'manual',confirm:startConfirm})" in SOURCE
     assert 'Sinais pendentes serão preservados na fila' in SOURCE
     assert 'contratos já enviados continuarão na Deriv; nada será apagado ou cancelado' in SOURCE
     assert 'id="manualCancelButton"' in SOURCE and '>DESAGENDAR LISTA</button>' in SOURCE
@@ -243,10 +251,30 @@ def test_manual_signal_card_uses_readonly_preview_and_explicit_queue_transitions
     assert 'manualActivateButton' not in SOURCE
     assert 'activateManualSignals' not in SOURCE
     assert 'Reativar execução pausada' not in SOURCE
-    assert "if(typeof manualProfileMode!=='undefined'&&manualProfileMode){showRobotNotice('Este perfil usa Nexora Manual." in SOURCE
+    assert "activePanelMode==='strategies'" in SOURCE
+    assert "activePanelMode==='manual'" in SOURCE
     assert 'state?.persisted_status||state?.status||state?.run_status' in SOURCE
     assert 'const listComplete=Boolean(state?.list_completed||run===\'COMPLETED\')' in SOURCE
     assert "manualPauseButton').textContent='DESLIGAR ROBÔ'" in SOURCE
     assert 'LISTA CONCLUÍDA' in SOURCE
     assert 'a operação atual continuará até a liquidação oficial' in SOURCE
     assert 'Desligar o robô Nexora Manual?' in SOURCE
+
+
+def test_menu_and_panels_are_explicit_and_do_not_offer_general_settings():
+    nav = SOURCE.split('<nav id="primaryNavigation"', 1)[1].split("</nav>", 1)[0]
+    assert 'data-view="dashboard"' in nav and '>Nexora Estratégias</button>' in nav
+    assert 'data-view="manual-dashboard"' in nav and '>Nexora Manual</button>' in nav
+    assert 'Configurar Robô</button>' not in nav
+    assert '<section id="settings"' not in SOURCE
+    assert '<section id="manual-dashboard"' in SOURCE
+    assert "onclick=\"go('robot-config','manual')\"" in SOURCE
+    assert "onclick=\"go('robot-config','strategies')\"" in SOURCE
+    manual_start = SOURCE.split("async function loadManualSignalsState(){", 1)[1].split(
+        "async function previewManualSignals()", 1
+    )[0]
+    assert "panel_mode=manual" in manual_start
+    strategy_start = SOURCE.split("async function toggleRobot(){", 1)[1].split(
+        "function money", 1
+    )[0]
+    assert "panel_mode=strategies" in strategy_start

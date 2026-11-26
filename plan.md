@@ -1,7 +1,7 @@
 # Plano — Nexora Manual e Catalogador de Sinais
 
 ## Objetivo e abordagem — Nexora Manual
-Adicionar uma modalidade explícita `Nexora IA Estratégias` ou `Nexora Manual (lista de sinais)` ao perfil salvo, preservando integralmente o fluxo atual de Estratégias. No modo Manual, a configuração mantém conta, stake, stops, payout e proteções, mas não solicita estratégia, mercado nem ativos antecipadamente. O mercado é escolhido por lista no card do painel.
+Separar o produto em dois painéis acessíveis pelo menu: `Nexora Manual` e `Nexora Estratégias`, preservando o fluxo de análise em Estratégias e removendo a configuração geral. Cada painel mantém um perfil independente. No Manual, a configuração mantém conta, stake, stops e proteções, mas não solicita estratégia, mercado nem ativos antecipadamente; o mercado é escolhido por lista no card do painel.
 
 O card terá prévia sem execução, entrada de uma ou várias linhas, escolha entre hoje/amanhã, mercado e fuso IANA (padrão `America/Sao_Paulo`, rotulado claramente como Brasília UTC−03:00). O catálogo oficial Deriv será usado para normalizar aliases reconhecidos e classificar cada ativo. Erros de formato, horário passado e ativo desconhecido serão mostrados linha a linha; ativos de outro mercado serão explicitamente excluídos sem descartar os sinais válidos restantes. A confirmação agenda apenas itens válidos e informa os excluídos.
 
@@ -13,6 +13,17 @@ O teto é de 100 sinais pendentes por sessão manual ativa. A vaga libera quando
 Remover da interface a ação “Reativar execução pausada” e o fluxo JavaScript que a oferece. Adicionar “Desagendar lista” para bloquear novas entradas imediatamente; se houver tentativa reivindicada, operação pendente/incerta ou contrato ativo, aguardar evidência de liquidação/cancelamento oficial da Deriv antes de cancelar somente os sinais futuros não enviados. Nunca cancelar, excluir ou reescrever contrato/ledger já comprado. A solicitação de desagendamento deve persistir e poder ser finalizada após reconciliação ou reinício. Ao esgotar a lista executável, marcar a sessão concluída e desligar o executor DEMO/REAL. A seção “Fila e estado persistidos” mostra apenas itens ainda agendados ou em reconciliação; linhas terminais permanecem no banco para auditoria e seus resultados oficiais continuam disponíveis em Resultados.
 
 A execução DEMO passará exclusivamente por `perform_demo_buy()` e `demo_ledger`; a execução REAL reutilizará a ativação/consentimento existentes, os limites e reservas de `real_ledger`, a validação de proposta e `buy_real_contract()` e a reconciliação REAL. Prévia e agendamento não enviam ordens. Testes usarão mocks e não contactarão as APIs de compra.
+
+## Escopo — dois painéis Nexora independentes
+O menu terá dois painéis próprios, “Nexora Manual” e “Nexora Estratégias”. Cada painel apresenta seus botões de configuração e mantém configuração completa e independente, do início ao fim; não haverá uma configuração geral. A configuração Manual inclui conta/modo e parâmetros financeiros/proteções, sem estratégia nem seleção antecipada de ativos; a configuração Estratégias mantém mercado, ativos, estratégia e expiração configurável (automática ou M1/M3/M5/M15), com Forex experimental fixo em M15, além dos próprios parâmetros financeiros/proteções. A lista manual permanece no painel Manual.
+
+Persistir as duas configurações por usuário e painel, incluindo stake, stops, progressão/Martingale, conta/modo e os campos específicos de Estratégias. Fazer migração aditiva e idempotente: sem apagar o perfil/tabelas anteriores, histórico ou ledgers; inicializar apenas os perfis novos ausentes usando os valores legados como base, sem copiar consentimento REAL nem ligar qualquer painel. Manter as APIs de ordens diretas sem painel no escopo legado/direto; elas não herdam implicitamente a configuração do painel ativo. Ordens antigas sem origem preservam essa condição, sem serem atribuídas por suposição a Manual ou Estratégias.
+
+Ordens novas de robô devem registrar painel de origem. Cada painel calcula seus próprios stops e progressões com operações daquele painel; uma ordem aberta/incerta da mesma conta continua sendo bloqueio comum contra outra execução, independentemente do painel. O consentimento REAL deve permanecer explícito e associado ao painel/conta usado na ativação; migração ou configuração nunca amplia autorização.
+
+Impor exclusividade de ativação no servidor para Manual e Estratégias, DEMO e REAL, com serialização durável por usuário e checagem antes de reservar/enviar ordens. Ao tentar ligar o painel oposto, responder com conflito e identificar qual painel está ativo; a interface apresenta essa informação sem mudar nem desligar a execução existente. Lista manual com itens pendentes, em tentativa, desconhecidos ou em cancelamento continua reservando o painel Manual até conclusão/desagendamento reconciliado. Preservar o estado seguro após reinício e impedir condições de corrida entre solicitações/processos.
+
+Na interface, remover a configuração geral do menu e das ações de painel; cada botão abre a configuração do próprio painel. A ativação/status devem refletir o painel ativo e não apresentar ambos como disponíveis para execução; APIs de status exigem o painel solicitado, sem assumir Estratégias quando omitido. Reutilizar os cartões, paleta escura azul-marinho/azul-petróleo e destaque dourado existentes, sem alterar o estilo visual do produto.
 
 ## Escopo — Catalogador de Sinais
 Manter a página autenticada “Catalogador” como ferramenta de pesquisa somente leitura, sem iniciar operações. A pessoa escolhe apenas o mercado, não um ativo individual, e a página percorre sequencialmente todos os ativos ativos do catálogo Deriv desse mercado. Em Derivados, incluir somente Volatility clássicos (`R_<valor>`) e de 1 segundo (`1HZ<valor>V`), excluindo Boom/Crash e outros derivados. Forex opera exclusivamente em M15; os demais mercados mantêm M5 e M15. A análise oferece janelas de 7, 15, 30 ou 60 dias; a primeira carga de cada ativo/timeframe busca e armazena até 60 dias, independentemente da janela escolhida. Forex inicia em M15 e 60 dias, e permite selecionar janelas menores. Manter Brasília UTC−03:00 como fuso padrão e os demais fusos já disponíveis no módulo Manual. A varredura exibe ativo atual e progresso, preservando resultados de ativos válidos se outro falhar.
@@ -31,6 +42,9 @@ A saída deve poder ser copiada como linhas `M5 <ativo> HH:MM CALL/PUT` ou `M15 
 - `app/db.py`: tabelas persistentes de candles e estado de sincronização, criadas pelo bootstrap aditivo existente.
 - `app/market.py` e `app/automation_markets.py`: cliente e catálogo Deriv existentes, reutilizados.
 - `app/manual_signals.py`: gramática vigente de listas manuais para validar o formato exportado.
+- `app/db.py` e helpers de configuração: persistência/migração aditiva para perfis completos e escopo por painel; conservar os registros globais antigos apenas para compatibilidade/dados legados.
+- `app/main.py`: endpoints de perfil, ativação, status, configuração e travas transacionais entre os painéis.
+- `app/demo_ledger.py`, `app/real_ledger.py` e `app/real_runtime.py`: atribuição das novas operações ao painel, proteção por risco correspondente e bloqueio compartilhado de ordens abertas/incertas.
 - `tests/`: testes isolados de algoritmo, timezones, paginação, filtros por mercado, reuso/atualização do cache e endpoints autenticados.
 
 ## Interface e estilo
@@ -42,5 +56,7 @@ No painel mobile, manter a navegação principal sticky do topo visível e remov
 - Nenhuma tentativa antes de confirmar a lista; nenhum envio de ordem durante testes.
 - O cache compartilhado contém somente candles públicos, sem tokens ou dados por usuário, e retém no máximo 60 dias por ativo/timeframe. Não executar smoke tests em produção.
 - Estado do robô e capacidade da fila devem vir do banco, não apenas de memória de processo.
+- Nenhuma migração pode apagar históricos nem duplicar consentimento REAL; configuração de um painel nunca grava nos campos de configuração do outro.
+- Uma ativação concorrente do painel oposto deve falhar no servidor com identificação do painel ativo; ordens diretas não podem ser reclassificadas como ordens de robô.
 - A agenda não pode transformar sinal vencido em compra tardia ou duplicada.
 - O Catalogador não chama endpoints de compra, não altera o modo/conta do usuário e não se anuncia como previsão garantida.

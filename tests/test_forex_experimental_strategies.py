@@ -220,7 +220,7 @@ def test_real_candidate_window_honors_explicit_m15_deadline_and_fails_closed(mon
 def test_forex_profile_api_rejects_non_forex_strategy_without_network(monkeypatch, account_mode):
     monkeypatch.setattr(main, "active_session", lambda request, sid: (SimpleNamespace(id=7), "offline"))
     payload = main.AutomationProfileRequest(
-        account_mode=account_mode,
+        panel_mode="strategies", operation_mode="strategies", account_mode=account_mode,
         market="volatility",
         symbols=["frxEURUSD"],
         strategy="fx_pullback_m15",
@@ -259,13 +259,15 @@ def test_new_forex_profile_persists_in_demo_without_generic_indicators(monkeypat
 
     monkeypatch.setattr(main, "featured_instruments_by_group", instruments)
     payload = main.AutomationProfileRequest(
-        account_mode="demo",
+        panel_mode="strategies", operation_mode="strategies", account_mode="demo",
         market="forex",
         symbols=["frxEURUSD"],
         strategy="fx_pullback_m15",
         indicators=["EMA"],
         direction="AUTO",
-        min_payout_pct=88,
+        min_payout_pct=88, stake="0.50", stop_loss="2.00", stop_win="0.00",
+        martingale=False, gale_count=0, cycles=0, multiplier="2.00", cycle_multiplier="2.00",
+        expiry_minutes=15,
     )
     saved = asyncio.run(main.save_automation_profile(None, payload, "offline"))
     assert saved["saved"] is True
@@ -323,16 +325,17 @@ def test_new_forex_profile_persists_in_real_with_broker_apis_mocked(monkeypatch)
 
     monkeypatch.setattr(main, "featured_instruments_by_group", instruments)
     payload = main.AutomationProfileRequest(
-        account_mode="real", market="forex", symbols=["frxEURUSD"],
+        panel_mode="strategies", operation_mode="strategies", account_mode="real", market="forex", symbols=["frxEURUSD"],
         strategy="fx_pullback_m15", real_account_id="R123",
         indicators=["EMA"], direction="AUTO", min_payout_pct=88,
+        expiry_minutes=15,
     )
     saved = asyncio.run(main.save_automation_profile(None, payload, "offline"))
     assert saved["saved"] is True
     assert saved["strategy"] == "fx_pullback_m15"
     assert saved["account_mode"] == "real"
     assert saved["market"] == "forex"
-    assert saved["expiry_minutes"] == 0
+    assert saved["expiry_minutes"] == 15
     assert saved["indicators"] == []
     assert saved["execution"] == "DERIV_REAL_CONFIGURED"
 
@@ -368,7 +371,7 @@ def test_real_activation_accepts_forex_experimental_without_sending_orders(tmp_p
         profile = db.AutomationProfile(
             user_id=uid, market="forex", symbols_json='["frxEURUSD"]',
             strategy="fx_breakout_m15", account_mode="real",
-            expiry_minutes=0, news_filter=False, min_payout="88",
+            expiry_minutes=15, news_filter=False, min_payout="88",
             max_daily_orders=0, indicators_json="[]", direction="AUTO",
             real_account_id="R123", preset_mode="custom",
         )
@@ -389,7 +392,7 @@ def test_real_activation_accepts_forex_experimental_without_sending_orders(tmp_p
     real_runtime.running.discard(uid)
     try:
         response = client.post(
-            "/api/autopilot/start", json={"confirm": "START_REAL_AUTOPILOT"}
+            "/api/autopilot/start", json={"confirm":"START_REAL_AUTOPILOT",'panel_mode':'strategies'}
         )
         assert response.status_code == 200, response.text
         assert response.json()["running"] is True
@@ -413,8 +416,8 @@ def test_forex_experimental_choices_are_real_visible_and_clearly_disclosed():
     assert "Em REAL, contratos podem gerar perdas financeiras" in html
     assert "isForexExperimentalStrategy" in html
     assert "fixa M15 (15 minutos)" in html
-    assert "Em REAL, o executor tenta a primeira duração indicada pelo sinal" in html
-    assert "REAL: primeira duração do sinal (M1 se automático)" in html
+    assert "A duração selecionada será verificada pela Deriv e pelo payout mínimo" in html
+    assert "fixa M15 (15 minutos)" in html
 
 
 def test_status_syncs_persisted_demo_run_and_blocks_duplicate_start(tmp_path, monkeypatch):
@@ -426,19 +429,19 @@ def test_status_syncs_persisted_demo_run_and_blocks_duplicate_start(tmp_path, mo
     monkeypatch.setattr(main, "demo_buy", AsyncMock(side_effect=AssertionError("must not buy")))
     try:
         started = client.post(
-            "/api/autopilot/start", json={"confirm": "START_DEMO_AUTOPILOT"}
+            "/api/autopilot/start", json={"confirm":"START_DEMO_AUTOPILOT",'panel_mode':'strategies'}
         )
         assert started.status_code == 200
 
         # Simulate another request worker/browser process with no local set.
         main.autopilot_enabled.discard(uid)
-        state = client.get("/api/status").json()
+        state = client.get("/api/status?panel_mode=strategies").json()
         assert state["running"] is True
         assert state["demo_run_intent"] is True
         assert state["running_local"] is False
 
         duplicate = client.post(
-            "/api/autopilot/start", json={"confirm": "START_DEMO_AUTOPILOT"}
+            "/api/autopilot/start", json={"confirm":"START_DEMO_AUTOPILOT",'panel_mode':'strategies'}
         )
         assert duplicate.status_code == 409
         assert "armada na nuvem" in duplicate.json()["detail"]
@@ -446,9 +449,9 @@ def test_status_syncs_persisted_demo_run_and_blocks_duplicate_start(tmp_path, mo
             assert session.get(db.RobotRun, uid) is not None
             assert session.get(db.AutoPilotResumeConsent, uid) is not None
 
-        stopped = client.post("/api/autopilot/stop")
+        stopped = client.post("/api/autopilot/stop",json={"panel_mode":"strategies"})
         assert stopped.status_code == 200
-        assert client.get("/api/status").json()["running"] is False
+        assert client.get("/api/status?panel_mode=strategies").json()["running"] is False
         with factory() as session:
             assert session.get(db.RobotRun, uid) is None
             assert session.get(db.AutoPilotResumeConsent, uid) is None

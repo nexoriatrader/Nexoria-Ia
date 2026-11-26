@@ -119,6 +119,9 @@ def test_real_worker_reserves_and_reconciles_mock_contract(session,monkeypatch):
         market="derived",symbols_json=json.dumps(["R_100"]),strategy="trend",
         expiry_minutes=0,indicators_json="[]",direction="AUTO",
         min_payout="88",news_filter=False))
+    db.ensure_panel_profiles(session,1)
+    session.get(db.AutomationExecutionState,1).active_panel_mode='strategies'
+    session.get(db.RealRobotConsent,1).panel_mode='strategies'
     session.commit()
     session_factory=sessionmaker(bind=session.bind,expire_on_commit=False)
     monkeypatch.setattr(db,"SessionLocal",session_factory)
@@ -173,6 +176,9 @@ def test_uncertain_real_execution_never_sends_next_buy(session,monkeypatch):
         symbols_json=json.dumps(["R_100"]),strategy="trend",
         expiry_minutes=0,indicators_json="[]",direction="AUTO",
         min_payout="88",news_filter=False))
+    db.ensure_panel_profiles(session,1)
+    session.get(db.AutomationExecutionState,1).active_panel_mode='strategies'
+    session.get(db.RealRobotConsent,1).panel_mode='strategies'
     session.commit()
     monkeypatch.setattr(db,"SessionLocal",
                         sessionmaker(bind=session.bind,expire_on_commit=False))

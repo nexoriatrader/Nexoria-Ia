@@ -20,4 +20,7 @@ def test_educational_menu_and_views_are_removed_without_hiding_robot_configurati
     assert "if(!APP_PAGES.has(v))v='dashboard'" in html
     assert '<section id="robot-config"' in html
     assert 'name="autoStrategy"' in html
-    assert 'Nexora IA Estratégias' in html
+    primary_nav=html.split('<nav id="primaryNavigation"',1)[1].split('</nav>',1)[0]
+    assert 'Nexora Estratégias' in primary_nav
+    assert 'Nexora Manual' in primary_nav
+    assert 'data-view="robot-config"' not in primary_nav

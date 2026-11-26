@@ -37,7 +37,10 @@ def test_mobile_navigation_and_single_primary_robot_control():
     assert 'id="configureRobotButton"' in html
     assert "AutoPilot" in html
     assert "loadDemoOrders()" in html
-    assert "/api/onboarding/config" in html
+    primary_nav=html.split('<nav id="primaryNavigation"',1)[1].split('</nav>',1)[0]
+    assert 'data-view="dashboard"' in primary_nav and 'Nexora Estratégias' in primary_nav
+    assert 'data-view="manual-dashboard"' in primary_nav and 'Nexora Manual' in primary_nav
+    assert 'data-view="robot-config"' not in primary_nav
     assert 'data-view="results"' in html
 
 
@@ -104,14 +107,15 @@ def test_premium_landing_mobile_and_accessibility():
     assert '.landing-cta:focus-visible' in html
     assert 'id="landingHeading"' in html
     assert 'id="robot-config"' in html
-    assert 'data-view="robot-config"' in html
+    assert 'onclick="go(\'robot-config\',\'strategies\')"' in html
+    assert 'onclick="go(\'robot-config\',\'manual\')"' in html
 
 
 def test_authenticated_oauth_requires_initial_setup_before_user_starts_robot():
     html=load_ui()
-    assert 'id="setupForm"' in html
-    assert 'id="setupStake"' in html
-    assert 'id="setupLoss"' in html
+    assert 'id="setupForm"' not in html
+    assert 'CONFIGURAR NEXORA ESTRATÉGIAS' in html
+    assert 'CONFIGURAR NEXORA MANUAL' in html
     assert "const loginResult=params.get('login');" in html
     assert "go('robot-config');" in html
     assert "go('setup')" not in html
@@ -176,7 +180,7 @@ def test_dashboard_ignores_stale_status_after_loading_secondary_cards():
     assert refresh.count("if(sequence!==dashboardStatusSequence)return null;")>=2
     assert refresh.index("await Promise.allSettled(")<refresh.rindex(
         "if(sequence!==dashboardStatusSequence)return null;")
-    assert "const status=await req('/api/status')" in refresh
+    assert "const status=await req('/api/status?panel_mode=strategies')" in refresh
 
 
 def test_risk_reset_confirmation_has_real_line_breaks():

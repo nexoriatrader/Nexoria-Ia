@@ -40,7 +40,7 @@ def test_public_and_authenticated_real_flags_agree(tmp_path, monkeypatch):
         assert health["real_orders_enabled"] is False
         assert health["execution"] == "DERIV_DEMO_ONLY"
         assert client.get("/api/session").json()["real_enabled"] is False
-        assert client.get("/api/onboarding/config").json()["real_enabled"] is False
+        assert client.get("/api/onboarding/config?panel_mode=strategies").json()["real_enabled"] is False
         # The legacy flag alone cannot enable real-money purchases.
         monkeypatch.setenv("NEXORA_REAL_AUTOPILOT_ENABLED", "true")
         health = client.get("/healthz").json()
@@ -53,8 +53,8 @@ def test_public_and_authenticated_real_flags_agree(tmp_path, monkeypatch):
         assert health["execution"] == "DERIV_REAL_OPT_IN"
         assert "real" in health["execution_modes"]
         assert client.get("/api/session").json()["real_enabled"] is True
-        assert client.get("/api/onboarding/config").json()["real_enabled"] is True
-        assert client.get("/api/status").json()["real_orders_enabled"] is True
+        assert client.get("/api/onboarding/config?panel_mode=strategies").json()["real_enabled"] is True
+        assert client.get("/api/status?panel_mode=strategies").json()["real_orders_enabled"] is True
     finally:
         real_runtime.running.discard(uid)
         engine.dispose()
@@ -63,17 +63,18 @@ def test_public_and_authenticated_real_flags_agree(tmp_path, monkeypatch):
 def test_real_run_blocks_onboarding_edits(tmp_path, monkeypatch):
     client, engine, uid = client_with_user(tmp_path, monkeypatch)
     payload = {
+        "panel_mode": "strategies",
         "stake": "2", "stop_win": "6", "stop_loss": "4",
         "martingale": False, "gale_count": 0,
         "multiplier": "2", "cycles": "0", "cycle_multiplier": "2",
     }
     try:
-        previous = client.get("/api/onboarding/config").json()
+        previous = client.get("/api/onboarding/config?panel_mode=strategies").json()
         real_runtime.running.add(uid)
         response = client.post("/api/onboarding/config", json=payload)
         assert response.status_code == 409
         assert "Desligue o robô" in response.json()["detail"]
-        current = client.get("/api/onboarding/config").json()
+        current = client.get("/api/onboarding/config?panel_mode=strategies").json()
         assert current["stake"] == previous["stake"]
         assert current["stop_loss"] == previous["stop_loss"]
     finally:
@@ -83,10 +84,7 @@ def test_real_run_blocks_onboarding_edits(tmp_path, monkeypatch):
 
 def test_initial_setup_explains_real_requires_separate_explicit_opt_in():
     html = (Path(__file__).resolve().parents[1] / "app" / "index.html").read_text(encoding="utf-8")
-    assert 'id="setupRealAvailability"' in html
-    assert "s.real_enabled?" in html
-    assert "Disponível na seção Automação mediante confirmação" in html
-    assert "Aguardando habilitação do servidor" in html
+    assert 'Nexora Estratégias' in html and 'Nexora Manual' in html
     assert "START_REAL_AUTOPILOT" in html
 
 def test_logout_revokes_real_consent_and_disarms_real_worker(tmp_path, monkeypatch):
@@ -135,5 +133,5 @@ def test_real_activation_uses_user_stake_without_hardcoded_one_dollar_cap():
     source=inspect.getsource(main.start_real_autopilot)
     assert 'server_max_stake' not in source
     assert 'real_pilot_limits' not in source
-    assert "stake=Decimal(str(user.stake))" in source
-    assert "stop=Decimal(str(user.stop_loss))" in source
+    assert "stake=Decimal(str(profile.stake))" in source
+    assert "stop=Decimal(str(profile.stop_loss))" in source

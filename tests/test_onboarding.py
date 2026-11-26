@@ -30,11 +30,11 @@ def test_onboarding_saves_limits_and_future_preferences_without_triggering_broke
     client,factory,uid,engine=make_client(tmp_path,monkeypatch)
     buy=AsyncMock(side_effect=AssertionError('No broker orders during onboarding'))
     monkeypatch.setattr(main,'demo_buy',buy)
-    payload={'stake':'2.50','stop_win':'20','stop_loss':'12',
+    payload={'panel_mode':'strategies','stake':'2.50','stop_win':'20','stop_loss':'12',
              'martingale':True,'gale_count':2,'multiplier':'3',
              'cycles':'5'}
     try:
-        before=client.get('/api/onboarding/config')
+        before=client.get('/api/onboarding/config?panel_mode=strategies')
         assert before.status_code==200
         assert before.json()['mode']=='demo'
         assert before.json()['stop_win']=='0.00'
@@ -45,13 +45,13 @@ def test_onboarding_saves_limits_and_future_preferences_without_triggering_broke
         response=client.post('/api/onboarding/config',json=payload)
         assert response.status_code==422,response.text
         assert 'Martingale' in response.json()['detail']
-        assert client.get('/api/onboarding/config').json()['cycles']=='0'
+        assert client.get('/api/onboarding/config?panel_mode=strategies').json()['cycles']=='0'
 
         martingale_only={**payload,'cycles':'0'}
         response=client.post('/api/onboarding/config',json=martingale_only)
         assert response.status_code==200,response.text
         assert response.json()['martingale_execution_enabled'] is True
-        after=client.get('/api/onboarding/config').json()
+        after=client.get('/api/onboarding/config?panel_mode=strategies').json()
         assert after['martingale'] is True
         assert after['gale_count']==2
         assert after['multiplier']=='3'
@@ -62,7 +62,7 @@ def test_onboarding_saves_limits_and_future_preferences_without_triggering_broke
         response=client.post('/api/onboarding/config',json=cycles_only)
         assert response.status_code==200,response.text
         assert response.json()['cycles_execution_enabled'] is True
-        after=client.get('/api/onboarding/config').json()
+        after=client.get('/api/onboarding/config?panel_mode=strategies').json()
         assert after['martingale'] is False
         assert after['gale_count']==0
         assert after['cycles']=='5'
@@ -72,9 +72,11 @@ def test_onboarding_saves_limits_and_future_preferences_without_triggering_broke
             u=sess.get(db.User,uid)
             assert u.martingale is False
             assert u.multiplier=='2.00'
-            assert u.stop_loss=='12.00'
-            plan=sess.get(db.RobotPlan,uid)
-            assert plan.cycles_limit==5
+            assert u.stop_loss=='0.00'
+            profile=sess.get(db.AutomationPanelProfile,(uid,'strategies'))
+            assert profile.cycles_limit==5
+            assert profile.stop_loss=='12.00'
+            assert sess.get(db.RobotPlan,uid) is None
         buy.assert_not_awaited()
     finally:
         main.runtimes.pop(uid,None)
@@ -83,7 +85,7 @@ def test_onboarding_saves_limits_and_future_preferences_without_triggering_broke
 
 def test_onboarding_validates_cycle_and_martingale_inputs(tmp_path,monkeypatch):
     client,factory,uid,engine=make_client(tmp_path,monkeypatch)
-    valid={'stake':'2','stop_win':'20','stop_loss':'10',
+    valid={'panel_mode':'strategies','stake':'2','stop_win':'20','stop_loss':'10',
            'martingale':False,'gale_count':0,'multiplier':'2','cycles':'0'}
     try:
         for override in ({'cycles':'-1'}, {'cycles':'6'}, {'gale_count':6},
@@ -92,7 +94,7 @@ def test_onboarding_validates_cycle_and_martingale_inputs(tmp_path,monkeypatch):
                          {'martingale':True,'gale_count':2,'cycles':'1'},
                          {'multiplier':'invalid'}, {'multiplier':'0.9'}, {'cycle_multiplier':'0'}, {'stake':'0'}):
             assert client.post('/api/onboarding/config',json={**valid,**override}).status_code==422
-        assert client.get('/api/onboarding/config').json()['cycles']=='0'
+        assert client.get('/api/onboarding/config?panel_mode=strategies').json()['cycles']=='0'
         assert client.post('/api/onboarding/config',json=valid).status_code==200
     finally:
         main.runtimes.pop(uid,None)
@@ -103,33 +105,23 @@ def test_onboarding_requires_session_and_never_enables_real_orders(tmp_path,monk
     client,factory,uid,engine=make_client(tmp_path,monkeypatch)
     try:
         client.cookies.clear()
-        assert client.get('/api/onboarding/config').status_code==401
+        assert client.get('/api/onboarding/config?panel_mode=strategies').status_code==401
         assert client.post('/api/onboarding/config',json={}).status_code==401
     finally:
         main.runtimes.pop(uid,None)
         engine.dispose()
 
 
-def test_legacy_setup_is_not_in_oauth_flow_and_wizard_is_used():
+def test_configuration_is_panel_scoped_and_wizard_is_reached_from_each_panel():
     from pathlib import Path
     html=(Path(__file__).resolve().parents[1]/'app'/'index.html').read_text()
-    setup=html.split('<section id="setup"',1)[1].split('<section id="dashboard"',1)[0]
-    assert "go('setup')" not in html
-    assert "go('robot-config');" in html
-    assert 'id="autoWizardProgress"' in html
-    assert "go('dashboard')" in html
-    assert 'É hora de ' in setup
-    assert 'configurar seu robô' in setup
-    assert 'FINALIZAR CONFIGURAÇÃO E IR PARA O PAINEL' in setup
-    assert 'id="setupCycles"' in setup
-    assert 'id="setupMg"' in setup
-    assert 'id="setupGales"' in setup
-    assert 'id="setupMultiplier"' in setup
-    assert 'disabled' not in setup.split('id="setupStake"')[1].split('>',1)[0]
-    assert '/api/autopilot/start' not in setup
-    assert '/api/demo/buy' not in setup
-    assert 'id="setupCycleMultiplier"' in setup
-    assert 'A cada perda confirmada' in setup
+    nav=html.split('<nav id="primaryNavigation"',1)[1].split('</nav>',1)[0]
+    assert 'Nexora Manual' in nav and 'Nexora Estratégias' in nav
+    assert 'data-view="robot-config"' not in nav
+    assert "go('robot-config','manual')" in html
+    assert "go('robot-config','strategies')" in html
+    assert "req('/api/automation/profile?panel_mode='+encodeURIComponent(panelMode))" in html
+    assert 'Nexora Manual · configuração completa' in html
 
 
 def test_account_page_identity_referrals_and_plan_catalog_are_separate():

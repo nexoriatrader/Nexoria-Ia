@@ -13,7 +13,7 @@ import websockets
 from fastapi import FastAPI, HTTPException, Cookie, Request
 from fastapi.responses import FileResponse, RedirectResponse, JSONResponse, Response
 from pydantic import BaseModel
-from sqlalchemy import select, delete, func
+from sqlalchemy import select, delete, func, update
 
 from . import db
 from .public_urls import origin_for_request, checkout_return_origin, nexora_referral_origin, canonical_origin
@@ -274,14 +274,15 @@ def candidate_entry_deadline(candidate):
     return 0
 
 
-def autopilot_entry_plan(sess, user, orders):
+def autopilot_entry_plan(sess, user, orders, panel_profile=None):
     """Read immutable official ledger results since this run was armed."""
-    plan=sess.get(db.RobotPlan,user.id)
-    cfg=sess.get(db.RobotCycleParams,user.id)
+    plan=panel_profile or sess.get(db.RobotPlan,user.id)
+    cfg=panel_profile or sess.get(db.RobotCycleParams,user.id)
     run=sess.get(db.RobotRun,user.id)
     if not run:
         raise ProgressionHalt('Reative o robô para iniciar uma nova sequência')
-    previous=[o for o in sorted(orders,key=lambda x:x.id) if o.id>run.after_order_id]
+    previous=[o for o in sorted(orders,key=lambda x:x.id)
+              if o.id>run.after_order_id and getattr(o,'source_panel_mode',None)=='strategies']
     attribution_ids=[o.id for o in previous]
     attributions=sess.scalars(select(db.AutoPilotAttribution).where(
         db.AutoPilotAttribution.order_id.in_(attribution_ids))).all() if attribution_ids else []
@@ -292,7 +293,7 @@ def autopilot_entry_plan(sess, user, orders):
            'symbol':o.symbol,'stake':o.stake,'strategy':attrs[o.id].strategy}
           for o in previous]
     cycles=(plan.cycles_limit if plan else 0) or 0
-    entry=next_entry(base=user.stake,gale_enabled=bool(plan and plan.requested_martingale),
+    entry=next_entry(base=getattr(panel_profile,'stake',user.stake),gale_enabled=bool(plan and plan.requested_martingale),
         gales=plan.gale_count if plan and plan.requested_martingale else 0,
         gale_multiplier=plan.requested_multiplier if plan else '2',
         cycles=cycles or None,cycles_enabled=cycles>0,
@@ -330,7 +331,7 @@ def pause_demo_autopilot_after_restart():
     log.info('DEMO AutoPilot left disarmed after process restart; explicit activation is required')
 
 
-def v2_symbol_recovery(sess,user,orders,plan,cycle_cfg,batch):
+def v2_symbol_recovery(sess,user,orders,plan,cycle_cfg,batch,panel_profile=None):
     """Choose the next official-ledger progression in one EXCLUSIVE mode.
 
     Martingale uses independent per-symbol sequences and repeats the last
@@ -347,7 +348,8 @@ def v2_symbol_recovery(sess,user,orders,plan,cycle_cfg,batch):
     if plan and plan.requested_martingale and plan.cycles_limit:
         raise ProgressionHalt('Martingale e ciclos são configurações alternativas')
     after=max(batch.after_order_id,run.after_order_id)
-    historical=sorted((o for o in orders if o.id>after and o.state!='CANCELLED'),
+    historical=sorted((o for o in orders if o.id>after and o.state!='CANCELLED'
+                       and getattr(o,'source_panel_mode',None)=='strategies'),
                       key=lambda o:o.id)
     if not historical:
         return None,None
@@ -369,7 +371,7 @@ def v2_symbol_recovery(sess,user,orders,plan,cycle_cfg,batch):
         # parallel open orders, which would make the next-cycle stake ambiguous.
         if any(o.state in ('PENDING','CONFIRMED','UNKNOWN') for o in historical):
             raise ProgressionHalt('Contrato anterior não liquidado; aguardando reconciliação')
-        entry=next_entry(base=user.stake,gale_enabled=False,gales=0,
+        entry=next_entry(base=getattr(panel_profile,'stake',user.stake),gale_enabled=False,gales=0,
                          gale_multiplier='1',cycles=plan.cycles_limit,
                          cycles_enabled=True,
                          cycle_multiplier=cycle_cfg.multiplier if cycle_cfg else '2',
@@ -388,7 +390,7 @@ def v2_symbol_recovery(sess,user,orders,plan,cycle_cfg,batch):
         if any(o.state in ('PENDING','CONFIRMED','UNKNOWN') for o in group):
             continue
         try:
-            entry=next_entry(base=user.stake,gale_enabled=True,
+            entry=next_entry(base=getattr(panel_profile,'stake',user.stake),gale_enabled=True,
                              gales=plan.gale_count,
                              gale_multiplier=plan.requested_multiplier,
                              cycles=None,cycles_enabled=False,
@@ -470,7 +472,7 @@ def _manual_demo_cycle_entry(session,user,run,signals,plan,cycle_cfg):
     configured base stake. Their official outcomes remain usable, but only
     orders opened after the current risk plan was saved are in this sequence.
     """
-    if not plan or not plan.cycles_limit:
+    if not plan or not (plan.cycles_limit or plan.requested_martingale):
         return None
     configured_at=plan.updated_at
     if configured_at is not None and configured_at.tzinfo is None:
@@ -502,9 +504,13 @@ def _manual_demo_cycle_entry(session,user,run,signals,plan,cycle_cfg):
                         'direction':order.direction,'symbol':order.symbol,
                         'strategy':'manual','stake':order.stake})
     history.sort(key=lambda row:row['id'])
-    return next_entry(base=user.stake,gale_enabled=False,gales=0,
-        gale_multiplier='1',cycles=plan.cycles_limit,cycles_enabled=True,
-        cycle_multiplier=cycle_cfg.multiplier if cycle_cfg else '2',
+    martingale=bool(plan.requested_martingale)
+    return next_entry(base=getattr(plan,'stake',user.stake),gale_enabled=martingale,
+        gales=plan.gale_count if martingale else 0,
+        gale_multiplier=plan.requested_multiplier if martingale else '1',
+        cycles=plan.cycles_limit if plan.cycles_limit else None,
+        cycles_enabled=bool(plan.cycles_limit),
+        cycle_multiplier=getattr(cycle_cfg,'cycle_multiplier','2') if cycle_cfg else '2',
         orders=history,validate_stakes=False)
 
 
@@ -513,9 +519,11 @@ async def _run_manual_demo_signal(uid):
     if uid not in autopilot_enabled or not autopilot_allowed():return
     now=datetime.now(timezone.utc)
     with db.SessionLocal() as session:
-        profile=session.get(db.AutomationProfile,uid);run=session.get(db.ManualSignalRun,uid)
+        db.ensure_panel_profiles(session,uid)
+        profile=session.get(db.AutomationPanelProfile,(uid,'manual'));run=session.get(db.ManualSignalRun,uid)
+        lease=session.get(db.AutomationExecutionState,uid)
         user=session.get(db.User,uid)
-        if not profile or getattr(profile,'operation_mode','strategies')!='manual':return
+        if not profile or not lease or lease.active_panel_mode!='manual':return
         if not run or run.status!='RUNNING' or run.account_mode!='demo' or not user or user.selected_mode!='demo':
             autopilot_enabled.discard(uid);autopilot_reasons[uid]='Sessão Manual pausada ou conta incompatível';return
         auths=session.scalars(select(db.Session).where(db.Session.user_id==uid).order_by(db.Session.created_at.desc())).all()
@@ -556,8 +564,8 @@ async def _run_manual_demo_signal(uid):
         if not signal:return
         due=signal.scheduled_at.replace(tzinfo=timezone.utc) if signal.scheduled_at.tzinfo is None else signal.scheduled_at
         if now>=due+timedelta(seconds=60):return
-        plan=session.get(db.RobotPlan,uid)
-        cycle_cfg=session.get(db.RobotCycleParams,uid)
+        plan=profile
+        cycle_cfg=profile
         try:
             progression=_manual_demo_cycle_entry(session,user,run,all_signals,plan,cycle_cfg)
         except ProgressionHalt as exc:
@@ -569,12 +577,16 @@ async def _run_manual_demo_signal(uid):
         payload=DemoBuy(symbol=signal.symbol,direction=signal.direction,minutes=signal.duration_minutes,
                         confirm='DEMO_ONLY',request_key=key)
         deadline=due.timestamp()+60-0.001
-        attribution={'strategy':'manual','reason':'Sinal manual confirmado · duração a partir da aceitação'}
-        stake_override=None
+        attribution={'strategy':'manual','reason':'Sinal manual confirmado · duração a partir da aceitação',
+                     'panel_mode':'manual'}
+        # Manual execution must use this panel's saved base stake; the legacy
+        # account-wide stake belongs to neither independent panel profile.
+        stake_override=profile.stake
         if progression is not None:
             attribution.update({'source':'manual','cycle_index':progression.cycle,
-                'gale_index':0,'gale_multiplier':'1',
-                'cycle_multiplier':cycle_cfg.multiplier if cycle_cfg else '2'})
+                'gale_index':progression.gale,
+                'gale_multiplier':profile.requested_multiplier if progression.gale else '1',
+                'cycle_multiplier':getattr(cycle_cfg,'cycle_multiplier','2') if cycle_cfg else '2'})
             stake_override=progression.stake
     try:
         result=await perform_demo_buy(user,token,payload,
@@ -601,9 +613,14 @@ async def _run_manual_demo_signal(uid):
 
 async def reconcile_manual_lifecycle_once():
     """Recover durable Manual completion/cancellation transitions every tick."""
+    from sqlalchemy import and_,or_
     with db.SessionLocal() as session:
+        active_manual_ids=select(db.AutomationExecutionState.user_id).where(
+            db.AutomationExecutionState.active_panel_mode=='manual')
         candidates=session.scalars(select(db.ManualSignalRun.user_id).where(
-            db.ManualSignalRun.status.in_(('RUNNING','PAUSED','CANCELLING')))).all()
+            or_(db.ManualSignalRun.status.in_(('RUNNING','PAUSED','CANCELLING')),
+                and_(db.ManualSignalRun.status=='COMPLETED',
+                     db.ManualSignalRun.user_id.in_(active_manual_ids))))).all()
     for uid in candidates:
         with db.SessionLocal() as session:
             run=session.get(db.ManualSignalRun,uid)
@@ -613,11 +630,16 @@ async def reconcile_manual_lifecycle_once():
                 with db.SessionLocal() as session:
                     run=session.get(db.ManualSignalRun,uid,with_for_update=True)
                     if not run:continue
-                    changed=(manual_lifecycle.finish_manual_cancellation_if_safe(session,run)
-                             if run.status=='CANCELLING'
-                             else manual_lifecycle.complete_exhausted_manual_run(session,run))
+                    changed=(_release_panel(session,uid,'manual')
+                             if run.status=='COMPLETED' else
+                             manual_lifecycle.finish_manual_cancellation_if_safe(session,run)
+                             if run.status=='CANCELLING' else
+                             manual_lifecycle.complete_exhausted_manual_run(session,run))
                     final_reason=run.pause_reason
-                    if changed:session.commit()
+                    if changed:
+                        if run.status!='COMPLETED':
+                            _release_panel(session,uid,'manual')
+                        session.commit()
                 if changed:
                     reason=final_reason or 'Lista Manual concluída; robô desligado'
                     real_runtime.disarm_real(uid,reason)
@@ -627,10 +649,15 @@ async def reconcile_manual_lifecycle_once():
                 with db.SessionLocal() as session:
                     run=session.get(db.ManualSignalRun,uid,with_for_update=True)
                     if not run:continue
-                    changed=(manual_lifecycle.finish_manual_cancellation_if_safe(session,run)
-                             if run.status=='CANCELLING'
-                             else manual_lifecycle.complete_exhausted_manual_run(session,run))
-                    if changed:session.commit()
+                    changed=(_release_panel(session,uid,'manual')
+                             if run.status=='COMPLETED' else
+                             manual_lifecycle.finish_manual_cancellation_if_safe(session,run)
+                             if run.status=='CANCELLING' else
+                             manual_lifecycle.complete_exhausted_manual_run(session,run))
+                    if changed:
+                        if run.status!='COMPLETED':
+                            _release_panel(session,uid,'manual')
+                        session.commit()
                 if changed:
                     autopilot_enabled.discard(uid)
                     autopilot_reasons[uid]='Lista Manual concluída/desagendada; robô desligado'
@@ -645,8 +672,9 @@ async def autopilot_once():
     strategy_users=[]
     for manual_uid in tuple(autopilot_enabled):
         with db.SessionLocal() as ss:
-            prof=ss.get(db.AutomationProfile,manual_uid)
-            is_manual=bool(prof and getattr(prof,'operation_mode','strategies')=='manual')
+            prof=ss.get(db.AutomationPanelProfile,(manual_uid,'manual'))
+            is_manual=bool(prof and ss.get(db.ManualSignalRun,manual_uid)
+                           and ss.get(db.ManualSignalRun,manual_uid).status=='RUNNING')
         if is_manual:
             async with autopilot_lock:
                 await _run_manual_demo_signal(manual_uid)
@@ -666,8 +694,9 @@ async def autopilot_once():
                      if sess.get(db.PilotValidationBatch,v) is not None}
         for uid in tuple(autopilot_enabled):
             with db.SessionLocal() as ss:
-                prof=ss.get(db.AutomationProfile,uid)
-                is_manual=bool(prof and getattr(prof,'operation_mode','strategies')=='manual')
+                prof=ss.get(db.AutomationPanelProfile,(uid,'manual'))
+                is_manual=bool(prof and ss.get(db.ManualSignalRun,uid)
+                               and ss.get(db.ManualSignalRun,uid).status=='RUNNING')
             if uid not in live_v2 and not is_manual:
                 autopilot_reasons[uid]='Aguardando cotações recentes da Deriv'
         if not live_v2:
@@ -678,8 +707,8 @@ async def autopilot_once():
         if uid not in autopilot_enabled:
             continue
         with db.SessionLocal() as mode_session:
-            mode_profile=mode_session.get(db.AutomationProfile,uid)
-            if mode_profile and getattr(mode_profile,'operation_mode','strategies')=='manual':
+            manual_run=mode_session.get(db.ManualSignalRun,uid)
+            if manual_run and manual_run.status=='RUNNING':
                 continue
         async with autopilot_lock:
             if uid not in autopilot_enabled or not autopilot_allowed():
@@ -692,6 +721,11 @@ async def autopilot_once():
                     autopilot_reasons[uid]='Desligado em outro painel; novas entradas bloqueadas'
                     continue
                 user=sess.get(db.User,uid)
+                db.ensure_panel_profiles(sess,uid)
+                profile=sess.get(db.AutomationPanelProfile,(uid,'strategies'))
+                if not profile:
+                    disarm_autopilot(uid,'Perfil Nexora Estratégias indisponível')
+                    continue
                 if not user or user.selected_mode!='demo':
                     disarm_autopilot(uid,'Conta de treinamento indisponível; robô desligado')
                     continue
@@ -718,15 +752,16 @@ async def autopilot_once():
                 # Enforce settled-result stops on EVERY worker tick, even when
                 # the scanner finds no signal. Previously an armed robot could
                 # remain green after reaching Stop Win / Stop Loss indefinitely.
-                boundary=latest_risk_session(sess,uid)
+                boundary=latest_risk_session(sess,uid,'strategies')
                 after_id=boundary.after_order_id if boundary else 0
                 try:
                     settled_pnl=sum((
                         Decimal(str(o.pnl)) for o in orders
                         if o.state=='SETTLED' and o.pnl is not None
+                        and getattr(o,'source_panel_mode',None)=='strategies'
                         and (o.id or 0)>after_id),Decimal('0'))
-                    stop_win=Decimal(str(user.stop_win))
-                    stop_loss=Decimal(str(user.stop_loss))
+                    stop_win=Decimal(str(profile.stop_win))
+                    stop_loss=Decimal(str(profile.stop_loss))
                     if not all(v.is_finite() for v in (settled_pnl,stop_win,stop_loss)):
                         raise InvalidOperation()
                 except (InvalidOperation,ValueError,TypeError):
@@ -738,8 +773,8 @@ async def autopilot_once():
                 if stop_loss>0 and settled_pnl<=-stop_loss:
                     disarm_autopilot(uid,'Stop Loss atingido; robô desligado')
                     continue
-                plan=sess.get(db.RobotPlan,uid)
-                cycle_cfg=sess.get(db.RobotCycleParams,uid)
+                plan=profile
+                cycle_cfg=profile
                 if plan and plan.requested_martingale and plan.cycles_limit:
                     disarm_autopilot(uid,'Escolha apenas Martingale OU ciclos nas configurações; operações existentes continuam em reconciliação')
                     continue
@@ -747,7 +782,7 @@ async def autopilot_once():
                 # PULSO V2 replaces the legacy scanner for every manually
                 # armed DEMO evaluation; no extra strategy-selection button.
                 pulso_active=bool(batch and v2_enabled())
-                profile=sess.get(db.AutomationProfile,uid) if pulso_active else None
+                profile=profile
                 if not batch and not connected:
                     continue
                 # The goal of 50 trades is informational, NOT an execution cap.
@@ -760,20 +795,20 @@ async def autopilot_once():
                         active=[o for o in orders if o.state in ('PENDING','CONFIRMED','UNKNOWN')]
                         entry=last=None
                         if plan and (plan.requested_martingale or plan.cycles_limit):
-                            entry,last=v2_symbol_recovery(sess,user,orders,plan,cycle_cfg,batch)
+                            entry,last=v2_symbol_recovery(sess,user,orders,plan,cycle_cfg,batch,profile)
                         if entry is None:
-                            entry=NextEntry(stake=Decimal(str(user.stake)),cycle=0,gale=0,retry=False)
+                            entry=NextEntry(stake=Decimal(str(profile.stake)),cycle=0,gale=0,retry=False)
                     elif batch:
                         active=[o for o in orders if o.state in ('PENDING','CONFIRMED','UNKNOWN')]
                         if any(o.state in ('PENDING','UNKNOWN') for o in active):
                             log_v2_gate(uid,'PENDING_OR_UNKNOWN_CONTRACT')
                             autopilot_reasons[uid]='Contrato DEMO incerto; aguardando conferência'
                             continue
-                        entry,last=v2_symbol_recovery(sess,user,orders,plan,cycle_cfg,batch)
+                        entry,last=v2_symbol_recovery(sess,user,orders,plan,cycle_cfg,batch,profile)
                         if entry is None:
-                            entry=NextEntry(stake=Decimal(str(user.stake)),cycle=0,gale=0,retry=False)
+                            entry=NextEntry(stake=Decimal(str(profile.stake)),cycle=0,gale=0,retry=False)
                     else:
-                        entry,last=autopilot_entry_plan(sess,user,orders)
+                        entry,last=autopilot_entry_plan(sess,user,orders,profile)
                 except ProgressionHalt as exc:
                     reason=str(exc)
                     # An unliquidated broker contract is normal during the
@@ -954,10 +989,11 @@ async def autopilot_once():
                         candidate={**candidate,'symbol':SYMBOL,'minutes':5}
                 from .demo_ledger import order_guard
                 try:
-                    boundary=latest_risk_session(sess,uid)
+                    boundary=latest_risk_session(sess,uid,'strategies')
                     order_guard(user,orders,entry.stake,
                         after_order_id=boundary.after_order_id if boundary else 0,
-                        parallel=bool(batch),symbol=candidate['symbol'])
+                        parallel=bool(batch),symbol=candidate['symbol'],
+                        risk_config=profile,panel_mode='strategies')
                 except OrderGuardError as exc:
                     msg=str(exc)
                     if 'Stop' in msg or 'Loss' in msg or 'Win' in msg or 'ultrapass' in msg:
@@ -1096,13 +1132,14 @@ async def autopilot_once():
                     DemoBuy(symbol=candidate['symbol'],direction=candidate['direction'],
                             minutes=candidate['minutes'],confirm='DEMO_ONLY',request_key=key),
                     attribution={'strategy':candidate['strategy'],'reason':candidate['reason'],
+                                 'panel_mode':'strategies',
                                  'v2':bool(batch),'pulso_v2':pulso_active,
                                  'min_payout_ratio':str(Decimal('1')+Decimal(str(profile.min_payout))/Decimal('100')) if pulso_active and profile is not None else '1.50',
-                                 'cycle_index':entry.cycle,'gale_index':entry.gale,
-                                 'gale_multiplier':(plan.requested_multiplier if plan else '2.00'),
-                                 'cycle_multiplier':(cycle_cfg.multiplier if cycle_cfg else '2.00')},
-                    stake_override=entry.stake,
-                    latest_buy_send_epoch=deadline_for_buy)
+                    'cycle_index':entry.cycle,'gale_index':entry.gale,
+                    'gale_multiplier':(plan.requested_multiplier if plan else '2.00'),
+                    'cycle_multiplier':(cycle_cfg.cycle_multiplier if cycle_cfg else '2.00')},
+                stake_override=entry.stake,
+                latest_buy_send_epoch=deadline_for_buy)
                 autopilot_reasons[uid]='Contrato DEMO #'+str(result['id'])+' confirmado; aguardando liquidação'
             except HTTPException as exc:
                 msg=str(exc.detail)
@@ -1721,6 +1758,7 @@ async def current_config(request:Request,nexora_sid:str|None=Cookie(default=None
 
 class AutomationProfileRequest(BaseModel):
     """Explicit user choices; not an instruction to place a buy."""
+    panel_mode:str|None=None
     operation_mode:str='strategies'
     account_mode:str='demo'
     market:str='volatility'
@@ -1737,9 +1775,17 @@ class AutomationProfileRequest(BaseModel):
     real_account_id:str|None=None
     min_payout_pct:int=88
     preset_mode:str='custom'
+    stake:str|None=None
+    stop_win:str|None=None
+    stop_loss:str|None=None
+    martingale:bool|None=None
+    gale_count:int|None=None
+    multiplier:str|None=None
+    cycles:int|None=None
+    cycle_multiplier:str|None=None
 
 
-def automation_profile_result(profile):
+def automation_profile_result(profile, panel_mode=None):
     if profile is None:
         return {
             'operation_mode':'strategies','account_mode':'demo','market':'volatility','symbols':[],
@@ -1748,13 +1794,16 @@ def automation_profile_result(profile):
             'news_minutes_after':30,'max_daily_orders':0,
             'indicators':[],'direction':'AUTO','real_account_id':None,
             'min_payout_pct':88,'preset_mode':'custom',
+            'stake':'0.50','stop_win':'0.00','stop_loss':'0.00',
+            'martingale':False,'gale_count':0,'multiplier':'2.00','cycles':0,
+            'cycle_multiplier':'2.00','panel_mode':panel_mode or 'strategies',
             'configured':False,'execution':'DERIV_DEMO_ONLY'
         }
     return {
         'operation_mode':getattr(profile,'operation_mode','strategies'),
         'account_mode':profile.account_mode,'market':profile.market,
         'symbols':json.loads(profile.symbols_json),
-        'strategy':profile.strategy,'expiry_minutes':0,
+        'strategy':profile.strategy,'expiry_minutes':profile.expiry_minutes,
         'news_filter':profile.news_filter,
         'news_minutes_before':profile.news_minutes_before,
         'news_minutes_after':profile.news_minutes_after,
@@ -1765,25 +1814,46 @@ def automation_profile_result(profile):
         'real_account_id':profile.real_account_id,
         'min_payout_pct':int(Decimal(profile.min_payout)),
         'preset_mode':profile.preset_mode,
+        'stake':getattr(profile,'stake','0.50'),
+        'stop_win':getattr(profile,'stop_win','0.00'),
+        'stop_loss':getattr(profile,'stop_loss','0.00'),
+        'martingale':bool(getattr(profile,'requested_martingale',False)),
+        'gale_count':getattr(profile,'gale_count',0),
+        'multiplier':getattr(profile,'requested_multiplier','2.00'),
+        'cycles':getattr(profile,'cycles_limit',0),
+        'cycle_multiplier':getattr(profile,'cycle_multiplier','2.00'),
+        'panel_mode':getattr(profile,'panel_mode',panel_mode or 'strategies'),
         'configured':True,
         'execution':'DERIV_REAL_CONFIGURED' if profile.account_mode=='real' else 'DERIV_DEMO_ONLY'
     }
 
 
 @app.get('/api/automation/profile')
-async def get_automation_profile(request:Request,nexora_sid:str|None=Cookie(default=None)):
+async def get_automation_profile(request:Request,panel_mode:str,
+                                 nexora_sid:str|None=Cookie(default=None)):
     user=active_user(request,nexora_sid)
+    if panel_mode not in ('manual','strategies'):
+        raise HTTPException(422,'Painel inválido')
     with db.SessionLocal() as session:
-        return automation_profile_result(session.get(db.AutomationProfile,user.id))
+        manual_profile,strategy_profile=db.ensure_panel_profiles(session,user.id)
+        session.commit()
+        selected=manual_profile if panel_mode=='manual' else strategy_profile
+        return automation_profile_result(selected,panel_mode)
 
 
 @app.post('/api/automation/profile')
 async def save_automation_profile(request:Request,payload:AutomationProfileRequest,
                                   nexora_sid:str|None=Cookie(default=None)):
     user,token=active_session(request,nexora_sid)
-    if payload.operation_mode not in ('strategies','manual'):
+    panel_mode=payload.panel_mode
+    if panel_mode not in ('strategies','manual'):
+        raise HTTPException(422,'Painel inválido')
+    operation_mode=payload.operation_mode
+    if operation_mode not in ('strategies','manual'):
         raise HTTPException(422,'Modalidade de operação inválida')
-    manual_mode=payload.operation_mode=='manual'
+    if operation_mode!=panel_mode:
+        raise HTTPException(422,'A configuração deve corresponder ao painel selecionado')
+    manual_mode=operation_mode=='manual'
     if payload.account_mode not in ('demo','real'):
         raise HTTPException(422,'Modo de conta inválido')
     if payload.market not in (*AUTOMATION_GROUPS, 'volatility'):
@@ -1795,6 +1865,8 @@ async def save_automation_profile(request:Request,payload:AutomationProfileReque
     if not manual_mode:
         if payload.expiry_minutes not in (0,1,3,5,15):
             raise HTTPException(422,'Expiração inválida')
+        if payload.strategy in FOREX_MTF_STRATEGIES and payload.expiry_minutes!=15:
+            raise HTTPException(422,'Esta estratégia Forex exige expiração fixa M15')
         if not 1<=len(payload.symbols)<=5 or len(payload.symbols)!=len(set(payload.symbols)):
             raise HTTPException(422,'Selecione de 1 a 5 ativos diferentes')
         if any(not re.fullmatch(r'[A-Za-z0-9_]{2,30}',x) for x in payload.symbols):
@@ -1836,16 +1908,20 @@ async def save_automation_profile(request:Request,payload:AutomationProfileReque
         if not set(payload.symbols).issubset(available):
             raise HTTPException(422,'Seleção contém ativo não disponível no mercado escolhido')
     async with autopilot_lock:
-        if user.id in autopilot_enabled or user.id in real_runtime.running:
-            raise HTTPException(409,'Desligue o robô antes de alterar sua automação')
         with db.SessionLocal() as session:
+            db.ensure_panel_profiles(session,user.id)
+            lease=session.get(db.AutomationExecutionState,user.id)
+            if lease and lease.active_panel_mode is not None:
+                raise HTTPException(409,'Desligue o painel ativo antes de alterar sua automação')
+            if user.id in autopilot_enabled or user.id in real_runtime.running:
+                raise HTTPException(409,'Desligue o robô antes de alterar sua automação')
             try:
                 session.get(db.User,user.id,with_for_update=True)
             except TypeError:
                 # Lightweight in-memory sessions in legacy unit tests do not
                 # expose SQLAlchemy's optional row-lock keyword.
                 session.get(db.User,user.id)
-            profile=session.get(db.AutomationProfile,user.id)
+            profile=session.get(db.AutomationPanelProfile,(user.id,panel_mode))
             run=session.get(db.ManualSignalRun,user.id)
             pending=(session.scalar(select(db.ManualSignal.id).where(
                 db.ManualSignal.user_id==user.id,
@@ -1853,21 +1929,21 @@ async def save_automation_profile(request:Request,payload:AutomationProfileReque
                 if hasattr(session,'scalar') else None)
             if pending:
                 same_execution=(manual_mode and profile is not None
-                    and getattr(profile,'operation_mode','strategies')=='manual'
+                    and profile.panel_mode=='manual'
                     and run is not None and run.account_mode==payload.account_mode
                     and (run.account_mode!='real' or run.real_account_id==payload.real_account_id))
                 if not same_execution:
                     raise HTTPException(409,
                         'Há sinais pendentes ou incertos. Pause a fila e aguarde o desfecho oficial antes de mudar modalidade ou conta.')
             if profile is None:
-                profile=db.AutomationProfile(user_id=user.id)
+                profile=db.AutomationPanelProfile(user_id=user.id,panel_mode=panel_mode)
                 session.add(profile)
-            profile.operation_mode=payload.operation_mode
+            profile.operation_mode=operation_mode
             profile.market=payload.market
             profile.account_mode=payload.account_mode
             profile.symbols_json=json.dumps([] if manual_mode else sorted(payload.symbols))
             profile.strategy='manual' if manual_mode else payload.strategy
-            profile.expiry_minutes=0
+            profile.expiry_minutes=0 if manual_mode else payload.expiry_minutes
             profile.news_filter=payload.news_filter
             profile.news_minutes_before=payload.news_minutes_before
             profile.news_minutes_after=payload.news_minutes_after
@@ -1877,8 +1953,41 @@ async def save_automation_profile(request:Request,payload:AutomationProfileReque
             profile.real_account_id=payload.real_account_id if payload.account_mode=='real' else None
             profile.min_payout=str(payload.min_payout_pct)
             profile.preset_mode=payload.preset_mode
+            # A panel save is an atomic snapshot. Omitted finance fields keep
+            # this panel's existing values, never the other panel's settings.
+            def retained(field, fallback):
+                value=getattr(payload,field)
+                if value is not None:
+                    return value
+                stored=getattr(profile,field,None)
+                return fallback if stored is None else stored
+            stake=retained('stake','0.50')
+            stop_win=retained('stop_win','0.00')
+            stop_loss=retained('stop_loss','0.00')
+            try:
+                risk_settings=Settings.parse({'stake':stake,'stop_win':stop_win,
+                    'stop_loss':stop_loss,'martingale':False,'multiplier':'2'})
+            except ValueError as exc:
+                raise HTTPException(422,str(exc)) from None
+            profile.stake=str(risk_settings.stake)
+            profile.stop_win=str(risk_settings.stop_win)
+            profile.stop_loss=str(risk_settings.stop_loss)
+            mg=retained('martingale',False);gales=retained('gale_count',0)
+            cycles=retained('cycles',0)
+            multiplier=retained('multiplier','2.00')
+            cycle_multiplier=retained('cycle_multiplier','2.00')
+            if not isinstance(gales,int) or gales not in range(6) or not isinstance(cycles,int) or cycles not in range(6):
+                raise HTTPException(422,'Progressão inválida')
+            if mg and (gales<1 or cycles):
+                raise HTTPException(422,'Escolha Martingale OU ciclos; ambos não podem operar juntos')
+            if not mg and gales:
+                raise HTTPException(422,'Desative tentativas quando Martingale estiver desligado')
+            profile.requested_martingale=bool(mg);profile.gale_count=gales
+            profile.requested_multiplier=str(parse_progression_multiplier(multiplier,'Multiplicador Martingale'))
+            profile.cycles_limit=cycles
+            profile.cycle_multiplier=str(parse_progression_multiplier(cycle_multiplier,'Multiplicador de ciclos'))
             session.commit()
-            result=automation_profile_result(profile)
+            result=automation_profile_result(profile,panel_mode)
     return {**result,'saved':True,'running':False,
         'ready_to_start':(payload.account_mode=='demo' and (manual_mode or not payload.news_filter)),
         'note':'Preferências registradas. A ativação é um comando separado.'}
@@ -2006,8 +2115,8 @@ def _manual_market(value):
     return 'derived' if value=='volatility' else value
 
 def _manual_profile(session, uid):
-    profile=session.get(db.AutomationProfile,uid)
-    if not profile or getattr(profile,'operation_mode','strategies')!='manual':
+    profile,_=db.ensure_panel_profiles(session,uid)
+    if not profile:
         raise HTTPException(409,'Salve a modalidade Nexora Manual antes de continuar')
     return profile
 
@@ -2045,6 +2154,12 @@ async def manual_signals_confirm(request:Request,payload:ManualSignalConfirmRequ
     with db.SessionLocal() as session:
         session.get(db.User,user.id,with_for_update=True)
         profile=_manual_profile(session,user.id);run=session.get(db.ManualSignalRun,user.id)
+        lease=session.get(db.AutomationExecutionState,user.id)
+        if not lease or lease.active_panel_mode!='manual':
+            active=lease.active_panel_mode if lease else None
+            if active in ('manual','strategies'):
+                raise HTTPException(409,f"{_panel_label(active)} está ativo. Não é possível confirmar sinais pelo Nexora Manual.")
+            raise HTTPException(409,'Ligue explicitamente o Nexora Manual antes de confirmar sinais')
         if not run:raise HTTPException(409,'Ligue explicitamente a modalidade Manual antes de confirmar sinais')
         sess_no=run.session_number
         previous=session.scalar(select(db.ManualSignalBatch).where(
@@ -2068,6 +2183,12 @@ async def manual_signals_confirm(request:Request,payload:ManualSignalConfirmRequ
         session.get(db.User,user.id,with_for_update=True)
         profile=_manual_profile(session,user.id)
         run=session.get(db.ManualSignalRun,user.id,with_for_update=True)
+        lease=session.get(db.AutomationExecutionState,user.id)
+        if not lease or lease.active_panel_mode!='manual':
+            active=lease.active_panel_mode if lease else None
+            if active in ('manual','strategies'):
+                raise HTTPException(409,f"{_panel_label(active)} está ativo. Não é possível confirmar sinais pelo Nexora Manual.")
+            raise HTTPException(409,'Ligue explicitamente o Nexora Manual antes de confirmar sinais')
         if not run or run.session_number!=sess_no:raise HTTPException(409,'Sessão Manual alterada; confirme novamente')
         previous=session.scalar(select(db.ManualSignalBatch).where(
             db.ManualSignalBatch.user_id==user.id,
@@ -2117,8 +2238,10 @@ async def manual_signals_confirm(request:Request,payload:ManualSignalConfirmRequ
 async def manual_signals_status(request:Request,nexora_sid:str|None=Cookie(default=None)):
     user=active_user(request,nexora_sid)
     with db.SessionLocal() as session:
-        profile=session.get(db.AutomationProfile,user.id);run=session.get(db.ManualSignalRun,user.id)
-        if not profile or getattr(profile,'operation_mode','strategies')!='manual':return {'configured':False,'running':False,'signals':[],'pending_count':0}
+        db.ensure_panel_profiles(session,user.id)
+        profile=session.get(db.AutomationPanelProfile,(user.id,'manual'))
+        run=session.get(db.ManualSignalRun,user.id)
+        if not profile:return {'configured':False,'running':False,'signals':[],'pending_count':0}
         rows=manual_lifecycle.queue_session_signals(session,run)
         has_history=bool(run and session.scalar(select(db.ManualSignal.id).where(
             db.ManualSignal.user_id==user.id,
@@ -2141,6 +2264,9 @@ async def manual_signals_cancel(request:Request,nexora_sid:str|None=Cookie(defau
     user=active_user(request,nexora_sid)
     with db.SessionLocal() as session:
         profile=_manual_profile(session,user.id)
+        lease=session.get(db.AutomationExecutionState,user.id)
+        if lease and lease.active_panel_mode not in (None,'manual'):
+            raise HTTPException(409,f"{_panel_label(lease.active_panel_mode)} está ativo. O desagendamento Manual não pode alterar esse painel.")
         run=session.get(db.ManualSignalRun,user.id)
         if not run:
             raise HTTPException(409,'Não há uma lista Manual ativa para desagendar')
@@ -2205,18 +2331,79 @@ async def manual_signals_cancel(request:Request,nexora_sid:str|None=Cookie(defau
 
 class AutoPilotSwitch(BaseModel):
     confirm:str=''
+    panel_mode:str|None=None
 
 
-def latest_risk_session(sess,user_id):
-    return sess.scalars(select(db.RiskSession).where(
-        db.RiskSession.user_id==user_id).order_by(db.RiskSession.id.desc()).limit(1)).first()
+def _panel_label(mode):
+    return 'Nexora Manual' if mode=='manual' else 'Nexora Estratégias'
 
 
-def risk_session_summary(sess,user_id):
+def _reserve_panel(session, uid, panel_mode, account_mode):
+    """Atomically reserve one panel in durable storage across workers/restarts."""
+    if panel_mode not in ('manual','strategies'):
+        raise HTTPException(422,'Painel inválido')
+    db.ensure_panel_profiles(session,uid)
+    current=session.get(db.AutomationExecutionState,uid,with_for_update=True)
+    if current is None:
+        current=db.AutomationExecutionState(user_id=uid)
+        session.add(current);session.flush()
+    if current.active_panel_mode and current.active_panel_mode!=panel_mode:
+        raise HTTPException(409,f"{_panel_label(current.active_panel_mode)} está ativo. Desligue esse painel antes de ativar {_panel_label(panel_mode)}.")
+    if current.active_panel_mode==panel_mode:
+        if current.account_mode!=account_mode:
+            raise HTTPException(409,
+                f"{_panel_label(panel_mode)} já está ativo em {str(current.account_mode or '').upper()}; desligue-o antes de trocar para {account_mode.upper()}.")
+        current.updated_at=db.utcnow()
+        return
+    result=session.execute(update(db.AutomationExecutionState).where(
+        db.AutomationExecutionState.user_id==uid,
+        db.AutomationExecutionState.active_panel_mode.is_(None)).values(
+            active_panel_mode=panel_mode,account_mode=account_mode,
+            reserved_at=db.utcnow(),updated_at=db.utcnow()))
+    if result.rowcount!=1:
+        session.expire(current)
+        winner=session.get(db.AutomationExecutionState,uid)
+        mode=winner.active_panel_mode if winner else 'unknown'
+        raise HTTPException(409,f"{_panel_label(mode)} está ativo. Desligue esse painel antes de ativar {_panel_label(panel_mode)}.")
+    session.expire(current)
+
+
+def _release_panel(session,uid,panel_mode,*,force=False):
+    state=session.get(db.AutomationExecutionState,uid,with_for_update=True)
+    if not state or state.active_panel_mode!=panel_mode:
+        return False
+    if not force and panel_mode=='manual':
+        pending=session.scalar(select(db.ManualSignal.id).where(
+            db.ManualSignal.user_id==uid,
+            db.ManualSignal.status.in_(('SCHEDULED','CLAIMED','UNKNOWN'))).limit(1))
+        unresolved_demo=session.scalar(select(db.DemoOrder.id).where(
+            db.DemoOrder.user_id==uid,db.DemoOrder.source_panel_mode=='manual',
+            db.DemoOrder.state.in_(('PENDING','CONFIRMED','UNKNOWN'))).limit(1))
+        unresolved_real=session.scalar(select(db.RealOrder.id).where(
+            db.RealOrder.user_id==uid,db.RealOrder.source_panel_mode=='manual',
+            db.RealOrder.state.in_(('PENDING','CONFIRMED','UNKNOWN'))).limit(1))
+        if pending or unresolved_demo or unresolved_real:
+            return False
+    state.active_panel_mode=None;state.account_mode=None;state.reserved_at=None
+    state.updated_at=db.utcnow()
+    return True
+
+
+def latest_risk_session(sess,user_id,panel_mode='strategies'):
+    if panel_mode not in ('manual','strategies',None):
+        raise ValueError('Painel de risco inválido')
+    query=select(db.RiskSession).where(db.RiskSession.user_id==user_id)
+    query=(query.where(db.RiskSession.panel_mode.is_(None)) if panel_mode is None
+           else query.where(db.RiskSession.panel_mode==panel_mode))
+    return sess.scalars(query.order_by(db.RiskSession.id.desc()).limit(1)).first()
+
+
+def risk_session_summary(sess,user_id,panel_mode='strategies'):
     from .demo_ledger import money
-    boundary=latest_risk_session(sess,user_id)
+    boundary=latest_risk_session(sess,user_id,panel_mode)
     orders=sess.scalars(select(db.DemoOrder).where(
-        db.DemoOrder.user_id==user_id)).all()
+        db.DemoOrder.user_id==user_id,
+        db.DemoOrder.source_panel_mode==panel_mode)).all()
     after_id=boundary.after_order_id if boundary else 0
     pnl=sum((money(o.pnl) for o in orders
              if o.state=='SETTLED' and o.pnl is not None and o.id>after_id),
@@ -2229,13 +2416,17 @@ def risk_session_summary(sess,user_id):
 
 class RiskResetRequest(BaseModel):
     confirm:str
+    panel_mode:str
 
 
 @app.get('/api/demo/risk-session')
-async def get_risk_session(request:Request,nexora_sid:str|None=Cookie(default=None)):
+async def get_risk_session(request:Request,panel_mode:str,
+                           nexora_sid:str|None=Cookie(default=None)):
     user=active_user(request,nexora_sid)
+    if panel_mode not in ('manual','strategies'):
+        raise HTTPException(422,'Painel inválido')
     with db.SessionLocal() as sess:
-        return risk_session_summary(sess,user.id)
+        return risk_session_summary(sess,user.id,panel_mode)
 
 
 @app.post('/api/demo/risk-session/reset')
@@ -2245,8 +2436,14 @@ async def reset_risk_session(request:Request,payload:RiskResetRequest,
     user=active_user(request,nexora_sid)
     if payload.confirm!='RESET_DEMO_RISK_SESSION':
         raise HTTPException(403,'Confirme o reinício da sessão de treinamento')
+    if payload.panel_mode not in ('manual','strategies'):
+        raise HTTPException(422,'Painel inválido')
     async with autopilot_lock:
-        if user.id in autopilot_enabled:
+        with db.SessionLocal() as sess:
+            lease=sess.get(db.AutomationExecutionState,user.id)
+            active_panel=lease.active_panel_mode if lease else None
+        if ((user.id in autopilot_enabled or user.id in real_runtime.running)
+                and active_panel==payload.panel_mode):
             raise HTTPException(409,'Desligue o robô antes de reiniciar a sessão')
         with db.SessionLocal() as sess:
             pending=sess.scalars(select(db.DemoOrder).where(
@@ -2255,14 +2452,17 @@ async def reset_risk_session(request:Request,payload:RiskResetRequest,
             if pending:
                 raise HTTPException(409,'Existe contrato pendente ou incerto. Aguarde a liquidação e reconciliação antes de reiniciar.')
             latest=sess.scalars(select(db.DemoOrder.id).where(
-                db.DemoOrder.user_id==user.id).order_by(db.DemoOrder.id.desc()).limit(1)).first()
-            session=db.RiskSession(user_id=user.id,after_order_id=latest or 0)
+                db.DemoOrder.user_id==user.id,
+                db.DemoOrder.source_panel_mode==payload.panel_mode
+                ).order_by(db.DemoOrder.id.desc()).limit(1)).first()
+            session=db.RiskSession(user_id=user.id,panel_mode=payload.panel_mode,
+                                   after_order_id=latest or 0)
             sess.add(session)
-            # A reset revokes both the prior progression and resume consent.
-            run=sess.get(db.RobotRun,user.id)
-            consent=sess.get(db.AutoPilotResumeConsent,user.id)
-            if run:sess.delete(run)
-            if consent:sess.delete(consent)
+            if payload.panel_mode=='strategies':
+                run=sess.get(db.RobotRun,user.id)
+                consent=sess.get(db.AutoPilotResumeConsent,user.id)
+                if run:sess.delete(run)
+                if consent:sess.delete(consent)
             sess.commit()
             session_id=session.id
         autopilot_last_attempt.pop(user.id,None)
@@ -2321,17 +2521,18 @@ async def new_v2_evaluation(request:Request,payload:EvaluationResetRequest,
             'message':'Indicadores da avaliação 2.2 zerados. Histórico anterior e saldo Deriv preservados.'}
 
 
-def autopilot_start_blocker(user,orders,*,after_order_id=0):
+def autopilot_start_blocker(user,orders,*,profile=None,panel_mode='strategies',after_order_id=0):
     """Read-only explanation for refused starts; never bypass order safeguards."""
     if not autopilot_allowed():
         return 'AutoPilot DEMO está desativado na configuração do servidor'
     if user.selected_mode!='demo':
         return 'Apenas a conta Treinamento está habilitada para operar'
-    if user.martingale:
-        return 'Configuração antiga de Martingale incompatível; salve novamente em Configurações'
+    if panel_mode not in ('manual','strategies') or profile is None:
+        return 'Perfil do painel indisponível; salve a configuração antes de ligar'
     from .demo_ledger import order_guard,OrderGuardError
     try:
-        order_guard(user,orders,user.stake,after_order_id=after_order_id)
+        order_guard(user,orders,profile.stake,after_order_id=after_order_id,
+                    risk_config=profile,panel_mode=panel_mode)
     except OrderGuardError as exc:
         if 'Contrato demo em andamento' in str(exc):
             if any(o.state in ('PENDING','UNKNOWN') for o in orders):
@@ -2343,13 +2544,19 @@ def autopilot_start_blocker(user,orders,*,after_order_id=0):
 
 
 @app.get('/api/autopilot/readiness')
-async def autopilot_readiness(request:Request,nexora_sid:str|None=Cookie(default=None)):
+async def autopilot_readiness(request:Request,panel_mode:str,
+                              nexora_sid:str|None=Cookie(default=None)):
     """Authenticated dry-run of start guards, without activating or purchasing."""
     user=active_user(request,nexora_sid)
+    if panel_mode not in ('manual','strategies'):
+        raise HTTPException(422,'Painel inválido')
     with db.SessionLocal() as sess:
         orders=sess.scalars(select(db.DemoOrder).where(db.DemoOrder.user_id==user.id)).all()
-        boundary=latest_risk_session(sess,user.id)
-        reason=autopilot_start_blocker(user,orders,after_order_id=boundary.after_order_id if boundary else 0)
+        manual_profile,strategy_profile=db.ensure_panel_profiles(sess,user.id)
+        profile=manual_profile if panel_mode=='manual' else strategy_profile
+        boundary=latest_risk_session(sess,user.id,panel_mode)
+        reason=autopilot_start_blocker(user,orders,profile=profile,panel_mode=panel_mode,
+            after_order_id=boundary.after_order_id if boundary else 0)
         access=access_status(sess,user.id)
         if access['status']=='SUSPENDED' or (access['enforced'] and access['status']=='EXPIRED'):
             reason='Acesso do robô suspenso ou expirado. Conquiste horas por indicação ou consulte o suporte.'
@@ -2745,20 +2952,28 @@ def _begin_manual_run(sess,user,account_mode,real_account_id=None):
 async def _start_manual_demo(user):
     if not autopilot_allowed():raise HTTPException(503,'AutoPilot DEMO não habilitado no servidor')
     if user.selected_mode!='demo':raise HTTPException(403,'Somente conta demonstrativa')
-    if user.id in real_runtime.running:raise HTTPException(409,'Desligue o robô REAL antes de iniciar Manual DEMO')
+    if user.id in real_runtime.running:
+        with db.SessionLocal() as sess:
+            lease=sess.get(db.AutomationExecutionState,user.id)
+            active_mode=lease.active_panel_mode if lease else 'strategies'
+        raise HTTPException(409,
+            f"{_panel_label(active_mode)} está ativo em REAL. Desligue esse painel antes de ativar Nexora Manual.")
     with db.SessionLocal() as sess:
-        profile=_manual_profile(sess,user.id)
+        manual_profile,_=db.ensure_panel_profiles(sess,user.id)
+        profile=manual_profile
         if profile.account_mode!='demo':raise HTTPException(409,'A modalidade Manual está configurada para REAL')
         if not access_status(sess,user.id)['allowed'] and access_status(sess,user.id)['status']!='TRIAL_AVAILABLE':
             raise HTTPException(403,'Acesso do robô expirado ou suspenso')
         orders=sess.scalars(select(db.DemoOrder).where(db.DemoOrder.user_id==user.id)).all()
-        boundary=latest_risk_session(sess,user.id)
-        blocker=autopilot_start_blocker(user,orders,after_order_id=boundary.after_order_id if boundary else 0)
+        boundary=latest_risk_session(sess,user.id,'manual')
+        blocker=autopilot_start_blocker(user,orders,profile=profile,panel_mode='manual',
+            after_order_id=boundary.after_order_id if boundary else 0)
         if blocker:raise HTTPException(409,blocker)
     async with autopilot_lock:
         if user.id in autopilot_enabled:raise HTTPException(409,'A modalidade Manual já está ativa')
         with db.SessionLocal() as sess:
             sess.get(db.User,user.id,with_for_update=True)
+            _reserve_panel(sess,user.id,'manual','demo')
             access=start_trial_on_first_robot_start(sess,user.id)
             if access['enforced'] and not access['allowed']:raise HTTPException(403,'Acesso do robô expirado. Renove antes de ligar.')
             _begin_manual_run(sess,user,'demo')
@@ -2768,16 +2983,29 @@ async def _start_manual_demo(user):
     return {'running':True,'operation_mode':'manual','access':access,'execution':'DERIV_DEMO_ONLY',
             'real_orders_enabled':False,'message':'Sessão Manual ativa. A fila confirmada será executada sem scanner de Estratégias.'}
 
-async def start_real_autopilot(request:Request,nexora_sid:str|None=None):
+async def start_real_autopilot(request:Request,nexora_sid:str|None=None,panel_mode=None):
     """Explicit opt-in REAL start. No implicit resume after a server restart."""
     user,token=active_session(request,nexora_sid)
+    if panel_mode not in ('manual','strategies'):
+        raise HTTPException(422,'Selecione explicitamente o painel para ativar REAL')
     if not real_runtime.real_available():
         raise HTTPException(503,'Operações REAL ainda não foram ativadas neste servidor')
-    if user.id in autopilot_enabled:
-        raise HTTPException(409,'Desligue o robô DEMO antes de iniciar a conta REAL')
     with db.SessionLocal() as sess:
-        profile=sess.get(db.AutomationProfile,user.id)
-        plan=sess.get(db.RobotPlan,user.id)
+        db.ensure_panel_profiles(sess,user.id)
+        lease=sess.get(db.AutomationExecutionState,user.id)
+        if lease and lease.active_panel_mode:
+            if lease.active_panel_mode!=panel_mode:
+                raise HTTPException(409,
+                    f"{_panel_label(lease.active_panel_mode)} está ativo. Desligue esse painel antes de ativar {_panel_label(panel_mode)}.")
+            if lease.account_mode!='real':
+                raise HTTPException(409,
+                    f"{_panel_label(panel_mode)} está ativo em DEMO. Desligue-o antes de ativar REAL.")
+        if user.id in real_runtime.running:
+            raise HTTPException(409,f"{_panel_label(panel_mode)} já está ativo em REAL.")
+        if user.id in autopilot_enabled:
+            raise HTTPException(409,'Nexora está ativo em DEMO; desligue o painel antes de ativar REAL')
+        profile=sess.get(db.AutomationPanelProfile,(user.id,panel_mode))
+        plan=profile
         if not profile or profile.account_mode!='real' or not profile.real_account_id:
             raise HTTPException(409,'Selecione e salve uma conta REAL nas configurações')
         manual_mode=getattr(profile,'operation_mode','strategies')=='manual'
@@ -2785,13 +3013,11 @@ async def start_real_autopilot(request:Request,nexora_sid:str|None=None):
             raise HTTPException(409,'Filtro de notícias indisponível; desative para usar REAL')
         if plan and (plan.requested_martingale or plan.cycles_limit):
             raise HTTPException(409,'Conta REAL beta exige Martingale e ciclos desativados')
-        if user.martingale:
-            raise HTTPException(409,'Desative Martingale nas configurações atuais')
         if not access_status(sess,user.id)['allowed']:
             raise HTTPException(403,'Acesso ao robô expirado ou suspenso')
         try:
-            stake=Decimal(str(user.stake))
-            stop=Decimal(str(user.stop_loss))
+            stake=Decimal(str(profile.stake))
+            stop=Decimal(str(profile.stop_loss))
             if not stake.is_finite() or not stop.is_finite() or stake<Decimal('0.50') or stop<stake:
                 raise ValueError()
         except (InvalidOperation,ValueError):
@@ -2833,20 +3059,23 @@ async def start_real_autopilot(request:Request,nexora_sid:str|None=None):
         raise HTTPException(409,'Saldo insuficiente na conta REAL')
     async with real_runtime.user_lock(user.id):
         with db.SessionLocal() as sess:
-            profile=sess.get(db.AutomationProfile,user.id)
+            db.ensure_panel_profiles(sess,user.id)
+            profile=sess.get(db.AutomationPanelProfile,(user.id,panel_mode))
             if (not profile or profile.account_mode!='real'
                 or profile.real_account_id!=account_id):
                 raise HTTPException(409,'Configuração REAL alterada; inicie novamente')
+            _reserve_panel(sess,user.id,panel_mode,'real')
             consent=sess.get(db.RealRobotConsent,user.id)
             if consent is None:
                 consent=db.RealRobotConsent(
                     user_id=user.id,account_id=account_id,
-                    max_stake=str(stake),stop_loss=str(stop))
+                    max_stake=str(stake),stop_loss=str(stop),panel_mode=panel_mode)
                 sess.add(consent)
             else:
                 consent.account_id=account_id
                 consent.max_stake=str(stake)
                 consent.stop_loss=str(stop)
+                consent.panel_mode=panel_mode
                 consent.revoked_at=None
             if manual_mode:_begin_manual_run(sess,user,'real',account_id)
             sess.commit()
@@ -2862,13 +3091,20 @@ async def start_real_autopilot(request:Request,nexora_sid:str|None=None):
 async def autopilot_start(request:Request,payload:AutoPilotSwitch,
                           nexora_sid:str|None=Cookie(default=None)):
     if payload.confirm=='START_REAL_AUTOPILOT':
-        return await start_real_autopilot(request,nexora_sid)
+        return await start_real_autopilot(request,nexora_sid,payload.panel_mode)
     user,_=active_session(request,nexora_sid)
     if payload.confirm!='START_DEMO_AUTOPILOT':
         raise HTTPException(403,'Confirme o modo automático de treinamento')
+    if payload.panel_mode not in ('manual','strategies'):
+        raise HTTPException(422,'Selecione explicitamente o painel para ativar')
     with db.SessionLocal() as profile_session:
-        stored_profile=profile_session.get(db.AutomationProfile,user.id)
-        is_manual=bool(stored_profile and getattr(stored_profile,'operation_mode','strategies')=='manual')
+        db.ensure_panel_profiles(profile_session,user.id)
+        panel_mode=payload.panel_mode
+        if panel_mode not in ('manual','strategies'):
+            raise HTTPException(422,'Painel inválido')
+        stored_profile=profile_session.get(db.AutomationPanelProfile,(user.id,panel_mode))
+        is_manual=panel_mode=='manual'
+        profile_session.commit()
     if is_manual:
         return await _start_manual_demo(user)
     if not autopilot_allowed():
@@ -2878,7 +3114,8 @@ async def autopilot_start(request:Request,payload:AutoPilotSwitch,
     if user.selected_mode!='demo':
         raise HTTPException(403,'Somente conta demonstrativa')
     with db.SessionLocal() as session:
-        profile=session.get(db.AutomationProfile,user.id)
+        db.ensure_panel_profiles(session,user.id)
+        profile=session.get(db.AutomationPanelProfile,(user.id,'strategies'))
         if profile is None:
             raise HTTPException(409,'Configure e salve os ativos no novo painel antes de ligar o robô')
         if profile is not None:
@@ -2893,15 +3130,15 @@ async def autopilot_start(request:Request,payload:AutoPilotSwitch,
                     raise HTTPException(409,'Escolha pelo menos um ativo')
             except (ValueError,TypeError):
                 raise HTTPException(409,'Lista de ativos inválida') from None
-    if user.martingale:
-        raise HTTPException(409,'Configuração antiga de Martingale: salve novamente as opções atuais')
     with db.SessionLocal() as sess:
-        plan=sess.get(db.RobotPlan,user.id)
+        db.ensure_panel_profiles(sess,user.id)
+        plan=sess.get(db.AutomationPanelProfile,(user.id,'strategies'))
         if plan and plan.requested_martingale and plan.cycles_limit:
             raise HTTPException(409,'Escolha Martingale OU ciclos antes de ligar o robô; ambos não podem operar juntos')
         orders=sess.scalars(select(db.DemoOrder).where(db.DemoOrder.user_id==user.id)).all()
-        boundary=latest_risk_session(sess,user.id)
-        blocker=autopilot_start_blocker(user,orders,after_order_id=boundary.after_order_id if boundary else 0)
+        boundary=latest_risk_session(sess,user.id,'strategies')
+        blocker=autopilot_start_blocker(user,orders,profile=plan,panel_mode='strategies',
+            after_order_id=boundary.after_order_id if boundary else 0)
         if blocker:
             raise HTTPException(409,blocker)
         access=access_status(sess,user.id)
@@ -2912,6 +3149,7 @@ async def autopilot_start(request:Request,payload:AutoPilotSwitch,
     async with autopilot_lock:
         with db.SessionLocal() as sess:
             sess.get(db.User,user.id,with_for_update=True)
+            _reserve_panel(sess,user.id,'strategies','demo')
             if user.id in autopilot_enabled:
                 raise HTTPException(409,'O robô já está ativo. Atualize o estado do painel antes de tentar novamente.')
             access=start_trial_on_first_robot_start(sess,user.id)
@@ -2952,11 +3190,21 @@ async def autopilot_start(request:Request,payload:AutoPilotSwitch,
 
 
 @app.post('/api/autopilot/stop')
-async def autopilot_stop(request:Request,nexora_sid:str|None=Cookie(default=None)):
+async def autopilot_stop(request:Request,payload:AutoPilotSwitch|None=None,
+                         nexora_sid:str|None=Cookie(default=None)):
     user=active_user(request,nexora_sid)
+    if not payload or payload.panel_mode not in ('manual','strategies'):
+        raise HTTPException(422,'Informe explicitamente o painel que deseja desligar')
     with db.SessionLocal() as check:
-        profile=check.get(db.AutomationProfile,user.id)
-        manual_mode=bool(profile and getattr(profile,'operation_mode','strategies')=='manual')
+        db.ensure_panel_profiles(check,user.id)
+        lease=check.get(db.AutomationExecutionState,user.id)
+        panel_mode=payload.panel_mode
+        if panel_mode not in ('manual','strategies'):
+            raise HTTPException(422,'Painel inválido')
+        if lease and lease.active_panel_mode and panel_mode!=lease.active_panel_mode:
+            raise HTTPException(409,f"{_panel_label(lease.active_panel_mode)} está ativo; a solicitação não desligou outro painel.")
+        profile=check.get(db.AutomationPanelProfile,(user.id,panel_mode))
+        manual_mode=panel_mode=='manual'
     if manual_mode:
         if profile.account_mode=='real' or user.id in real_runtime.running:
             async with real_runtime.user_lock(user.id):
@@ -2973,11 +3221,22 @@ async def autopilot_stop(request:Request,nexora_sid:str|None=Cookie(default=None
                     run=sess.get(db.ManualSignalRun,user.id)
                     if run and run.status not in ('PAUSED','CANCELLING'):
                         run.status='PAUSED';run.pause_reason='Desligado manualmente; sinais futuros preservados';run.paused_at=db.utcnow();sess.commit()
-        return {'running':False,'operation_mode':'manual','persisted_status':'PAUSED','execution':'DERIV_REAL' if profile.account_mode=='real' else 'DERIV_DEMO_ONLY','real_orders_enabled':real_runtime.real_available(),'message':'Robô Manual desligado. Sinais pendentes preservados; contratos já enviados continuam na Deriv.'}
+        with db.SessionLocal() as sess:
+            _release_panel(sess,user.id,'manual')
+            sess.commit()
+            lease=sess.get(db.AutomationExecutionState,user.id)
+            active_mode=lease.active_panel_mode if lease else None
+        return {'running':False,'operation_mode':'manual','panel_mode':'manual',
+                'active_panel_mode':active_mode,'persisted_status':'PAUSED',
+                'execution':'DERIV_REAL' if profile.account_mode=='real' else 'DERIV_DEMO_ONLY',
+                'real_orders_enabled':real_runtime.real_available(),
+                'message':'Robô Manual desligado. Sinais pendentes preservados; contratos já enviados continuam na Deriv.'}
     # Real execution is independently locked and cannot be confused with DEMO.
     if user.id in real_runtime.running:
         async with real_runtime.user_lock(user.id):
             real_runtime.disarm_real(user.id,'Desligado manualmente; contratos REAL continuam em reconciliação')
+        with db.SessionLocal() as sess:
+            _release_panel(sess,user.id,panel_mode,force=True);sess.commit()
         return {'running':False,'execution':'DERIV_REAL','real_orders_enabled':real_runtime.real_available()}
     # Wait for any already dispatched broker request to finish before declaring OFF.
     async with autopilot_lock:
@@ -2990,26 +3249,36 @@ async def autopilot_stop(request:Request,nexora_sid:str|None=Cookie(default=None
             consent=sess.get(db.AutoPilotResumeConsent,user.id)
             if run:sess.delete(run)
             if consent:sess.delete(consent)
+            _release_panel(sess,user.id,'strategies',force=True)
             sess.commit()
         autopilot_reasons[user.id]='Desligado: novas entradas bloqueadas; contratos abertos permanecem na Deriv'
     return {'running':False,'execution':'DERIV_DEMO_ONLY','real_orders_enabled':False}
 
 
 @app.get('/api/status')
-async def status(request:Request,nexora_sid:str|None=Cookie(default=None)):
+async def status(request:Request,panel_mode:str,
+                 nexora_sid:str|None=Cookie(default=None)):
     user=active_user(request,nexora_sid)
+    if panel_mode not in ('manual','strategies'):
+        raise HTTPException(422,'Painel inválido')
     real_running=user.id in real_runtime.running
     with db.SessionLocal() as sess:
-        configured_profile=sess.get(db.AutomationProfile,user.id)
+        db.ensure_panel_profiles(sess,user.id)
+        lease=sess.get(db.AutomationExecutionState,user.id)
+        active_panel_mode=lease.active_panel_mode if lease else None
+        selected_panel=active_panel_mode or panel_mode
+        configured_profile=sess.get(db.AutomationPanelProfile,(user.id,selected_panel))
+        sess.commit()
         configured_account_mode=configured_profile.account_mode if configured_profile else 'demo'
-        operation_mode=getattr(configured_profile,'operation_mode','strategies') if configured_profile else 'strategies'
+        operation_mode=selected_panel
         manual_run=sess.get(db.ManualSignalRun,user.id)
         run=sess.get(db.RobotRun,user.id)
         consent=sess.get(db.AutoPilotResumeConsent,user.id)
         demo_run_intent=bool(
             run is not None and consent is not None
             and configured_account_mode=='demo'
-            and operation_mode!='manual' and autopilot_allowed() and v2_enabled())
+            and operation_mode=='strategies' and active_panel_mode=='strategies'
+            and autopilot_allowed() and v2_enabled())
         manual_restart_pause=bool(manual_run and manual_run.status=='PAUSED'
             and manual_run.pause_reason=='Processo reiniciado; fila preservada sem rearmar automaticamente')
         interrupted=(run is not None and user.id not in autopilot_enabled
@@ -3023,6 +3292,7 @@ async def status(request:Request,nexora_sid:str|None=Cookie(default=None)):
         engine=rt_for(user)
         return {'connected':engine.connected,'symbol':engine.symbol,
                 'operation_mode':operation_mode,
+                'active_panel_mode':active_panel_mode,
                 'manual_session':({'status':manual_run.status,'session_number':manual_run.session_number,
                     'pause_reason':manual_run.pause_reason,'pending_count':manual_pending}
                     if operation_mode=='manual' and manual_run else None),
@@ -3129,6 +3399,7 @@ async def config(request:Request, config:Config,nexora_sid:str|None=Cookie(defau
 
 
 class OnboardingConfig(BaseModel):
+    panel_mode:str|None=None
     stake:str='2.00'
     stop_win:str='0.00'
     stop_loss:str='0.00'
@@ -3154,27 +3425,31 @@ def parse_progression_multiplier(value, label):
 
 
 @app.get('/api/onboarding/config')
-async def get_onboarding_config(request:Request,nexora_sid:str|None=Cookie(default=None)):
+async def get_onboarding_config(request:Request,panel_mode:str|None=None,
+                                nexora_sid:str|None=Cookie(default=None)):
     u=active_user(request,nexora_sid)
+    if panel_mode not in ('manual','strategies'):
+        raise HTTPException(422,'Informe o painel para consultar sua configuração')
     with db.SessionLocal() as sess:
-        plan=sess.get(db.RobotPlan,u.id)
-        cycles=sess.get(db.RobotCycleParams,u.id)
-        profile=sess.get(db.AutomationProfile,u.id)
-        return {'mode':profile.account_mode if profile else 'demo',
-                'real_enabled':real_runtime.real_available(),
-                'stake':u.stake,'stop_win':u.stop_win,'stop_loss':u.stop_loss,
-                'martingale':bool(plan.requested_martingale) if plan else False,
-                'gale_count':plan.gale_count if plan else 0,
-                'multiplier':plan.requested_multiplier if plan else '2.00',
-                'cycles':str(plan.cycles_limit) if plan and plan.cycles_limit is not None else '0',
-                'cycle_multiplier':cycles.multiplier if cycles else '2.00',
-                'martingale_execution_enabled':True,'cycles_execution_enabled':True}
+        manual_profile,strategy_profile=db.ensure_panel_profiles(sess,u.id)
+        profile=manual_profile if panel_mode=='manual' else strategy_profile
+        sess.commit()
+        return {'panel_mode':panel_mode,'mode':profile.account_mode,
+            'real_enabled':real_runtime.real_available(),'stake':profile.stake,
+            'stop_win':profile.stop_win,'stop_loss':profile.stop_loss,
+            'martingale':bool(profile.requested_martingale),
+            'gale_count':profile.gale_count,'multiplier':profile.requested_multiplier,
+            'cycles':str(profile.cycles_limit or 0),'cycle_multiplier':profile.cycle_multiplier,
+            'martingale_execution_enabled':True,'cycles_execution_enabled':True}
 
 
 @app.post('/api/onboarding/config')
 async def save_onboarding_config(request:Request,payload:OnboardingConfig,
                                  nexora_sid:str|None=Cookie(default=None)):
     u=active_user(request,nexora_sid)
+    panel_mode=payload.panel_mode
+    if panel_mode not in ('manual','strategies'):
+        raise HTTPException(422,'Informe o painel para salvar sua configuração')
     if u.id in autopilot_enabled or u.id in real_runtime.running:
         raise HTTPException(409,'Desligue o robô antes de salvar uma nova progressão')
     if payload.gale_count not in range(0,6):
@@ -3196,6 +3471,31 @@ async def save_onboarding_config(request:Request,payload:OnboardingConfig,
     except ValueError as e:
         raise HTTPException(422,str(e)) from None
     async with autopilot_lock:
+        if panel_mode is not None:
+            with db.SessionLocal() as sess:
+                manual_profile,strategy_profile=db.ensure_panel_profiles(sess,u.id)
+                lease=sess.get(db.AutomationExecutionState,u.id)
+                if lease and lease.active_panel_mode:
+                    raise HTTPException(409,'Desligue o painel ativo antes de editar a configuração')
+                unresolved=sess.scalar(select(db.DemoOrder.id).where(
+                    db.DemoOrder.user_id==u.id,
+                    db.DemoOrder.state.in_(('PENDING','CONFIRMED','UNKNOWN'))).limit(1))
+                if unresolved:
+                    raise HTTPException(409,'Aguarde o encerramento e a reconciliação do contrato antes de editar')
+                profile=manual_profile if panel_mode=='manual' else strategy_profile
+                profile.stake=str(settings.stake);profile.stop_win=str(settings.stop_win)
+                profile.stop_loss=str(settings.stop_loss)
+                profile.requested_martingale=payload.martingale
+                profile.gale_count=payload.gale_count
+                profile.requested_multiplier=str(gale_factor)
+                profile.cycles_limit=int(payload.cycles)
+                profile.cycle_multiplier=str(cycle_factor)
+                profile.updated_at=db.utcnow()
+                sess.commit()
+            return {'ok':True,'panel_mode':panel_mode,
+                'execution_mode':'DERIV_REAL_CONFIGURED' if profile.account_mode=='real' else 'DERIV_DEMO_ONLY',
+                'martingale_execution_enabled':True,'cycles_execution_enabled':True,
+                'message':'Configuração do painel salva. Ative a execução separadamente.'}
         if u.id in autopilot_enabled:
             raise HTTPException(409,'Desligue o robô antes de salvar uma nova progressão')
         async with lock:
@@ -3507,6 +3807,16 @@ async def perform_demo_buy(user, token, payload:DemoBuy, *, attribution:dict|Non
         raise HTTPException(422,'Ativo inválido')
     with db.SessionLocal() as s:
         stored=s.get(db.User,user.id)
+        panel_mode=attribution.get('panel_mode') if attribution else None
+        panel_profile=None
+        if panel_mode is not None:
+            if panel_mode not in ('manual','strategies'):
+                raise HTTPException(409,'Origem de painel inválida; compra bloqueada')
+            db.ensure_panel_profiles(s,user.id)
+            panel_profile=s.get(db.AutomationPanelProfile,(user.id,panel_mode))
+            lease=s.get(db.AutomationExecutionState,user.id)
+            if not panel_profile or not lease or lease.active_panel_mode!=panel_mode:
+                raise HTTPException(409,'Painel não possui reserva ativa; nenhuma compra enviada')
         # Subscription is checked at the durable purchase boundary, not only
         # once per scanner cycle. Broker-settled open contracts remain intact.
         if attribution:
@@ -3517,7 +3827,8 @@ async def perform_demo_buy(user, token, payload:DemoBuy, *, attribution:dict|Non
             order,created=reserve(s,stored,request_key=payload.request_key,
                                   symbol=payload.symbol,direction=payload.direction,
                                   minutes=payload.minutes,stake_override=stake_override,
-                                  parallel=bool(attribution and attribution.get('v2')))
+                                  parallel=bool(attribution and attribution.get('v2')),
+                                  panel_mode=panel_mode,risk_config=panel_profile)
         except OrderGuardError as e:
             raise HTTPException(409,str(e)) from None
         order_id=order.id

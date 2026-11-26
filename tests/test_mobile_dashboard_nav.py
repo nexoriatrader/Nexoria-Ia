@@ -12,9 +12,12 @@ def test_mobile_dashboard_keeps_the_primary_navigation_sticky_and_visible():
     assert "body:has(#dashboard:not(.hidden)) .primary-nav{display:none}" not in html
     assert "$('primaryNavigation').classList.toggle('hidden',v==='welcome'||v==='setup')" in html
     primary_nav = html.split('<nav id="primaryNavigation"', 1)[1].split("</nav>", 1)[0]
-    for view in ("account", "dashboard", "robot-config", "results", "cataloger"):
+    for view in ("account", "dashboard", "manual-dashboard", "results", "cataloger"):
         assert f'data-view="{view}"' in primary_nav
     assert 'class="nav-link nav-broker-link"' in primary_nav
+    assert 'Nexora Manual' in primary_nav
+    assert 'Nexora Estratégias' in primary_nav
+    assert 'data-view="robot-config"' not in primary_nav
 
 
 def test_old_fixed_bottom_dashboard_navigation_is_removed():

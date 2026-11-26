@@ -1,7 +1,7 @@
 """Durable database. SQLite allowed only for LOCAL development; production requires Postgres."""
 import os
 from datetime import datetime, timezone
-from sqlalchemy import create_engine, Column, Integer, String, Boolean, DateTime, ForeignKey, Text, UniqueConstraint, Index, inspect, text
+from sqlalchemy import create_engine, Column, Integer, String, Boolean, DateTime, ForeignKey, Text, UniqueConstraint, Index, inspect, text, select
 from sqlalchemy.orm import declarative_base, sessionmaker
 
 DB_URL = os.getenv('DATABASE_URL', 'sqlite:///./nexora_local.db')
@@ -188,11 +188,53 @@ class AutomationProfile(Base):
     updated_at=Column(DateTime(timezone=True),default=utcnow,onupdate=utcnow,nullable=False)
 
 
+class AutomationPanelProfile(Base):
+    """Complete, independent user configuration for one executable panel."""
+    __tablename__='automation_panel_profiles'
+    user_id=Column(Integer,ForeignKey('users.id'),primary_key=True)
+    panel_mode=Column(String(16),primary_key=True)
+    operation_mode=Column(String(24),nullable=False,default='strategies')
+    market=Column(String(24),nullable=False,default='volatility')
+    symbols_json=Column(Text,nullable=False,default='["1HZ100V"]')
+    strategy=Column(String(40),nullable=False,default='pulso_v2')
+    account_mode=Column(String(16),nullable=False,default='demo')
+    expiry_minutes=Column(Integer,nullable=False,default=5)
+    news_filter=Column(Boolean,nullable=False,default=False)
+    news_minutes_before=Column(Integer,nullable=False,default=30)
+    news_minutes_after=Column(Integer,nullable=False,default=30)
+    min_payout=Column(String(12),nullable=False,default='88')
+    max_daily_orders=Column(Integer,nullable=False,default=0)
+    indicators_json=Column(Text,nullable=False,default='[]')
+    direction=Column(String(10),nullable=False,default='AUTO')
+    real_account_id=Column(String(100),nullable=True)
+    preset_mode=Column(String(20),nullable=False,default='custom')
+    stake=Column(String(20),nullable=False,default='0.50')
+    stop_win=Column(String(20),nullable=False,default='0.00')
+    stop_loss=Column(String(20),nullable=False,default='0.00')
+    requested_martingale=Column(Boolean,nullable=False,default=False)
+    gale_count=Column(Integer,nullable=False,default=0)
+    requested_multiplier=Column(String(20),nullable=False,default='2.00')
+    cycles_limit=Column(Integer,nullable=False,default=0)
+    cycle_multiplier=Column(String(20),nullable=False,default='2.00')
+    updated_at=Column(DateTime(timezone=True),default=utcnow,onupdate=utcnow,nullable=False)
+
+
+class AutomationExecutionState(Base):
+    """Durable per-user exclusive panel reservation; never an auto-resume grant."""
+    __tablename__='automation_execution_states'
+    user_id=Column(Integer,ForeignKey('users.id'),primary_key=True)
+    active_panel_mode=Column(String(16),nullable=True)
+    account_mode=Column(String(16),nullable=True)
+    reserved_at=Column(DateTime(timezone=True),nullable=True)
+    updated_at=Column(DateTime(timezone=True),default=utcnow,onupdate=utcnow,nullable=False)
+
+
 class RiskSession(Base):
     """Auditable manual DEMO risk reset boundary; historical orders stay untouched."""
     __tablename__ = 'risk_sessions'
     id = Column(Integer, primary_key=True)
     user_id = Column(Integer, ForeignKey('users.id'), nullable=False, index=True)
+    panel_mode = Column(String(16), nullable=True)
     after_order_id = Column(Integer, nullable=False, default=0)
     created_at = Column(DateTime(timezone=True), default=utcnow, nullable=False)
     __table_args__ = (Index('ix_risk_sessions_user_id_id', 'user_id', 'id'),)
@@ -315,6 +357,40 @@ class CatalogerHistoryState(Base):
     newest_epoch = Column(Integer, nullable=True)
 
 
+def _seed_panel_profile(user, legacy, plan, cycle, mode):
+    """Copy legacy automation identity only to the panel it previously described."""
+    current_mode=getattr(legacy,'operation_mode','strategies') if legacy else None
+    copy_current=legacy is not None and current_mode==mode
+    is_manual=mode=='manual'
+    copy_strategy=copy_current and not is_manual
+    copy_manual=copy_current and is_manual
+    return AutomationPanelProfile(
+        user_id=user.id,panel_mode=mode,
+        operation_mode='manual' if is_manual else 'strategies',
+        market=getattr(legacy,'market','volatility') if copy_strategy else 'volatility',
+        symbols_json='[]' if is_manual else (
+            getattr(legacy,'symbols_json','["1HZ100V"]') if copy_strategy else '["1HZ100V"]'),
+        strategy='manual' if is_manual else (
+            getattr(legacy,'strategy','pulso_v2') if copy_strategy else 'pulso_v2'),
+        account_mode=getattr(legacy,'account_mode','demo') if copy_current else 'demo',
+        expiry_minutes=0 if is_manual else (
+            getattr(legacy,'expiry_minutes',5) if copy_strategy else 5),
+        news_filter=getattr(legacy,'news_filter',False) if copy_strategy else False,
+        news_minutes_before=getattr(legacy,'news_minutes_before',30) if copy_strategy else 30,
+        news_minutes_after=getattr(legacy,'news_minutes_after',30) if copy_strategy else 30,
+        min_payout=getattr(legacy,'min_payout','88') if copy_strategy else '88',
+        direction=getattr(legacy,'direction','AUTO') if copy_strategy else 'AUTO',
+        real_account_id=(getattr(legacy,'real_account_id',None)
+                         if copy_current and getattr(legacy,'account_mode','demo')=='real' else None),
+        preset_mode=getattr(legacy,'preset_mode','custom') if copy_strategy else 'custom',
+        stake=user.stake,stop_win=user.stop_win,stop_loss=user.stop_loss,
+        requested_martingale=bool(plan and plan.requested_martingale and copy_current),
+        gale_count=plan.gale_count if plan and copy_current else 0,
+        requested_multiplier=(plan.requested_multiplier if plan and copy_current else '2.00'),
+        cycles_limit=(plan.cycles_limit or 0) if plan and copy_current else 0,
+        cycle_multiplier=cycle.multiplier if cycle and copy_current else '2.00')
+
+
 def init_db():
     Base.metadata.create_all(engine)
     # Backwards-compatible additive migration. Never fabricate official times
@@ -347,6 +423,56 @@ def init_db():
     if 'suspended' not in access_columns:
         with engine.begin() as conn:
             conn.execute(text('ALTER TABLE robot_access ADD COLUMN suspended BOOLEAN NOT NULL DEFAULT FALSE'))
+    consent_columns={col['name'] for col in inspect(engine).get_columns('real_robot_consents')}
+    if 'panel_mode' not in consent_columns:
+        with engine.begin() as conn:
+            conn.execute(text('ALTER TABLE real_robot_consents ADD COLUMN panel_mode VARCHAR(16)'))
+    for table in ('demo_orders','real_orders'):
+        columns={col['name'] for col in inspect(engine).get_columns(table)}
+        if 'source_panel_mode' not in columns:
+            with engine.begin() as conn:
+                conn.execute(text(f'ALTER TABLE {table} ADD COLUMN source_panel_mode VARCHAR(16)'))
+    risk_columns={col['name'] for col in inspect(engine).get_columns('risk_sessions')}
+    if 'panel_mode' not in risk_columns:
+        with engine.begin() as conn:
+            conn.execute(text('ALTER TABLE risk_sessions ADD COLUMN panel_mode VARCHAR(16)'))
+    # Profiles are additive and seeded only once. The old REAL consent table is
+    # intentionally never read or copied here, and no run/consent is armed.
+    with SessionLocal() as session:
+        users=session.scalars(select(User)).all()
+        for user in users:
+            legacy=session.get(AutomationProfile,user.id)
+            plan=session.get(RobotPlan,user.id)
+            cycle=session.get(RobotCycleParams,user.id)
+            for mode in ('manual','strategies'):
+                if session.get(AutomationPanelProfile,(user.id,mode)) is not None:
+                    continue
+                session.add(_seed_panel_profile(user,legacy,plan,cycle,mode))
+            if session.get(AutomationExecutionState,user.id) is None:
+                session.add(AutomationExecutionState(user_id=user.id))
+        session.commit()
+
+
+def ensure_panel_profiles(session, user_id):
+    """Create only absent panel rows from the still-preserved legacy settings."""
+    user=session.get(User,user_id)
+    if user is None:
+        return None,None
+    legacy=session.get(AutomationProfile,user_id)
+    plan=session.get(RobotPlan,user_id)
+    cycle=session.get(RobotCycleParams,user_id)
+    rows=[]
+    for mode in ('manual','strategies'):
+        row=session.get(AutomationPanelProfile,(user_id,mode))
+        if row is None:
+            row=_seed_panel_profile(user,legacy,plan,cycle,mode)
+            session.add(row)
+        rows.append(row)
+    if session.get(AutomationExecutionState,user_id) is None:
+        session.add(AutomationExecutionState(user_id=user_id))
+    session.flush()
+    by_mode={row.panel_mode:row for row in rows}
+    return by_mode.get('manual'),by_mode.get('strategies')
 
 
 
@@ -371,6 +497,7 @@ class DemoOrder(Base):
     pnl = Column(String(30), nullable=True)
     broker_status = Column(String(40), nullable=True)
     broker_purchase_at = Column(DateTime(timezone=True), nullable=True)  # Deriv-reported, not request time
+    source_panel_mode = Column(String(16), nullable=True)
     error_summary = Column(String(255), nullable=True)
     created_at = Column(DateTime(timezone=True), default=utcnow, nullable=False)
     updated_at = Column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
@@ -401,6 +528,7 @@ class RealOrder(Base):
     broker_status = Column(String(40), nullable=True)
     broker_purchase_at = Column(DateTime(timezone=True), nullable=True)
     error_summary = Column(String(255), nullable=True)
+    source_panel_mode = Column(String(16), nullable=True)
     created_at = Column(DateTime(timezone=True), default=utcnow, nullable=False)
     updated_at = Column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
     __table_args__ = (
@@ -416,6 +544,7 @@ class RealRobotConsent(Base):
     account_id = Column(String(100), nullable=False)
     max_stake = Column(String(20), nullable=False)
     stop_loss = Column(String(20), nullable=False)
+    panel_mode = Column(String(16), nullable=True)
     created_at = Column(DateTime(timezone=True), default=utcnow, nullable=False)
     revoked_at = Column(DateTime(timezone=True), nullable=True)
 

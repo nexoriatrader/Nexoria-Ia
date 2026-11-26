@@ -1565,6 +1565,7 @@ body:has(#dashboard:not(.hidden)) .nexora-logo-only .brand img{
 .cataloger-stats{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:11px}.cataloger-stat{border:1px solid #29455a;border-radius:10px;padding:9px;background:#0c1c2c}.cataloger-stat small{display:block;color:#9eb5c7;font-size:10px}.cataloger-stat strong{display:block;margin-top:3px;font-size:14px}.cataloger-export{width:100%;min-height:110px;margin-top:12px;border:1px solid #395a72;border-radius:12px;background:#081827;color:#e4eff7;padding:12px;font:12px/1.7 ui-monospace,SFMono-Regular,Consolas,monospace;resize:vertical}
 .cataloger-disclaimer{border-left:3px solid #d4aa55;background:#2b2a234d;border-radius:0 10px 10px 0;padding:12px;margin-top:14px;color:#c7c5b9;font-size:11px;line-height:1.6}.cataloger-empty{border:1px dashed #456076;border-radius:13px;padding:18px;color:#bdd1df;background:#0b1b2a}
 @media(max-width:600px){.cataloger-fields,.cataloger-result-grid{grid-template-columns:1fr}.cataloger-card{padding:17px}.cataloger-results-head{display:block}.cataloger-results-head .outline{margin-top:10px;width:100%}}
+#robot-config.manual-mode [data-strategy-only]{display:none!important}
 </style>
 </head>
 <body>
@@ -1574,8 +1575,8 @@ body:has(#dashboard:not(.hidden)) .nexora-logo-only .brand img{
 </header>
 <nav id="primaryNavigation" class="primary-nav hidden" aria-label="Navegação principal">
   <button class="nav-link" data-view="account" type="button" onclick="go('account')">Minha Conta</button>
-  <button class="nav-link" data-view="dashboard" type="button" onclick="go('dashboard')">Painel do Robô</button>
-  <button class="nav-link" data-view="robot-config" type="button" onclick="go('robot-config')">Configurar Robô</button>
+  <button class="nav-link" data-view="dashboard" type="button" onclick="go('dashboard')">Nexora Estratégias</button>
+  <button class="nav-link" data-view="manual-dashboard" type="button" onclick="go('manual-dashboard')">Nexora Manual</button>
   <button class="nav-link" data-view="results" type="button" onclick="go('results')">Resultados do Robô</button>
   <button class="nav-link" data-view="cataloger" type="button" onclick="go('cataloger')">Catalogador</button>
   <a class="nav-link nav-broker-link" href="https://t.deriv.link/?t=HR6MZB6Q499Z" target="_blank" rel="noopener noreferrer sponsored" aria-label="Abrir a corretora Deriv (link de indicação externo)">Acessar Corretora ↗</a>
@@ -1675,56 +1676,11 @@ body:has(#dashboard:not(.hidden)) .nexora-logo-only .brand img{
  <p class="lp-disclaimer">Operações financeiras envolvem riscos, inclusive a perda integral de capital em conta REAL. O NEXORA não garante lucros, não cancela contratos já comprados ao desligar o robô e não substitui uma avaliação independente de risco.</p>
 </section>
 <section id="setup" class="robot-setup hidden" aria-labelledby="setupTitle">
-  <div class="setup-aura" aria-hidden="true"></div>
-  <div class="setup-heading">
-    <div class="choose-overline"><span class="choose-overline-dot"></span> CONFIGURAÇÃO INICIAL</div>
-    <h1 id="setupTitle">É hora de <span>configurar seu robô.</span></h1>
-    <p>Defina os valores de entrada e os limites que orientarão as operações do NEXORA AutoPilot.</p>
-  </div>
-  <form id="setupForm" onsubmit="saveOnboarding(event)">
-    <div class="setup-grid">
-      <div class="setup-panel">
-        <div class="setup-panel-title"><span class="setup-icon" aria-hidden="true">◉</span><div><h2>Modo de operação</h2><p>Selecione o ambiente do robô.</p></div></div>
-        <div class="setup-mode-row" role="group" aria-label="Modo de conta">
-          <div class="setup-mode selected"><span>◉</span><strong>Treinamento</strong><small>Selecionado</small></div>
-          <div class="setup-mode disabled" aria-disabled="true"><span>◇</span><strong>Conta real</strong><small id="setupRealAvailability">Configure na seção Automação</small></div>
-        </div>
-      </div>
-      <div class="setup-panel">
-        <div class="setup-panel-title"><span class="setup-icon" aria-hidden="true">＄</span><div><h2>Valor de entrada</h2><p>Valor base por operação (USD).</p></div></div>
-        <label for="setupStake">Valor inicial em dólar</label>
-        <div class="setup-money"><span>US$</span><input id="setupStake" name="stake" inputmode="decimal" type="number" min="0.50" step=".01" value="0.50" required></div>
-      </div>
-      <div class="setup-panel">
-        <div class="setup-panel-title"><span class="setup-icon" aria-hidden="true">◇</span><div><h2>Gestão de risco</h2><p>Defina os limites de lucro e perda.</p></div></div>
-        <div class="setup-fields-two">
-          <div><label for="setupWin">Stop Win (USD)</label><div class="setup-money"><span>US$</span><input id="setupWin" inputmode="decimal" type="number" min="0" step=".01" value="0.00" required></div></div>
-          <div><label for="setupLoss">Stop Loss (USD)</label><div class="setup-money"><span>US$</span><input id="setupLoss" inputmode="decimal" type="number" min="0" step=".01" value="0.00" required></div></div>
-        </div>
-        <p class="setup-hint setup-zero-note"><strong>Stops em US$ 0,00:</strong> significam que esse limite fica desativado. Com ambos em zero, o robô não pausa por Stop Win ou Stop Loss e pode continuar operando até você desligá-lo manualmente ou outra proteção interromper a execução. Isso aumenta a exposição a perdas.</p>
-      </div>
-      <div class="setup-panel">
-        <div class="setup-panel-title"><span class="setup-icon" aria-hidden="true">↗</span><div><h2>Martingale</h2><p>Configure até 5 tentativas após uma derrota.</p></div></div>
-        <label class="setup-toggle"><span><strong>Ativar Martingale</strong><small>Novas entradas após perdas liquidadas.</small></span><input id="setupMg" type="checkbox" onchange="toggleSetupMartingale(true)"><span class="setup-toggle-track" aria-hidden="true"></span></label>
-        <div class="setup-fields-two hidden" id="setupGaleFields">
-          <div><label for="setupGales">Tentativas adicionais</label><select id="setupGales"><option value="1">1 tentativa</option><option value="2">2 tentativas</option><option value="3">3 tentativas</option><option value="4">4 tentativas</option><option value="5">5 tentativas</option></select></div>
-          <div><label for="setupMultiplier">Multiplicador</label><input id="setupMultiplier" type="text" inputmode="decimal" value="2.0" maxlength="12" placeholder="Ex.: 2.3" aria-describedby="setupMultiplierHelp"><small class="setup-fieldhelp" id="setupMultiplierHelp">Digite um fator ≥ 1.0, com até 2 casas decimais</small></div>
-        </div>
-        <p class="setup-hint">A cada perda confirmada, a entrada pode aumentar segundo seu multiplicador, respeitando o limite da sequência.</p>
-      </div>
-      <div class="setup-panel setup-panel-full">
-        <div class="setup-panel-title"><span class="setup-icon" aria-hidden="true">∞</span><div><h2>Ciclos operacionais</h2><p>Escolha ciclos OU Martingale, nunca os dois.</p></div></div>
-        <label for="setupCycles">Ciclos adicionais após uma sequência de perdas (máximo 5)</label>
-        <select id="setupCycles" onchange="toggleSetupCycles(true)"><option value="0">Desativado (0)</option><option value="1">1 ciclo adicional</option><option value="2">2 ciclos adicionais</option><option value="3">3 ciclos adicionais</option><option value="4">4 ciclos adicionais</option><option value="5">5 ciclos adicionais</option></select><label for="setupCycleMultiplier" style="margin-top:13px">Multiplicador dos ciclos</label><input id="setupCycleMultiplier" class="setup-numeric" type="text" inputmode="decimal" value="2.0" maxlength="12" placeholder="Ex.: 2.5"><small class="setup-fieldhelp">Digite livremente o fator de ciclo, como 1.0, 2.3 ou 2.5</small>
-        <p class="setup-hint">Ex.: entrada US$ 2, próximo sinal do ciclo US$ 5 (fator 2,5×), sem Martingale. Uma vitória reinicia no valor inicial. Se todas as tentativas terminarem em LOSS, a próxima entrada volta ao valor inicial e espera um novo sinal válido. O robô continua ligado, respeitando os stops e as proteções. Sem teto financeiro fixo de progressão no NEXORA; os valores dependem do saldo, dos stops escolhidos e da aceitação pela Deriv.</p>
-      </div>
-    </div>
-    <div class="setup-note"><span aria-hidden="true">✧</span><div><strong>Configure com atenção.</strong><p>Você poderá revisar esses parâmetros depois. Salvar configurações não inicia o robô: a ativação continua sob seu controle no painel.</p></div></div>
-    <p class="setup-feedback" id="setupFeedback" role="status"></p>
-    <button class="setup-submit" id="setupSubmit" type="submit">FINALIZAR CONFIGURAÇÃO E IR PARA O PAINEL <span aria-hidden="true">→</span></button>
-  </form>
+  <div class="setup-heading"><div class="choose-overline"><span class="choose-overline-dot"></span> CONFIGURAÇÃO INICIAL · NEXORA ESTRATÉGIAS</div><h1 id="setupTitle">Escolha seu painel <span>para configurar.</span></h1><p>Manual e Estratégias têm perfis completos e independentes. Configure dentro do painel desejado; não há risco global.</p></div>
+  <div class="choice-grid"><button class="gold" type="button" onclick="go('robot-config','strategies')">CONFIGURAR NEXORA ESTRATÉGIAS</button><button class="outline" type="button" onclick="go('robot-config','manual')">CONFIGURAR NEXORA MANUAL</button></div>
 </section>
-<section id="dashboard" class="hidden nx-neo-dashboard nx-calm-dashboard">
+<section id="dashboard" class="hidden nx-neo-dashboard nx-calm-dashboard" aria-label="Painel Nexora Estratégias">
+  <div class="section-heading"><div><div class="eyebrow">PAINEL · NEXORA ESTRATÉGIAS</div><h1>Nexora Estratégias</h1><p>Estratégia, ativos e proteções próprios deste painel. Apenas um painel pode operar por vez.</p></div><button class="outline" type="button" onclick="go('robot-config','strategies')">⚙ CONFIGURAR ESTRATÉGIAS</button></div>
   <section class="nx-neo-command" aria-labelledby="nxNeoCommandTitle">
     <div class="nx-neo-command-brand">
       <div class="nx-neo-command-symbol" aria-hidden="true">✦</div>
@@ -1752,7 +1708,7 @@ body:has(#dashboard:not(.hidden)) .nexora-logo-only .brand img{
       <div class="dash-control-main">
         <button id="robotButton" class="hero-action" disabled aria-disabled="true" onclick="toggleRobot()">CONSULTANDO ESTADO DO ROBÔ…</button>
         <div class="dash-control-actions">
-          <button id="configureRobotButton" class="dash-configure-button" type="button" onclick="go('robot-config')">⚙ CONFIGURAR ROBÔ</button>
+          <button id="configureRobotButton" class="dash-configure-button" type="button" onclick="go('robot-config','strategies')">⚙ CONFIGURAR ESTRATÉGIAS</button>
           <div class="dash-access">
             <span>Tempo disponível Robô</span>
             <strong id="dashboardAccessCountdown">Consultando...</strong>
@@ -1783,7 +1739,7 @@ body:has(#dashboard:not(.hidden)) .nexora-logo-only .brand img{
       <p id="robotNoticeText"></p>
       <div id="robotNoticeOptions" hidden>
         <p>Para continuar, você pode ajustar seu Stop Loss nas configurações ou desativar esse limite (não recomendado: aumenta o risco). Você também pode iniciar uma nova sessão de risco DEMO. Isso reinicia o cálculo dos stops da sessão, mas NÃO apaga perdas, resultados nem altera o saldo da Deriv.</p>
-        <div class="actions"><button class="outline" type="button" onclick="go('settings')">AJUSTAR STOP LOSS</button><button class="outline" type="button" onclick="resetRiskSession()">REINICIAR SESSÃO</button></div>
+        <div class="actions"><button class="outline" type="button" onclick="go('robot-config','strategies')">AJUSTAR PROTEÇÕES DE ESTRATÉGIAS</button><button class="outline" type="button" onclick="resetRiskSession()">REINICIAR SESSÃO</button></div>
         <p class="helper">O histórico oficial e o saldo Deriv não podem ser apagados pelo painel. Os limites de segurança permanecem ativos.</p>
       </div>
     </div>
@@ -1806,23 +1762,7 @@ body:has(#dashboard:not(.hidden)) .nexora-logo-only .brand img{
   </div>
   </details>
   </section>
-  <section id="manualSignalsCard" class="card manual-signals-card hidden" aria-labelledby="manualSignalsTitle">
-    <div class="manual-signals-head"><div><span class="nx-neo-section-caption">NEXORA MANUAL · LISTA DE SINAIS</span><h2 id="manualSignalsTitle">Agendar sinais</h2><p>Escolha o mercado, o dia e o fuso. Cada linha é validada separadamente.</p></div><span id="manualSignalsRunBadge" class="manual-run-badge" data-state="idle">PAUSADO</span></div>
-    <div class="manual-signals-callout"><strong>Atenção aos horários</strong><p>M15 é a duração do contrato a partir da aceitação da compra pela Deriv. Cada sinal só é tentado no minuto indicado; sinais vencidos nunca são recuperados.</p></div>
-    <div class="manual-signals-fields">
-      <div class="field"><label for="manualMarket">Mercado desta lista</label><select id="manualMarket"><option value="forex">Forex</option><option value="derived">Derivados</option><option value="stocks_indices">Ações e índices</option><option value="commodities">Matérias-primas</option></select></div>
-      <div class="field"><label for="manualDay">Dia dos horários</label><select id="manualDay"><option value="today">Hoje</option><option value="tomorrow">Amanhã</option></select></div>
-      <div class="field"><label for="manualTimezone">Fuso horário</label><select id="manualTimezone"><option value="America/Sao_Paulo" selected>Brasília (UTC−03:00) · padrão</option><option value="America/Noronha">Fernando de Noronha</option><option value="America/Manaus">Manaus</option><option value="America/Rio_Branco">Rio Branco</option><option value="UTC">UTC</option><option value="America/New_York">Nova York</option><option value="America/Chicago">Chicago</option><option value="America/Denver">Denver</option><option value="America/Los_Angeles">Los Angeles</option><option value="Europe/London">Londres</option><option value="Europe/Lisbon">Lisboa</option><option value="Europe/Madrid">Madri</option></select></div>
-    </div>
-    <div class="field manual-list-field"><label for="manualSignalText">Lista textual · uma linha por sinal</label><textarea id="manualSignalText" maxlength="20000" rows="7" placeholder="M15 EURUSD 19:00 CALL&#10;M5 GBPUSD 19:10 PUT" aria-describedby="manualSignalFormat"></textarea><p id="manualSignalFormat" class="helper">Formato: M15 EURUSD 19:00 CALL · durações aceitas: M1, M3, M5 ou M15. Você pode agendar listas em slots menores ou enviar até a capacidade disponível de uma só vez.</p></div>
-    <div class="manual-capacity"><span>Fila pendente</span><strong id="manualCapacityValue">Consultando…</strong><span>Limite: 100 sinais pendentes nesta sessão</span></div>
-    <div class="manual-preview-actions"><button id="manualPreviewButton" class="outline" type="button" onclick="previewManualSignals()">VALIDAR E VER PRÉVIA</button></div>
-    <div id="manualPreviewResult" class="manual-preview-result" role="status" aria-live="polite">A prévia não envia nem executa ordens.</div>
-    <label class="manual-confirm-line"><input id="manualScheduleConfirm" type="checkbox" disabled> <span>Confirmo o agendamento explícito dos sinais válidos exibidos acima. Entendo que isso ligará a modalidade Manual e autorizará tentativas na conta e com as proteções salvas.</span></label>
-    <div class="manual-signal-actions"><button id="manualScheduleButton" class="gold" type="button" onclick="scheduleManualSignals()" disabled>CONFIRMAR E AGENDAR VÁLIDOS</button><button id="manualPauseButton" class="outline" type="button" onclick="pauseManualSignals()" hidden>DESLIGAR ROBÔ</button><button id="manualCancelButton" class="outline" type="button" onclick="cancelManualSignals()" hidden>DESAGENDAR LISTA</button></div>
-    <p id="manualSignalsFeedback" class="helper" role="status" aria-live="polite">Nenhuma compra é enviada pela prévia ou pelo agendamento.</p>
-    <h3 class="manual-queue-title">Fila e estado persistidos</h3><div id="manualQueueList" class="manual-queue-list"><p class="muted">Consultando fila Manual…</p></div>
-  </section>
+
   <div id="nxPanelHistoryState" class="nx-history-state" data-state="unknown" role="status">Consultando o estado do robô…</div>
   <section class="nx-panel-history" aria-labelledby="nxPanelHistoryTitle">
     <div class="nx-history-head"><span class="nx-history-icon" aria-hidden="true">▤</span><div><span class="nx-neo-section-caption">HISTÓRICO</span><h2 id="nxPanelHistoryTitle">Resultados do robô</h2><p>Registros de operações encerradas</p></div></div>
@@ -2054,10 +1994,7 @@ body:has(#dashboard:not(.hidden)) .nexora-logo-only .brand img{
   </div>
   <div class="card auto-config" id="automationConfigCard">
     <p class="helper nx-guide-lead">Treinamento usa saldo fictício. Navegar ou salvar preferências não liga o robô.</p>
-    <fieldset class="operation-mode-picker"><legend>Escolha a modalidade do robô</legend><div class="operation-mode-options">
-      <label class="operation-mode-option"><input type="radio" name="operationMode" value="strategies" checked><span><strong>Nexora IA Estratégias</strong><small>Preserva o assistente atual: mercado, ativos e estratégia.</small></span></label>
-      <label class="operation-mode-option"><input type="radio" name="operationMode" value="manual"><span><strong>Nexora Manual (lista de sinais)</strong><small>Mercado e horários são escolhidos no painel.</small></span></label>
-    </div><p id="operationModeHelp" class="helper">A conta e as proteções permanecem configuráveis nas duas modalidades.</p></fieldset>
+    <div class="setup-note" id="configPanelIdentity" role="note"><span aria-hidden="true">◈</span><div><strong id="configPanelTitle">Nexora Estratégias</strong><p id="operationModeHelp">Este assistente edita somente a configuração completa do painel selecionado. Salvar não liga o robô.</p></div></div>
     <div class="auto-wizard-header">
       <span id="autoWizardProgress" role="status" aria-live="polite">Etapa 1 de 6</span>
       <div class="auto-wizard-track" id="autoWizardTrack" role="progressbar" aria-label="Progresso da configuração" aria-valuemin="1" aria-valuemax="6" aria-valuenow="1"><span id="autoWizardFill"></span></div>
@@ -2123,16 +2060,17 @@ body:has(#dashboard:not(.hidden)) .nexora-logo-only .brand img{
         <label class="auto-choice hidden" data-forex-experimental-strategy><input type="radio" name="autoStrategy" value="fx_breakout_m15"> Forex · Tendência H1 + rompimento M15 <small>Experimental · Forex · Treinamento/DEMO e REAL · expiração fixa M15</small></label>
       </div>
       <p class="helper" id="forexStrategyDisclosure" hidden>Estratégias experimentais ainda não validadas quanto ao desempenho e sem garantia de lucro. Disponíveis somente em Forex nas contas Treinamento/DEMO e REAL. Em REAL, contratos podem gerar perdas financeiras.</p>
-      <div class="field"><label for="autoDirection">Direção das entradas</label><select id="autoDirection"><option value="AUTO">Automática conforme estratégia</option><option value="CALL">Somente CALL / Alta</option><option value="PUT">Somente PUT / Baixa</option></select></div>
+      <div class="field" data-strategy-only><label for="autoDirection">Direção das entradas</label><select id="autoDirection"><option value="AUTO">Automática conforme estratégia</option><option value="CALL">Somente CALL / Alta</option><option value="PUT">Somente PUT / Baixa</option></select></div>
       <div class="auto-step"><span>05</span><strong>Entenda os valores e os limites</strong></div>
       <p class="helper auto-step-help">Este grupo reúne parâmetros financeiros e limites de segurança. Em treinamento, os valores são fictícios. Valores e estratégias não eliminam riscos em contas reais.</p>
       <div class="settings-grid">
         <div class="field"><label for="autoStake">Entrada (USD)</label><input id="autoStake" type="number" min="0.50" step="0.01" value="0.50"></div>
-        <div class="field"><label id="autoExpiryLabel">Expiração automática inteligente</label><p class="helper" id="autoExpiryHelp">O NEXORA compara M1, M3, M5 e M15 disponíveis na Deriv após confirmar um sinal e escolhe a proposta que atende ao payout mínimo. Sem proposta válida, não opera.</p></div>
+      <div class="field" data-strategy-only><label id="autoExpiryLabel" for="autoExpiry">Expiração</label><select id="autoExpiry"><option value="0">Automática conforme payout</option><option value="1">M1 · 1 minuto</option><option value="3">M3 · 3 minutos</option><option value="5">M5 · 5 minutos</option><option value="15">M15 · 15 minutos</option></select><p class="helper" id="autoExpiryHelp">Automática compara as durações disponíveis; selecione uma duração para restringir a proposta. Sem proposta válida, o robô não opera.</p></div>
         <div class="field"><label for="autoWin">Stop Win (USD)</label><input id="autoWin" type="number" min="0" step="0.01" value="0"></div>
         <div class="field"><label for="autoLoss">Stop Loss (USD)</label><input id="autoLoss" type="number" min="0" step="0.01" value="0"></div>
-        <div class="field"><label for="autoPayout">Payout mínimo (%)</label><input id="autoPayout" type="number" min="0" max="200" step="1" value="88"></div>
+        <div class="field" data-strategy-only><label for="autoPayout">Payout mínimo (%)</label><input id="autoPayout" type="number" min="0" max="200" step="1" value="88"></div>
       </div>
+      <p class="helper" id="autoStopsHelp">Zero em Stop Win e Stop Loss desativa apenas esses limites; os demais bloqueios de segurança e limites da corretora continuam ativos. Com ambos em zero, o robô não se desligará automaticamente por meta de ganho ou perda; será preciso desligá-lo manualmente.</p>
       <details class="nx-guide-advanced" id="autoAdvancedOptions">
         <summary>Opções avançadas e de alto risco <span aria-hidden="true">⌄</span></summary>
         <p class="helper">Martingale e ciclos podem aumentar valores e perdas. Estas opções não são necessárias para compreender o funcionamento básico e não são recomendadas para iniciantes.</p>
@@ -2159,6 +2097,27 @@ body:has(#dashboard:not(.hidden)) .nexora-logo-only .brand img{
     </div>
   </div>
 </section>
+<section id="manual-dashboard" class="hidden" aria-label="Painel Nexora Manual">
+  <div class="section-heading"><div><div class="eyebrow">PAINEL · NEXORA MANUAL</div><h1>Nexora Manual</h1><p>Configure conta e proteções deste painel; prepare e agende listas manualmente. Estratégias e Manual não operam simultaneamente.</p><p id="manualPanelStatus" class="helper" role="status" aria-live="polite">Consultando o estado dos painéis…</p></div><button class="outline" type="button" onclick="go('robot-config','manual')">⚙ CONFIGURAR MANUAL</button></div>
+  <p id="manualPanelConflict" class="robot-notice" role="alert" aria-live="polite" hidden></p>
+  <section id="manualSignalsCard" class="card manual-signals-card" aria-labelledby="manualSignalsTitle">
+    <div class="manual-signals-head"><div><span class="nx-neo-section-caption">NEXORA MANUAL · LISTA DE SINAIS</span><h2 id="manualSignalsTitle">Agendar sinais</h2><p>Escolha o mercado, o dia e o fuso. Cada linha é validada separadamente.</p></div><span id="manualSignalsRunBadge" class="manual-run-badge" data-state="idle">PAUSADO</span></div>
+    <div class="manual-signals-callout"><strong>Atenção aos horários</strong><p>M15 é a duração do contrato a partir da aceitação da compra pela Deriv. Cada sinal só é tentado no minuto indicado; sinais vencidos nunca são recuperados.</p></div>
+    <div class="manual-signals-fields">
+      <div class="field"><label for="manualMarket">Mercado desta lista</label><select id="manualMarket"><option value="forex">Forex</option><option value="derived">Derivados</option><option value="stocks_indices">Ações e índices</option><option value="commodities">Matérias-primas</option></select></div>
+      <div class="field"><label for="manualDay">Dia dos horários</label><select id="manualDay"><option value="today">Hoje</option><option value="tomorrow">Amanhã</option></select></div>
+      <div class="field"><label for="manualTimezone">Fuso horário</label><select id="manualTimezone"><option value="America/Sao_Paulo" selected>Brasília (UTC−03:00) · padrão</option><option value="America/Noronha">Fernando de Noronha</option><option value="America/Manaus">Manaus</option><option value="America/Rio_Branco">Rio Branco</option><option value="UTC">UTC</option><option value="America/New_York">Nova York</option><option value="America/Chicago">Chicago</option><option value="America/Denver">Denver</option><option value="America/Los_Angeles">Los Angeles</option><option value="Europe/London">Londres</option><option value="Europe/Lisbon">Lisboa</option><option value="Europe/Madrid">Madri</option></select></div>
+    </div>
+    <div class="field manual-list-field"><label for="manualSignalText">Lista textual · uma linha por sinal</label><textarea id="manualSignalText" maxlength="20000" rows="7" placeholder="M15 EURUSD 19:00 CALL&#10;M5 GBPUSD 19:10 PUT" aria-describedby="manualSignalFormat"></textarea><p id="manualSignalFormat" class="helper">Formato: M15 EURUSD 19:00 CALL · durações aceitas: M1, M3, M5 ou M15. Você pode agendar listas em slots menores ou enviar até a capacidade disponível de uma só vez.</p></div>
+    <div class="manual-capacity"><span>Fila pendente</span><strong id="manualCapacityValue">Consultando…</strong><span>Limite: 100 sinais pendentes nesta sessão</span></div>
+    <div class="manual-preview-actions"><button id="manualPreviewButton" class="outline" type="button" onclick="previewManualSignals()">VALIDAR E VER PRÉVIA</button></div>
+    <div id="manualPreviewResult" class="manual-preview-result" role="status" aria-live="polite">A prévia não envia nem executa ordens.</div>
+    <label class="manual-confirm-line"><input id="manualScheduleConfirm" type="checkbox" disabled> <span>Confirmo o agendamento explícito dos sinais válidos exibidos acima. Entendo que isso ligará a modalidade Manual e autorizará tentativas na conta e com as proteções salvas.</span></label>
+    <div class="manual-signal-actions"><button id="manualScheduleButton" class="gold" type="button" onclick="scheduleManualSignals()" disabled>CONFIRMAR E AGENDAR VÁLIDOS</button><button id="manualPauseButton" class="outline" type="button" onclick="pauseManualSignals()" hidden>DESLIGAR ROBÔ</button><button id="manualCancelButton" class="outline" type="button" onclick="cancelManualSignals()" hidden>DESAGENDAR LISTA</button></div>
+    <p id="manualSignalsFeedback" class="helper" role="status" aria-live="polite">Nenhuma compra é enviada pela prévia ou pelo agendamento.</p>
+    <h3 class="manual-queue-title">Fila e estado persistidos</h3><div id="manualQueueList" class="manual-queue-list"><p class="muted">Consultando fila Manual…</p></div>
+  </section>
+</section>
 <section id="results" class="hidden">
   <div class="section-heading"><div><h1>Resultados</h1><p>Somente contratos confirmados pela Deriv DEMO entram no placar. Horários sem confirmação da corretora aparecem como —.</p></div></div>
   <div class="card"><div class="surface-heading">HISTÓRICO COMPLETO DO ROBÔ</div>
@@ -2166,34 +2125,7 @@ body:has(#dashboard:not(.hidden)) .nexora-logo-only .brand img{
     <div class="table-wrap"><table><thead><tr><th>Data da compra (Deriv · Brasília)</th><th>Horário da compra (Deriv)</th><th>Conta</th><th>Ativo</th><th>Direção</th><th>Entrada</th><th>Expiração</th><th>Etapa</th><th>Situação</th><th>WIN / LOSS</th><th>Resultado</th></tr></thead><tbody id="ordersBody"><tr><td colspan="11" class="empty">Carregando contratos...</td></tr></tbody></table></div>
   </div>
 </section>
-<section id="settings" class="hidden">
-  <div class="section-heading"><div><div class="eyebrow">SEU CONTROLE</div><h1>Configurações</h1><p>Personalize entradas, stop e progressões. O AutoPilot deve estar desligado para salvar.</p></div></div>
-  <div class="card">
-    <div class="surface-heading">Entrada e limites de risco</div>
-    <div class="settings-grid">
-      <div class="field"><label for="stake">Entrada inicial (USD)</label><input id="stake" inputmode="decimal" type="number" value="0.50" min="0.50" step=".01"></div>
-      <div class="field"><label for="sw">Stop Win (USD)</label><input id="sw" inputmode="decimal" type="number" value="0" min="0" step=".01"></div>
-      <div class="field"><label for="sl">Stop Loss (USD)</label><input id="sl" inputmode="decimal" type="number" value="0" min="0" step=".01"></div>
-    </div>
-    <p class="muted">Um Stop Win ou Stop Loss em US$ 0,00 desativa esse limite. Outros bloqueios de segurança continuam valendo.</p>
-    <div class="divider" style="height:1px;background:#35536a;margin:21px 0"></div>
-    <div class="surface-heading">Martingale (opcional)</div>
-    <label class="checkrow"><input type="checkbox" id="mg" onchange="toggleSettingsMartingale(true)"> Ativar Martingale</label>
-    <div class="settings-grid" id="settingsGaleFields">
-      <div class="field"><label for="mgCount">Quantidade de Martingales</label><select id="mgCount"><option value="1">1 tentativa</option><option value="2">2 tentativas</option><option value="3">3 tentativas</option><option value="4">4 tentativas</option><option value="5">5 tentativas</option></select></div>
-      <div class="field"><label for="mult">Multiplicador Martingale</label><input id="mult" inputmode="decimal" type="text" placeholder="Ex.: 2.3" value="2.0"><small class="setup-fieldhelp">Número ≥ 1.0, até 2 casas decimais</small></div>
-    </div>
-    <div class="surface-heading" style="margin-top:22px">Ciclos no próximo sinal (alternativa ao Martingale)</div>
-    <p class="muted">Selecione somente Martingale ou somente ciclos. Ao escolher ciclos, o próximo valor é aplicado ao próximo sinal confirmado, em qualquer ativo habilitado.</p>
-    <div class="settings-grid" style="margin-top:16px">
-      <div class="field"><label for="cycles">Ciclos adicionais (máximo 5)</label><select id="cycles" onchange="toggleSettingsCycles(true)"><option value="0">Desativado (0)</option><option value="1">1 ciclo</option><option value="2">2 ciclos</option><option value="3">3 ciclos</option><option value="4">4 ciclos</option><option value="5">5 ciclos</option></select></div>
-      <div class="field"><label for="cycleMultiplier">Multiplicador dos ciclos</label><input id="cycleMultiplier" inputmode="decimal" type="text" placeholder="Ex.: 2.5" value="2.0"><small class="setup-fieldhelp">Digite seu fator livremente</small></div>
-    </div>
-    <p class="muted" style="margin-top:15px">Uma vitória reinicia a sequência. A progressão usa apenas resultados liquidados oficialmente na Deriv DEMO; os valores não possuem teto fixo de progressão no NEXORA, mas a Deriv pode rejeitar valores acima do saldo ou dos limites da corretora. Evite progressões agressivas.</p>
-    <div class="actions"><button class="gold" onclick="save()">SALVAR CONFIGURAÇÕES</button></div>
-    <p class="helper" id="configFeedback" role="status"></p>
-  </div>
-</section>
+
 <section id="account" class="hidden">
   <div class="section-heading account-page-heading"><div><div class="eyebrow">PERFIL E ASSINATURA</div><h1>Minha conta</h1><p>Gerencie seu acesso, suas indicações e conheça os planos do NEXORA.</p></div></div>
   <div class="card account-profile-card">
@@ -2278,72 +2210,7 @@ function updateAccessCountdown(){
 setInterval(updateAccessCountdown,1000);
 const money=(n,currency='USD')=>{const value=Number(n);return Number.isFinite(value)?value.toLocaleString('pt-BR',{style:'currency',currency:currency||'USD'}):'—'};
 const safe=(v)=>v===null||v===undefined?'—':String(v);
-function toggleSetupMartingale(changed=false){
- const enabled=$('setupMg').checked;
- if(changed&&enabled)$('setupCycles').value='0';
- $('setupGaleFields').classList.toggle('hidden',!enabled);
- $('setupGales').disabled=!enabled;
- $('setupMultiplier').disabled=!enabled;
-}
-function toggleSetupCycles(changed=false){
- if(changed&&$('setupCycles').value!=='0'){
-  $('setupMg').checked=false;
-  toggleSetupMartingale();
- }
-}
-function toggleSettingsMartingale(changed=false){
- const enabled=$('mg').checked;
- if(changed&&enabled)$('cycles').value='0';
- $('settingsGaleFields').classList.toggle('hidden',!enabled);
- $('mgCount').disabled=!enabled;
- $('mult').disabled=!enabled;
-}
-function toggleSettingsCycles(changed=false){
- if(changed&&$('cycles').value!=='0'){
-  $('mg').checked=false;
-  toggleSettingsMartingale();
- }
-}
-function setupPayload(prefix){
- const initial=prefix==='setup';
- const el=(a,b)=>$(initial?a:b);
- const mg=el('setupMg','mg').checked;
- return {stake:el('setupStake','stake').value,
-   stop_win:el('setupWin','sw').value,stop_loss:el('setupLoss','sl').value,
-   martingale:mg,gale_count:mg?Number(el('setupGales','mgCount').value):0,
-   multiplier:el('setupMultiplier','mult').value,
-   cycles:el('setupCycles','cycles').value,
-   cycle_multiplier:el('setupCycleMultiplier','cycleMultiplier').value};
-}
-async function loadOnboarding(){
- $('setupFeedback').textContent='';
- try{
-   const s=await req('/api/onboarding/config');
-   $('setupRealAvailability').textContent=s.real_enabled?
-     'Disponível na seção Automação mediante confirmação':
-     'Aguardando habilitação do servidor';
-   $('setupStake').value=s.stake;$('setupWin').value=s.stop_win;$('setupLoss').value=s.stop_loss;
-   $('setupMg').checked=Boolean(s.martingale);
-   $('setupGales').value=String(s.gale_count||1);
-   $('setupMultiplier').value=s.multiplier||'2.0';
-   $('setupCycles').value=s.cycles||'0';
-   $('setupCycleMultiplier').value=s.cycle_multiplier||'2.0';
-   toggleSetupMartingale();
- }catch(e){$('setupFeedback').textContent='Não foi possível carregar as configurações: '+e.message}
-}
-async function saveOnboarding(event){
- event.preventDefault();
- const btn=$('setupSubmit');btn.disabled=true;
- $('setupFeedback').textContent='Validando e salvando sua configuração...';
- try{
-   const response=await req('/api/onboarding/config',{method:'POST',
-        headers:{'Content-Type':'application/json'},body:JSON.stringify(setupPayload('setup'))});
-   if(!response.ok)throw Error('Configuração não confirmada');
-   go('dashboard');
- }catch(e){$('setupFeedback').textContent='Não foi possível salvar: '+e.message;fail('')}
- finally{btn.disabled=false}
-}
-const APP_PAGES=new Set(['welcome','setup','dashboard','robot-config','results','settings','account','cataloger']);
+const APP_PAGES=new Set(['welcome','setup','dashboard','manual-dashboard','robot-config','results','account','cataloger']);
 function page(v){if(!APP_PAGES.has(v))v='dashboard';document.body.classList.toggle('marketing-mode',v==='welcome');$('primaryNavigation').classList.toggle('hidden',v==='welcome'||v==='setup');for(const name of APP_PAGES)$(name).classList.toggle('hidden',name!==v);activePage=v;document.querySelectorAll('.nav-link[data-view]').forEach(b=>b.classList.toggle('active',b.dataset.view===v))}
 
 let dailyResultsLoading=false;
@@ -2378,12 +2245,13 @@ async function refreshPanelStatusDisplay(){
  const controller=new AbortController();
  const timeout=setTimeout(()=>controller.abort(),10000);
  try{
-  const status=await req('/api/status',{signal:controller.signal});
+  const status=await req('/api/status?panel_mode=strategies',{signal:controller.signal});
   if(activePage!=='dashboard'||sequence!==dashboardStatusSequence)return;
-  renderScanMonitor(status);
-  const state=status.running?'active':status.interrupted_after_restart?'interrupted':status.auto_buy_enabled?'paused':'unavailable';
+  activePanelMode=status.active_panel_mode||null;
+  const strategyRunning=Boolean(status.running&&activePanelMode==='strategies');
+  renderScanMonitor({...status,running:strategyRunning});
+  const state=strategyRunning?'active':status.interrupted_after_restart?'interrupted':status.auto_buy_enabled?'paused':'unavailable';
   renderPanelHistoryState(state,status.scan_progress);
-  if(manualProfileMode)refreshManualSignalsState().catch(()=>{});
  }catch(error){
   if(activePage==='dashboard'&&sequence===dashboardStatusSequence)renderPanelHistoryState('unknown',null,error?.name!=='AbortError');
   throw error;
@@ -2391,14 +2259,15 @@ async function refreshPanelStatusDisplay(){
 }
 function updateResultsPolling(){
  if(resultsRefreshTimer){clearInterval(resultsRefreshTimer);resultsRefreshTimer=null;}
- if(activePage==='results'||activePage==='dashboard'){
+ if(activePage==='results'||activePage==='dashboard'||activePage==='manual-dashboard'){
    resultsRefreshTimer=setInterval(async()=>{
      if(resultsRequestBusy)return;
      resultsRequestBusy=true;
      try{
        // Status display must not be blocked by a slow history request.
-       const statusTask=activePage==='dashboard'?refreshPanelStatusDisplay():Promise.resolve();
-       const [historyResult,statusResult]=await Promise.allSettled([loadDemoOrders(),statusTask]);
+       const statusTask=activePage==='dashboard'?refreshPanelStatusDisplay():activePage==='manual-dashboard'?Promise.all([refreshManualPanelStatus(),refreshManualSignalsState()]):Promise.resolve();
+       const historyTask=activePage==='manual-dashboard'?Promise.resolve():loadDemoOrders();
+       const [historyResult,statusResult]=await Promise.allSettled([historyTask,statusTask]);
        if(historyResult.status==='rejected')throw historyResult.reason;
        if(statusResult.status==='rejected')throw statusResult.reason;
        if(activePage==='results')$('resultsLiveStatus').textContent='Atualização automática 🟢';
@@ -2406,12 +2275,12 @@ function updateResultsPolling(){
        if(activePage==='results')$('resultsLiveStatus').textContent='○ Tentando sincronizar com a Deriv...';
        if(activePage==='dashboard')$('dashRealtimeSynced').textContent='Tentando sincronizar operações...';
      }finally{resultsRequestBusy=false;}
-   },activePage==='dashboard'?7000:3000);
+   },activePage==='dashboard'||activePage==='manual-dashboard'?7000:3000);
  }
 }
-function go(v){page(v);updateResultsPolling();window.scrollTo({top:0,behavior:'smooth'});if(v==='setup')loadOnboarding();if(v==='dashboard'){refreshDashboard();loadDemoOrders().catch(()=>{});loadDailyResults().catch(()=>{});loadManualSignalsState();}if(v==='robot-config'){initAutomationWizard();setAutomationWizardStep(operationMode()==='manual'?autoWizardStep:2);loadAutomationProfile();}if(v==='results'){loadDemoOrders();}if(v==='cataloger')loadCatalogerAssets();if(v==='account'){loadRobotAccess();loadBillingPlans()}if(v==='settings')loadSettings()}
+function go(v,panelMode){if(v==='robot-config'){setAutomationMode(panelMode||'strategies')}page(v);updateResultsPolling();window.scrollTo({top:0,behavior:'smooth'});if(v==='dashboard'){refreshDashboard();loadDemoOrders().catch(()=>{});loadDailyResults().catch(()=>{});}if(v==='manual-dashboard'){refreshManualPanelStatus();loadManualSignalsState();}if(v==='robot-config'){initAutomationWizard();setAutomationWizardStep(2);loadAutomationProfile();}if(v==='results'){loadDemoOrders();}if(v==='cataloger')loadCatalogerAssets();if(v==='account'){loadRobotAccess();loadBillingPlans()}}
 function fail(msg){$('error').textContent=msg||''}
-async function req(path,opts={}){const r=await fetch(path,{credentials:'same-origin',...opts});let data;try{data=await r.json()}catch{throw Error('Resposta inválida do servidor')}if(!r.ok)throw Error(data.detail||'Falha na conexão');return data}
+async function req(path,opts={}){const r=await fetch(path,{credentials:'same-origin',...opts});let data;try{data=await r.json()}catch{throw Error('Resposta inválida do servidor')}if(!r.ok){const error=Error(data.detail||'Falha na conexão');error.status=r.status;throw error}return data}
 function updateCatalogerMarketControls(){
  const market=$('catalogerMarket').value,granularity=$('catalogerGranularity'),lookback=$('catalogerLookback');
  if(market==='forex'){
@@ -2635,7 +2504,6 @@ async function init(){
     refreshDashboard();
     loadDemoOrders().catch(()=>{});
     loadDailyResults().catch(()=>{});
-    loadManualSignalsState();
     updateResultsPolling();
   }
   refreshTimer=setInterval(()=>{
@@ -2655,7 +2523,7 @@ function showRobotNotice(reason){
 async function loadRiskSession(){
  const element=$('riskSessionMetric');
  try{
-   const result=await req('/api/demo/risk-session');
+   const result=await req('/api/demo/risk-session?panel_mode=strategies');
    const n=Number(result.pnl);
    element.textContent='Lucro/prejuízo da sessão DEMO: '+(Number.isFinite(n)?money(n,'USD'):'indisponível')+' · Não é o saldo da conta · Histórico preservado';
  }catch(e){element.textContent='Resultado da sessão DEMO indisponível no momento'}
@@ -2670,7 +2538,7 @@ Só é permitido sem contratos pendentes. Deseja continuar?`;
  if(!window.confirm(message))return;
  try{
    await req('/api/demo/risk-session/reset',{method:'POST',headers:{'Content-Type':'application/json'},
-     body:JSON.stringify({confirm:'RESET_DEMO_RISK_SESSION'})});
+     body:JSON.stringify({confirm:'RESET_DEMO_RISK_SESSION',panel_mode:'strategies'})});
    await refreshDashboard();
    showRobotNotice('Sessão de risco DEMO reiniciada. Histórico e saldo preservados. Configure os limites antes de ligar o robô.');
  }catch(e){showRobotNotice('Não foi possível reiniciar a sessão: '+e.message)}
@@ -2678,7 +2546,7 @@ Só é permitido sem contratos pendentes. Deseja continuar?`;
 async function loadAutopilotReadiness(){
  if(robotRunning){showRobotNotice('');return}
  try{
-   const info=await req('/api/autopilot/readiness');
+   const info=await req('/api/autopilot/readiness?panel_mode=strategies');
    // Status may have changed while readiness was loading.
    if(robotRunning){showRobotNotice('');return}
    showRobotNotice(info.ready?'':info.reason);
@@ -2999,24 +2867,26 @@ async function refreshDashboard(){
  try{
    // Fetch authoritative robot state FIRST. Other panel requests may fail
    // independently and must never make an active robot look stopped.
-   const status=await req('/api/status');
+   const status=await req('/api/status?panel_mode=strategies');
    // Ignore an older response that arrived after a newer status request.
    if(sequence!==dashboardStatusSequence)return null;
    robotStatusConfirmed=true;
-   robotRunning=Boolean(status.running);
+   activePanelMode=status.active_panel_mode||null;
+   robotRunning=Boolean(status.running&&activePanelMode==='strategies');
    const previousHistoryMode=robotConfiguredMode;
    robotConfiguredMode=status.configured_account_mode==='real'?'real':'demo';
    if(previousHistoryMode!==robotConfiguredMode)renderPanelHistory(null);
 
-   renderScanMonitor(status);
-   renderRobotEasyOverview(status);
-   renderNxNeoTopCommand(status);
-   renderNxCalmActivity(status);
-   renderNxNeoScannerChart(status);
+   renderScanMonitor({...status,running:robotRunning});
+   renderRobotEasyOverview({...status,running:robotRunning});
+   const strategyStatus={...status,running:robotRunning};
+   renderNxNeoTopCommand(strategyStatus);
+   renderNxCalmActivity(strategyStatus);
+   renderNxNeoScannerChart(strategyStatus);
    const available=Boolean(status.auto_buy_enabled);
-   $('robotState').textContent=robotRunning?'ATIVO':status.interrupted_after_restart?'INTERROMPIDO':available?'PRONTO':'INDISPONÍVEL';
+   $('robotState').textContent=robotRunning?'ESTRATÉGIAS ATIVO':activePanelMode==='manual'?'NEXORA MANUAL ATIVO':status.running&&!activePanelMode?'ATIVO · PAINEL NÃO IDENTIFICADO':status.interrupted_after_restart?'INTERROMPIDO':available?'PRONTO':'INDISPONÍVEL';
    $('robotState').dataset.visualState=robotRunning?'active':status.interrupted_after_restart?'interrupted':available?'ready':'unavailable';
-   $('robotMessage').textContent=status.reason||'Aguardando oportunidades no mercado DEMO';
+   $('robotMessage').textContent=activePanelMode==='manual'?'Nexora Manual está ativo. Estratégias não pode operar simultaneamente.':status.running&&!activePanelMode?'Execução ativa; painel de origem não confirmado.':'Nexora Estratégias · '+(status.reason||'Aguardando oportunidades no mercado');
    const liveCard=$('robotLiveCard');
    liveCard.classList.toggle('offline',!robotRunning);
    $('robotLiveLabel').textContent=robotRunning?'ROBÔ ONLINE':'ROBÔ OFFLINE';
@@ -3040,9 +2910,9 @@ async function refreshDashboard(){
    $('volScheduleStatus').textContent=forexSelected?'EM ESPERA':'SELECIONADO';
    $('forexScheduleDot').classList.toggle('active',forexSelected);
    $('volScheduleDot').classList.toggle('active',!forexSelected);
-   $('robotButton').textContent=robotRunning?'DESLIGAR ROBÔ':'LIGAR ROBÔ';
-   $('robotButton').dataset.visualState=robotRunning?'active':'inactive';
-   $('robotButton').disabled=(!robotRunning&&!available)||$('robotButton').dataset.commandPending==='true';
+   $('robotButton').textContent=robotRunning?'DESLIGAR NEXORA ESTRATÉGIAS':activePanelMode==='manual'?'NEXORA MANUAL ESTÁ ATIVO':status.running&&!activePanelMode?'ESTADO DO PAINEL ATIVO NÃO CONFIRMADO':'LIGAR NEXORA ESTRATÉGIAS';
+   $('robotButton').dataset.visualState=robotRunning?'active':activePanelMode==='manual'?'blocked':'inactive';
+   $('robotButton').disabled=(!robotRunning&&(!available||activePanelMode==='manual'||(status.running&&!activePanelMode)))||$('robotButton').dataset.commandPending==='true';
    $('robotButton').setAttribute('aria-disabled',String($('robotButton').disabled));
    $('robotButton').style.background=robotRunning?'linear-gradient(135deg,#fa9b9d,#dc5269)':'';
    if(robotRunning)showRobotNotice('');
@@ -3136,6 +3006,7 @@ function reviewAmount(value){
 function askRobotStartConfirmation(profile,risk,catalogue){
  if(robotStartDialogResolver)return Promise.resolve(false);
  const box=$('robotStartDialogDetails');box.replaceChildren();
+ $('robotStartDialogTitle').textContent='Conferir ativação · Nexora Estratégias';
  $('robotStartDialogWarning').textContent=profile.account_mode==='real'?
   'ATENÇÃO: ao confirmar, o NEXORA poderá comprar contratos com DINHEIRO REAL da conta Deriv selecionada. Há risco de perder capital, inclusive antes de uma proteção interromper novas entradas. Nenhuma estratégia garante lucro.':
   'A ativação autoriza novas operações na conta DEMO conforme os parâmetros salvos. Nenhuma estratégia garante resultados.';
@@ -3175,7 +3046,6 @@ function askRobotStartConfirmation(profile,risk,catalogue){
  return new Promise(resolve=>{robotStartDialogResolver=resolve});
 }
 async function toggleRobot(){
- if(typeof manualProfileMode!=='undefined'&&manualProfileMode){showRobotNotice('Este perfil usa Nexora Manual. Use o card de sinais no painel; o controle de Estratégias não inicia esta fila.');return}
  const button=$('robotButton');
  if(button.dataset.commandPending==='true')return;
  let wasRunning=robotRunning;
@@ -3186,9 +3056,15 @@ async function toggleRobot(){
  button.disabled=true;
  button.textContent='CONFERINDO ESTADO DO ROBÔ…';
  try{
-  const currentStatus=await req('/api/status');
+  const currentStatus=await req('/api/status?panel_mode=strategies');
   robotStatusConfirmed=true;
-  wasRunning=Boolean(currentStatus.running);
+  activePanelMode=currentStatus.active_panel_mode||null;
+  if(activePanelMode==='manual'||(currentStatus.running&&!activePanelMode)){
+   button.dataset.commandPending='false';button.disabled=true;
+   showRobotNotice(activePanelMode==='manual'?'Nexora Manual está ativo. Para evitar sobreposição, Nexora Estratégias não pode ser iniciado nem desligado por este painel.':'Há uma execução ativa, mas o servidor não identificou o painel. Nenhuma alteração foi enviada.');
+   return;
+  }
+  wasRunning=Boolean(currentStatus.running&&activePanelMode==='strategies');
   robotRunning=wasRunning;
   if(wasRunning!==displayedRunning){
    button.dataset.commandPending='false';
@@ -3208,9 +3084,8 @@ async function toggleRobot(){
  if(!wasRunning)button.textContent='CONFERINDO CONFIGURAÇÕES…';
  if(!wasRunning){
   try{
-   const [profile,risk]=await Promise.all([
-    req('/api/automation/profile'),req('/api/onboarding/config')
-   ]);
+   const profile=await req('/api/automation/profile?panel_mode=strategies');
+   const risk=profile;
    if(!profile.configured){
     showRobotNotice('Configure e salve sua automação antes de ligar o robô.');
     return;
@@ -3261,24 +3136,30 @@ async function toggleRobot(){
  button.disabled=true;
  let confirmed=false;
  try{
+   if(!wasRunning&&activePanelMode==='manual')throw Error('Nexora Manual está ativo. Desligue-o no painel Nexora Manual antes de iniciar Nexora Estratégias.');
    await req(wasRunning?'/api/autopilot/stop':'/api/autopilot/start',
-     wasRunning?{method:'POST'}:{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({confirm:pendingAccountMode==='real'?'START_REAL_AUTOPILOT':'START_DEMO_AUTOPILOT'})});
+     wasRunning?{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({panel_mode:'strategies'})}:
+      {method:'POST',headers:{'Content-Type':'application/json'},
+       body:JSON.stringify({panel_mode:'strategies',confirm:pendingAccountMode==='real'?'START_REAL_AUTOPILOT':'START_DEMO_AUTOPILOT'})});
    confirmed=true;
  }catch(e){
    // An HTTP refusal (e.g. 409 Stop Loss) is explicit. An interrupted fetch
    // is ambiguous: the server might have accepted the command already.
    const networkError=e instanceof TypeError || /failed to fetch|networkerror|load failed/i.test(e.message||'');
    if(!networkError){
-     const status=await refreshDashboard();
-     if(status && status.running!==wasRunning){showRobotNotice('')}
-     else showRobotNotice((wasRunning?'Não foi possível desligar o robô: ':'Não foi possível ligar o robô: ')+e.message);
+     if(e.status===409){showRobotNotice(e.message)}
+     else{
+      const status=await refreshDashboard();
+      const strategyStillRunning=Boolean(status&&status.running&&status.active_panel_mode==='strategies');
+      if(status && strategyStillRunning!==wasRunning){showRobotNotice('')}
+      else showRobotNotice(e.message.includes('está ativo')?e.message:(wasRunning?'Não foi possível desligar Nexora Estratégias: ':'Não foi possível ligar Nexora Estratégias: ')+e.message);
+     }
    }else{
      $('feedState').textContent='○ Conexão instável. Conferindo o estado do AutoPilot, sem repetir o comando...';
      // Read-only checks. Never retry the POST, which could change trading state.
      for(let attempt=0;attempt<4;attempt++){
        const status=await refreshDashboard();
-       if(status && status.running!==wasRunning){confirmed=true;break}
+       if(status && Boolean(status.running&&status.active_panel_mode==='strategies')!==wasRunning){confirmed=true;break}
        if(attempt<3)await new Promise(resolve=>setTimeout(resolve,1500));
      }
      if(!confirmed){
@@ -3662,20 +3543,22 @@ function renderOrders(){
 }
 let automationAssets=[],automationSelected=new Set(),automationProfileSaved=false,automationMarketRequest=0;
 let manualProfileMode=false;
+let configurationPanelMode='strategies';
+let activePanelMode=null;
 
 let autoWizardStep=2,autoWizardReady=false,autoPresetMode='custom',autoPresetApplying=false;
-const operationMode=()=>document.querySelector('input[name="operationMode"]:checked')?.value==='manual'?'manual':'strategies';
+const operationMode=()=>configurationPanelMode==='manual'?'manual':'strategies';
 function setAutomationMode(mode){
- const selected=mode==='manual'?'manual':'strategies';
- const radio=document.querySelector('input[name="operationMode"][value="'+selected+'"]');if(radio)radio.checked=true;
- $('robot-config').classList.toggle('manual-mode',selected==='manual');
- $('operationModeHelp').textContent=selected==='manual'?
-  'Nexora Manual: conta e proteções continuam iguais; mercado e sinais serão definidos no painel, sem seleção antecipada de ativos ou estratégia.':
-  'Nexora IA Estratégias mantém o assistente atual. A conta e as proteções permanecem configuráveis nas duas modalidades.';
+ configurationPanelMode=mode==='manual'?'manual':'strategies';
+ const manual=configurationPanelMode==='manual';
+ $('robot-config').classList.toggle('manual-mode',manual);
+ $('configPanelTitle').textContent=manual?'Nexora Manual · configuração completa':'Nexora Estratégias · configuração completa';
+ $('operationModeHelp').textContent=manual?
+  'Este perfil pertence somente ao Nexora Manual. Conta, entrada, stops e progressões são independentes; mercado, ativos e estratégia não são exigidos.':
+  'Este perfil pertence somente ao Nexora Estratégias e inclui conta, mercado, ativos, estratégia e proteções. O perfil Manual não será alterado.';
  if(autoWizardReady)setAutomationWizardStep(autoWizardStep);
  automationProfileSaved=false;
 }
-document.querySelectorAll('input[name="operationMode"]').forEach(radio=>radio.addEventListener('change',()=>setAutomationMode(radio.value)));
 function setAutomationPresetMode(mode,notice){
  autoPresetMode=mode;
  document.querySelectorAll('.auto-preset-button').forEach(button=>{
@@ -3909,7 +3792,7 @@ function validateAutomationSettings(){
  check('autoRealAccount',automationRadio('autoMode')==='real'&&!$('autoRealAccount').value,'Selecione sua conta real vinculada.');
  for(const [id,min,max,label] of [
   ['autoStake',0.5,Infinity,'Valor da entrada'],['autoWin',0,1000000,'Stop Win'],
-  ['autoLoss',0,1000000,'Stop Loss'],['autoPayout',0,200,'Payout mínimo']
+  ['autoLoss',0,1000000,'Stop Loss'],...(operationMode()==='manual'?[]:[['autoPayout',0,200,'Payout mínimo']])
  ]){
   const field=$(id),value=Number(field.value);
   const missing=field.value.trim()==='';
@@ -3957,14 +3840,19 @@ function syncAutomationStrategyChoices(){
   automationProfileSaved=false;
  }
  const fixed=isForexExperimentalStrategy(automationRadio('autoStrategy'));
+ const expiry=$('autoExpiry');
+ if(expiry){
+  if(fixed)expiry.value='15';
+  expiry.disabled=fixed;
+ }
  $('forexStrategyDisclosure').hidden=!eligible;
  const real=automationRadio('autoMode')==='real';
- $('autoExpiryLabel').textContent=fixed?'Expiração fixa da estratégia':
-  real?'Expiração automática · conta REAL':'Expiração automática inteligente';
+ $('autoExpiryLabel').textContent=fixed?'Expiração fixa da estratégia':'Expiração';
  $('autoExpiryHelp').textContent=fixed
   ?'Esta estratégia usa contrato de 15 minutos (M15). A Deriv ainda precisa aceitar a proposta; indisponibilidade ou payout abaixo do mínimo impedem a entrada.'
-  :real?'Em REAL, o executor tenta a primeira duração indicada pelo sinal (M1 quando automático). A Deriv ainda valida a proposta e o payout mínimo; se não atender aos limites, não opera.'
-  :'O NEXORA compara M1, M3, M5 e M15 disponíveis na Deriv após confirmar um sinal e escolhe a proposta que atende ao payout mínimo. Sem proposta válida, não opera.';
+  :expiry?.value==='0'
+   ?'No modo automático, o NEXORA compara as durações disponíveis e seleciona uma proposta que atenda ao payout mínimo. Sem proposta válida, não opera.'
+   :'A duração selecionada será verificada pela Deriv e pelo payout mínimo antes de qualquer entrada. Sem proposta válida, não opera.';
 }
 async function changeAutomationAccount(selectedAccount){
  const isReal=automationRadio('autoMode')==='real';
@@ -4010,7 +3898,9 @@ document.querySelectorAll('input[name="autoMode"]').forEach(x=>x.addEventListene
 document.querySelectorAll('input[name="autoStrategy"]').forEach(x=>x.addEventListener('change',()=>{
  automationProfileSaved=false;syncAutomationStrategyChoices();renderAutomationSummary();
 }));
-['autoStake','autoWin','autoLoss','autoDirection','autoPayout'].forEach(id=>$(id)?.addEventListener('change',renderAutomationSummary));
+['autoStake','autoWin','autoLoss','autoDirection','autoPayout','autoExpiry'].forEach(id=>$(id)?.addEventListener('change',()=>{
+ automationProfileSaved=false;renderAutomationSummary();syncAutomationStrategyChoices();
+}));
 
 function toggleAutomationProgressions(changed=''){
  if(changed==='martingale'&&$('autoMg').checked)$('autoCycles').value='0';
@@ -4070,7 +3960,7 @@ function renderAutomationSummary(){
   'Mercado: '+(marketNames[market]||'Não confirmado'),
   'Ativos: '+automationSelected.size+' selecionado(s)',
   'Análise: '+(strategyNames[automationRadio('autoStrategy')]||'Não confirmada'),
-  'Direção: '+$('autoDirection').value+' · duração: '+(isForexExperimentalStrategy(automationRadio('autoStrategy'))?'fixa M15 (15 minutos)':mode==='real'?'REAL: primeira duração do sinal (M1 se automático)':'automática (M1, M3, M5 ou M15)'),
+  'Direção: '+$('autoDirection').value+' · duração: '+(isForexExperimentalStrategy(automationRadio('autoStrategy'))?'fixa M15 (15 minutos)':$('autoExpiry').value==='0'?'automática conforme payout':'M'+$('autoExpiry').value+' ('+$('autoExpiry').value+' minutos)'),
   'Valor por entrada: US$ '+$('autoStake').value,
   'Limites registrados: Stop Win US$ '+$('autoWin').value+' · Stop Loss US$ '+$('autoLoss').value,
   'Payout mínimo informado: '+$('autoPayout').value+'%',
@@ -4080,22 +3970,21 @@ function renderAutomationSummary(){
 async function loadAutomationProfile(){
  const feedback=$('autoConfigFeedback');
  try{
-  const [profile,risk]=await Promise.all([
-   req('/api/automation/profile'),req('/api/onboarding/config')
-  ]);
+  const panelMode=configurationPanelMode;
+  const profile=await req('/api/automation/profile?panel_mode='+encodeURIComponent(panelMode));
   setAutomationRadio('autoMode',profile.account_mode||'demo');
-  setAutomationMode(profile.operation_mode||'strategies');
   await changeAutomationAccount(profile.real_account_id);
+  $('autoExpiry').value=String(profile.expiry_minutes??0);
   $('autoPayout').value=String(profile.min_payout_pct??88);
   $('autoDirection').value=profile.direction||'AUTO';
-  $('autoStake').value=risk.stake;
-  $('autoWin').value=risk.stop_win;
-  $('autoLoss').value=risk.stop_loss;
-  $('autoMg').checked=Boolean(risk.martingale);
-  $('autoGales').value=String(risk.gale_count||1);
-  $('autoMultiplier').value=String(risk.multiplier||'2.00');
-  $('autoCycles').value=String(risk.cycles||'0');
-  $('autoCycleMultiplier').value=String(risk.cycle_multiplier||'2.00');
+  $('autoStake').value=profile.stake??'0.50';
+  $('autoWin').value=profile.stop_win??'0.00';
+  $('autoLoss').value=profile.stop_loss??'0.00';
+  $('autoMg').checked=Boolean(profile.martingale);
+  $('autoGales').value=String(profile.gale_count||1);
+  $('autoMultiplier').value=String(profile.multiplier||'2.00');
+  $('autoCycles').value=String(profile.cycles||'0');
+  $('autoCycleMultiplier').value=String(profile.cycle_multiplier||'2.00');
   if(operationMode()==='manual'){
    automationAssets=[];automationSelected.clear();renderAutomationAssets();toggleAutomationProgressions();
    automationProfileSaved=Boolean(profile.configured);
@@ -4126,35 +4015,35 @@ async function loadAutomationProfile(){
 }
 async function saveAutomationProfile(){
  const feedback=$('autoConfigFeedback'),button=$('autoSaveButton');
- if(robotRunning){feedback.textContent='Desligue o robô antes de editar sua automação.';return}
  if(!validateAutomationSettings())return;
+ try{
+  const status=await req('/api/status?panel_mode='+encodeURIComponent(configurationPanelMode));activePanelMode=status.active_panel_mode||null;
+  if(status.running||activePanelMode){
+   const activeName=activePanelMode==='manual'?'Nexora Manual':activePanelMode==='strategies'?'Nexora Estratégias':'um painel';
+   feedback.textContent='Desligue '+activeName+' antes de editar qualquer configuração.';return;
+  }
+ }catch(error){feedback.textContent='Estado dos painéis não confirmado. A configuração não foi alterada.';return}
  const stake=Number($('autoStake').value),win=Number($('autoWin').value),loss=Number($('autoLoss').value);
  const payout=Number($('autoPayout').value);
  button.disabled=true;feedback.textContent='Validando e salvando suas preferências...';
  try{
-  const manual=operationMode()==='manual';
-  const profile={operation_mode:manual?'manual':'strategies',account_mode:automationRadio('autoMode'),market:manual?'volatility':automationRadio('autoMarket'),
+  const manual=operationMode()==='manual',panelMode=configurationPanelMode;
+  const mg=$('autoMg').checked,cycles=$('autoCycles').value;
+  const profile={panel_mode:panelMode,operation_mode:panelMode,account_mode:automationRadio('autoMode'),market:manual?'volatility':automationRadio('autoMarket'),
    symbols:manual?[]:[...automationSelected],strategy:manual?'manual':automationRadio('autoStrategy'),
-   expiry_minutes:0,news_filter:false,
-   news_minutes_before:30,news_minutes_after:30,
-   max_daily_orders:0,
-   indicators:[],
-   direction:$('autoDirection').value,
-   min_payout_pct:Number($('autoPayout').value),
-   real_account_id:automationRadio('autoMode')==='real'?$('autoRealAccount').value:null,
-   preset_mode:autoPresetMode};
+   expiry_minutes:manual?0:Number($('autoExpiry').value),news_filter:false,news_minutes_before:30,news_minutes_after:30,
+   max_daily_orders:0,indicators:[],direction:manual?'AUTO':$('autoDirection').value,
+   min_payout_pct:manual?0:Number($('autoPayout').value),
+   real_account_id:automationRadio('autoMode')==='real'?$('autoRealAccount').value:null,preset_mode:autoPresetMode,
+   stake:String(stake),stop_win:String(win),stop_loss:String(loss),martingale:mg,
+   gale_count:mg?Number($('autoGales').value):0,multiplier:mg?$('autoMultiplier').value:'2.00',
+   cycles:cycles,cycle_multiplier:cycles!=='0'?$('autoCycleMultiplier').value:'2.00'};
   await req('/api/automation/profile',{method:'POST',headers:{'Content-Type':'application/json'},
    body:JSON.stringify(profile)});
-  const mg=$('autoMg').checked,cycles=$('autoCycles').value;
-  const risk={stake:String(stake),stop_win:String(win),stop_loss:String(loss),
-   martingale:mg,gale_count:mg?Number($('autoGales').value):0,
-   multiplier:mg?$('autoMultiplier').value:'2.00',
-   cycles:cycles,cycle_multiplier:cycles!=='0'?$('autoCycleMultiplier').value:'2.00'};
-  await req('/api/onboarding/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(risk)});
   automationProfileSaved=true;
   feedback.textContent='Configuração salva. Preferências registradas.';
   renderAutomationSummary();fail('');
-  go('dashboard');
+  go(panelMode==='manual'?'manual-dashboard':'dashboard');
  }catch(e){automationProfileSaved=false;feedback.textContent='Não foi possível concluir a configuração: '+e.message}
  finally{button.disabled=false}
 }
@@ -4212,7 +4101,7 @@ function renderManualQueue(state){
  $('manualPauseButton').hidden=!active;$('manualPauseButton').textContent='DESLIGAR ROBÔ';
  $('manualCancelButton').hidden=cancelPending||pending===0||listComplete;
  $('manualPauseButton').disabled=manualSignalsBusy;$('manualCancelButton').disabled=manualSignalsBusy;
- $('manualScheduleButton').disabled=Boolean(manualSignalsBusy||cancelPending||(!active&&pending>0)||!manualSignalsPreview||!$('manualScheduleConfirm').checked);
+ $('manualScheduleButton').disabled=Boolean(manualSignalsBusy||cancelPending||(!active&&pending>0)||activePanelMode==='strategies'||!manualSignalsPreview||!$('manualScheduleConfirm').checked);
  if(cancelPending&&state?.lifecycle_message)$('manualSignalsFeedback').textContent=state.lifecycle_message;
  if(!rows.length){const empty=document.createElement('p');empty.className='muted';
   if(cancelPending)empty.textContent='Desagendamento pendente; a operação atual continuará até a liquidação oficial.';
@@ -4265,16 +4154,26 @@ function renderManualPreview(result){
  $('manualScheduleButton').disabled=valid.length===0||valid.length>remaining;
  if(valid.length>remaining){const note=document.createElement('p');note.textContent='A lista tem mais sinais válidos do que vagas disponíveis agora. Divida-a em um slot menor ou aguarde liberações e valide novamente.';note.className='manual-signals-feedback-error';box.append(note)}
 }
+async function refreshManualPanelStatus(){
+ try{
+  const status=await req('/api/status?panel_mode=manual');activePanelMode=status.active_panel_mode||null;
+  $('manualPanelStatus').textContent=activePanelMode==='manual'?'Nexora Manual está ativo. Nexora Estratégias permanece bloqueado.':activePanelMode==='strategies'?'Nexora Estratégias está ativo. Nexora Manual não pode iniciar nem agendar até a execução terminar.':'Nenhum painel está ativo.';
+  $('manualScheduleButton').disabled=activePanelMode==='strategies'||!manualSignalsPreview||!$('manualScheduleConfirm').checked;
+  $('manualPanelConflict').hidden=activePanelMode!=='strategies';
+  $('manualPanelConflict').textContent=activePanelMode==='strategies'?'Nexora Estratégias está ativo. Desligue-o no painel Nexora Estratégias antes de iniciar ou agendar no Nexora Manual.':'';
+  return status;
+ }catch(error){$('manualPanelStatus').textContent='Estado dos painéis não confirmado. A ativação e o agendamento permanecem bloqueados até atualizar.';throw error}
+}
 async function refreshManualSignalsState(){
  const state=await req(MANUAL_SIGNAL_API.state);renderManualQueue(state);return state;
 }
 async function loadManualSignalsState(){
  const card=$('manualSignalsCard');if(!card)return;
  try{
-  const profile=await req('/api/automation/profile');
-  manualSignalsProfile=profile;manualProfileMode=profile.operation_mode==='manual';
-  card.classList.toggle('hidden',!manualProfileMode);$('dashboard').classList.toggle('manual-dashboard',manualProfileMode);
-  if(!manualProfileMode)return;
+  const profile=await req('/api/automation/profile?panel_mode=manual');
+  manualSignalsProfile=profile;manualProfileMode=true;
+  card.classList.remove('hidden');
+  if(!profile.configured)$('manualSignalsFeedback').textContent='Configure sua conta e proteções do Nexora Manual antes de agendar sinais.';
   try{await refreshManualSignalsState()}
   catch(error){
    manualSignalsCurrentState=null;$('manualSignalsFeedback').textContent='Estado da fila não confirmado. Prévia permanece somente informativa; confirme o estado antes de qualquer ativação.';
@@ -4283,7 +4182,7 @@ async function loadManualSignalsState(){
   }
  }catch(error){
   // Profile read errors fail closed: no Manual action or broker request is offered.
-  card.classList.add('hidden');$('dashboard').classList.remove('manual-dashboard');
+  card.classList.add('hidden');
  }
 }
 async function previewManualSignals(){
@@ -4300,8 +4199,11 @@ async function previewManualSignals(){
 }
 async function scheduleManualSignals(){
  if(manualSignalsBusy||!manualSignalsPreview||!$('manualScheduleConfirm').checked)return;
+ try{await refreshManualPanelStatus()}catch(_){$('manualSignalsFeedback').textContent='Estado dos painéis não confirmado. Nenhuma ativação foi enviada.';return}
+ if(activePanelMode==='strategies'){$('manualSignalsFeedback').textContent='Nexora Estratégias está ativo. Desligue-o no painel Nexora Estratégias antes de ativar ou agendar Nexora Manual.';return}
  if(!manualSignalsCurrentState){$('manualSignalsFeedback').textContent='Atualize o estado da fila antes de agendar ou ativar.';return}
  if(manualSignalsPreview.payload.text!==$('manualSignalText').value||manualSignalsPreview.payload.market!==$('manualMarket').value||manualSignalsPreview.payload.day!==$('manualDay').value||manualSignalsPreview.payload.timezone_name!==$('manualTimezone').value){invalidateManualPreview();$('manualSignalsFeedback').textContent='A lista mudou. Gere uma nova prévia antes de confirmar.';return}
+ if(!manualSignalsProfile?.configured){$('manualSignalsFeedback').textContent='Configure e salve conta e proteções do Nexora Manual antes de agendar.';return}
  const amount=manualSignalsPreview.validCount;
  const account=manualSignalsProfile?.account_mode==='real'?'REAL · dinheiro da conta Deriv':'Treinamento · saldo fictício';
  const current=manualSignalsCurrentState||{};
@@ -4318,7 +4220,7 @@ async function scheduleManualSignals(){
   const idempotency=await manualIdempotencyKey(manualSignalsPreview.payload);
   if(!active){
    const startConfirm=manualSignalsProfile?.account_mode==='real'?'START_REAL_AUTOPILOT':'START_DEMO_AUTOPILOT';
-   await req('/api/autopilot/start',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({confirm:startConfirm})});
+   await req('/api/autopilot/start',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({panel_mode:'manual',confirm:startConfirm})});
    startedHere=true;
   }
   const result=await req(MANUAL_SIGNAL_API.confirm,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({...manualSignalsPreview.payload,idempotency_key:idempotency.key})});
@@ -4332,7 +4234,7 @@ async function scheduleManualSignals(){
   }
   $('manualScheduleConfirm').checked=false;invalidateManualPreview();await refreshManualSignalsState();
  }catch(error){
-  if(startedHere&&!confirmationCompleted){try{await req('/api/autopilot/stop',{method:'POST'})}catch(_){};try{await refreshManualSignalsState()}catch(_){}}
+  if(startedHere&&!confirmationCompleted){try{await req('/api/autopilot/stop',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({panel_mode:'manual'})})}catch(_){};try{await refreshManualSignalsState()}catch(_){}}
   $('manualSignalsFeedback').textContent=confirmationCompleted?
    'Agendamento confirmado e persistido, mas não foi possível atualizar o estado da fila: '+error.message+' · consulte a fila novamente antes de enviar outra lista.':
    'Não foi possível confirmar o agendamento: '+error.message+(startedHere?' · a ativação iniciada por esta confirmação foi pausada; a fila não é apagada. Confira o estado antes de tentar novamente.':'')
@@ -4355,33 +4257,10 @@ async function pauseManualSignals(){
  if(!window.confirm('Desligar o robô Nexora Manual? Sinais pendentes serão preservados na fila e contratos já enviados continuarão na Deriv; nada será apagado ou cancelado.'))return;
  manualSignalsBusy=true;$('manualPauseButton').disabled=true;$('manualSignalsFeedback').textContent='Desligando o robô sem apagar a fila nem cancelar contratos…';
  try{
-  const result=await req('/api/autopilot/stop',{method:'POST'});
+  const result=await req('/api/autopilot/stop',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({panel_mode:'manual'})});
   $('manualSignalsFeedback').textContent=result.message||'Robô desligado. Os sinais pendentes permanecem na fila.';await refreshManualSignalsState();
  }catch(error){$('manualSignalsFeedback').textContent='Não foi possível confirmar a pausa: '+error.message}
  finally{manualSignalsBusy=false;$('manualPauseButton').disabled=false}
-}
-async function loadSettings(){
- $('configFeedback').textContent='';
- try{
-   const s=await req('/api/onboarding/config');
-   $('stake').value=s.stake;$('sw').value=s.stop_win;$('sl').value=s.stop_loss;
-   $('mg').checked=Boolean(s.martingale);
-   $('mgCount').value=String(s.gale_count||1);
-   $('mult').value=s.multiplier||'2.0';
-   $('cycles').value=s.cycles||'0';
-   $('cycleMultiplier').value=s.cycle_multiplier||'2.0';
-   toggleSettingsMartingale();
- }catch(e){$('configFeedback').textContent='Configurações não carregadas: '+e.message}
-}
-async function save(){
- $('configFeedback').textContent='Validando...';
- try{
-  const response=await req('/api/onboarding/config',{method:'POST',
-     headers:{'Content-Type':'application/json'},body:JSON.stringify(setupPayload('settings'))});
-  if(!response.ok)throw Error('Resposta não confirmada');
-  $('configFeedback').textContent='Configurações validadas e salvas. Alterações valerão na próxima ativação do robô.';
-  fail('');
- }catch(e){$('configFeedback').textContent='Não foi possível salvar: '+e.message;fail('')}
 }
 async function logout(){try{await req('/api/logout',{method:'POST'});if(refreshTimer)clearInterval(refreshTimer);if(resultsRefreshTimer)clearInterval(resultsRefreshTimer);page('welcome');demoOrders=[];demoBalance=null;fail('')}catch(e){fail(e.message)}}
 

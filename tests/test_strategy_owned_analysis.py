@@ -45,6 +45,7 @@ def test_profile_response_hides_legacy_indicator_choices():
         market="volatility",
         symbols_json='["R_100"]',
         strategy="pulso_v2",
+        expiry_minutes=0,
         news_filter=False,
         news_minutes_before=30,
         news_minutes_after=30,
@@ -67,6 +68,7 @@ def test_saving_legacy_indicator_selections_clears_persisted_values(monkeypatch)
         symbols_json='["R_100"]',
         strategy="pulso_v2",
         expiry_minutes=5,
+        active_panel_mode=None,
         news_filter=False,
         news_minutes_before=30,
         news_minutes_after=30,
@@ -103,8 +105,10 @@ def test_saving_legacy_indicator_selections_clears_persisted_values(monkeypatch)
         return [{"symbol": "R_100"}]
 
     monkeypatch.setattr(main, "featured_instruments_by_group", instruments)
+    monkeypatch.setattr(main.db, "ensure_panel_profiles", lambda session, uid: (profile, profile))
     monkeypatch.setattr(main.db, "SessionLocal", lambda: session)
     payload = main.AutomationProfileRequest(
+        panel_mode="strategies",
         account_mode="demo",
         market="volatility",
         symbols=["R_100"],

@@ -31,6 +31,7 @@ def prepare(tmp_path,monkeypatch,*,mode='demo',stop_loss='10.00'):
         s.add(db.AutomationProfile(user_id=uid,account_mode='demo',
                 market='volatility',strategy='pulso_v2',expiry_minutes=0,
                 symbols_json='["1HZ100V"]',news_filter=False))
+        db.ensure_panel_profiles(s,uid)
         s.add(db.Session(session_hash=hashsecret('pilot-sid'),user_id=uid,
                          token_encrypted=encrypt('token-dummy'),
                          expires_at=db.utcnow()+timedelta(hours=1)))
@@ -72,17 +73,17 @@ def test_start_requires_explicit_consent_and_feature_flag(tmp_path,monkeypatch):
         denied=client.post('/api/autopilot/start',json={'confirm':'wrong'})
         assert denied.status_code==403
         monkeypatch.setenv('NEXORA_AUTOPILOT_DEMO_ENABLED','false')
-        disabled=client.post('/api/autopilot/start',json={'confirm':'START_DEMO_AUTOPILOT'})
+        disabled=client.post('/api/autopilot/start',json={'confirm':'START_DEMO_AUTOPILOT','panel_mode':'strategies'})
         assert disabled.status_code==503
         assert uid not in main.autopilot_enabled
-        assert client.get('/api/status').json()['auto_buy_enabled'] is False
+        assert client.get('/api/status?panel_mode=strategies').json()['auto_buy_enabled'] is False
     finally: cleanup(engine)
 
 
 def test_real_account_cannot_start(tmp_path,monkeypatch):
     client,factory,engine,uid=prepare(tmp_path,monkeypatch,mode='real')
     try:
-        resp=client.post('/api/autopilot/start',json={'confirm':'START_DEMO_AUTOPILOT'})
+        resp=client.post('/api/autopilot/start',json={'confirm':'START_DEMO_AUTOPILOT','panel_mode':'strategies'})
         assert resp.status_code==403
         assert uid not in main.autopilot_enabled
     finally: cleanup(engine)
@@ -99,8 +100,8 @@ def test_continuous_demo_orders_one_at_a_time_and_attributed(tmp_path,monkeypatc
     monkeypatch.setattr(main,'market_connected',True)
     monkeypatch.setattr(main,'recent_prices',[100+i*.05 for i in range(100)])
     try:
-        assert client.post('/api/autopilot/start',json={'confirm':'START_DEMO_AUTOPILOT'}).status_code==200
-        assert client.get('/api/status').json()['running'] is True
+        assert client.post('/api/autopilot/start',json={'confirm':'START_DEMO_AUTOPILOT','panel_mode':'strategies'}).status_code==200
+        assert client.get('/api/status?panel_mode=strategies').json()['running'] is True
         async def execute():
             main.market_last_tick=asyncio.get_running_loop().time()
             await main.autopilot_once()
@@ -124,7 +125,7 @@ def test_continuous_demo_orders_one_at_a_time_and_attributed(tmp_path,monkeypatc
         with factory() as sess:
             assert len(sess.scalars(select(db.DemoOrder)).all())==2
             assert len(sess.scalars(select(db.AutoPilotAttribution)).all())==2
-        assert client.post('/api/autopilot/stop').status_code==200
+        assert client.post('/api/autopilot/stop',json={'panel_mode':'strategies'}).status_code==200
         assert uid not in main.autopilot_enabled
         asyncio.run(again())
         assert broker.await_count==2
@@ -142,7 +143,7 @@ def test_confirmed_contract_keeps_autopilot_armed_without_duplicate_buy(tmp_path
     monkeypatch.setattr(main,'recent_prices',[100+i*.05 for i in range(100)])
     try:
         assert client.post('/api/autopilot/start',
-            json={'confirm':'START_DEMO_AUTOPILOT'}).status_code==200
+            json={'confirm':'START_DEMO_AUTOPILOT','panel_mode':'strategies'}).status_code==200
         async def attempt():
             main.market_last_tick=asyncio.get_running_loop().time()
             await main.autopilot_once()
@@ -153,7 +154,7 @@ def test_confirmed_contract_keeps_autopilot_armed_without_duplicate_buy(tmp_path
         asyncio.run(attempt())
         assert uid in main.autopilot_enabled
         assert broker.await_count==1
-        status=client.get('/api/status').json()
+        status=client.get('/api/status?panel_mode=strategies').json()
         assert status['running'] is True
         assert status['reason'] != 'Falha na execução; robô desligado para segurança'
         with factory() as sess:
@@ -177,10 +178,11 @@ def test_stop_loss_ends_automatic_session(tmp_path,monkeypatch):
     try:
         with factory() as sess:
             o=db.DemoOrder(user_id=uid,request_key='already-settled',active_slot=None,
+                           source_panel_mode='strategies',
                            state='SETTLED',symbol='1HZ100V',direction='PUT',
                            duration_minutes=5,stake='2.00',pnl='-2.00')
             sess.add(o);sess.commit()
-        resp=client.post('/api/autopilot/start',json={'confirm':'START_DEMO_AUTOPILOT'})
+        resp=client.post('/api/autopilot/start',json={'confirm':'START_DEMO_AUTOPILOT','panel_mode':'strategies'})
         assert resp.status_code==409
         assert uid not in main.autopilot_enabled
         broker.assert_not_awaited()
@@ -190,7 +192,7 @@ def test_stop_loss_ends_automatic_session(tmp_path,monkeypatch):
 def test_logout_disables_auto_trading(tmp_path,monkeypatch):
     client,factory,engine,uid=prepare(tmp_path,monkeypatch)
     try:
-        assert client.post('/api/autopilot/start',json={'confirm':'START_DEMO_AUTOPILOT'}).status_code==200
+        assert client.post('/api/autopilot/start',json={'confirm':'START_DEMO_AUTOPILOT','panel_mode':'strategies'}).status_code==200
         assert client.post('/api/logout').status_code==200
         assert uid not in main.autopilot_enabled
     finally: cleanup(engine)
@@ -289,7 +291,7 @@ def test_reconciliation_prioritizes_recent_contracts(tmp_path,monkeypatch):
 def test_restart_revokes_consent_and_requires_explicit_activation(tmp_path,monkeypatch):
     client,factory,engine,uid=prepare(tmp_path,monkeypatch)
     try:
-        assert client.post('/api/autopilot/start',json={'confirm':'START_DEMO_AUTOPILOT'}).status_code==200
+        assert client.post('/api/autopilot/start',json={'confirm':'START_DEMO_AUTOPILOT','panel_mode':'strategies'}).status_code==200
         with factory() as s:
             assert s.get(db.AutoPilotResumeConsent,uid) is not None
             original=s.get(db.RobotRun,uid).after_order_id
@@ -300,14 +302,14 @@ def test_restart_revokes_consent_and_requires_explicit_activation(tmp_path,monke
         with factory() as s:
             assert s.get(db.RobotRun,uid).after_order_id==original
             assert s.get(db.AutoPilotResumeConsent,uid) is None
-        state=client.get('/api/status').json()
+        state=client.get('/api/status?panel_mode=strategies').json()
         assert state['running'] is False
         assert state['demo_run_intent'] is False
         assert state['interrupted_after_restart'] is True
         assert 'reative manualmente' in state['reason']
-        assert client.post('/api/autopilot/start',json={'confirm':'START_DEMO_AUTOPILOT'}).status_code==200
-        assert client.get('/api/status').json()['running'] is True
-        assert client.post('/api/autopilot/stop').status_code==200
+        assert client.post('/api/autopilot/start',json={'confirm':'START_DEMO_AUTOPILOT','panel_mode':'strategies'}).status_code==200
+        assert client.get('/api/status?panel_mode=strategies').json()['running'] is True
+        assert client.post('/api/autopilot/stop',json={'panel_mode':'strategies'}).status_code==200
         with factory() as s:
             assert s.get(db.AutoPilotResumeConsent,uid) is None
             assert s.get(db.RobotRun,uid) is None
@@ -328,7 +330,7 @@ def test_old_robot_run_does_not_imply_resume_consent(tmp_path,monkeypatch):
 def test_restart_requires_activation_and_explicit_start_blocks_unknown_order(tmp_path,monkeypatch):
     client,factory,engine,uid=prepare(tmp_path,monkeypatch)
     try:
-        assert client.post('/api/autopilot/start',json={'confirm':'START_DEMO_AUTOPILOT'}).status_code==200
+        assert client.post('/api/autopilot/start',json={'confirm':'START_DEMO_AUTOPILOT','panel_mode':'strategies'}).status_code==200
         with factory() as s:
             s.add(db.DemoOrder(user_id=uid,request_key='uncertain-resume',
                 state='UNKNOWN',symbol='1HZ100V',direction='CALL',
@@ -339,7 +341,7 @@ def test_restart_requires_activation_and_explicit_start_blocks_unknown_order(tmp
         assert uid not in main.autopilot_enabled
         with factory() as s:
             assert s.get(db.AutoPilotResumeConsent,uid) is None
-        assert client.post('/api/autopilot/start',json={'confirm':'START_DEMO_AUTOPILOT'}).status_code==409
+        assert client.post('/api/autopilot/start',json={'confirm':'START_DEMO_AUTOPILOT','panel_mode':'strategies'}).status_code==409
         assert uid not in main.autopilot_enabled
     finally: cleanup(engine)
 
@@ -347,7 +349,7 @@ def test_restart_requires_activation_and_explicit_start_blocks_unknown_order(tmp
 def test_restart_revokes_consent_even_when_deriv_session_expired(tmp_path,monkeypatch):
     client,factory,engine,uid=prepare(tmp_path,monkeypatch)
     try:
-        assert client.post('/api/autopilot/start',json={'confirm':'START_DEMO_AUTOPILOT'}).status_code==200
+        assert client.post('/api/autopilot/start',json={'confirm':'START_DEMO_AUTOPILOT','panel_mode':'strategies'}).status_code==200
         with factory() as s:
             auth=s.scalar(select(db.Session).where(db.Session.user_id==uid))
             auth.expires_at=db.utcnow()-timedelta(minutes=2)
@@ -363,9 +365,10 @@ def test_restart_revokes_consent_even_when_deriv_session_expired(tmp_path,monkey
 def test_stop_loss_halt_revokes_resume_consent(tmp_path,monkeypatch):
     client,factory,engine,uid=prepare(tmp_path,monkeypatch,stop_loss='2.00')
     try:
-        assert client.post('/api/autopilot/start',json={'confirm':'START_DEMO_AUTOPILOT'}).status_code==200
+        assert client.post('/api/autopilot/start',json={'confirm':'START_DEMO_AUTOPILOT','panel_mode':'strategies'}).status_code==200
         with factory() as s:
             s.add(db.DemoOrder(user_id=uid,request_key='loss-after-start',
+                source_panel_mode='strategies',
                 state='SETTLED',symbol='1HZ100V',direction='CALL',
                 duration_minutes=5,stake='2.00',pnl='-2.00'))
             s.commit()
@@ -384,7 +387,7 @@ def test_stop_loss_halt_revokes_resume_consent(tmp_path,monkeypatch):
 def test_restart_requires_reactivation_and_confirmed_contract_blocks_duplicate_buy(tmp_path,monkeypatch):
     client,factory,engine,uid=prepare(tmp_path,monkeypatch)
     try:
-        assert client.post('/api/autopilot/start',json={'confirm':'START_DEMO_AUTOPILOT'}).status_code==200
+        assert client.post('/api/autopilot/start',json={'confirm':'START_DEMO_AUTOPILOT','panel_mode':'strategies'}).status_code==200
         with factory() as s:
             order=db.DemoOrder(user_id=uid,request_key='known-contract',
                 state='CONFIRMED',symbol='1HZ100V',direction='CALL',contract_id='1234567',
@@ -406,7 +409,7 @@ def test_restart_requires_reactivation_and_confirmed_contract_blocks_duplicate_b
             await main.autopilot_once()
         asyncio.run(tick())
         broker.assert_not_awaited()
-        assert client.post('/api/autopilot/start',json={'confirm':'START_DEMO_AUTOPILOT'}).status_code==200
+        assert client.post('/api/autopilot/start',json={'confirm':'START_DEMO_AUTOPILOT','panel_mode':'strategies'}).status_code==200
         asyncio.run(tick())
         broker.assert_not_awaited()
         assert uid in main.autopilot_enabled

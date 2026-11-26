@@ -18,23 +18,23 @@ def test_parallel_exposure_and_symbol_lock(tmp_path,monkeypatch):
     try:
         with factory() as sess:
             user=sess.get(db.User,uid)
-            o,_=reserve(sess,user,request_key='parallel-0001',symbol='EURJPY',
+            o,_=reserve(sess,user,panel_mode='strategies',request_key='parallel-0001',symbol='EURJPY',
                 direction='CALL',minutes=3,parallel=True)
             confirmed(sess,o,{'contract_id':'990001','buy_price':'2'})
             with pytest.raises(OrderGuardError,match='neste ativo'):
-                reserve(sess,user,request_key='parallel-0002',symbol='EURJPY',
+                reserve(sess,user,panel_mode='strategies',request_key='parallel-0002',symbol='EURJPY',
                     direction='PUT',minutes=3,parallel=True)
-            o2,_=reserve(sess,user,request_key='parallel-0003',symbol='EURUSD',
+            o2,_=reserve(sess,user,panel_mode='strategies',request_key='parallel-0003',symbol='EURUSD',
                 direction='PUT',minutes=3,parallel=True)
             confirmed(sess,o2,{'contract_id':'990002','buy_price':'2'})
             assert o.active_slot!=o2.active_slot
-            o3,_=reserve(sess,user,request_key='parallel-0004',symbol='GBPUSD',
+            o3,_=reserve(sess,user,panel_mode='strategies',request_key='parallel-0004',symbol='GBPUSD',
                 direction='CALL',minutes=15,parallel=True)
             confirmed(sess,o3,{'contract_id':'990003','buy_price':'2'})
-            o4,_=reserve(sess,user,request_key='parallel-0005',symbol='AUDNZD',
+            o4,_=reserve(sess,user,panel_mode='strategies',request_key='parallel-0005',symbol='AUDNZD',
                 direction='CALL',minutes=15,parallel=True)
             confirmed(sess,o4,{'contract_id':'990004','buy_price':'2'})
-            o5,_=reserve(sess,user,request_key='parallel-0006',symbol='USDCAD',
+            o5,_=reserve(sess,user,panel_mode='strategies',request_key='parallel-0006',symbol='USDCAD',
                 direction='CALL',minutes=15,parallel=True)
             confirmed(sess,o5,{'contract_id':'990005','buy_price':'2'})
             assert len([o for o in (o,o2,o3,o4,o5) if o.state=='CONFIRMED'])==5
@@ -48,20 +48,20 @@ def test_parallel_pending_and_unknown_lock_only_their_symbol(tmp_path,monkeypatc
     try:
         with factory() as sess:
             user=sess.get(db.User,uid)
-            first,_=reserve(sess,user,request_key='pending-0001',symbol='EURJPY',
+            first,_=reserve(sess,user,panel_mode='strategies',request_key='pending-0001',symbol='EURJPY',
                 direction='CALL',minutes=3,parallel=True)
             with pytest.raises(OrderGuardError,match='neste ativo'):
-                reserve(sess,user,request_key='pending-0002',symbol='EURJPY',
+                reserve(sess,user,panel_mode='strategies',request_key='pending-0002',symbol='EURJPY',
                     direction='PUT',minutes=3,parallel=True)
-            second,_=reserve(sess,user,request_key='pending-0003',symbol='EURUSD',
+            second,_=reserve(sess,user,panel_mode='strategies',request_key='pending-0003',symbol='EURUSD',
                 direction='CALL',minutes=3,parallel=True)
             assert second.state=='PENDING'
             from app.demo_ledger import unknown
             unknown(sess,first)
             with pytest.raises(OrderGuardError,match='neste ativo'):
-                reserve(sess,user,request_key='pending-0004',symbol='EURJPY',
+                reserve(sess,user,panel_mode='strategies',request_key='pending-0004',symbol='EURJPY',
                     direction='PUT',minutes=3,parallel=True)
-            third,_=reserve(sess,user,request_key='pending-0005',symbol='GBPUSD',
+            third,_=reserve(sess,user,panel_mode='strategies',request_key='pending-0005',symbol='GBPUSD',
                 direction='CALL',minutes=3,parallel=True)
             assert third.state=='PENDING'
     finally:cleanup(engine)
@@ -78,7 +78,7 @@ def test_martingale_recovery_keeps_symbol_and_original_direction(tmp_path,monkey
             sess.add(db.RobotPlan(user_id=uid,requested_martingale=True,
                 gale_count=2,requested_multiplier='2.0'))
             for symbol,pnl in [('EURJPY','-2.00'),('EURUSD','1.56')]:
-                order=db.DemoOrder(user_id=uid,request_key='test-'+symbol,
+                order=db.DemoOrder(source_panel_mode='strategies',user_id=uid,request_key='test-'+symbol,
                     state='SETTLED',symbol=symbol,direction='CALL',
                     duration_minutes=3,stake='2.00',pnl=pnl)
                 sess.add(order)
@@ -113,7 +113,7 @@ def test_recovery_queue_prefers_oldest_settled_loss_not_latest_id(tmp_path,monke
             for i,(symbol,settled_at) in enumerate((
                 ('EURUSD',base),('EURJPY',base+timedelta(minutes=10)),
                 ('GBPUSD',base+timedelta(minutes=20)))):
-                order=db.DemoOrder(user_id=uid,request_key='fair-'+symbol,
+                order=db.DemoOrder(source_panel_mode='strategies',user_id=uid,request_key='fair-'+symbol,
                     state='SETTLED',symbol=symbol,direction='CALL',
                     duration_minutes=15,stake='2.00',pnl='-2.00',
                     created_at=settled_at-timedelta(minutes=15),
@@ -149,11 +149,11 @@ def test_v2_restart_keeps_old_records_out_of_evaluation(tmp_path,monkeypatch):
     client,factory,engine,uid=prepare(tmp_path,monkeypatch)
     try:
         with factory() as sess:
-            sess.add(db.DemoOrder(user_id=uid,request_key='legacy-0001',state='SETTLED',
+            sess.add(db.DemoOrder(source_panel_mode='strategies',user_id=uid,request_key='legacy-0001',state='SETTLED',
                 symbol='1HZ100V',direction='CALL',duration_minutes=5,stake='2.00',pnl='1.00'))
             sess.commit()
         assert client.post('/api/autopilot/start',
-            json={'confirm':'START_DEMO_AUTOPILOT'}).status_code==200
+            json={'confirm':'START_DEMO_AUTOPILOT','panel_mode':'strategies'}).status_code==200
         stats=client.get('/api/autopilot/v2/evaluation').json()
         assert stats['active']
         assert stats['submitted']==0
@@ -173,7 +173,7 @@ def test_v2_parallel_real_path_with_two_assets(tmp_path,monkeypatch):
     monkeypatch.setattr(main,'market_connected',False)
     try:
         assert client.post('/api/autopilot/start',
-            json={'confirm':'START_DEMO_AUTOPILOT'}).status_code==200
+            json={'confirm':'START_DEMO_AUTOPILOT','panel_mode':'strategies'}).status_code==200
         async def run():
             await main.autopilot_once()
         asyncio.run(run())
@@ -208,9 +208,13 @@ def test_v2_martingale_enters_same_symbol_without_waiting_for_scan(tmp_path,monk
         with factory() as s:
             s.add(db.RobotPlan(user_id=uid,requested_martingale=True,gale_count=1,
                 requested_multiplier='2.00'))
+            strategy_profile=s.get(db.AutomationPanelProfile,(uid,'strategies'))
+            strategy_profile.requested_martingale=True
+            strategy_profile.gale_count=1
+            strategy_profile.requested_multiplier='2.00'
             s.commit()
         assert client.post('/api/autopilot/start',
-            json={'confirm':'START_DEMO_AUTOPILOT'}).status_code==200
+            json={'confirm':'START_DEMO_AUTOPILOT','panel_mode':'strategies'}).status_code==200
         async def tick():
             await main.autopilot_once()
         asyncio.run(tick())
@@ -248,19 +252,19 @@ def test_v2_unavailable_fails_closed_then_requires_explicit_start(tmp_path,monke
     try:
         monkeypatch.setenv('NEXORA_V2_ENABLED','false')
         blocked=client.post('/api/autopilot/start',
-            json={'confirm':'START_DEMO_AUTOPILOT'})
+            json={'confirm':'START_DEMO_AUTOPILOT','panel_mode':'strategies'})
         assert blocked.status_code==503
         assert uid not in main.autopilot_enabled
         monkeypatch.setenv('NEXORA_V2_ENABLED','true')
         started=client.post('/api/autopilot/start',
-            json={'confirm':'START_DEMO_AUTOPILOT'})
+            json={'confirm':'START_DEMO_AUTOPILOT','panel_mode':'strategies'})
         assert started.status_code==200,started.text
-        state=client.get('/api/status').json()
+        state=client.get('/api/status?panel_mode=strategies').json()
         assert state['autopilot_version']=='V2_PULSO'
         assert state['v2_available'] is True
         assert state['analysis_symbol']=='1HZ100V'
-        assert client.post('/api/autopilot/stop').status_code==200
-        assert client.get('/api/status').json()['running'] is False
+        assert client.post('/api/autopilot/stop',json={'panel_mode':'strategies'}).status_code==200
+        assert client.get('/api/status?panel_mode=strategies').json()['running'] is False
     finally:cleanup(engine)
 
 
@@ -336,7 +340,7 @@ def test_underscore_deriv_symbol_can_be_discovered_quoted_and_reserved(tmp_path,
     try:
         with factory() as sess:
             user=sess.get(db.User,uid)
-            order,created=reserve(sess,user,request_key='underscore001',
+            order,created=reserve(sess,user,panel_mode='strategies',request_key='underscore001',
                 symbol='R_100',direction='CALL',minutes=5)
             assert created and order.symbol=='R_100'
     finally:cleanup(engine)
@@ -398,11 +402,11 @@ def test_half_dollar_four_parallel_m15_orders_keep_exposure_guard(tmp_path,monke
         with factory() as sess:
             user=sess.get(db.User,uid)
             for i,symbol in enumerate(('frxAUDNZD','frxEURUSD','frxUSDJPY','frxGBPUSD')):
-                o,_=reserve(sess,user,request_key=f'halfdollar-{i:04}',
+                o,_=reserve(sess,user,panel_mode='strategies',request_key=f'halfdollar-{i:04}',
                     symbol=symbol,direction='CALL',minutes=15,
                     stake_override=Decimal('0.50'),parallel=True)
                 confirmed(sess,o,{'contract_id':str(100000+i),'buy_price':'0.50'})
-            fifth,_=reserve(sess,user,request_key='halfdollar-0005',
+            fifth,_=reserve(sess,user,panel_mode='strategies',request_key='halfdollar-0005',
                 symbol='frxAUDCAD',direction='CALL',minutes=15,
                 stake_override=Decimal('0.50'),parallel=True)
             confirmed(sess,fifth,{'contract_id':'100005','buy_price':'0.50'})
@@ -459,7 +463,7 @@ def test_v22_new_evaluation_keeps_official_ledger_and_resets_only_score(tmp_path
             user.stake='0.50'
             sess.add(db.RobotPlan(user_id=uid,requested_martingale=False,gale_count=0))
             sess.add(db.PilotValidationBatch(user_id=uid,after_order_id=0,max_orders=50))
-            sess.add(db.DemoOrder(user_id=uid,request_key='historical-001',
+            sess.add(db.DemoOrder(source_panel_mode='strategies',user_id=uid,request_key='historical-001',
                 state='SETTLED',symbol='frxEURUSD',direction='CALL',
                 duration_minutes=15,stake='2.00',pnl='-2.00'))
             sess.commit()
@@ -479,7 +483,7 @@ def test_v22_new_evaluation_keeps_official_ledger_and_resets_only_score(tmp_path
             assert sess.get(db.User,uid).stake=='0.50'
             assert sess.get(db.RobotPlan,uid).requested_martingale is False
         assert client.post('/api/autopilot/start',
-            json={'confirm':'START_DEMO_AUTOPILOT'}).status_code==200
+            json={'confirm':'START_DEMO_AUTOPILOT','panel_mode':'strategies'}).status_code==200
         assert client.post('/api/autopilot/v2/new-evaluation',
             json={'confirm':'START_NEW_DEMO_EVALUATION'}).status_code==409
     finally:
@@ -491,7 +495,7 @@ def test_v21_reset_rejects_confirmed_contract(tmp_path,monkeypatch):
     client,factory,engine,uid=prepare(tmp_path,monkeypatch,stop_loss='0.00')
     try:
         with factory() as sess:
-            sess.add(db.DemoOrder(user_id=uid,request_key='unsettled-001',
+            sess.add(db.DemoOrder(source_panel_mode='strategies',user_id=uid,request_key='unsettled-001',
                 state='CONFIRMED',symbol='frxEURUSD',direction='CALL',
                 duration_minutes=15,stake='0.50',contract_id='889012'))
             sess.commit()
@@ -514,7 +518,7 @@ def test_v2_symbol_history_out_of_order_uses_ascending_order_ids(tmp_path,monkey
             sess.add(db.RobotRun(user_id=uid,after_order_id=0))
             sess.add(db.PilotValidationBatch(user_id=uid,after_order_id=0,max_orders=100))
             for idx,pnl in enumerate(('-0.50','0.40','-0.50'),start=1):
-                o=db.DemoOrder(user_id=uid,request_key=f'history-order-{idx}',
+                o=db.DemoOrder(source_panel_mode='strategies',user_id=uid,request_key=f'history-order-{idx}',
                     state='SETTLED',symbol='frxEURUSD',direction='CALL',
                     duration_minutes=15,stake='0.50',pnl=pnl)
                 sess.add(o)
@@ -566,7 +570,7 @@ def test_deriv_purchase_time_is_distinct_from_signal_and_reservation(tmp_path,mo
         purchase_epoch=1794668102  # broker reports an actual second +2
         with factory() as sess:
             user=sess.get(db.User,uid)
-            o,_=reserve(sess,user,request_key='broker-time-01',
+            o,_=reserve(sess,user,panel_mode='strategies',request_key='broker-time-01',
                         symbol='R_75',direction='CALL',minutes=5,parallel=True)
             assert o.broker_purchase_at is None
             confirmed(sess,o,{'contract_id':'900100','buy_price':'0.50',
@@ -586,7 +590,7 @@ def test_unknown_broker_purchase_time_must_not_use_local_created_at(tmp_path,mon
     try:
         with factory() as sess:
             user=sess.get(db.User,uid)
-            o,_=reserve(sess,user,request_key='broker-time-02',
+            o,_=reserve(sess,user,panel_mode='strategies',request_key='broker-time-02',
                         symbol='R_10',direction='PUT',minutes=5,parallel=True)
             confirmed(sess,o,{'contract_id':'900101','buy_price':'0.50'})
             details=main.order_result_details(o)
@@ -622,7 +626,7 @@ def test_cycle_only_uses_new_signal_any_symbol_and_resets_on_win(tmp_path,monkey
                 gale_count=0,cycles_limit=2))
             sess.add(db.RobotCycleParams(user_id=uid,multiplier='2.50'))
             sess.commit()
-            first=db.DemoOrder(user_id=uid,request_key='cycle-cross-001',
+            first=db.DemoOrder(source_panel_mode='strategies',user_id=uid,request_key='cycle-cross-001',
                 state='SETTLED',symbol='EURUSD',direction='PUT',
                 duration_minutes=5,stake=user.stake,pnl='-2.00')
             sess.add(first);sess.flush()
@@ -640,7 +644,7 @@ def test_cycle_only_uses_new_signal_any_symbol_and_resets_on_win(tmp_path,monkey
                 1,0,Decimal('5.00'),False)
             assert entry.symbol is None and entry.direction is None
             assert last.symbol=='EURUSD'
-            second=db.DemoOrder(user_id=uid,request_key='cycle-cross-002',
+            second=db.DemoOrder(source_panel_mode='strategies',user_id=uid,request_key='cycle-cross-002',
                 state='SETTLED',symbol='GBPUSD',direction='CALL',
                 duration_minutes=1,stake='5.00',pnl='-5.00')
             sess.add(second);sess.flush()
@@ -656,7 +660,7 @@ def test_cycle_only_uses_new_signal_any_symbol_and_resets_on_win(tmp_path,monkey
                 sess.get(db.PilotValidationBatch,uid))
             assert (entry.cycle,entry.stake,entry.retry)==(2,Decimal('12.50'),False)
             assert entry.symbol is None and last.symbol=='GBPUSD'
-            win=db.DemoOrder(user_id=uid,request_key='cycle-cross-003',
+            win=db.DemoOrder(source_panel_mode='strategies',user_id=uid,request_key='cycle-cross-003',
                 state='SETTLED',symbol='1HZ50V',direction='PUT',
                 duration_minutes=3,stake='12.50',pnl='11.00')
             sess.add(win);sess.flush()
@@ -687,7 +691,7 @@ def test_exhausted_cycles_rearm_base_for_fresh_signal_across_assets(tmp_path,mon
             sess.add(db.RobotCycleParams(user_id=uid,multiplier='2.50'))
             for index,(symbol,stake) in enumerate(
                     [('1HZ75V','2.00'),('R_100','5.00'),('1HZ25V','12.50')],1):
-                order=db.DemoOrder(user_id=uid,request_key=f'exhausted-cycles-{index}',
+                order=db.DemoOrder(source_panel_mode='strategies',user_id=uid,request_key=f'exhausted-cycles-{index}',
                     state='SETTLED',symbol=symbol,direction='PUT',
                     duration_minutes=15,stake=stake,pnl='-'+stake)
                 sess.add(order);sess.flush()
@@ -706,7 +710,7 @@ def test_exhausted_cycles_rearm_base_for_fresh_signal_across_assets(tmp_path,mon
             assert entry.symbol is None and entry.direction is None
             assert last.symbol=='1HZ25V'
             # The first fresh-signal LOSS starts the next cycle series.
-            fourth=db.DemoOrder(user_id=uid,request_key='exhausted-cycles-4',
+            fourth=db.DemoOrder(source_panel_mode='strategies',user_id=uid,request_key='exhausted-cycles-4',
                 state='SETTLED',symbol='GBPUSD',direction='CALL',
                 duration_minutes=5,stake='2.00',pnl='-2.00')
             sess.add(fourth);sess.flush()
@@ -735,7 +739,7 @@ def test_cycle_only_blocks_until_all_official_orders_settle(tmp_path,monkeypatch
             sess.add(db.RobotPlan(user_id=uid,requested_martingale=False,
                 gale_count=0,cycles_limit=2))
             sess.add(db.RobotCycleParams(user_id=uid,multiplier='2.50'))
-            order=db.DemoOrder(user_id=uid,request_key='cycle-confirmed-001',
+            order=db.DemoOrder(source_panel_mode='strategies',user_id=uid,request_key='cycle-confirmed-001',
                 state='CONFIRMED',symbol='EURUSD',direction='PUT',
                 duration_minutes=5,stake='2.00')
             sess.add(order);sess.flush()

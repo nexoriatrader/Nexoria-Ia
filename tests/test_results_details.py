@@ -80,7 +80,7 @@ def test_results_table_contains_official_columns_and_autorefresh():
     assert 'id="ordersBody"' in section
     assert 'id="resultsLiveStatus"' in section
     assert 'setInterval(async()=>{' in html
-    assert "activePage==='dashboard'?7000:3000" in html
+    assert "activePage==='dashboard'||activePage==='manual-dashboard'?7000:3000" in html
     assert 'America/Sao_Paulo' in html
     assert "p.cycle===null" in html
     assert "p.martingale===null" in html
