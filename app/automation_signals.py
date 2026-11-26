@@ -190,6 +190,7 @@ async def _confirmed_forex_signal(profile, scan_event=None, excluded_symbols=())
         or profile.strategy not in FOREX_MTF_STRATEGIES):
         return None
     excluded = set(excluded_symbols)
+    direction = 'AUTO'
     symbols = [symbol for symbol in json.loads(profile.symbols_json)
                if symbol not in excluded]
     if not symbols:
@@ -201,7 +202,7 @@ async def _confirmed_forex_signal(profile, scan_event=None, excluded_symbols=())
         if scan_event:
             scan_event('window', None, len(symbols), 'aguardando_fechamento_m15')
         return None
-    key = (profile.strategy, 15, profile.direction, tuple(symbols))
+    key = (profile.strategy, 15, direction, tuple(symbols))
     async with _scan_lock:
         cached = _scan_cache.get(key)
         if cached and cached[0] == slot:
@@ -245,7 +246,7 @@ async def _confirmed_forex_signal(profile, scan_event=None, excluded_symbols=())
                     if candidate is None:
                         reason = 'criterios_mtf_nao_confirmados'
                         return None
-                    if profile.direction != 'AUTO' and candidate['direction'] != profile.direction:
+                    if direction != 'AUTO' and candidate['direction'] != direction:
                         reason = 'direcao_nao_permitida'
                         return None
                     candidate['symbol'] = symbol
@@ -290,7 +291,9 @@ async def confirmed_automation_signal(profile, scan_event=None, excluded_symbols
              if symbol not in excluded]
     if not symbols:
         return None
-    direction=profile.direction
+    # Legacy profiles may contain a forced CALL/PUT filter. Strategy panels
+    # now derive direction from the selected strategy, so ignore that value.
+    direction='AUTO'
     if profile.strategy=='pulso_v2':
         return await confirmed_pulso_signal(symbols,direction=direction,minutes=profile.expiry_minutes,scan_event=scan_event)
 

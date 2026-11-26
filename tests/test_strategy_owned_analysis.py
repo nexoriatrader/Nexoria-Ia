@@ -10,11 +10,11 @@ import pytest
 from app import automation_signals, pulso_live
 
 
-def make_profile(strategy, indicators_json='["ATR","EMA","RSI"]'):
+def make_profile(strategy, indicators_json='["ATR","EMA","RSI"]', direction="AUTO"):
     return SimpleNamespace(
         symbols_json='["R_100"]',
         indicators_json=indicators_json,
-        direction="AUTO",
+        direction=direction,
         strategy=strategy,
         expiry_minutes=5,
     )
@@ -50,13 +50,16 @@ def test_profile_response_hides_legacy_indicator_choices():
         news_minutes_before=30,
         news_minutes_after=30,
         indicators_json='["ATR","EMA"]',
-        direction="AUTO",
+        direction="PUT",
+        operation_mode=None,
         real_account_id=None,
         min_payout="88",
         preset_mode="custom",
     )
 
-    assert automation_profile_result(profile)["indicators"] == []
+    result = automation_profile_result(profile)
+    assert result["indicators"] == []
+    assert result["direction"] == "AUTO"
 
 
 def test_saving_legacy_indicator_selections_clears_persisted_values(monkeypatch):
@@ -180,7 +183,7 @@ def test_legacy_indicators_do_not_filter_strategy_owned_signal(monkeypatch, stra
         lambda candle_rows, selected_strategy: "CALL",
     )
     automation_signals._scan_cache.clear()
-    profile = make_profile(strategy, '["ATR","BOLLINGER","CANDLE_PATTERNS"]')
+    profile = make_profile(strategy, '["ATR","BOLLINGER","CANDLE_PATTERNS"]', direction="PUT")
 
     try:
         result = asyncio.run(automation_signals.confirmed_automation_signal(profile))

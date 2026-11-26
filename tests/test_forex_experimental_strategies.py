@@ -156,7 +156,7 @@ def test_forex_scanner_requests_h1_m15_and_discards_forming_candles(monkeypatch,
     automation_signals._scan_cache.clear()
     profile = SimpleNamespace(
         market="forex", account_mode=account_mode, strategy="fx_breakout_m15",
-        symbols_json='["frxEURUSD"]', direction="AUTO",
+        symbols_json='["frxEURUSD"]', direction="PUT",
     )
     try:
         result = asyncio.run(automation_signals.confirmed_automation_signal(profile))

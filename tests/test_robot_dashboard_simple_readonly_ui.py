@@ -576,7 +576,7 @@ def test_activation_link_is_top_level_and_requires_existing_confirmation():
     assert 'id="robotButton" class="hero-action" disabled aria-disabled="true"' in top
     assert 'onclick="nxNeoStopRunningRobot()"' in top
     assert 'onclick="toggleRobot()"' in top
-    assert "if(!await askRobotStartConfirmation(profile,risk,catalogue))return;" in HTML
+    assert "if(!await askRobotStartConfirmation(profile,risk))return;" in HTML
     assert "if(!health.real_orders_enabled)" in HTML
     assert "if(robotRunning)await toggleRobot();" in HTML
     assert "'nxNeoActivationLabel'" in HTML
@@ -645,7 +645,7 @@ def test_mobile_controls_no_fake_start_and_no_overflow():
     )
     assert '<details class="nx-neo-account" id="nxNeoAccountDetails" open>' in panel
     assert 'id="robotButton"' in controls
-    assert "if(!await askRobotStartConfirmation(profile,risk,catalogue))return;" in HTML
+    assert "if(!await askRobotStartConfirmation(profile,risk))return;" in HTML
     assert "if(!health.real_orders_enabled)" in HTML
     css = HTML.split("</head>", 1)[0]
     assert "/* Calm hotfix: remove fake start button" in css
@@ -680,7 +680,7 @@ def test_only_reference_control_card_is_visible_at_dashboard_entry():
     assert panel.count('id="robotButton"') == 1
     assert panel.count('id="nxNeoQuickStop"') == 1
     assert "onclick=\"toggleRobot()\"" in card
-    assert "if(!await askRobotStartConfirmation(profile,risk,catalogue))return;" in HTML
+    assert "if(!await askRobotStartConfirmation(profile,risk))return;" in HTML
     assert "if(!health.real_orders_enabled)" in HTML
 
     styles = HTML.split("</head>", 1)[0]
@@ -731,7 +731,7 @@ def test_premium_reference_skin_preserves_existing_controls():
     assert "#dashboard.nx-calm-dashboard .nx-calm-activity," in header
     assert "#dashboard.nx-calm-dashboard .nx-calm-extra{" in header
     assert 'onclick="toggleRobot()"' in panel
-    assert "if(!await askRobotStartConfirmation(profile,risk,catalogue))return;" in HTML
+    assert "if(!await askRobotStartConfirmation(profile,risk))return;" in HTML
     assert "if(!health.real_orders_enabled)" in HTML
     # Status colour is derived from the authoritative boolean; "ready" != "active".
     assert "dataset.visualState=robotRunning?'active'" in HTML
@@ -764,12 +764,12 @@ def test_premium_skin_only_adds_css_and_nonoperational_status_state():
     assert '.hero-action[data-visual-state="active"]' in HTML
     assert "$('robotButton').disabled=(!robotRunning&&(!available||activePanelMode==='manual'||(status.running&&!activePanelMode)))" in HTML
     assert "if(!health.real_orders_enabled)" in HTML
-    assert "if(!await askRobotStartConfirmation(profile,risk,catalogue))return;" in HTML
+    assert "if(!await askRobotStartConfirmation(profile,risk))return;" in HTML
     assert "wasRunning?'/api/autopilot/stop':'/api/autopilot/start'" in HTML
 
 
-def test_review_optional_catalogue_timeout_prevents_long_wait():
-    """Optional broker descriptions cannot hold up a configuration review."""
+def test_start_confirmation_omits_asset_lists_and_skips_catalogue_request():
+    """Market-selected assets and strategy direction stay automatic and hidden."""
     html = HTML
     code = "async function toggleRobot(){" + html.split(
         "async function toggleRobot(){", 1
@@ -778,62 +778,56 @@ def test_review_optional_catalogue_timeout_prevents_long_wait():
     assert "const risk=profile" in code
     assert "if(!profile.configured)" in code
     assert "if(!health.real_orders_enabled)" in code
-    assert "if(!await askRobotStartConfirmation(profile,risk,catalogue))return;" in code
-    assert "setTimeout(()=>catalogueController.abort(),1800)" in code
-    assert "{signal:catalogueController.signal}" in code
-    assert "clearTimeout(catalogueTimeout)" in code
+    assert "if(!await askRobotStartConfirmation(profile,risk))return;" in code
+    assert "/api/automation/catalogue?" not in code
+    review = html.split("function askRobotStartConfirmation(profile,risk){", 1)[1].split(
+        "async function toggleRobot(){", 1
+    )[0]
+    assert "Até cinco ativos disponíveis, escolhidos automaticamente" in review
+    assert "Ativos selecionados" not in review
+    assert "Lista de ativos" not in review
+    assert "symbols.map(" not in review
+    assert "profile.direction" not in review
     assert "if(!wasRunning)button.textContent='CONFERINDO CONFIGURAÇÕES…';" in code
     assert "button.textContent=buttonOriginalLabel;" in code
     if not shutil.which("node"):
         return
     # Shorten only the sandbox test, not the deployed UI.
-    test_code = code.replace("catalogueController.abort(),1800",
-                             "catalogueController.abort(),25")
+    test_code = code
     runtime = r"""
-const notices=[],requests=[],modalCatalogues=[];
+const notices=[],requests=[],modalCalls=[];
 const button={dataset:{},disabled:false,textContent:'LIGAR ROBÔ',setAttribute(){}};
 const $=id=>id==='robotButton'?button:{textContent:'',dataset:{}};
-let robotRunning=false,scenario='slow',abortSeen=false;
+let robotRunning=false,scenario='demo';
 function showRobotNotice(msg){notices.push(msg);}
 async function refreshDashboard(){throw Error('Unexpected POST path');}
 async function req(path,opts={}){
 	 requests.push(path);
 	 if(path.startsWith('/api/status?panel_mode='))return {running:false,active_panel_mode:null};
 	 if(path==='/api/automation/profile?panel_mode=strategies'){
-	  if(scenario==='bad_risk')throw Error('Unavailable');
-	  return {configured:true,account_mode:scenario==='real'?'real':'demo',market:'derived',
-	   stake:1,stop_loss:2,cycles:0,martingale:false};
-	 }
- if(path==='/healthz')return {real_orders_enabled:false};
- if(path.startsWith('/api/automation/catalogue?')){
-  if(scenario==='fast')return {items:[{symbol:'TEST',name:'Label'}]};
-  return new Promise((resolve,reject)=>{
-   opts.signal.addEventListener('abort',()=>{
-    abortSeen=true;reject(new Error('Cancelled'));
-   },{once:true});
-  });
+  if(scenario==='bad_risk')throw Error('Unavailable');
+  return {configured:true,account_mode:scenario==='real'?'real':'demo',market:'derived',
+   stake:1,stop_loss:2,cycles:0,martingale:false};
  }
+ if(path==='/healthz')return {real_orders_enabled:false};
  throw Error('Unexpected request: '+path);
 }
-async function askRobotStartConfirmation(profile,risk,catalogue){
- modalCatalogues.push(catalogue);return false;
+async function askRobotStartConfirmation(profile,risk){
+ modalCalls.push({profile,risk});return false;
 }
 """
     checks = r"""
 (async()=>{
- const started=Date.now();await toggleRobot();
- if(Date.now()-started>450||!abortSeen)throw Error('Optional labels delayed review');
- if(modalCatalogues.length!==1||modalCatalogues[0].length)
-  throw Error('Saved-symbol fallback failed');
+ await toggleRobot();
+ if(modalCalls.length!==1)throw Error('Confirmation did not open');
+ if(requests.some(p=>p.includes('/api/automation/catalogue?')))
+  throw Error('Confirmation fetched an unnecessary asset catalogue');
  if(button.disabled||button.dataset.commandPending!=='false'
     ||button.textContent!=='LIGAR ROBÔ')throw Error('Loading button not restored');
- scenario='fast';await toggleRobot();
- if(modalCatalogues.length!==2||modalCatalogues[1][0].name!=='Label')
-  throw Error('Fast catalogue not used');
  scenario='bad_risk';await toggleRobot();
- if(modalCatalogues.length!==2)throw Error('Review opened on invalid configuration');
+ if(modalCalls.length!==1)throw Error('Review opened on invalid configuration');
  scenario='real';await toggleRobot();
- if(modalCatalogues.length!==2)throw Error('REAL guard bypassed');
+ if(modalCalls.length!==1)throw Error('REAL guard bypassed');
  if(!notices.some(s=>s.includes('Conta REAL ainda não habilitada')))
   throw Error('Missing REAL safety notice');
  if(requests.some(p=>p.includes('/api/autopilot/')))

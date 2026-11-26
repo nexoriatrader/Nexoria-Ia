@@ -61,7 +61,7 @@ def test_real_mode_requires_explicit_authorization_before_purchases():
     assert "/api/accounts/available" in html
     assert "health.real_orders_enabled" in html
     assert "START_REAL_AUTOPILOT" in html
-    assert "askRobotStartConfirmation(profile,risk,catalogue)" in html
+    assert "askRobotStartConfirmation(profile,risk)" in html
 
 
 def test_inline_javascript_syntax_is_valid(tmp_path):
@@ -146,7 +146,7 @@ def test_autopilot_activation_confirmation_is_mode_specific_and_explicit():
     assert 'id="robotStartDialogWarning"' in html
     assert "DINHEIRO REAL" in html
     assert "profile.real_account_id" in html
-    assert "askRobotStartConfirmation(profile,risk,catalogue)" in html
+    assert "askRobotStartConfirmation(profile,risk)" in html
     assert "resolveRobotStartDialog(true)" in html
     assert "START_REAL_AUTOPILOT" in html
     assert "START_DEMO_AUTOPILOT" in html

@@ -1996,18 +1996,17 @@ body:has(#dashboard:not(.hidden)) .nexora-logo-only .brand img{
     <p class="helper nx-guide-lead">Treinamento usa saldo fictício. Navegar ou salvar preferências não liga o robô.</p>
     <div class="setup-note" id="configPanelIdentity" role="note"><span aria-hidden="true">◈</span><div><strong id="configPanelTitle">Nexora Estratégias</strong><p id="operationModeHelp">Este assistente edita somente a configuração completa do painel selecionado. Salvar não liga o robô.</p></div></div>
     <div class="auto-wizard-header">
-      <span id="autoWizardProgress" role="status" aria-live="polite">Etapa 1 de 6</span>
-      <div class="auto-wizard-track" id="autoWizardTrack" role="progressbar" aria-label="Progresso da configuração" aria-valuemin="1" aria-valuemax="6" aria-valuenow="1"><span id="autoWizardFill"></span></div>
+      <span id="autoWizardProgress" role="status" aria-live="polite">Etapa 1 de 5</span>
+      <div class="auto-wizard-track" id="autoWizardTrack" role="progressbar" aria-label="Progresso da configuração" aria-valuemin="1" aria-valuemax="5" aria-valuenow="1"><span id="autoWizardFill"></span></div>
     </div>
     <div class="nx-guide-current" role="note">
       <span class="nx-guide-kicker">SEU PASSO ATUAL</span>
       <strong id="autoWizardTitle">Entenda os tipos de conta</strong>
       <p id="autoWizardHint">Treinamento utiliza valores fictícios. Operações reais envolvem risco de perda de dinheiro e não fazem parte da experiência introdutória.</p>
     </div>
-    <ol class="nx-guide-path" aria-label="As seis etapas do guia">
+    <ol class="nx-guide-path" aria-label="As cinco etapas do guia">
       <li data-nx-wizard="2" aria-current="step">Conta</li>
       <li data-nx-wizard="3">Mercado</li>
-      <li data-nx-wizard="4">Ativos</li>
       <li data-nx-wizard="5">Análise</li>
       <li data-nx-wizard="6">Limites</li>
       <li data-nx-wizard="7">Revisão</li>
@@ -2035,32 +2034,25 @@ body:has(#dashboard:not(.hidden)) .nexora-logo-only .brand img{
       </div>
       <div class="field hidden" id="autoRealAccountWrapper"><label for="autoRealAccount">Selecione sua conta real na Deriv</label><select id="autoRealAccount"><option value="">Consultando contas vinculadas...</option></select></div>
       <div class="auto-step"><span>02</span><strong>Conheça os mercados disponíveis</strong></div>
-      <p class="helper auto-step-help">Mercado é o conjunto de ativos que você deseja acompanhar. Cada grupo tem características diferentes.</p>
+      <p class="helper auto-step-help">Escolha o mercado. O Nexora identifica automaticamente até cinco ativos disponíveis nesse grupo; não é preciso escolher ativos nem direção.</p>
       <div class="auto-options auto-market-options">
         <label class="auto-choice"><input type="radio" name="autoMarket" value="forex"> Forex <small>Pares de moedas</small></label>
         <label class="auto-choice"><input type="radio" name="autoMarket" value="derived" checked> Derivados <small>Volatility, Step, Crash/Boom e outros</small></label>
         <label class="auto-choice"><input type="radio" name="autoMarket" value="stocks_indices"> Ações e Índices <small>Empresas e índices de bolsas</small></label>
         <label class="auto-choice"><input type="radio" name="autoMarket" value="commodities"> Matérias-primas <small>Ouro, prata, petróleo e outros</small></label>
       </div>
-      <div class="auto-step"><span>03</span><strong>Quais ativos deseja acompanhar?</strong></div>
-      <p class="helper">Ativo é um instrumento do mercado. A lista contém até cinco opções consultadas na Deriv; os nomes podem demorar a carregar.</p>
-      <p class="helper auto-assets-tip">Exibimos até cinco ativos por mercado para simplificar a seleção e reduzir análises repetidas. Marque somente os que deseja operar.</p>
-      <div class="actions" style="margin:4px 0 10px">
-        <button type="button" class="outline" onclick="selectAutomationAssets(false)">LIMPAR SELEÇÃO</button>
-      </div>
-      <div class="field hidden"><label for="autoAssetSearch">Buscar ativo</label><input id="autoAssetSearch" type="search" placeholder="Nome ou código do ativo" oninput="renderAutomationAssets()"></div>
-      <div id="automationSymbols" class="auto-symbols"><p class="helper">Carregando ativos...</p></div>
-      <div class="auto-step"><span>04</span><strong>Como os dados serão analisados?</strong></div>
+      <div class="auto-step"><span>03</span><strong>Ativos escolhidos automaticamente</strong></div>
+      <p class="helper auto-step-help">Até cinco instrumentos disponíveis do mercado escolhido são selecionados pelo Nexora, sem configuração manual.</p>
+  <div class="auto-step"><span>04</span><strong>Como os dados serão analisados?</strong></div>
       <p class="helper auto-step-help">Cada estratégia já aplica seus próprios critérios de análise. Os indicadores apresentados no guia são conceitos educativos, não filtros genéricos para selecionar.</p>
       <div class="auto-options">
-        <label class="auto-choice"><input type="radio" name="autoStrategy" value="pulso_v2" checked> PULSO V2 <small>Pressão direcional + volatilidade estável · direção configurável · expiração automática</small></label>
+        <label class="auto-choice"><input type="radio" name="autoStrategy" value="pulso_v2" checked> PULSO V2 <small>Pressão direcional + volatilidade estável · expiração automática</small></label>
         <label class="auto-choice"><input type="radio" name="autoStrategy" value="trend"> Tendência e pullback <small>EMA 20/50 + confirmação de preço</small></label>
         <label class="auto-choice"><input type="radio" name="autoStrategy" value="rsi"> Reversão RSI <small>RSI e confirmação de reversão</small></label>
         <label class="auto-choice hidden" data-forex-experimental-strategy><input type="radio" name="autoStrategy" value="fx_pullback_m15"> Forex · Tendência H1 + pullback M15 <small>Experimental · Forex · Treinamento/DEMO e REAL · expiração fixa M15</small></label>
         <label class="auto-choice hidden" data-forex-experimental-strategy><input type="radio" name="autoStrategy" value="fx_breakout_m15"> Forex · Tendência H1 + rompimento M15 <small>Experimental · Forex · Treinamento/DEMO e REAL · expiração fixa M15</small></label>
       </div>
       <p class="helper" id="forexStrategyDisclosure" hidden>Estratégias experimentais ainda não validadas quanto ao desempenho e sem garantia de lucro. Disponíveis somente em Forex nas contas Treinamento/DEMO e REAL. Em REAL, contratos podem gerar perdas financeiras.</p>
-      <div class="field" data-strategy-only><label for="autoDirection">Direção das entradas</label><select id="autoDirection"><option value="AUTO">Automática conforme estratégia</option><option value="CALL">Somente CALL / Alta</option><option value="PUT">Somente PUT / Baixa</option></select></div>
       <div class="auto-step"><span>05</span><strong>Entenda os valores e os limites</strong></div>
       <p class="helper auto-step-help">Este grupo reúne parâmetros financeiros e limites de segurança. Em treinamento, os valores são fictícios. Valores e estratégias não eliminam riscos em contas reais.</p>
       <div class="settings-grid">
@@ -2086,7 +2078,7 @@ body:has(#dashboard:not(.hidden)) .nexora-logo-only .brand img{
       </details>
       <div class="auto-step"><span>07</span><strong>Confira antes de guardar suas preferências</strong></div>
       <p class="helper">Veja o resumo do que foi selecionado. Salvar não inicia nenhuma operação; a ativação tem verificações e confirmação separadas.</p>
-      <div id="autoConfigSummary" class="auto-summary">Selecione os ativos para configurar o robô.</div>
+      <div id="autoConfigSummary" class="auto-summary">Escolha o mercado e a estratégia; o Nexora seleciona automaticamente os ativos e a direção.</div>
       <p class="nx-guide-save-note" role="note">As preferências serão registradas, mas o robô permanecerá no estado atual.</p>
       <button type="button" class="gold" id="autoSaveButton" onclick="saveAutomationProfile()">SALVAR E VOLTAR AO PAINEL</button>
       <p class="helper" id="autoConfigFeedback" role="status"></p>
@@ -3003,7 +2995,7 @@ function reviewAmount(value){
  const number=Number(value);
  return Number.isFinite(number)?money(number,'USD'):'Valor indisponível';
 }
-function askRobotStartConfirmation(profile,risk,catalogue){
+function askRobotStartConfirmation(profile,risk){
  if(robotStartDialogResolver)return Promise.resolve(false);
  const box=$('robotStartDialogDetails');box.replaceChildren();
  $('robotStartDialogTitle').textContent='Conferir ativação · Nexora Estratégias';
@@ -3016,20 +3008,16 @@ function askRobotStartConfirmation(profile,risk,catalogue){
   fx_pullback_m15:'Forex H1 + pullback M15 (experimental)',
   fx_breakout_m15:'Forex H1 + rompimento M15 (experimental)'};
  const presetNames={conservative:'Conservadora',aggressive:'Arriscada',custom:'Personalizada'};
- const symbols=Array.isArray(profile.symbols)?profile.symbols:[];
- const symbolNames=new Map(catalogue.map(item=>[item.symbol,item.name||item.symbol]));
  const stopAmount=(value)=>Number(value)>0?reviewAmount(value):'Desativado';
  addRobotReviewGroup(box,'Conta e mercado',[
   ['Conta Deriv',profile.account_mode==='real'?(profile.real_account_id||'Não selecionada'):'Conta de treinamento'],
   ['Modo de operação',profile.account_mode==='real'?'Conta REAL (dinheiro próprio)':'Treinamento · conta DEMO (saldo fictício)'],
   ['Perfil',presetNames[profile.preset_mode]||'Personalizada'],
   ['Mercado',marketNames[profile.market]||profile.market],
-  ['Ativos selecionados',symbols.length+' ativo(s)'],
-  ['Lista de ativos',symbols.map(symbol=>(symbolNames.get(symbol)||symbol)+' ('+symbol+')').join('\n')||'Nenhum']
+  ['Ativos', 'Até cinco ativos disponíveis, escolhidos automaticamente']
  ]);
  addRobotReviewGroup(box,'Estratégia e análise',[
   ['Estratégia',strategyNames[profile.strategy]||profile.strategy],
-  ['Direção',({AUTO:'Automática',CALL:'Somente alta (CALL)',PUT:'Somente baixa (PUT)'})[profile.direction]||profile.direction],
   ['Expiração',isForexExperimentalStrategy(profile.strategy)?'Fixa · 15 minutos (M15)':profile.account_mode==='real'?'REAL · primeira duração do sinal (M1 se automático; proposta/payout validados)':'AUTO · M1, M3, M5 ou M15 (payout válido)'],
   ['Payout mínimo',(profile.min_payout_pct??88)+'%']
  ]);
@@ -3102,23 +3090,7 @@ async function toggleRobot(){
      return;
     }
    }
-   let catalogue=[];
-   // Optional read-only broker labels must not make the saved-configuration
-   // review wait for websocket retries; codes in the saved profile are enough
-   // to display an accurate review while all mandatory checks stay unchanged.
-   const catalogueController=new AbortController();
-   const catalogueTimeout=setTimeout(()=>catalogueController.abort(),1800);
-   try{
-    const response=await req('/api/automation/catalogue?market='+encodeURIComponent(profile.market),
-      {signal:catalogueController.signal});
-    catalogue=Array.isArray(response.items)?response.items:[];
-   }catch(e){
-    // Public names are optional. Saved symbols stay visible verbatim.
-    // No consent, risk check, or authorization is skipped.
-   }finally{
-    clearTimeout(catalogueTimeout);
-   }
-   if(!await askRobotStartConfirmation(profile,risk,catalogue))return;
+   if(!await askRobotStartConfirmation(profile,risk))return;
   }catch(e){
    showRobotNotice('Não foi possível conferir as configurações salvas: '+e.message+'. Nenhuma operação foi iniciada.');
    return;
@@ -3541,7 +3513,7 @@ function renderOrders(){
    tbody.append(row);
  }
 }
-let automationAssets=[],automationSelected=new Set(),automationProfileSaved=false,automationMarketRequest=0;
+let automationSelected=new Set(),automationProfileSaved=false,automationMarketRequest=0;
 let manualProfileMode=false;
 let configurationPanelMode='strategies';
 let activePanelMode=null;
@@ -3555,7 +3527,7 @@ function setAutomationMode(mode){
  $('configPanelTitle').textContent=manual?'Nexora Manual · configuração completa':'Nexora Estratégias · configuração completa';
  $('operationModeHelp').textContent=manual?
   'Este perfil pertence somente ao Nexora Manual. Conta, entrada, stops e progressões são independentes; mercado, ativos e estratégia não são exigidos.':
-  'Este perfil pertence somente ao Nexora Estratégias e inclui conta, mercado, ativos, estratégia e proteções. O perfil Manual não será alterado.';
+  'Este perfil pertence somente ao Nexora Estratégias e inclui conta, mercado, estratégia e proteções. Ativos e direção são definidos automaticamente; o perfil Manual não será alterado.';
  if(autoWizardReady)setAutomationWizardStep(autoWizardStep);
  automationProfileSaved=false;
 }
@@ -3589,7 +3561,7 @@ function initAutomationWizard(){
    group=document.createElement('div');group.className='auto-wizard-step';
    group.dataset.wizardStep=String(number);
    // Keep the legacy preset group hidden for existing code references.
-   if(number===1){group.hidden=true;group.inert=true;}
+   if(number===1||number===4){group.hidden=true;group.inert=true;}
    container.insertBefore(group,child);
   }
   if(group)group.appendChild(child);
@@ -3600,8 +3572,8 @@ function initAutomationWizard(){
 const automationGuideDescriptions=[
  ['Por onde começar?','Você pode conhecer os perfis existentes. A opção Personalizada permite entender cada campo, sem aplicar um modelo automaticamente.'],
  ['Entenda os tipos de conta','Treinamento utiliza valores fictícios. Operações reais envolvem risco de perda de dinheiro e não fazem parte da experiência introdutória.'],
- ['Conheça os mercados','Os mercados são grupos de instrumentos. A etapa apenas organiza o que será exibido na seleção seguinte.'],
- ['Veja os ativos disponíveis','Um ativo é um instrumento do mercado. Os nomes são obtidos no catálogo; uma lista vazia significa que os dados não foram confirmados.'],
+ ['Conheça os mercados','Escolha o grupo de mercado. O Nexora identifica automaticamente até cinco instrumentos disponíveis nesse mercado.'],
+ ['Ativos escolhidos automaticamente','Os instrumentos são selecionados pelo sistema; não é necessário escolher ativos.'],
  ['Aprenda sobre análise','Cada estratégia segue seus próprios critérios de entrada e confirmação. Não há filtros genéricos separados para alterar essa lógica.'],
  ['Conheça os limites','Veja o significado dos parâmetros e dos limites. Martingale e ciclos ficam separados como opções avançadas de risco elevado.'],
  ['Revise o que está salvo','Confira as preferências antes de salvar. Salvar não liga o robô e não substitui as confirmações posteriores.']
@@ -3630,15 +3602,19 @@ function setAutomationWizardStep(step){
   $('autoWizardNext').textContent=manualIndex===1?'VER REVISÃO →':'CONTINUAR →';
   return;
  }
- // Preserve internal step IDs and their existing validation rules.
- autoWizardStep=Math.min(7,Math.max(2,step));
- $('autoWizardTrack').setAttribute('aria-valuemax','6');
- const visibleStep=autoWizardStep-1;
+ // Keep internal IDs stable for the Manual panel, while Strategies skips
+ // the now-automatic asset step (4) and presents five steps.
+ const strategySteps=[2,3,5,6,7];
+ let strategyIndex=strategySteps.findIndex(candidate=>candidate>=step);
+ if(strategyIndex<0)strategyIndex=strategySteps.length-1;
+ autoWizardStep=strategySteps[strategyIndex];
+ $('autoWizardTrack').setAttribute('aria-valuemax','5');
+ const visibleStep=strategyIndex+1;
  for(const element of document.querySelectorAll('.auto-wizard-step')){
   element.hidden=Number(element.dataset.wizardStep)!==autoWizardStep;
  }
- $('autoWizardProgress').textContent='Etapa '+visibleStep+' de 6';
- $('autoWizardFill').style.width=(visibleStep/6*100)+'%';
+ $('autoWizardProgress').textContent='Etapa '+visibleStep+' de 5';
+ $('autoWizardFill').style.width=(visibleStep/5*100)+'%';
  $('autoWizardTrack').setAttribute('aria-valuenow',String(visibleStep));
  const [title,description]=automationGuideDescriptions[autoWizardStep-1];
  $('autoWizardTitle').textContent=title;
@@ -3647,7 +3623,8 @@ function setAutomationWizardStep(step){
   const number=Number(marker.dataset.nxWizard),current=number===autoWizardStep;
   if(current)marker.setAttribute('aria-current','step');
   else marker.removeAttribute('aria-current');
-  marker.dataset.past=String(number<autoWizardStep);
+  const markerIndex=strategySteps.indexOf(number);
+  marker.dataset.past=String(markerIndex>=0&&markerIndex<strategyIndex);
  });
  $('autoWizardBack').hidden=autoWizardStep===2;
  $('autoWizardNext').hidden=autoWizardStep===7;
@@ -3667,12 +3644,9 @@ function changeAutomationWizardStep(delta){
    focusAutomationInvalid(markAutomationInvalid('autoRealAccount','Selecione sua conta real para continuar.'));
    return;
   }
-  if(autoWizardStep===4&&!automationSelected.size){
-   focusAutomationInvalid(markAutomationInvalid('automationSymbols','Selecione pelo menos um ativo.'));
-   return;
-  }
  }
- setAutomationWizardStep(autoWizardStep+delta);
+ const strategySteps=[2,3,5,6,7],currentIndex=Math.max(0,strategySteps.indexOf(autoWizardStep));
+ setAutomationWizardStep(strategySteps[Math.max(0,Math.min(strategySteps.length-1,currentIndex+delta))]);
  $('automationConfigCard').scrollIntoView({behavior:'smooth',block:'start'});
 }
 function presetMoney(value){return Math.max(0,Math.round(value*100)/100).toFixed(2)}
@@ -3709,7 +3683,6 @@ async function applyAutomationPreset(mode){
    return;
   }
   setAutomationRadio('autoStrategy',conservative?'trend':'rsi');
-  $('autoDirection').value='AUTO';
   $('autoStake').value=presetMoney(conservative?Math.max(0.5,balance*0.005):Math.max(0.5,balance===null?0.5:balance*0.01));
   $('autoWin').value=conservative?presetMoney(balance*0.05):'0.00';
   $('autoLoss').value=conservative?presetMoney(balance*0.03):'0.00';
@@ -3733,23 +3706,6 @@ document.querySelectorAll('#robot-config input,#robot-config select').forEach(fi
  for(const eventName of ['input','change'])field.addEventListener(eventName,markAutomationCustomized);
 });
 
-// Five broker-listed suggestions per market; code matches are preferences, never fabricated assets.
-const automationMarketFavourites={
- forex:['frxEURUSD','frxGBPUSD','frxUSDJPY','frxAUDUSD','frxUSDCAD'],
- derived:['R_10','R_25','R_50','R_75','R_100','1HZ10V','1HZ25V','1HZ50V','1HZ75V','1HZ100V'],
- stocks_indices:['OTC_SP500','OTC_NASDAQ','OTC_DJI','OTC_FTSE','OTC_NIKKEI'],
- commodities:['frxXAUUSD','frxXAGUSD','frxXTIUSD','frxXBRUSD','frxXPTUSD']
-};
-function suggestedAutomationAssets(market,items){
- const favourites=automationMarketFavourites[market]||[];
- const priorities=new Map(favourites.map((symbol,i)=>[symbol.toUpperCase(),i]));
- const sorted=[...items].sort((a,b)=>{
-  const pa=priorities.get(a.symbol.toUpperCase())??1000;
-  const pb=priorities.get(b.symbol.toUpperCase())??1000;
-  return pa-pb||String(a.name||a.symbol).localeCompare(String(b.name||b.symbol),'pt-BR');
- });
- return sorted.slice(0,5).map(x=>x.symbol);
-}
 function clearAutomationInvalid(id){
  const target=$(id);
  if(!target)return;
@@ -3788,7 +3744,7 @@ function validateAutomationSettings(){
  clearAutomationErrors();
  const errors=[];
  const check=(id,condition,message)=>{if(condition)errors.push(markAutomationInvalid(id,message))};
- if(operationMode()!=='manual')check('automationSymbols',!automationSelected.size,'Selecione pelo menos um ativo deste mercado.');
+ if(operationMode()!=='manual')check('autoMarket',!automationSelected.size,'Não foi possível localizar ativos neste mercado. Escolha outro mercado e tente novamente.');
  check('autoRealAccount',automationRadio('autoMode')==='real'&&!$('autoRealAccount').value,'Selecione sua conta real vinculada.');
  for(const [id,min,max,label] of [
   ['autoStake',0.5,Infinity,'Valor da entrada'],['autoWin',0,1000000,'Stop Win'],
@@ -3819,7 +3775,7 @@ function validateAutomationSettings(){
 document.querySelectorAll('#robot-config input,#robot-config select').forEach(field=>{
  for(const eventName of ['input','change'])field.addEventListener(eventName,()=>{
   clearAutomationInvalid(field.id);
-  if(field.name==='autoMarket')clearAutomationInvalid('automationSymbols');
+  if(field.name==='autoMarket')clearAutomationInvalid('autoMarket');
  });
 });
 const automationRadio=name=>document.querySelector('input[name="'+name+'"]:checked')?.value;
@@ -3876,19 +3832,18 @@ async function changeAutomationAccount(selectedAccount){
 async function changeAutomationMarket(){
  const feedback=$('autoConfigFeedback'),market=automationRadio('autoMarket'),requestId=++automationMarketRequest;
  syncAutomationStrategyChoices();
- clearAutomationInvalid('automationSymbols');
- feedback.textContent='Carregando ativos do mercado selecionado...';
- automationAssets=[];automationSelected.clear();$('autoAssetSearch').value='';renderAutomationAssets();
+ clearAutomationInvalid('autoMarket');
+ feedback.textContent='Identificando automaticamente os ativos disponíveis neste mercado...';
+ automationSelected.clear();
  try{
   const result=await req('/api/automation/catalogue?market='+encodeURIComponent(market));
   if(requestId!==automationMarketRequest||automationRadio('autoMarket')!==market)return;
-  automationAssets=result.items||[];
-  automationSelected=new Set(suggestedAutomationAssets(market,automationAssets));
-  renderAutomationAssets();renderAutomationSummary();
+  automationSelected=new Set((result.items||[]).map(item=>item.symbol));
+  renderAutomationSummary();
   automationProfileSaved=false;
   feedback.textContent=automationSelected.size?
-   automationSelected.size+' ativos principais pré-selecionados. Você pode alterar a seleção.':
-   'Nenhum dos ativos destacados está disponível neste mercado na Deriv.';
+   automationSelected.size+' ativos disponíveis identificados automaticamente; não é preciso selecioná-los.':
+   'Nenhum ativo disponível neste mercado na Deriv. Escolha outro mercado.';
  }catch(e){if(requestId===automationMarketRequest)feedback.textContent='Não foi possível consultar o mercado: '+e.message}
 }
 document.querySelectorAll('input[name="autoMarket"]').forEach(x=>x.addEventListener('change',changeAutomationMarket));
@@ -3898,7 +3853,7 @@ document.querySelectorAll('input[name="autoMode"]').forEach(x=>x.addEventListene
 document.querySelectorAll('input[name="autoStrategy"]').forEach(x=>x.addEventListener('change',()=>{
  automationProfileSaved=false;syncAutomationStrategyChoices();renderAutomationSummary();
 }));
-['autoStake','autoWin','autoLoss','autoDirection','autoPayout','autoExpiry'].forEach(id=>$(id)?.addEventListener('change',()=>{
+['autoStake','autoWin','autoLoss','autoPayout','autoExpiry'].forEach(id=>$(id)?.addEventListener('change',()=>{
  automationProfileSaved=false;renderAutomationSummary();syncAutomationStrategyChoices();
 }));
 
@@ -3911,30 +3866,6 @@ function toggleAutomationProgressions(changed=''){
  const advanced=$('autoAdvancedOptions');
  if(advanced&&($('autoMg').checked||$('autoCycles').value!=='0'))advanced.open=true;
  renderAutomationSummary();
-}
-function selectAutomationAssets(all){
- automationSelected=new Set(all?automationAssets.map(x=>x.symbol):[]);
- renderAutomationAssets();
- renderAutomationSummary();
- automationProfileSaved=false;
- if(automationSelected.size)clearAutomationInvalid('automationSymbols');
-}
-function renderAutomationAssets(){
- const box=$('automationSymbols');box.replaceChildren();
- if(!automationAssets.length){box.textContent='Nenhum ativo disponível. Verifique a conexão com a Deriv.';return}
- const search=$('autoAssetSearch').value.trim().toLowerCase();
- for(const item of automationAssets){
-  if(search&&!((item.name||'')+' '+item.symbol).toLowerCase().includes(search))continue;
-  const label=document.createElement('label'),input=document.createElement('input');
-  input.type='checkbox';input.checked=automationSelected.has(item.symbol);
-  input.addEventListener('change',()=>{
-   if(input.checked)automationSelected.add(item.symbol);else automationSelected.delete(item.symbol);
-   renderAutomationSummary();automationProfileSaved=false;
-   if(automationSelected.size)clearAutomationInvalid('automationSymbols');
-  });
-  label.append(input,document.createTextNode(' '+(item.name||item.symbol)+' · '+item.symbol));
-  box.append(label);
- }
 }
 function renderAutomationSummary(){
  const node=$('autoConfigSummary');if(!node)return;
@@ -3958,9 +3889,8 @@ function renderAutomationSummary(){
  node.textContent=[
   'Conta: '+(mode==='real'?'REAL · envolve dinheiro e risco':'Treinamento · saldo fictício'),
   'Mercado: '+(marketNames[market]||'Não confirmado'),
-  'Ativos: '+automationSelected.size+' selecionado(s)',
   'Análise: '+(strategyNames[automationRadio('autoStrategy')]||'Não confirmada'),
-  'Direção: '+$('autoDirection').value+' · duração: '+(isForexExperimentalStrategy(automationRadio('autoStrategy'))?'fixa M15 (15 minutos)':$('autoExpiry').value==='0'?'automática conforme payout':'M'+$('autoExpiry').value+' ('+$('autoExpiry').value+' minutos)'),
+  'Duração: '+(isForexExperimentalStrategy(automationRadio('autoStrategy'))?'fixa M15 (15 minutos)':$('autoExpiry').value==='0'?'automática conforme payout':'M'+$('autoExpiry').value+' ('+$('autoExpiry').value+' minutos)'),
   'Valor por entrada: US$ '+$('autoStake').value,
   'Limites registrados: Stop Win US$ '+$('autoWin').value+' · Stop Loss US$ '+$('autoLoss').value,
   'Payout mínimo informado: '+$('autoPayout').value+'%',
@@ -3976,7 +3906,6 @@ async function loadAutomationProfile(){
   await changeAutomationAccount(profile.real_account_id);
   $('autoExpiry').value=String(profile.expiry_minutes??0);
   $('autoPayout').value=String(profile.min_payout_pct??88);
-  $('autoDirection').value=profile.direction||'AUTO';
   $('autoStake').value=profile.stake??'0.50';
   $('autoWin').value=profile.stop_win??'0.00';
   $('autoLoss').value=profile.stop_loss??'0.00';
@@ -3986,7 +3915,7 @@ async function loadAutomationProfile(){
   $('autoCycles').value=String(profile.cycles||'0');
   $('autoCycleMultiplier').value=String(profile.cycle_multiplier||'2.00');
   if(operationMode()==='manual'){
-   automationAssets=[];automationSelected.clear();renderAutomationAssets();toggleAutomationProgressions();
+   automationSelected.clear();toggleAutomationProgressions();
    automationProfileSaved=Boolean(profile.configured);
    setAutomationPresetMode('custom','Nexora Manual · conta e proteções carregadas.');
    feedback.textContent=profile.configured?'Perfil Manual e proteções carregados.':'Configure conta e proteções e salve o perfil Manual.';
@@ -3999,18 +3928,15 @@ async function loadAutomationProfile(){
   const requestId=++automationMarketRequest;
   const catalogue=await req('/api/automation/catalogue?market='+encodeURIComponent(selectedMarket));
   if(requestId!==automationMarketRequest)return;
-  automationAssets=catalogue.items||[];
-  automationSelected=new Set(profile.configured?
-   profile.symbols.filter(symbol=>automationAssets.some(item=>item.symbol===symbol)):
-   suggestedAutomationAssets(selectedMarket,automationAssets));
-  renderAutomationAssets();toggleAutomationProgressions();
+  automationSelected=new Set((catalogue.items||[]).map(item=>item.symbol));
+  toggleAutomationProgressions();
   automationProfileSaved=Boolean(profile.configured);
   setAutomationPresetMode(profile.preset_mode||'custom',
    profile.preset_mode==='conservative'?'Conservadora · parâmetros salvos. Revise os percentuais ao mudar o saldo.':
    profile.preset_mode==='aggressive'?'Arriscada · parâmetros salvos. Revise antes de iniciar.':
    'Personalizada · configuração carregada para edição.');
-  feedback.textContent=profile.configured?'Configuração carregada. Salve novamente após fazer alterações.':
-   automationSelected.size+' ativos principais selecionados automaticamente. Revise e salve sua automação.';
+  feedback.textContent=profile.configured?'Configuração carregada. Ativos e direção são determinados automaticamente. Salve após alterar suas preferências.':
+   automationSelected.size+' ativos disponíveis serão selecionados automaticamente neste mercado. Revise e salve sua automação.';
  }catch(e){feedback.textContent='Configurador indisponível: '+e.message}
 }
 async function saveAutomationProfile(){
@@ -4030,9 +3956,9 @@ async function saveAutomationProfile(){
   const manual=operationMode()==='manual',panelMode=configurationPanelMode;
   const mg=$('autoMg').checked,cycles=$('autoCycles').value;
   const profile={panel_mode:panelMode,operation_mode:panelMode,account_mode:automationRadio('autoMode'),market:manual?'volatility':automationRadio('autoMarket'),
-   symbols:manual?[]:[...automationSelected],strategy:manual?'manual':automationRadio('autoStrategy'),
+   symbols:[],strategy:manual?'manual':automationRadio('autoStrategy'),
    expiry_minutes:manual?0:Number($('autoExpiry').value),news_filter:false,news_minutes_before:30,news_minutes_after:30,
-   max_daily_orders:0,indicators:[],direction:manual?'AUTO':$('autoDirection').value,
+   max_daily_orders:0,indicators:[],direction:'AUTO',
    min_payout_pct:manual?0:Number($('autoPayout').value),
    real_account_id:automationRadio('autoMode')==='real'?$('autoRealAccount').value:null,preset_mode:autoPresetMode,
    stake:String(stake),stop_win:String(win),stop_loss:String(loss),martingale:mg,

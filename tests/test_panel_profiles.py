@@ -132,6 +132,31 @@ def test_saving_one_panel_does_not_change_the_other_panel(tmp_path, monkeypatch)
         cleanup(engine)
 
 
+def test_strategy_profile_automatically_uses_up_to_five_market_assets(tmp_path, monkeypatch):
+    client, factory, engine, uid = prepare(tmp_path, monkeypatch)
+    catalog = [
+        {"symbol": symbol, "name": symbol, "group": "derived"}
+        for symbol in ("R_10", "R_25", "R_50", "R_75", "R_100", "1HZ100V")
+    ]
+    monkeypatch.setattr(main, "featured_instruments_by_group", AsyncMock(return_value=catalog))
+    try:
+        response = client.post("/api/automation/profile", json={
+            "panel_mode": "strategies", "operation_mode": "strategies",
+            "account_mode": "demo", "market": "volatility",
+            "symbols": [], "strategy": "pulso_v2", "expiry_minutes": 5,
+            "direction": "PUT", "stake": "1.00", "stop_win": "0.00",
+            "stop_loss": "0.00", "martingale": False, "gale_count": 0,
+            "cycles": 0, "multiplier": "2.00", "cycle_multiplier": "2.00",
+        })
+        assert response.status_code == 200, response.text
+        saved = client.get("/api/automation/profile?panel_mode=strategies").json()
+        assert saved["symbols"] == ["R_10", "R_100", "R_25", "R_50", "R_75"]
+        assert len(saved["symbols"]) == 5
+        assert saved["direction"] == "AUTO"
+    finally:
+        cleanup(engine)
+
+
 def test_risk_summary_only_counts_orders_from_requested_panel(tmp_path, monkeypatch):
     client, factory, engine, uid = prepare(tmp_path, monkeypatch)
     with factory() as session:

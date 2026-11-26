@@ -1810,7 +1810,8 @@ def automation_profile_result(profile, panel_mode=None):
         'max_daily_orders':0,
         # Do not expose stale choices from profiles created by older panels.
         'indicators':[],
-        'direction':profile.direction,
+        # Direction is owned by the strategy; do not leak stale CALL/PUT values.
+        'direction':'AUTO',
         'real_account_id':profile.real_account_id,
         'min_payout_pct':int(Decimal(profile.min_payout)),
         'preset_mode':profile.preset_mode,
@@ -1867,14 +1868,8 @@ async def save_automation_profile(request:Request,payload:AutomationProfileReque
             raise HTTPException(422,'Expiração inválida')
         if payload.strategy in FOREX_MTF_STRATEGIES and payload.expiry_minutes!=15:
             raise HTTPException(422,'Esta estratégia Forex exige expiração fixa M15')
-        if not 1<=len(payload.symbols)<=5 or len(payload.symbols)!=len(set(payload.symbols)):
-            raise HTTPException(422,'Selecione de 1 a 5 ativos diferentes')
-        if any(not re.fullmatch(r'[A-Za-z0-9_]{2,30}',x) for x in payload.symbols):
-            raise HTTPException(422,'Símbolo inválido')
     if payload.news_minutes_before not in (0,15,30,60) or payload.news_minutes_after not in (0,15,30,60):
         raise HTTPException(422,'Janela de notícias inválida')
-    if payload.direction not in ('AUTO','CALL','PUT'):
-        raise HTTPException(422,'Direção inválida')
     if not 0<=payload.min_payout_pct<=200:
         raise HTTPException(422,'Payout mínimo fora do intervalo')
     if payload.preset_mode not in ('conservative','aggressive','custom'):
@@ -1898,15 +1893,23 @@ async def save_automation_profile(request:Request,payload:AutomationProfileReque
         owned={a['account_id'] for a in real_accounts(extract_accounts(payload_accounts))}
         if payload.real_account_id not in owned:
             raise HTTPException(403,'Conta REAL não pertence à sessão autenticada')
-    # Strategy profiles validate selected assets against the broker catalogue.
+    # Strategy profiles use the up-to-five broker-listed instruments returned
+    # for the chosen market. Symbols are no longer user-editable preferences.
+    selected_symbols=[]
     if not manual_mode:
         try:
             instruments=await featured_instruments_by_group('derived' if payload.market=='volatility' else payload.market)
-            available={item['symbol'] for item in instruments}
         except (MarketError,TimeoutError,OSError):
             raise HTTPException(503,'Catálogo da Deriv indisponível; configuração não salva') from None
-        if not set(payload.symbols).issubset(available):
-            raise HTTPException(422,'Seleção contém ativo não disponível no mercado escolhido')
+        for item in instruments:
+            symbol=item.get('symbol') if isinstance(item,dict) else None
+            if (isinstance(symbol,str) and re.fullmatch(r'[A-Za-z0-9_]{2,30}',symbol)
+                and symbol not in selected_symbols):
+                selected_symbols.append(symbol)
+            if len(selected_symbols)==5:
+                break
+        if not selected_symbols:
+            raise HTTPException(422,'Nenhum ativo disponível no mercado escolhido; tente outro mercado')
     async with autopilot_lock:
         with db.SessionLocal() as session:
             db.ensure_panel_profiles(session,user.id)
@@ -1941,7 +1944,7 @@ async def save_automation_profile(request:Request,payload:AutomationProfileReque
             profile.operation_mode=operation_mode
             profile.market=payload.market
             profile.account_mode=payload.account_mode
-            profile.symbols_json=json.dumps([] if manual_mode else sorted(payload.symbols))
+            profile.symbols_json=json.dumps([] if manual_mode else sorted(selected_symbols))
             profile.strategy='manual' if manual_mode else payload.strategy
             profile.expiry_minutes=0 if manual_mode else payload.expiry_minutes
             profile.news_filter=payload.news_filter
@@ -1949,7 +1952,7 @@ async def save_automation_profile(request:Request,payload:AutomationProfileReque
             profile.news_minutes_after=payload.news_minutes_after
             profile.max_daily_orders=0  # Daily operation-count cap retired; risk gates remain active.
             profile.indicators_json='[]'
-            profile.direction=payload.direction
+            profile.direction='AUTO'
             profile.real_account_id=payload.real_account_id if payload.account_mode=='real' else None
             profile.min_payout=str(payload.min_payout_pct)
             profile.preset_mode=payload.preset_mode
