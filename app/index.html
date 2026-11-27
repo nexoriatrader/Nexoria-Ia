@@ -1994,7 +1994,7 @@ body:has(#app-home:not(.hidden)) .nexora-logo-only .brand img{width:clamp(155px,
 
   <div id="nxPanelHistoryState" class="nx-history-state" data-state="unknown" role="status">Consultando o estado do robô…</div>
   <section class="nx-panel-history" aria-labelledby="nxPanelHistoryTitle">
-    <div class="nx-history-head"><span class="nx-history-icon" aria-hidden="true">▤</span><div><span class="nx-neo-section-caption">HISTÓRICO</span><h2 id="nxPanelHistoryTitle">Resultados do robô</h2><p>Registros de operações encerradas</p></div></div>
+    <div class="nx-history-head"><span class="nx-history-icon" aria-hidden="true">▤</span><div><span class="nx-neo-section-caption">HISTÓRICO</span><h2 id="nxPanelHistoryTitle">Resultados do robô</h2><p>Acompanha ordens em andamento e resultados encerrados</p></div></div>
     <h3 class="nx-history-label">Última operação</h3>
     <div id="nxPanelHistoryLatest" class="nx-history-list nx-history-latest"><p class="nx-history-note">Consultando histórico…</p></div>
     <h3 class="nx-history-label">Operações anteriores</h3>
@@ -3701,26 +3701,36 @@ function renderPanelHistory(items,mode){
   empty(latest,'Histórico não confirmado.');empty(previous,'Sem registros confirmados.');
   note.textContent='Aguardando sincronização do histórico.';return;
  }
- const dateOf=o=>o.started_at_brasilia||o.broker_purchase_at||'';
+ const dateOf=o=>o.started_at_brasilia||o.broker_purchase_at||o.created_at||'';
  const stamp=o=>{const value=Date.parse(dateOf(o));return Number.isFinite(value)?value:-Infinity;};
- const rows=visibleOrderRows(items,mode).filter(o=>o&&o.state==='SETTLED'&&o.progression?.source==='autopilot').sort((a,b)=>stamp(b)-stamp(a)).slice(0,4);
+ const activeStates=new Set(['PENDING','CONFIRMED','UNKNOWN']);
+ const stateOf=o=>String(o?.state||'').toUpperCase();
+ const rows=visibleOrderRows(items,mode).filter(o=>o&&o.progression?.source==='autopilot'&&(stateOf(o)==='SETTLED'||activeStates.has(stateOf(o)))).sort((a,b)=>stamp(b)-stamp(a));
+ const active=rows.find(o=>activeStates.has(stateOf(o)));
+ const settled=rows.filter(o=>stateOf(o)==='SETTLED');
  function tile(order){
   const row=document.createElement('div');row.className='nx-history-row';
   const main=document.createElement('div'),title=document.createElement('strong'),sub=document.createElement('small');
   title.textContent=String(order.symbol||'Ativo não informado');
-  const date=brasilDateTime(dateOf(order));sub.textContent=date[0]+' · '+date[1]+' (Brasília)';
+  const date=brasilDateTime(dateOf(order));sub.textContent=(!order.started_at_brasilia&&!order.broker_purchase_at?'Registro · ':'')+date[0]+' · '+date[1]+' (Brasília)';
   main.append(title,sub);
   const outcome=document.createElement('div');outcome.className='nx-history-outcome';
-  const state=String(order.outcome||'').toUpperCase();
-  const label=document.createElement('strong');label.textContent=state==='WIN'?'Ganho':state==='LOSS'?'Perda':'Encerrada';
+  const state=stateOf(order),result=String(order.outcome||'').toUpperCase();
+  const label=document.createElement('strong');
   const value=document.createElement('small');
-  value.textContent=order.pnl!==null&&order.pnl!==undefined&&Number.isFinite(Number(order.pnl))?money(order.pnl):'Valor não informado';
+  if(state==='CONFIRMED'){label.textContent='Em andamento';value.textContent='Contrato ativo';}
+  else if(state==='UNKNOWN'){label.textContent='Conferindo com a Deriv';value.textContent='Reconciliação pendente';}
+  else if(state==='PENDING'){label.textContent='Aguardando confirmação';value.textContent='Aguardando a Deriv';}
+  else{label.textContent=result==='WIN'?'Ganho':result==='LOSS'?'Perda':result==='DRAW'?'Empate':'Encerrada';
+   value.textContent=order.pnl!==null&&order.pnl!==undefined&&Number.isFinite(Number(order.pnl))?money(order.pnl):'Valor não informado';}
   outcome.append(label,value);row.append(main,outcome);return row;
  }
- if(rows.length)latest.append(tile(rows[0]));else empty(latest,'Nenhuma operação encerrada do robô neste histórico.');
- rows.slice(1,4).forEach(o=>previous.append(tile(o)));
- if(rows.length<2)empty(previous,'Nenhuma operação anterior registrada.');
- note.textContent=(mode==='real'?'Conta real':'Treinamento · saldo fictício')+' · histórico confirmado · resultados passados não garantem resultados futuros.';
+ if(active)latest.append(tile(active));else if(settled.length)latest.append(tile(settled[0]));
+ else empty(latest,'Nenhuma operação ativa ou encerrada do robô neste histórico.');
+ const previousRows=active?settled:settled.slice(1);
+ previousRows.slice(0,3).forEach(o=>previous.append(tile(o)));
+ if(!previousRows.length)empty(previous,'Nenhuma operação anterior encerrada registrada.');
+ note.textContent=(mode==='real'?'Conta real':'Treinamento · saldo fictício')+' · ordens ativas e resultados sincronizados automaticamente · resultados passados não garantem resultados futuros.';
 }
 async function loadDemoOrders(){const historyMode=robotConfiguredMode;try{const data=await req(historyMode==='real'?'/api/real/orders':'/api/demo/orders');demoOrders=data.items||[];if(historyMode===robotConfiguredMode)syncClearResultsButtonLabel(historyMode);updateLastOrderLabel();renderOrders();renderRealtimeOrders();if(historyMode===robotConfiguredMode)renderPanelHistory(data.items||[],historyMode);return data}catch(e){if(historyMode===robotConfiguredMode)renderPanelHistory(null);$('ordersBody').innerHTML='<tr><td colspan="11" class="empty">Não foi possível carregar o histórico.</td></tr>';throw e}}
 const brasilDateTime=(iso)=>{
