@@ -386,7 +386,9 @@ def v2_symbol_recovery(sess,user,orders,plan,cycle_cfg,batch,panel_profile=None)
         entry=next_entry(base=getattr(panel_profile,'stake',user.stake),gale_enabled=False,gales=0,
                          gale_multiplier='1',cycles=plan.cycles_limit,
                          cycles_enabled=True,
-                         cycle_multiplier=cycle_cfg.multiplier if cycle_cfg else '2',
+                         cycle_multiplier=(getattr(cycle_cfg,'cycle_multiplier',
+                                                   getattr(cycle_cfg,'multiplier','2'))
+                                           if cycle_cfg else '2'),
                          orders=rows_for(historical))
         # A completed loss advances to a new cycle but never reuses the
         # previous signal. Retry remains FALSE (gale=0).
