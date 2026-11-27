@@ -207,7 +207,7 @@ def test_dashboard_ignores_stale_status_after_loading_secondary_cards():
     assert refresh.count("if(sequence!==dashboardStatusSequence)return null;")>=2
     assert refresh.index("await Promise.allSettled(")<refresh.rindex(
         "if(sequence!==dashboardStatusSequence)return null;")
-    assert "const status=await req('/api/status?panel_mode=strategies')" in refresh
+    assert "const status=await fetchStrategyStatus();" in refresh
 
 
 def test_risk_reset_confirmation_has_real_line_breaks():

@@ -71,7 +71,8 @@ def test_robot_dashboard_plain_language_overview_is_accessible_and_read_only():
     assert "renderRobotEasyOverview({...status,running:robotRunning});" in HTML
     assert "reportRobotEasyUncertainty();" in HTML
     assert "Não presuma que o robô foi desligado." in HTML
-    assert "const status=await req('/api/status?panel_mode=strategies')" in HTML
+    assert "const status=await fetchStrategyStatus();" in HTML
+    assert "function fetchStrategyStatus()" in HTML
     assert "const sequence=++dashboardStatusSequence" in HTML
 
 
@@ -853,8 +854,11 @@ def test_review_performance_logs_are_readonly_and_do_not_log_secrets():
     ast.parse(main)
     ast.parse(markets)
     assert "_REVIEW_READ_PATHS=frozenset((" in main
+    assert "'/api/status'" in main and "'/api/demo/balance'" in main
+    assert "'/api/demo/results/today'" in main and "'/api/real/results/today'" in main
     assert "request.method=='GET'" in main
     assert "response.headers['Server-Timing']" in main
+    assert "app_read;dur=" in main and "slow app read path=" in main
     assert "review_path,elapsed_ms,response.status_code" in main
     assert "request.headers.get('origin')" in main
     assert "'Cache-Control':'no-store'" in main
@@ -865,3 +869,59 @@ def test_review_performance_logs_are_readonly_and_do_not_log_secrets():
     assert "public catalogue refresh slow" in markets
     assert 'timeout=15' in markets
     assert '_catalog_cache["at"] < 300' in markets
+
+
+def test_slow_robot_status_is_not_aborted_and_duplicate_reads_are_shared():
+    panel = HTML.split("async function refreshPanelStatusDisplay(){", 1)[1].split(
+        "function updateResultsPolling(){", 1
+    )[0]
+    assert "AbortController" not in panel
+    assert "controller.abort" not in panel
+    assert "fetchStrategyStatus()" in panel
+    assert "renderPanelHistoryStatusFailure(error)" in panel
+    assert "function fetchStrategyStatus()" in HTML
+    assert "if(!strategyStatusRequest)" in HTML
+    helper = HTML.split("function fetchStrategyStatus(){", 1)[1].split(
+        "async function refreshPanelStatusDisplay(){", 1
+    )[0]
+    assert helper.count("req('/api/status?panel_mode=strategies')") == 1
+    dashboard = HTML.split("async function refreshDashboard(){", 1)[1].split(
+        "let robotStartDialogResolver", 1
+    )[0]
+    assert "const status=await fetchStrategyStatus();" in dashboard
+    assert "if(activePage==='dashboard')refreshDashboard();" in HTML
+    assert "if(activePage==='dashboard'||activePage==='results')refreshDashboard();" not in HTML
+    assert "if(dashboardRefreshInFlight)return null;" in HTML
+
+
+def test_panel_status_failure_preserves_recent_confirmation_as_delayed():
+    if not shutil.which("node"):
+        return
+    block = "function renderPanelHistoryState(" + HTML.split(
+        "function renderPanelHistoryState(", 1
+    )[1].split("function renderPanelHistory(items,mode){", 1)[0]
+    runtime = r"""
+const node={dataset:{},textContent:'',nxActivityTimer:null,nxUnknownTimer:null};
+const $=()=>node;
+let timer=0;
+function setTimeout(){return ++timer;}
+function clearTimeout(){}
+"""
+    checks = r"""
+renderPanelHistoryState('active',{last_scan_at:new Date().toISOString(),stage:'scanning',checked:2,total:5});
+if(node.dataset.state!=='active')throw Error('Fresh state was not applied');
+if(node.dataset.lastConfirmedState!=='active')throw Error('Last confirmed state was not stored');
+renderPanelHistoryStatusFailure(new Error('slow response'));
+if(node.dataset.state!=='stale')throw Error('A transient failure erased a recent state');
+if(!node.textContent.includes('último estado confirmado: Em execução'))throw Error('Missing last known state context');
+if(!node.textContent.includes('Tentando sincronizar novamente'))throw Error('Missing retry guidance');
+renderPanelHistoryState('paused',null);
+if(node.dataset.state!=='paused'||node.dataset.lastConfirmedState!=='paused')throw Error('New confirmed state did not replace stale state');
+renderPanelHistoryStatusFailure({name:'AbortError'});
+if(node.dataset.state!=='stale')throw Error('A later transient failure incorrectly removed the new confirmation');
+"""
+    result = subprocess.run(
+        ["node", "-e", runtime + block + checks],
+        capture_output=True, text=True, timeout=15, check=False,
+    )
+    assert result.returncode == 0, result.stderr

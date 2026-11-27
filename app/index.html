@@ -1496,9 +1496,9 @@ body:has(#dashboard:not(.hidden)) .nexora-logo-only .brand img{
 #dashboard .nx-history-state[data-state="active"]::before{background:#70d6a9;box-shadow:0 0 0 3px #70d6a91c}
 #dashboard .nx-history-state[data-state="active"][data-activity="waiting"]{color:#eac16f}
 #dashboard .nx-history-state[data-state="active"][data-activity="waiting"]::before{background:#eac16f;box-shadow:none}
-#dashboard .nx-history-state[data-state="active"][data-activity="degraded"],#dashboard .nx-history-state[data-state="unknown"]{color:#eac16f}
+#dashboard .nx-history-state[data-state="active"][data-activity="degraded"],#dashboard .nx-history-state[data-state="unknown"],#dashboard .nx-history-state[data-state="stale"]{color:#eac16f}
 #dashboard .nx-history-state[data-activity="error"]{color:#f2abab}
-#dashboard .nx-history-state[data-state="active"][data-activity="degraded"]::before,#dashboard .nx-history-state[data-state="unknown"]::before{background:#eac16f;box-shadow:none}
+#dashboard .nx-history-state[data-state="active"][data-activity="degraded"]::before,#dashboard .nx-history-state[data-state="unknown"]::before,#dashboard .nx-history-state[data-state="stale"]::before{background:#eac16f;box-shadow:none}
 #dashboard .nx-history-state[data-activity="error"]::before{background:#f2abab;box-shadow:none}
 #dashboard .nx-history-state[data-state="active"][data-activity="checking"]::before{animation:nxHistoryActivityPulse 1.65s ease-out infinite}
 @keyframes nxHistoryActivityPulse{0%,100%{box-shadow:0 0 0 2px #70d6a940}65%{box-shadow:0 0 0 7px #70d6a900}}
@@ -2472,22 +2472,25 @@ async function loadDailyResults(){
 }
 setInterval(()=>{if(activePage==='dashboard')loadDailyResults().catch(()=>{})},120000);
 
+let panelStatusSequence=0,strategyStatusRequest=null;
+function fetchStrategyStatus(){
+ if(!strategyStatusRequest)strategyStatusRequest=req('/api/status?panel_mode=strategies').finally(()=>{strategyStatusRequest=null});
+ return strategyStatusRequest;
+}
 async function refreshPanelStatusDisplay(){
- const sequence=dashboardStatusSequence;
- const controller=new AbortController();
- const timeout=setTimeout(()=>controller.abort(),10000);
+ const sequence=++panelStatusSequence;
  try{
-  const status=await req('/api/status?panel_mode=strategies',{signal:controller.signal});
-  if(activePage!=='dashboard'||sequence!==dashboardStatusSequence)return;
+  const status=await fetchStrategyStatus();
+  if(activePage!=='dashboard'||sequence!==panelStatusSequence)return;
   activePanelMode=status.active_panel_mode||null;
   const strategyRunning=Boolean(status.running&&activePanelMode==='strategies');
   renderScanMonitor({...status,running:strategyRunning});
   const state=strategyRunning?'active':status.interrupted_after_restart?'interrupted':status.auto_buy_enabled?'paused':'unavailable';
   renderPanelHistoryState(state,status.scan_progress);
  }catch(error){
-  if(activePage==='dashboard'&&sequence===dashboardStatusSequence)renderPanelHistoryState('unknown',null,error?.name!=='AbortError');
+  if(activePage==='dashboard'&&sequence===panelStatusSequence)renderPanelHistoryStatusFailure(error);
   throw error;
- }finally{clearTimeout(timeout);}
+ }
 }
 function updateResultsPolling(){
  if(resultsRefreshTimer){clearInterval(resultsRefreshTimer);resultsRefreshTimer=null;}
@@ -2752,7 +2755,7 @@ async function init(){
     updateResultsPolling();
   }
   refreshTimer=setInterval(()=>{
-    if(activePage==='dashboard'||activePage==='results')refreshDashboard();
+    if(activePage==='dashboard')refreshDashboard();
   },30000);
  }catch(e){fail(e.message);page('welcome');refreshLandingOffer()}}
 function showRobotNotice(reason){
@@ -3107,12 +3110,15 @@ function renderScanMonitor(status){
  $('dashScanFill').style.width=running&&data?.total?
   Math.min(100,100*Number(data.checked||0)/Number(data.total))+'%':'0%';
 }
+let dashboardRefreshInFlight=false;
 async function refreshDashboard(){
+ if(dashboardRefreshInFlight)return null;
+ dashboardRefreshInFlight=true;
  const sequence=++dashboardStatusSequence;
  try{
    // Fetch authoritative robot state FIRST. Other panel requests may fail
    // independently and must never make an active robot look stopped.
-   const status=await req('/api/status?panel_mode=strategies');
+   const status=await fetchStrategyStatus();
    // Ignore an older response that arrived after a newer status request.
    if(sequence!==dashboardStatusSequence)return null;
    robotStatusConfirmed=true;
@@ -3216,7 +3222,7 @@ async function refreshDashboard(){
    markNxNeoScannerUncertain();
    // Keep the last known status; do not imply that the server stopped trading.
    return null;
- }
+ }finally{dashboardRefreshInFlight=false;}
 }
 let robotStartDialogResolver=null,robotStartDialogPreviousFocus=null;
 function resolveRobotStartDialog(accepted){
@@ -3650,6 +3656,10 @@ function renderPanelHistoryState(state,scan,confirmedError=false){
  if(!node)return;
  const labels={active:'Robô em execução: aguardando nova leitura',paused:'Robô pausado',interrupted:'Execução interrompida',unavailable:'Robô indisponível',unknown:'Estado do robô não confirmado · aguardando atualização'};
  const safeState=Object.prototype.hasOwnProperty.call(labels,state)?state:'unknown';
+ if(safeState!=='unknown'){
+  node.dataset.lastConfirmedState=safeState;
+  node.dataset.lastConfirmedAt=String(Date.now());
+ }
  node.dataset.state=safeState;
  let activity=safeState==='active'?'waiting':'idle';
  let message=labels[safeState];
@@ -3686,11 +3696,35 @@ function renderPanelHistoryState(state,scan,confirmedError=false){
  if(node.textContent!==message)node.textContent=message;
  // Stop the visual pulse if new status confirmations stop arriving.
  clearTimeout(node.nxActivityTimer);
- if(safeState!=='unknown')node.nxActivityTimer=setTimeout(()=>{
-  node.dataset.state='unknown';
-  node.dataset.activity='idle';
-  node.textContent='Sem atualização recente do estado · aguardando resposta do servidor';
- },35000);
+ clearTimeout(node.nxUnknownTimer);
+ if(safeState!=='unknown'){
+  const confirmedAt=Number(node.dataset.lastConfirmedAt),statusLabel=labels[safeState];
+  node.nxActivityTimer=setTimeout(()=>{
+   if(Number(node.dataset.lastConfirmedAt)!==confirmedAt)return;
+   node.dataset.state='stale';node.dataset.activity='degraded';
+   node.textContent='Atualização atrasada · último estado confirmado: '+statusLabel+'. Tentando sincronizar novamente.';
+  },35000);
+  node.nxUnknownTimer=setTimeout(()=>{
+   if(Number(node.dataset.lastConfirmedAt)!==confirmedAt)return;
+   node.dataset.state='unknown';node.dataset.activity='idle';
+   node.textContent='Estado do robô não confirmado · aguardando atualização. Último estado confirmado: '+statusLabel+'.';
+  },90000);
+ }
+}
+function renderPanelHistoryStatusFailure(error){
+ const node=$('nxPanelHistoryState');
+ if(!node)return;
+ const confirmedAt=Number(node.dataset.lastConfirmedAt||0);
+ const age=Date.now()-confirmedAt;
+ const state=node.dataset.lastConfirmedState;
+ if(state&&Number.isFinite(confirmedAt)&&age>=0&&age<90000){
+  const labels={active:'Em execução',paused:'Pausado',interrupted:'Interrompido',unavailable:'Indisponível'};
+  const time=new Intl.DateTimeFormat('pt-BR',{timeZone:'America/Sao_Paulo',hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false}).format(new Date(confirmedAt));
+  node.dataset.state='stale';node.dataset.activity='degraded';
+  node.textContent='Atualização atrasada · último estado confirmado: '+(labels[state]||'sem classificação')+' às '+time+'. Tentando sincronizar novamente; o estado pode ter mudado.';
+ }else{
+  renderPanelHistoryState('unknown',null,error?.name!=='AbortError');
+ }
 }
 function renderPanelHistory(items,mode){
  const latest=$('nxPanelHistoryLatest'),previous=$('nxPanelHistoryPrevious'),note=$('nxPanelHistoryNote');

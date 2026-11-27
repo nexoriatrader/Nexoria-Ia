@@ -176,6 +176,43 @@ def test_shared_fetch_slots_are_freed_after_waiter_timeout(monkeypatch):
     asyncio.run(check())
 
 
+def test_shared_store_timeout_trips_temporary_circuit_breaker(monkeypatch):
+    async def check():
+        market._candle_snapshots.clear()
+        market._candle_snapshot_times.clear()
+        market._candle_inflight.clear()
+        market._shared_market_store_disabled_until=0
+        monkeypatch.setattr(market.shared_market_store,"enabled",lambda:True)
+        monkeypatch.setattr(market,"_SHARED_MARKET_STORE_TIMEOUT_SECONDS",.01)
+        store_reads=[]
+        store_writes=[]
+        def slow_read(*args):
+            store_reads.append(args)
+            time.sleep(.05)
+            return None
+        def save(*args):
+            store_writes.append(args)
+            return True
+        monkeypatch.setattr(market.shared_market_store,"get_snapshot",slow_read)
+        monkeypatch.setattr(market.shared_market_store,"save_snapshot",save)
+        broker=AsyncMock(return_value=_candles())
+        monkeypatch.setattr(market,"public_request",broker)
+
+        await market.shared_candle_request("R_25",60,165)
+        await market.shared_candle_request("R_75",60,165)
+
+        assert len(store_reads)==1
+        assert store_writes==[]
+        assert broker.await_count==2
+        assert market._shared_market_store_disabled_until>time.monotonic()
+
+        market._shared_market_store_disabled_until=0
+        market._candle_snapshots.clear()
+        market._candle_snapshot_times.clear()
+        market._candle_inflight.clear()
+    asyncio.run(check())
+
+
 def test_ten_simulated_robots_reuse_one_broker_fetch(monkeypatch):
     """Ten concurrent analysts share one public data fetch, no trading orders."""
     async def check():

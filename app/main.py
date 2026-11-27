@@ -1346,12 +1346,26 @@ _REVIEW_READ_PATHS=frozenset((
     '/api/automation/profile',
     '/api/onboarding/config',
     '/api/automation/catalogue',
+    '/api/status',
+    '/api/autopilot/readiness',
+    '/api/autopilot/v2/scanner-status',
+    '/api/manual-signals/status',
+    '/api/demo/balance',
+    '/api/demo/orders',
+    '/api/demo/results/today',
+    '/api/demo/risk-session',
+    '/api/access/status',
+    '/api/session',
+    '/api/real/balance',
+    '/api/real/orders',
+    '/api/real/results/today',
+    '/',
 ))
 
 @app.middleware('http')
 async def headers(request:Request, call_next):
-    # Only the three read-only review endpoints are timed. Never log identities,
-    # request bodies or catalogue query parameters.
+    # Selected read-only endpoints are timed. Never log identities, request
+    # bodies, URL queries, account details or financial values.
     review_path=request.url.path
     review_start=(time.perf_counter()
                   if request.method=='GET' and review_path in _REVIEW_READ_PATHS else None)
@@ -1365,9 +1379,9 @@ async def headers(request:Request, call_next):
     response=await call_next(request)
     if review_start is not None:
         elapsed_ms=(time.perf_counter()-review_start)*1000
-        response.headers['Server-Timing']=f'review_read;dur={elapsed_ms:.1f}'
+        response.headers['Server-Timing']=f'app_read;dur={elapsed_ms:.1f}'
         if elapsed_ms>=1000:
-            log.warning('slow review read path=%s elapsed_ms=%.1f status=%d',
+            log.warning('slow app read path=%s elapsed_ms=%.1f status=%d',
                         review_path,elapsed_ms,response.status_code)
     response.headers.update({'Cache-Control':'no-store','X-Content-Type-Options':'nosniff','Referrer-Policy':'no-referrer',
         'X-Frame-Options':'DENY','Content-Security-Policy':"default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; connect-src 'self'; frame-ancestors 'none'"})

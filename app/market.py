@@ -2,6 +2,7 @@
 import asyncio
 import json
 import logging
+import time
 from . import shared_market_store
 from decimal import Decimal, InvalidOperation
 
@@ -152,6 +153,36 @@ _candle_lock = asyncio.Lock()
 _CANDLE_CACHE_MAX_ITEMS = 48
 _CANDLE_INFLIGHT_MAX_ITEMS = 20
 _CANDLE_SCAN_REUSE_SECONDS = {60: 12, 300: 30, 900: 30, 3600: 45}
+_SHARED_MARKET_STORE_TIMEOUT_SECONDS=0.6
+_SHARED_MARKET_STORE_RETRY_SECONDS=60.0
+_shared_market_store_disabled_until=0.0
+_shared_market_store_lock=asyncio.Lock()
+
+
+def _shared_market_store_available():
+    return (shared_market_store.enabled()
+            and time.monotonic()>=_shared_market_store_disabled_until)
+
+
+async def _shared_market_store_call(operation,func,*args):
+    """Fail open to the public in-process/broker path and back off on slow DB I/O."""
+    global _shared_market_store_disabled_until
+    if not _shared_market_store_available():
+        return None
+    async with _shared_market_store_lock:
+        if not _shared_market_store_available():
+            return None
+        try:
+            return await asyncio.wait_for(
+                asyncio.to_thread(func,*args),
+                timeout=_SHARED_MARKET_STORE_TIMEOUT_SECONDS)
+        except Exception as exc:
+            _shared_market_store_disabled_until=(
+                time.monotonic()+_SHARED_MARKET_STORE_RETRY_SECONDS)
+            logging.getLogger("nexora.market").warning(
+                "Shared market cache %s unavailable; backing off %ss: %s",
+                operation,int(_SHARED_MARKET_STORE_RETRY_SECONDS),type(exc).__name__)
+            return None
 
 
 def _prune_candle_snapshots(now: float) -> None:
@@ -185,7 +216,6 @@ def _shared_candle_done(key, task):
 
 
 async def shared_candle_request(symbol: str, granularity: int, count: int, *, timeout: float = 8.0) -> dict:
-    import time
     if not isinstance(symbol, str) or not symbol or granularity not in (60, 300, 900, 3600):
         raise MarketError('Consulta de velas inválida')
     if not isinstance(count, int) or not 1 <= count <= 1000:
@@ -201,19 +231,14 @@ async def shared_candle_request(symbol: str, granularity: int, count: int, *, ti
         # Cache is keyed by public symbol/timeframe/count/bucket, never user.
         # Other workers may reuse fresh data without querying the broker again.
         # Fail open to the original Deriv fetch if the shared database is slow.
-        if shared_market_store.enabled():
-            try:
-                shared = await asyncio.wait_for(
-                    asyncio.to_thread(shared_market_store.get_snapshot,
-                        symbol, granularity, count, bucket, now), timeout=0.6)
-                if shared is not None:
-                    _candle_snapshots[key] = dict(shared)
-                    _candle_snapshot_times[key] = now
-                    _prune_candle_snapshots(now)
-                    return dict(shared)
-            except Exception as exc:
-                logging.getLogger("nexora.market").warning(
-                    "Shared market cache read unavailable: %s", type(exc).__name__)
+        shared = await _shared_market_store_call(
+            'read',shared_market_store.get_snapshot,
+            symbol,granularity,count,bucket,now)
+        if shared is not None:
+            _candle_snapshots[key] = dict(shared)
+            _candle_snapshot_times[key] = now
+            _prune_candle_snapshots(now)
+            return dict(shared)
         task = _candle_inflight.get(key)
         if task is None:
             # Backpressure: do not allocate arbitrarily many queued coroutines
@@ -245,15 +270,11 @@ async def shared_candle_request(symbol: str, granularity: int, count: int, *, ti
             _candle_snapshots[key] = dict(response)
             _candle_snapshot_times[key] = saved_at
             _prune_candle_snapshots(saved_at)
-    if fresh and int(saved_at // granularity) == bucket and shared_market_store.enabled():
-        try:
-            await asyncio.wait_for(asyncio.to_thread(
-                shared_market_store.save_snapshot,
-                symbol, granularity, count, bucket, response,
-                _CANDLE_SCAN_REUSE_SECONDS[granularity], saved_at), timeout=0.6)
-        except Exception as exc:
-            logging.getLogger("nexora.market").warning(
-                "Shared market cache write unavailable: %s", type(exc).__name__)
+    if fresh and int(saved_at // granularity) == bucket:
+        await _shared_market_store_call(
+            'write',shared_market_store.save_snapshot,
+            symbol,granularity,count,bucket,response,
+            _CANDLE_SCAN_REUSE_SECONDS[granularity],saved_at)
     return dict(response)
 
 
