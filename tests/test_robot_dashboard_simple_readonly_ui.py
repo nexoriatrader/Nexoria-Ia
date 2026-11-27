@@ -709,6 +709,18 @@ def test_only_reference_control_card_is_visible_at_dashboard_entry():
 
 
 
+def test_strategy_dashboard_has_youtube_tutorial_link_above_heading():
+    panel = _dashboard_panel()
+    href = 'href="https://www.youtube.com/watch?v=5VJcnhDxGz4"'
+    assert panel.count('class="strategy-tutorial-cta"') == 1
+    assert href in panel
+    assert 'target="_blank" rel="noopener noreferrer"' in panel
+    assert 'aria-label="Tutorial: Veja como usar Nexora Estratégias (abre em nova aba)"' in panel
+    assert "Tutorial: Veja como usar Nexora Estratégias" in panel
+    assert panel.index('class="strategy-tutorial-cta"') < panel.index('<div class="section-heading">')
+    assert "#dashboard .strategy-tutorial-cta:focus-visible" in HTML
+
+
 def test_premium_reference_skin_preserves_existing_controls():
     """Approved premium reference changes visual presentation, not execution."""
     panel = _dashboard_panel()
