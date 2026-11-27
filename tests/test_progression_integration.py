@@ -40,13 +40,13 @@ def test_restart_is_detected_not_automatically_rearmed(tmp_path,monkeypatch):
         main.autopilot_enabled.clear()
         main.autopilot_reasons.clear()
         main.pause_demo_autopilot_after_restart()  # Render startup revokes durable consent.
-        status=client.get('/api/status?panel_mode=strategies')
+        status=client.get('/api/status?panel_mode=strategies&fresh=true')
         assert status.status_code==200
         assert status.json()['running'] is False
         assert status.json()['interrupted_after_restart'] is True
         assert 'reative manualmente' in status.json()['reason']
         assert client.post('/api/autopilot/stop',json={'panel_mode':'strategies'}).status_code==200
-        assert client.get('/api/status?panel_mode=strategies').json()['interrupted_after_restart'] is False
+        assert client.get('/api/status?panel_mode=strategies&fresh=true').json()['interrupted_after_restart'] is False
     finally:cleanup(engine)
 
 

@@ -259,7 +259,7 @@ def test_manual_confirmation_is_idempotent_limited_to_active_session_and_status(
     retry_after_pause=client.post('/api/manual-signals/confirm',json=data)
     assert retry_after_pause.status_code==200
     assert retry_after_pause.json()==first.json()
-    status=client.get('/api/status?panel_mode=manual').json()
+    status=client.get('/api/status?panel_mode=manual&fresh=true').json()
     assert status['operation_mode']=='manual' and status['manual_session']['status']=='PAUSED'
     assert main.autopilot_enabled.isdisjoint({uid})
 

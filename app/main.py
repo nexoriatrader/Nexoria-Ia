@@ -1,5 +1,6 @@
 """NEXORA IA. Official Deriv DEMO orders and read-only AutoPilot research."""
 import asyncio, json, logging, os, secrets, re, time
+from copy import deepcopy
 from math import isfinite
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation
@@ -76,6 +77,10 @@ v2_gate_last_log: dict[tuple[int,str],float] = {}
 autopilot_reasons: dict[int,str] = {}
 # Read-only progress snapshots. Only real scanner callbacks update symbols.
 automation_scan_progress: dict[int,dict] = {}
+status_snapshot_cache: dict[tuple[int,int,str],dict] = {}
+status_snapshot_refresh_tasks: dict[tuple[int,int,str],asyncio.Task] = {}
+STATUS_SNAPSHOT_REFRESH_AFTER_SECONDS=2.0
+STATUS_SNAPSHOT_STALE_AFTER_SECONDS=15.0
 
 def record_automation_scan(uid:int, event:str, symbol:str|None, total:int, reason:str|None=None):
     """In-memory diagnostics of real market checks, not synthetic activity."""
@@ -319,6 +324,7 @@ def disarm_autopilot(uid:int, reason:str):
     """Revoke persistent opt-in on a safety stop."""
     autopilot_enabled.discard(uid)
     automation_scan_progress.pop(uid,None)
+    invalidate_status_cache(uid)
     with db.SessionLocal() as sess:
         consent=sess.get(db.AutoPilotResumeConsent,uid)
         if consent:
@@ -1333,10 +1339,13 @@ async def lifespan(app):
     yield
     autopilot_enabled.clear()
     real_runtime.running.clear()
-    tasks=[task for task in (market_task,reconcile_task,autopilot_task,market_selfcheck_task,research_worker_task,m1_research_task,real_task,real_reconciliation_task,cataloger_retention_task) if task]
+    snapshot_tasks=list(status_snapshot_refresh_tasks.values())
+    tasks=[task for task in (market_task,reconcile_task,autopilot_task,market_selfcheck_task,research_worker_task,m1_research_task,real_task,real_reconciliation_task,cataloger_retention_task,*snapshot_tasks) if task]
     for task in tasks:
         task.cancel()
     await asyncio.gather(*tasks,return_exceptions=True)
+    status_snapshot_refresh_tasks.clear()
+    status_snapshot_cache.clear()
 
 app=FastAPI(title='NEXORA IA',version=VERSION,lifespan=lifespan)
 
@@ -1766,6 +1775,7 @@ async def logout(request:Request,nexora_sid:str|None=Cookie(default=None)):
                 old_run=s.get(db.RobotRun,session.user_id)
                 if old_run:s.delete(old_run)
                 s.delete(session);s.commit()
+                invalidate_status_cache(session.user_id)
     response=JSONResponse({'ok':True});response.delete_cookie('nexora_sid',path='/');return response
 
 class Config(BaseModel):
@@ -2028,6 +2038,7 @@ async def save_automation_profile(request:Request,payload:AutomationProfileReque
             profile.cycle_multiplier=str(parse_progression_multiplier(cycle_multiplier,'Multiplicador de ciclos'))
             session.commit()
             result=automation_profile_result(profile,panel_mode)
+    invalidate_status_cache(user.id)
     return {**result,'saved':True,'running':False,
         'ready_to_start':(payload.account_mode=='demo' and (manual_mode or not payload.news_filter)),
         'note':'Preferências registradas. A ativação é um comando separado.'}
@@ -3027,6 +3038,8 @@ async def _start_manual_demo(user):
             sess.commit()
         autopilot_last_attempt.pop(user.id,None);autopilot_enabled.add(user.id)
         autopilot_reasons[user.id]='Nexora Manual DEMO ativa; aguardando sinais confirmados'
+        _publish_status_transition(user.id,'manual',running=True,account_mode='demo',
+            reason=autopilot_reasons[user.id])
     return {'running':True,'operation_mode':'manual','access':access,'execution':'DERIV_DEMO_ONLY',
             'real_orders_enabled':False,'message':'Sessão Manual ativa. A fila confirmada será executada sem scanner de Estratégias.'}
 
@@ -3129,6 +3142,8 @@ async def start_real_autopilot(request:Request,nexora_sid:str|None=None,panel_mo
         real_runtime.last_scan.pop(user.id,None)
         real_runtime.running.add(user.id)
         real_runtime.reasons[user.id]='Nexora Manual REAL ativa; aguardando sinais confirmados' if manual_mode else 'Conta REAL ligada; aguardando sinal confirmado'
+        _publish_status_transition(user.id,panel_mode,running=True,account_mode='real',
+            reason=real_runtime.reasons[user.id])
     return {'running':True,'operation_mode':'manual' if manual_mode else 'strategies','execution':'DERIV_REAL',
             'real_orders_enabled':True,
             'message':'Sessão Manual REAL ativa com consentimento vigente' if manual_mode else 'Compras REAL autorizadas com stop obrigatório e contrato único'}
@@ -3233,6 +3248,8 @@ async def autopilot_start(request:Request,payload:AutoPilotSwitch,
         autopilot_enabled.add(user.id)
         log.warning('AutoPilot armed: scan_mode=PULSO_V2; expiry=AUTO_M1_M3_M5_M15; execution=DEMO')
     autopilot_reasons[user.id]='AutoPilot DEMO ativo; buscando sinais com expiração automática conforme perfil salvo'
+    _publish_status_transition(user.id,'strategies',running=True,account_mode='demo',
+        reason=autopilot_reasons[user.id])
     return {'running':True,'access':access,'execution':'DERIV_DEMO_ONLY','real_orders_enabled':False}
 
 
@@ -3273,6 +3290,9 @@ async def autopilot_stop(request:Request,payload:AutoPilotSwitch|None=None,
             sess.commit()
             lease=sess.get(db.AutomationExecutionState,user.id)
             active_mode=lease.active_panel_mode if lease else None
+        _publish_status_transition(user.id,'manual',running=False,
+            account_mode=profile.account_mode,active_mode=active_mode,
+            reason='Robô Manual desligado; sinais pendentes preservados')
         return {'running':False,'operation_mode':'manual','panel_mode':'manual',
                 'active_panel_mode':active_mode,'persisted_status':'PAUSED',
                 'execution':'DERIV_REAL' if profile.account_mode=='real' else 'DERIV_DEMO_ONLY',
@@ -3284,6 +3304,8 @@ async def autopilot_stop(request:Request,payload:AutoPilotSwitch|None=None,
             real_runtime.disarm_real(user.id,'Desligado manualmente; contratos REAL continuam em reconciliação')
         with db.SessionLocal() as sess:
             _release_panel(sess,user.id,panel_mode,force=True);sess.commit()
+        _publish_status_transition(user.id,panel_mode,running=False,
+            account_mode='real',reason='Robô desligado; contratos REAL continuam em reconciliação')
         return {'running':False,'execution':'DERIV_REAL','real_orders_enabled':real_runtime.real_available()}
     # Wait for any already dispatched broker request to finish before declaring OFF.
     async with autopilot_lock:
@@ -3299,72 +3321,237 @@ async def autopilot_stop(request:Request,payload:AutoPilotSwitch|None=None,
             _release_panel(sess,user.id,'strategies',force=True)
             sess.commit()
         autopilot_reasons[user.id]='Desligado: novas entradas bloqueadas; contratos abertos permanecem na Deriv'
+    _publish_status_transition(user.id,'strategies',running=False,
+        account_mode='demo',reason=autopilot_reasons[user.id])
     return {'running':False,'execution':'DERIV_DEMO_ONLY','real_orders_enabled':False}
 
 
-@app.get('/api/status')
-async def status(request:Request,panel_mode:str,
-                 nexora_sid:str|None=Cookie(default=None)):
-    user=active_user(request,nexora_sid)
-    if panel_mode not in ('manual','strategies'):
-        raise HTTPException(422,'Painel inválido')
-    real_running=user.id in real_runtime.running
+def _status_cache_key(user_id:int,panel_mode:str):
+    bind=getattr(db.SessionLocal,'kw',{}).get('bind')
+    return (id(bind),int(user_id),panel_mode)
+
+
+def invalidate_status_cache(user_id:int):
+    """Drop read-only dashboard snapshots after an explicit state transition."""
+    for key in list(status_snapshot_cache):
+        if key[1]==user_id:
+            status_snapshot_cache.pop(key,None)
+    for key,task in list(status_snapshot_refresh_tasks.items()):
+        if key[1]==user_id:
+            status_snapshot_refresh_tasks.pop(key,None)
+            if not task.done():
+                task.cancel()
+
+
+def _read_status_persisted_state(user_id:int,panel_mode:str):
+    """Read durable status fields in one worker thread, away from the event loop."""
     with db.SessionLocal() as sess:
-        db.ensure_panel_profiles(sess,user.id)
-        lease=sess.get(db.AutomationExecutionState,user.id)
+        db.ensure_panel_profiles(sess,user_id)
+        lease=sess.get(db.AutomationExecutionState,user_id)
         active_panel_mode=lease.active_panel_mode if lease else None
         selected_panel=active_panel_mode or panel_mode
-        configured_profile=sess.get(db.AutomationPanelProfile,(user.id,selected_panel))
-        sess.commit()
+        configured_profile=sess.get(db.AutomationPanelProfile,(user_id,selected_panel))
         configured_account_mode=configured_profile.account_mode if configured_profile else 'demo'
-        operation_mode=selected_panel
-        manual_run=sess.get(db.ManualSignalRun,user.id)
-        run=sess.get(db.RobotRun,user.id)
-        consent=sess.get(db.AutoPilotResumeConsent,user.id)
-        demo_run_intent=bool(
-            run is not None and consent is not None
-            and configured_account_mode=='demo'
-            and operation_mode=='strategies' and active_panel_mode=='strategies'
-            and autopilot_allowed() and v2_enabled())
+        manual_run=sess.get(db.ManualSignalRun,user_id)
+        run=sess.get(db.RobotRun,user_id)
+        consent=sess.get(db.AutoPilotResumeConsent,user_id)
+        batch=sess.get(db.PilotValidationBatch,user_id)
+        manual_pending=_manual_capacity_status(sess,manual_run)
         manual_restart_pause=bool(manual_run and manual_run.status=='PAUSED'
             and manual_run.pause_reason=='Processo reiniciado; fila preservada sem rearmar automaticamente')
-        interrupted=(run is not None and user.id not in autopilot_enabled
-                     and not demo_run_intent) or manual_restart_pause
-        manual_pending=_manual_capacity_status(sess,manual_run)
-        batch=sess.get(db.PilotValidationBatch,user.id)
-        selected_strategy='pulso_v2' if v2_enabled() else 'unavailable'
-        mode='V2_PULSO' if v2_enabled() else 'V1_SINGLE_ASSET'
-        upgrade_needed=bool(v2_enabled() and batch is None and user.id in autopilot_enabled)
+        manual_session=({'status':manual_run.status,'session_number':manual_run.session_number,
+            'pause_reason':manual_run.pause_reason,'pending_count':manual_pending}
+            if selected_panel=='manual' and manual_run else None)
+        sess.commit()
+    return {
+        'active_panel_mode':active_panel_mode,
+        'operation_mode':selected_panel,
+        'configured_account_mode':configured_account_mode,
+        'manual_session':manual_session,
+        'manual_restart_pause':manual_restart_pause,
+        'demo_run_exists':run is not None,
+        'resume_consent_exists':consent is not None,
+        'validation_batch_exists':batch is not None,
+    }
+
+
+async def _build_status_snapshot(user,panel_mode:str):
+    state=await asyncio.to_thread(_read_status_persisted_state,user.id,panel_mode)
+    real_running=user.id in real_runtime.running
+    demo_run_intent=bool(
+        state['demo_run_exists'] and state['resume_consent_exists']
+        and state['configured_account_mode']=='demo'
+        and state['operation_mode']=='strategies'
+        and state['active_panel_mode']=='strategies'
+        and autopilot_allowed() and v2_enabled())
+    interrupted=(state['demo_run_exists'] and user.id not in autopilot_enabled
+                 and not demo_run_intent) or state['manual_restart_pause']
     async with lock:
         engine=rt_for(user)
-        return {'connected':engine.connected,'symbol':engine.symbol,
-                'operation_mode':operation_mode,
-                'active_panel_mode':active_panel_mode,
-                'manual_session':({'status':manual_run.status,'session_number':manual_run.session_number,
-                    'pause_reason':manual_run.pause_reason,'pending_count':manual_pending}
-                    if operation_mode=='manual' and manual_run else None),
-                'latest_price':engine.prices[-1] if engine.prices else None,
-                'ticks':len(engine.prices),'execution':'DERIV_REAL' if real_running else 'DERIV_DEMO_ONLY',
-                'running':real_running or user.id in autopilot_enabled or demo_run_intent,
-                'demo_run_intent':demo_run_intent,
-                'running_local':real_running or user.id in autopilot_enabled,
-                'auto_buy_enabled':autopilot_allowed() or real_runtime.real_available(),
-                'real_orders_enabled':real_runtime.real_available(),
-                'configured_account_mode':configured_account_mode,
-                'interrupted_after_restart':interrupted,
-                'autopilot_version':mode,
-                'selected_strategy':selected_strategy,
-                'v2_available':v2_enabled(),
-                'v2_upgrade_needed':upgrade_needed,
-                'analysis_symbol':SYMBOL,
-                'scan_progress':automation_scan_progress.get(user.id) if user.id in autopilot_enabled else None,
-                'reason':real_runtime.reasons.get(user.id,'Conta REAL ativa; buscando oportunidades') if real_running else
-                   ('AutoPilot DEMO armado na nuvem; estado sincronizado pelo consentimento salvo'
-                    if demo_run_intent and user.id not in autopilot_enabled else
-                    autopilot_reasons.get(user.id,
-                    ('Sessão Manual pausada após reinício; confirme uma nova lista ou desagende os sinais pendentes'
-                     if interrupted and operation_mode=='manual' else
-                     'Execução interrompida após reinício; reative manualmente no painel' if interrupted else 'Robô desligado')))}
+        snapshot={
+            'connected':engine.connected,'symbol':engine.symbol,
+            'operation_mode':state['operation_mode'],
+            'active_panel_mode':state['active_panel_mode'],
+            'manual_session':state['manual_session'],
+            'latest_price':engine.prices[-1] if engine.prices else None,
+            'ticks':len(engine.prices),
+            'execution':'DERIV_REAL' if real_running else 'DERIV_DEMO_ONLY',
+            'running':real_running or user.id in autopilot_enabled or demo_run_intent,
+            'demo_run_intent':demo_run_intent,
+            'running_local':real_running or user.id in autopilot_enabled,
+            'auto_buy_enabled':autopilot_allowed() or real_runtime.real_available(),
+            'real_orders_enabled':real_runtime.real_available(),
+            'configured_account_mode':state['configured_account_mode'],
+            'interrupted_after_restart':interrupted,
+            'autopilot_version':'V2_PULSO' if v2_enabled() else 'V1_SINGLE_ASSET',
+            'selected_strategy':'pulso_v2' if v2_enabled() else 'unavailable',
+            'v2_available':v2_enabled(),
+            'v2_upgrade_needed':bool(v2_enabled() and not state['validation_batch_exists']
+                                     and user.id in autopilot_enabled),
+            'analysis_symbol':SYMBOL,
+            'scan_progress':automation_scan_progress.get(user.id)
+                if user.id in autopilot_enabled else None,
+            'reason':real_runtime.reasons.get(user.id,'Conta REAL ativa; buscando oportunidades')
+                if real_running else
+                ('AutoPilot DEMO armado na nuvem; estado sincronizado pelo consentimento salvo'
+                 if demo_run_intent and user.id not in autopilot_enabled else
+                 autopilot_reasons.get(user.id,
+                 ('Sessão Manual pausada após reinício; confirme uma nova lista ou desagende os sinais pendentes'
+                  if interrupted and state['operation_mode']=='manual' else
+                  'Execução interrompida após reinício; reative manualmente no painel'
+                  if interrupted else 'Robô desligado'))),
+        }
+    return snapshot
+
+
+def _store_status_snapshot(key,snapshot):
+    now=asyncio.get_running_loop().time()
+    payload=deepcopy(snapshot)
+    payload['status_updated_at']=datetime.now(timezone.utc).isoformat()
+    payload['status_is_stale']=False
+    status_snapshot_cache[key]={'payload':payload,'refreshed_at':now}
+    if len(status_snapshot_cache)>256:
+        oldest=min(status_snapshot_cache,key=lambda item:status_snapshot_cache[item]['refreshed_at'])
+        if oldest!=key:
+            status_snapshot_cache.pop(oldest,None)
+
+
+def _status_snapshot_response(entry):
+    age=max(0,asyncio.get_running_loop().time()-entry['refreshed_at'])
+    response=deepcopy(entry['payload'])
+    response['status_is_stale']=age>STATUS_SNAPSHOT_STALE_AFTER_SECONDS
+    return response
+
+
+def _publish_status_transition(user_id:int,panel_mode:str,*,running:bool,
+                               account_mode:str,reason:str,
+                               active_mode:str|None=None):
+    """Reflect a server-confirmed command in any warmed snapshot for this DB/user."""
+    bind_id=id(getattr(db.SessionLocal,'kw',{}).get('bind'))
+    now_loop=asyncio.get_running_loop().time()
+    now_iso=datetime.now(timezone.utc).isoformat()
+    for key,entry in list(status_snapshot_cache.items()):
+        if key[0]!=bind_id or key[1]!=user_id:
+            continue
+        payload=deepcopy(entry['payload'])
+        current_mode=panel_mode if running else active_mode
+        payload.update({
+            'operation_mode':current_mode or panel_mode,
+            'active_panel_mode':current_mode,
+            'running':running,
+            'running_local':running,
+            'demo_run_intent':bool(running and panel_mode=='strategies' and account_mode=='demo'),
+            'execution':'DERIV_REAL' if account_mode=='real' else 'DERIV_DEMO_ONLY',
+            'configured_account_mode':account_mode,
+            'interrupted_after_restart':False,
+            'reason':reason,
+            'scan_progress':automation_scan_progress.get(user_id)
+                if running and panel_mode=='strategies' else None,
+            'status_updated_at':now_iso,
+            'status_is_stale':False,
+        })
+        if panel_mode=='manual' and isinstance(payload.get('manual_session'),dict):
+            payload['manual_session'].update(
+                status='RUNNING' if running else 'PAUSED',
+                pause_reason=None if running else 'Desligado manualmente; sinais futuros preservados')
+        status_snapshot_cache[key]={'payload':payload,'refreshed_at':now_loop}
+
+
+def _status_pending_response(user,panel_mode:str):
+    """Fast fail-closed response while the first authenticated snapshot is loading."""
+    real_running=user.id in real_runtime.running
+    local_running=real_running or user.id in autopilot_enabled
+    with_prices=list(recent_prices)
+    return {
+        'connected':market_connected,'symbol':SYMBOL,
+        'operation_mode':panel_mode,'active_panel_mode':None,
+        'manual_session':None,'latest_price':with_prices[-1] if with_prices else None,
+        'ticks':len(with_prices),
+        'execution':'DERIV_REAL' if real_running else 'DERIV_DEMO_ONLY',
+        'running':local_running,'demo_run_intent':False,'running_local':local_running,
+        'auto_buy_enabled':autopilot_allowed() or real_runtime.real_available(),
+        'real_orders_enabled':real_runtime.real_available(),
+        'configured_account_mode':None,'interrupted_after_restart':False,
+        'autopilot_version':'V2_PULSO' if v2_enabled() else 'V1_SINGLE_ASSET',
+        'selected_strategy':'pulso_v2' if v2_enabled() else 'unavailable',
+        'v2_available':v2_enabled(),'v2_upgrade_needed':False,
+        'analysis_symbol':SYMBOL,
+        'scan_progress':automation_scan_progress.get(user.id)
+            if user.id in autopilot_enabled else None,
+        'reason':'Carregando o primeiro snapshot autenticado; estado ainda não confirmado',
+        'status_updated_at':None,'status_is_stale':True,
+    }
+
+
+async def _refresh_status_snapshot(user,panel_mode:str,key):
+    task=asyncio.current_task()
+    started=time.perf_counter()
+    try:
+        snapshot=await _build_status_snapshot(user,panel_mode)
+        _store_status_snapshot(key,snapshot)
+        elapsed_ms=(time.perf_counter()-started)*1000
+        if elapsed_ms>=1000:
+            log.warning('slow status snapshot refresh elapsed_ms=%.1f',elapsed_ms)
+    except asyncio.CancelledError:
+        raise
+    except Exception as exc:
+        log.warning('status snapshot refresh failed error=%s',type(exc).__name__)
+    finally:
+        if status_snapshot_refresh_tasks.get(key) is task:
+            status_snapshot_refresh_tasks.pop(key,None)
+
+
+async def _get_status_snapshot(user,panel_mode:str,*,fresh:bool=False):
+    key=_status_cache_key(user.id,panel_mode)
+    if fresh:
+        invalidate_status_cache(user.id)
+    entry=status_snapshot_cache.get(key)
+    if entry is not None and not fresh:
+        age=max(0,asyncio.get_running_loop().time()-entry['refreshed_at'])
+        if (age>=STATUS_SNAPSHOT_REFRESH_AFTER_SECONDS
+                and key not in status_snapshot_refresh_tasks):
+            task=asyncio.create_task(_refresh_status_snapshot(user,panel_mode,key))
+            status_snapshot_refresh_tasks[key]=task
+        return _status_snapshot_response(entry)
+    if not fresh:
+        if key not in status_snapshot_refresh_tasks:
+            task=asyncio.create_task(_refresh_status_snapshot(user,panel_mode,key))
+            status_snapshot_refresh_tasks[key]=task
+        return _status_pending_response(user,panel_mode)
+    snapshot=await _build_status_snapshot(user,panel_mode)
+    _store_status_snapshot(key,snapshot)
+    return _status_snapshot_response(status_snapshot_cache[key])
+
+
+@app.get('/api/status')
+async def status(request:Request,panel_mode:str,fresh:bool=False,
+                 nexora_sid:str|None=Cookie(default=None)):
+    # Authentication stays authoritative, but synchronous SQLAlchemy work is
+    # moved off the event loop so it cannot stall the robot's background tasks.
+    user=await asyncio.to_thread(active_user,request,nexora_sid)
+    if panel_mode not in ('manual','strategies'):
+        raise HTTPException(422,'Painel inválido')
+    return await _get_status_snapshot(user,panel_mode,fresh=fresh)
 
 @app.get('/api/autopilot/v2/scanner-status')
 async def autopilot_v2_scanner_status(request:Request,

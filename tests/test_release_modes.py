@@ -54,7 +54,7 @@ def test_public_and_authenticated_real_flags_agree(tmp_path, monkeypatch):
         assert "real" in health["execution_modes"]
         assert client.get("/api/session").json()["real_enabled"] is True
         assert client.get("/api/onboarding/config?panel_mode=strategies").json()["real_enabled"] is True
-        assert client.get("/api/status?panel_mode=strategies").json()["real_orders_enabled"] is True
+        assert client.get("/api/status?panel_mode=strategies&fresh=true").json()["real_orders_enabled"] is True
     finally:
         real_runtime.running.discard(uid)
         engine.dispose()

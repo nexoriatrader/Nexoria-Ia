@@ -76,7 +76,7 @@ def test_start_requires_explicit_consent_and_feature_flag(tmp_path,monkeypatch):
         disabled=client.post('/api/autopilot/start',json={'confirm':'START_DEMO_AUTOPILOT','panel_mode':'strategies'})
         assert disabled.status_code==503
         assert uid not in main.autopilot_enabled
-        assert client.get('/api/status?panel_mode=strategies').json()['auto_buy_enabled'] is False
+        assert client.get('/api/status?panel_mode=strategies&fresh=true').json()['auto_buy_enabled'] is False
     finally: cleanup(engine)
 
 
@@ -101,7 +101,7 @@ def test_continuous_demo_orders_one_at_a_time_and_attributed(tmp_path,monkeypatc
     monkeypatch.setattr(main,'recent_prices',[100+i*.05 for i in range(100)])
     try:
         assert client.post('/api/autopilot/start',json={'confirm':'START_DEMO_AUTOPILOT','panel_mode':'strategies'}).status_code==200
-        assert client.get('/api/status?panel_mode=strategies').json()['running'] is True
+        assert client.get('/api/status?panel_mode=strategies&fresh=true').json()['running'] is True
         async def execute():
             main.market_last_tick=asyncio.get_running_loop().time()
             await main.autopilot_once()
@@ -154,7 +154,7 @@ def test_confirmed_contract_keeps_autopilot_armed_without_duplicate_buy(tmp_path
         asyncio.run(attempt())
         assert uid in main.autopilot_enabled
         assert broker.await_count==1
-        status=client.get('/api/status?panel_mode=strategies').json()
+        status=client.get('/api/status?panel_mode=strategies&fresh=true').json()
         assert status['running'] is True
         assert status['reason'] != 'Falha na execução; robô desligado para segurança'
         with factory() as sess:
@@ -302,13 +302,13 @@ def test_restart_revokes_consent_and_requires_explicit_activation(tmp_path,monke
         with factory() as s:
             assert s.get(db.RobotRun,uid).after_order_id==original
             assert s.get(db.AutoPilotResumeConsent,uid) is None
-        state=client.get('/api/status?panel_mode=strategies').json()
+        state=client.get('/api/status?panel_mode=strategies&fresh=true').json()
         assert state['running'] is False
         assert state['demo_run_intent'] is False
         assert state['interrupted_after_restart'] is True
         assert 'reative manualmente' in state['reason']
         assert client.post('/api/autopilot/start',json={'confirm':'START_DEMO_AUTOPILOT','panel_mode':'strategies'}).status_code==200
-        assert client.get('/api/status?panel_mode=strategies').json()['running'] is True
+        assert client.get('/api/status?panel_mode=strategies&fresh=true').json()['running'] is True
         assert client.post('/api/autopilot/stop',json={'panel_mode':'strategies'}).status_code==200
         with factory() as s:
             assert s.get(db.AutoPilotResumeConsent,uid) is None

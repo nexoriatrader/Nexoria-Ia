@@ -436,7 +436,7 @@ def test_status_syncs_persisted_demo_run_and_blocks_duplicate_start(tmp_path, mo
 
         # Simulate another request worker/browser process with no local set.
         main.autopilot_enabled.discard(uid)
-        state = client.get("/api/status?panel_mode=strategies").json()
+        state = client.get("/api/status?panel_mode=strategies&fresh=true").json()
         assert state["running"] is True
         assert state["demo_run_intent"] is True
         assert state["running_local"] is False
@@ -452,7 +452,7 @@ def test_status_syncs_persisted_demo_run_and_blocks_duplicate_start(tmp_path, mo
 
         stopped = client.post("/api/autopilot/stop",json={"panel_mode":"strategies"})
         assert stopped.status_code == 200
-        assert client.get("/api/status?panel_mode=strategies").json()["running"] is False
+        assert client.get("/api/status?panel_mode=strategies&fresh=true").json()["running"] is False
         with factory() as session:
             assert session.get(db.RobotRun, uid) is None
             assert session.get(db.AutoPilotResumeConsent, uid) is None

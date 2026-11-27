@@ -2496,7 +2496,7 @@ async function refreshPanelStatusDisplay(){
   activePanelMode=status.active_panel_mode||null;
   const strategyRunning=Boolean(status.running&&activePanelMode==='strategies');
   renderScanMonitor({...status,running:strategyRunning});
-  const state=strategyRunning?'active':status.interrupted_after_restart?'interrupted':status.auto_buy_enabled?'paused':'unavailable';
+  const state=status.status_is_stale?'unknown':strategyRunning?'active':status.interrupted_after_restart?'interrupted':status.auto_buy_enabled?'paused':'unavailable';
   renderPanelHistoryState(state,status.scan_progress);
  }catch(error){
   if(activePage==='dashboard'&&sequence===panelStatusSequence)renderPanelHistoryStatusFailure(error);
@@ -2897,6 +2897,16 @@ function reportRobotEasyDiagnosisUncertain(){
 }
 function renderNxCalmActivity(status){
  // Authenticated read-only status display. Never initiate broker actions.
+ if(status.status_is_stale){
+  $('nxCalmActivityText').textContent='Estado aguardando confirmação';
+  $('nxCalmActivityDescription').textContent='O último snapshot pode estar desatualizado. Aguardando uma nova leitura do servidor.';
+  $('nxCalmConnection').dataset.state='uncertain';
+  $('nxCalmConnection').textContent='Atualização pendente';
+  $('nxCalmUpdated').textContent=status.status_updated_at
+   ?'Último snapshot '+new Intl.DateTimeFormat('pt-BR',{timeZone:'America/Sao_Paulo',hour:'2-digit',minute:'2-digit'}).format(new Date(status.status_updated_at))
+   :'Aguardando primeiro snapshot';
+  return;
+ }
  const scan=status.scan_progress||{},running=Boolean(status.running);
  const interrupted=Boolean(status.interrupted_after_restart);
  const raw=scan.last_checked_at||scan.last_scan_at;
@@ -2938,6 +2948,17 @@ function markNxCalmActivityUnknown(){
 function renderNxNeoTopCommand(status){
  const running=Boolean(status.running),interrupted=Boolean(status.interrupted_after_restart);
  const pill=$('nxNeoRunStatus'),stop=$('nxNeoQuickStop');
+ if(status.status_is_stale){
+  pill.dataset.state='unknown';
+  renderPanelHistoryState('unknown');
+  pill.textContent='● Atualizando estado';
+  $('nxNeoRunHelp').textContent='O último snapshot não confirma o estado atual; aguardando nova leitura.';
+  $('nxNeoActivationLabel').textContent='Verificando estado';
+  stop.hidden=false;
+  // A last-known running state may still be stopped; toggleRobot verifies it freshly.
+  stop.disabled=!running||$('robotButton').dataset.commandPending==='true'||stop.dataset.commandPending==='true';
+  return;
+ }
  const state=running?'active':interrupted?'interrupted':status.auto_buy_enabled?'paused':'unavailable';
  pill.dataset.state=state;
  renderPanelHistoryState(state,status.scan_progress);
@@ -2974,6 +2995,20 @@ async function nxNeoStopRunningRobot(){
 }
 function renderRobotEasyOverview(status){
  // Read-only reflection of GET /api/status; do not trigger broker actions.
+ if(status.status_is_stale){
+  $('robotEasyOverview').classList.add('is-uncertain');
+  $('robotEasyState').dataset.state='unknown';
+  $('robotEasyState').textContent='Estado não confirmado';
+  $('robotEasyStateHelp').textContent='O último snapshot pode estar desatualizado. A consulta está sendo atualizada; não presuma que o robô parou.';
+  $('robotEasyUpdated').textContent=status.status_updated_at
+   ?'Último snapshot '+new Intl.DateTimeFormat('pt-BR',{timeZone:'America/Sao_Paulo',hour:'2-digit',minute:'2-digit',second:'2-digit'}).format(new Date(status.status_updated_at))
+   :'Aguardando primeiro snapshot';
+  $('robotEasyFeedback').textContent='Estado ainda não confirmado. A ativação permanece bloqueada até uma leitura atual.';
+  const conn=$('robotEasyConnection');conn.dataset.state='uncertain';conn.textContent='Conexão: atualização pendente';
+  reportRobotEasyDiagnosisUncertain();
+  recordRobotEasyCheck('uncertain','Snapshot do estado aguardando atualização.');
+  return;
+ }
  const running=Boolean(status.running),interrupted=Boolean(status.interrupted_after_restart);
  const available=Boolean(status.auto_buy_enabled);
  const state=running?'active':interrupted?'interrupted':available?'paused':'unavailable';
@@ -3023,6 +3058,7 @@ async function refreshRobotEasyOverview(){
 const nxNeoScanSamples=[];
 function renderNxNeoScannerChart(status){
  // Only last_scan_at from authenticated status; never draw fabricated market prices.
+ if(status.status_is_stale){markNxNeoScannerUncertain();return;}
  const info=status.scan_progress||{};
  const raw=info.last_scan_at;
  const date=raw?new Date(raw):null;
@@ -3060,6 +3096,16 @@ function markNxNeoScannerUncertain(){
 }
 function renderScanMonitor(status){
  const card=$('dashScanMonitor');if(!card||!status)return;
+ if(status.status_is_stale){
+  card.classList.remove('scanning','waiting');
+  $('dashScanStatus').textContent='ESTADO NÃO CONFIRMADO';
+  $('dashScanCaption').textContent='Aguardando atualização do último snapshot do servidor.';
+  $('dashScanSymbol').textContent='—';$('dashScanLastSymbol').textContent='—';
+  $('dashScanChecked').textContent='—';$('dashScanExpiry').textContent='—';
+  $('dashScanCycle').textContent='—';$('dashScanReasons').textContent='A última leitura pode estar desatualizada.';
+  $('dashScanFill').style.width='0%';
+  return;
+ }
  const running=Boolean(status.running),data=status.scan_progress;
  const at=data?.last_checked_at||data?.last_scan_at;
  const date=at?new Date(at):null;
@@ -3121,7 +3167,7 @@ function renderScanMonitor(status){
  $('dashScanFill').style.width=running&&data?.total?
   Math.min(100,100*Number(data.checked||0)/Number(data.total))+'%':'0%';
 }
-let dashboardRefreshInFlight=false;
+let dashboardRefreshInFlight=false,dashboardSnapshotRetryTimer=null;
 async function refreshDashboard(){
  if(dashboardRefreshInFlight)return null;
  dashboardRefreshInFlight=true;
@@ -3132,7 +3178,7 @@ async function refreshDashboard(){
    const status=await fetchStrategyStatus();
    // Ignore an older response that arrived after a newer status request.
    if(sequence!==dashboardStatusSequence)return null;
-   robotStatusConfirmed=true;
+   robotStatusConfirmed=!status.status_is_stale;
    activePanelMode=status.active_panel_mode||null;
    robotRunning=Boolean(status.running&&activePanelMode==='strategies');
    const previousHistoryMode=robotConfiguredMode;
@@ -3146,19 +3192,19 @@ async function refreshDashboard(){
    renderNxCalmActivity(strategyStatus);
    renderNxNeoScannerChart(strategyStatus);
    const available=Boolean(status.auto_buy_enabled);
-   $('robotState').textContent=robotRunning?'ESTRATÉGIAS ATIVO':activePanelMode==='manual'?'NEXORA MANUAL ATIVO':status.running&&!activePanelMode?'ATIVO · PAINEL NÃO IDENTIFICADO':status.interrupted_after_restart?'INTERROMPIDO':available?'PRONTO':'INDISPONÍVEL';
-   $('robotState').dataset.visualState=robotRunning?'active':status.interrupted_after_restart?'interrupted':available?'ready':'unavailable';
-   $('robotMessage').textContent=activePanelMode==='manual'?'Nexora Manual está ativo. Estratégias não pode operar simultaneamente.':status.running&&!activePanelMode?'Execução ativa; painel de origem não confirmado.':'Nexora Estratégias · '+(status.reason||'Aguardando oportunidades no mercado');
+   $('robotState').textContent=status.status_is_stale?'ESTADO NÃO CONFIRMADO':robotRunning?'ESTRATÉGIAS ATIVO':activePanelMode==='manual'?'NEXORA MANUAL ATIVO':status.running&&!activePanelMode?'ATIVO · PAINEL NÃO IDENTIFICADO':status.interrupted_after_restart?'INTERROMPIDO':available?'PRONTO':'INDISPONÍVEL';
+   $('robotState').dataset.visualState=status.status_is_stale?'unknown':robotRunning?'active':status.interrupted_after_restart?'interrupted':available?'ready':'unavailable';
+   $('robotMessage').textContent=status.status_is_stale?'Aguardando uma nova leitura. O último estado não está confirmado e a ativação está bloqueada.':activePanelMode==='manual'?'Nexora Manual está ativo. Estratégias não pode operar simultaneamente.':status.running&&!activePanelMode?'Execução ativa; painel de origem não confirmado.':'Nexora Estratégias · '+(status.reason||'Aguardando oportunidades no mercado');
    const liveCard=$('robotLiveCard');
-   liveCard.classList.toggle('offline',!robotRunning);
-   $('robotLiveLabel').textContent=robotRunning?'ROBÔ ONLINE':'ROBÔ OFFLINE';
-   $('dashRealtimeState').textContent=robotRunning?'ROBÔ ONLINE':'ROBÔ OFFLINE';
-   $('dashRealtimeState').parentElement.classList.toggle('offline',!robotRunning);
+   liveCard.classList.toggle('offline',!robotRunning||status.status_is_stale);
+   $('robotLiveLabel').textContent=status.status_is_stale?'ESTADO NÃO CONFIRMADO':robotRunning?'ROBÔ ONLINE':'ROBÔ OFFLINE';
+   $('dashRealtimeState').textContent=status.status_is_stale?'ESTADO NÃO CONFIRMADO':robotRunning?'ROBÔ ONLINE':'ROBÔ OFFLINE';
+   $('dashRealtimeState').parentElement.classList.toggle('offline',!robotRunning||status.status_is_stale);
    $('dashRealtimeDescription').textContent=robotRunning
     ?(status.reason||'Buscando oportunidades nos ativos selecionados.')
     :(status.reason||'Robô desligado. Ative para iniciar as análises.');
    if(!demoOrders.length)renderRealtimeOrders();
-   $('robotLiveCopy').textContent=robotRunning
+   $('robotLiveCopy').textContent=status.status_is_stale?'Aguardando atualização confirmada.' : robotRunning
      ?'Análise em tempo real'
      :(status.interrupted_after_restart?'Execução interrompida. Confira o aviso antes de ativar.'
        :available?'Análises pausadas. Ative quando desejar.':'AutoPilot indisponível.');
@@ -3172,9 +3218,9 @@ async function refreshDashboard(){
    $('volScheduleStatus').textContent=forexSelected?'EM ESPERA':'SELECIONADO';
    $('forexScheduleDot').classList.toggle('active',forexSelected);
    $('volScheduleDot').classList.toggle('active',!forexSelected);
-   $('robotButton').textContent=robotRunning?'DESLIGAR NEXORA ESTRATÉGIAS':activePanelMode==='manual'?'NEXORA MANUAL ESTÁ ATIVO':status.running&&!activePanelMode?'ESTADO DO PAINEL ATIVO NÃO CONFIRMADO':'LIGAR NEXORA ESTRATÉGIAS';
-   $('robotButton').dataset.visualState=robotRunning?'active':activePanelMode==='manual'?'blocked':'inactive';
-   $('robotButton').disabled=(!robotRunning&&(!available||activePanelMode==='manual'||(status.running&&!activePanelMode)))||$('robotButton').dataset.commandPending==='true';
+   $('robotButton').textContent=status.status_is_stale?'ESTADO NÃO CONFIRMADO':robotRunning?'DESLIGAR NEXORA ESTRATÉGIAS':activePanelMode==='manual'?'NEXORA MANUAL ESTÁ ATIVO':status.running&&!activePanelMode?'ESTADO DO PAINEL ATIVO NÃO CONFIRMADO':'LIGAR NEXORA ESTRATÉGIAS';
+   $('robotButton').dataset.visualState=status.status_is_stale?'unknown':robotRunning?'active':activePanelMode==='manual'?'blocked':'inactive';
+   $('robotButton').disabled=status.status_is_stale||(!robotRunning&&(!available||activePanelMode==='manual'||(status.running&&!activePanelMode)))||$('robotButton').dataset.commandPending==='true';
    $('robotButton').setAttribute('aria-disabled',String($('robotButton').disabled));
    $('robotButton').style.background=robotRunning?'linear-gradient(135deg,#fa9b9d,#dc5269)':'';
    if(robotRunning)showRobotNotice('');
@@ -3212,11 +3258,18 @@ async function refreshDashboard(){
        }
      });
    }
-   await Promise.allSettled([loadRobotAccess(),loadDemoBalance(),loadDemoOrders(),loadRealBalance(),
-                             loadRiskSession(),loadAutopilotReadiness()]);
-   // A newer dashboard request may have superseded this response while
-   // secondary cards were loading; do not return an obsolete status.
-   if(sequence!==dashboardStatusSequence)return null;
+   // These cards may call slow balance/history APIs; let them update independently
+   // so they cannot hold the robot-status refresh lock.
+   void Promise.allSettled([loadRobotAccess(),loadDemoBalance(),loadDemoOrders(),loadRealBalance(),
+                            loadRiskSession(),loadAutopilotReadiness()]);
+   if(status.status_is_stale){
+    if(!dashboardSnapshotRetryTimer)dashboardSnapshotRetryTimer=setTimeout(()=>{
+     dashboardSnapshotRetryTimer=null;
+     if(activePage==='dashboard')refreshDashboard();
+    },1000);
+   }else if(dashboardSnapshotRetryTimer){
+    clearTimeout(dashboardSnapshotRetryTimer);dashboardSnapshotRetryTimer=null;
+   }
    fail('');
    return status;
  }catch(e){
@@ -3314,7 +3367,7 @@ async function toggleRobot(){
  button.disabled=true;
  button.textContent='CONFERINDO ESTADO DO ROBÔ…';
  try{
-  const currentStatus=await req('/api/status?panel_mode=strategies');
+  const currentStatus=await req('/api/status?panel_mode=strategies&fresh=true');
   robotStatusConfirmed=true;
   activePanelMode=currentStatus.active_panel_mode||null;
   if(activePanelMode==='manual'||(currentStatus.running&&!activePanelMode)){
@@ -4259,7 +4312,7 @@ async function saveAutomationProfile(){
  const feedback=$('autoConfigFeedback'),button=$('autoSaveButton');
  if(!validateAutomationSettings())return;
  try{
-  const status=await req('/api/status?panel_mode='+encodeURIComponent(configurationPanelMode));activePanelMode=status.active_panel_mode||null;
+  const status=await req('/api/status?panel_mode='+encodeURIComponent(configurationPanelMode)+'&fresh=true');activePanelMode=status.active_panel_mode||null;
   if(status.running||activePanelMode){
    const activeName=activePanelMode==='manual'?'Nexora Manual':activePanelMode==='strategies'?'Nexora Estratégias':'um painel';
    feedback.textContent='Desligue '+activeName+' antes de editar qualquer configuração.';return;
@@ -4396,9 +4449,15 @@ function renderManualPreview(result){
  $('manualScheduleButton').disabled=valid.length===0||valid.length>remaining;
  if(valid.length>remaining){const note=document.createElement('p');note.textContent='A lista tem mais sinais válidos do que vagas disponíveis agora. Divida-a em um slot menor ou aguarde liberações e valide novamente.';note.className='manual-signals-feedback-error';box.append(note)}
 }
-async function refreshManualPanelStatus(){
+async function refreshManualPanelStatus(fresh=false){
  try{
-  const status=await req('/api/status?panel_mode=manual');activePanelMode=status.active_panel_mode||null;
+  const status=await req('/api/status?panel_mode=manual'+(fresh?'&fresh=true':''));
+  if(status.status_is_stale){
+   $('manualPanelStatus').textContent='Atualizando o estado dos painéis. A ativação e o agendamento permanecem bloqueados.';
+   $('manualScheduleButton').disabled=true;$('manualPanelConflict').hidden=true;
+   return status;
+  }
+  activePanelMode=status.active_panel_mode||null;
   $('manualPanelStatus').textContent=activePanelMode==='manual'?'Nexora Manual está ativo. Nexora Estratégias permanece bloqueado.':activePanelMode==='strategies'?'Nexora Estratégias está ativo. Nexora Manual não pode iniciar nem agendar até a execução terminar.':'Nenhum painel está ativo.';
   $('manualScheduleButton').disabled=activePanelMode==='strategies'||!manualSignalsPreview||!$('manualScheduleConfirm').checked;
   $('manualPanelConflict').hidden=activePanelMode!=='strategies';
@@ -4441,7 +4500,9 @@ async function previewManualSignals(){
 }
 async function scheduleManualSignals(){
  if(manualSignalsBusy||!manualSignalsPreview||!$('manualScheduleConfirm').checked)return;
- try{await refreshManualPanelStatus()}catch(_){$('manualSignalsFeedback').textContent='Estado dos painéis não confirmado. Nenhuma ativação foi enviada.';return}
+ let freshPanelStatus;
+ try{freshPanelStatus=await refreshManualPanelStatus(true)}catch(_){$('manualSignalsFeedback').textContent='Estado dos painéis não confirmado. Nenhuma ativação foi enviada.';return}
+ if(freshPanelStatus?.status_is_stale){$('manualSignalsFeedback').textContent='Estado dos painéis não confirmado. Nenhuma ativação foi enviada.';return}
  if(activePanelMode==='strategies'){$('manualSignalsFeedback').textContent='Nexora Estratégias está ativo. Desligue-o no painel Nexora Estratégias antes de ativar ou agendar Nexora Manual.';return}
  if(!manualSignalsCurrentState){$('manualSignalsFeedback').textContent='Atualize o estado da fila antes de agendar ou ativar.';return}
  if(manualSignalsPreview.payload.text!==$('manualSignalText').value||manualSignalsPreview.payload.market!==$('manualMarket').value||manualSignalsPreview.payload.day!==$('manualDay').value||manualSignalsPreview.payload.timezone_name!==$('manualTimezone').value){invalidateManualPreview();$('manualSignalsFeedback').textContent='A lista mudou. Gere uma nova prévia antes de confirmar.';return}
@@ -4497,6 +4558,12 @@ async function cancelManualSignals(){
 async function pauseManualSignals(){
  if(manualSignalsBusy)return;
  if(!window.confirm('Desligar o robô Nexora Manual? Sinais pendentes serão preservados na fila e contratos já enviados continuarão na Deriv; nada será apagado ou cancelado.'))return;
+ try{
+  const status=await req('/api/status?panel_mode=manual&fresh=true');
+  if(status.active_panel_mode&&status.active_panel_mode!=='manual'){
+   $('manualSignalsFeedback').textContent='Outro painel está ativo. Nenhuma alteração foi enviada.';return;
+  }
+ }catch(error){$('manualSignalsFeedback').textContent='Não foi possível confirmar o painel ativo. A pausa foi bloqueada: '+error.message;return}
  manualSignalsBusy=true;$('manualPauseButton').disabled=true;$('manualSignalsFeedback').textContent='Desligando o robô sem apagar a fila nem cancelar contratos…';
  try{
   const result=await req('/api/autopilot/stop',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({panel_mode:'manual'})});

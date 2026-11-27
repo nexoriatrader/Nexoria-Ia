@@ -750,7 +750,7 @@ def test_premium_reference_skin_preserves_existing_controls():
     assert "if(!await askRobotStartConfirmation(profile,risk))return;" in HTML
     assert "if(!health.real_orders_enabled)" in HTML
     # Status colour is derived from the authoritative boolean; "ready" != "active".
-    assert "dataset.visualState=robotRunning?'active'" in HTML
+    assert "dataset.visualState=status.status_is_stale?'unknown':robotRunning?'active'" in HTML
     assert "available?'ready':'unavailable'" in HTML
     assert '.hero-state[data-visual-state="ready"]' in header
     assert '.hero-state[data-visual-state="active"]' in header
@@ -776,9 +776,9 @@ def test_premium_skin_only_adds_css_and_nonoperational_status_state():
         assert forbidden not in skin
     assert "LIGAR ROBÔ" in HTML and "DESLIGAR ROBÔ" in HTML
     assert "robotRunning?'DESLIGAR NEXORA ESTRATÉGIAS'" in HTML
-    assert "$('robotButton').dataset.visualState=robotRunning?'active':activePanelMode==='manual'?'blocked'" in HTML
+    assert "$('robotButton').dataset.visualState=status.status_is_stale?'unknown':robotRunning?'active':activePanelMode==='manual'?'blocked'" in HTML
     assert '.hero-action[data-visual-state="active"]' in HTML
-    assert "$('robotButton').disabled=(!robotRunning&&(!available||activePanelMode==='manual'||(status.running&&!activePanelMode)))" in HTML
+    assert "$('robotButton').disabled=status.status_is_stale||(!robotRunning&&(!available||activePanelMode==='manual'||(status.running&&!activePanelMode)))" in HTML
     assert "if(!health.real_orders_enabled)" in HTML
     assert "if(!await askRobotStartConfirmation(profile,risk))return;" in HTML
     assert "wasRunning?'/api/autopilot/stop':'/api/autopilot/start'" in HTML
@@ -937,3 +937,16 @@ if(node.dataset.state!=='stale')throw Error('A later transient failure incorrect
         capture_output=True, text=True, timeout=15, check=False,
     )
     assert result.returncode == 0, result.stderr
+
+
+def test_stale_status_is_never_confirmed_and_commands_require_fresh_read():
+    assert "status.status_is_stale" in HTML
+    assert "Estado não confirmado" in HTML
+    assert "A ativação permanece bloqueada até uma leitura atual." in HTML
+    assert "&fresh=true" in HTML
+    robot_action = HTML.split("async function toggleRobot(){", 1)[1].split(
+        "async function loadRealBalance(){", 1
+    )[0]
+    assert "req('/api/status?panel_mode=strategies&fresh=true')" in robot_action
+    assert "status.status_is_stale||" in HTML
+    assert "const status=await req('/api/status?panel_mode=manual&fresh=true')" in HTML

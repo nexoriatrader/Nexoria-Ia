@@ -259,12 +259,12 @@ def test_v2_unavailable_fails_closed_then_requires_explicit_start(tmp_path,monke
         started=client.post('/api/autopilot/start',
             json={'confirm':'START_DEMO_AUTOPILOT','panel_mode':'strategies'})
         assert started.status_code==200,started.text
-        state=client.get('/api/status?panel_mode=strategies').json()
+        state=client.get('/api/status?panel_mode=strategies&fresh=true').json()
         assert state['autopilot_version']=='V2_PULSO'
         assert state['v2_available'] is True
         assert state['analysis_symbol']=='1HZ100V'
         assert client.post('/api/autopilot/stop',json={'panel_mode':'strategies'}).status_code==200
-        assert client.get('/api/status?panel_mode=strategies').json()['running'] is False
+        assert client.get('/api/status?panel_mode=strategies&fresh=true').json()['running'] is False
     finally:cleanup(engine)
 
 
