@@ -1,6 +1,6 @@
 # NEXORA — estabilidade do feed público Deriv
 
-Preparação de lançamento, 17/11/2026. **PR #31 — ainda não publicada no Render**.
+Registro técnico de estabilidade do feed público. Os testes locais usam mocks e não substituem a verificação de conectividade contínua nos logs do Render.
 
 ## Diagnóstico
 Logs do Render (antes da correção) mostraram episódios recorrentes de
@@ -32,9 +32,9 @@ Referências:
 4. Induzir queda controlada em staging com mock e confirmar recuperação.
 5. Validar dados do scanner realmente retornados pela Deriv, sem marcação
    fictícia de online nem compra durante indisponibilidade.
-6. Reavaliar o consumo do Render Free e as cotas de API para 10 usuários.
+6. Reavaliar a margem de CPU/memória do compute ativo e as cotas de API sob carga observada.
 7. Se falhas persistirem, coletar código/causa de fechamento de WebSocket e
    validar bloqueios de rede, limites da Deriv e payload de subscrição.
 
-**Ainda não verificado:** comportamento de produção *após* o deploy;
-os testes atuais usam mocks e não estabelecem conectividade duradoura real.
+Os testes atuais usam mocks e não estabelecem, por si só, conectividade
+duradoura em produção.

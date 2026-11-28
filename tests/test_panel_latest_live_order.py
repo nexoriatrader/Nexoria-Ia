@@ -73,6 +73,54 @@ if(latest.children[0].children[1].children[0].textContent!=='Ganho')
     assert result.returncode == 0, result.stdout + result.stderr
 
 
+def test_load_demo_orders_shares_in_flight_request_per_mode_and_ignores_stale_response():
+    if not shutil.which("node"):
+        pytest.skip("Node.js is required for the front-end loader regression test")
+
+    block = HTML.split("const demoOrdersInFlight=new Map();", 1)[1].split(
+        "\nconst brasilDateTime", 1
+    )[0]
+    function = "const demoOrdersInFlight=new Map();" + block
+    runtime = r"""
+let robotConfiguredMode='demo',demoOrders=[];
+const requests=[],renderedModes=[];
+function req(path){return new Promise(resolve=>requests.push({path,resolve}));}
+function $(id){return {innerHTML:''};}
+function syncClearResultsButtonLabel(){}
+function updateLastOrderLabel(){}
+function renderOrders(){}
+function renderRealtimeOrders(){}
+function renderPanelHistory(items,mode){renderedModes.push(mode);}
+
+const first=loadDemoOrders(),duplicate=loadDemoOrders();
+if(requests.length!==1)throw Error('Concurrent dashboard loads duplicated the history GET');
+if(requests[0].path!=='/api/demo/orders')throw Error('The demo account was not requested');
+robotConfiguredMode='real';
+const current=loadDemoOrders();
+if(requests.length!==2||requests[1].path!=='/api/real/orders')
+ throw Error('A new account mode must use its own in-flight request');
+requests[0].resolve({items:[{id:'stale-demo'}]});
+Promise.all([first,duplicate]).then(()=>{
+ if(demoOrders.length!==0)throw Error('A stale-mode response replaced the visible orders');
+ requests[1].resolve({items:[{id:'current-real'}]});
+ return current;
+}).then(data=>{
+ if(data.items[0].id!=='current-real'||demoOrders[0].id!=='current-real')
+  throw Error('The current-mode response was not applied');
+ if(renderedModes.length!==1||renderedModes[0]!=='real')
+  throw Error('Only the current account mode should update the interface');
+}).catch(error=>{console.error(error);process.exitCode=1;});
+"""
+    result = subprocess.run(
+        ["node", "-e", function + runtime],
+        text=True,
+        capture_output=True,
+        timeout=20,
+        check=False,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
 def test_panel_history_copy_includes_active_orders():
     panel = HTML.split('<section class="nx-panel-history"', 1)[1].split(
         "</section>", 1

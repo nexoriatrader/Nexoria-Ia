@@ -3830,7 +3830,36 @@ function renderPanelHistory(items,mode){
  if(!previousRows.length)empty(previous,'Nenhuma operação anterior encerrada registrada.');
  note.textContent=(mode==='real'?'Conta real':'Treinamento · saldo fictício')+' · ordens ativas e resultados sincronizados automaticamente · resultados passados não garantem resultados futuros.';
 }
-async function loadDemoOrders(){const historyMode=robotConfiguredMode;try{const data=await req(historyMode==='real'?'/api/real/orders':'/api/demo/orders');demoOrders=data.items||[];if(historyMode===robotConfiguredMode)syncClearResultsButtonLabel(historyMode);updateLastOrderLabel();renderOrders();renderRealtimeOrders();if(historyMode===robotConfiguredMode)renderPanelHistory(data.items||[],historyMode);return data}catch(e){if(historyMode===robotConfiguredMode)renderPanelHistory(null);$('ordersBody').innerHTML='<tr><td colspan="11" class="empty">Não foi possível carregar o histórico.</td></tr>';throw e}}
+const demoOrdersInFlight=new Map();
+async function loadDemoOrders(){
+ const historyMode=robotConfiguredMode;
+ const existing=demoOrdersInFlight.get(historyMode);
+ if(existing)return existing;
+ const request=(async()=>{
+  try{
+   const data=await req(historyMode==='real'?'/api/real/orders':'/api/demo/orders');
+   if(historyMode===robotConfiguredMode){
+    demoOrders=data.items||[];
+    syncClearResultsButtonLabel(historyMode);
+    updateLastOrderLabel();
+    renderOrders();
+    renderRealtimeOrders();
+    renderPanelHistory(data.items||[],historyMode);
+   }
+   return data;
+  }catch(e){
+   if(historyMode===robotConfiguredMode){
+    renderPanelHistory(null);
+    $('ordersBody').innerHTML='<tr><td colspan="11" class="empty">Não foi possível carregar o histórico.</td></tr>';
+   }
+   throw e;
+  }
+ })();
+ demoOrdersInFlight.set(historyMode,request);
+ const clear=()=>{if(demoOrdersInFlight.get(historyMode)===request)demoOrdersInFlight.delete(historyMode);};
+ request.then(clear,clear);
+ return request;
+}
 const brasilDateTime=(iso)=>{
  if(!iso)return ['—','—'];
  const d=new Date(iso);

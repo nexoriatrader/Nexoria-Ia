@@ -582,7 +582,7 @@ async def select_demo_signal(*, exclude_symbols=(), user_key=None, filtered=Fals
         _log.warning('V2 selector: zero eligible symbols in Deriv public catalog')
         return None
     # Evaluate EVERY currently eligible broker asset on each pass.
-    # A semaphore keeps Deriv/WebSocket requests bounded on Render Free.
+    # A semaphore keeps Deriv/WebSocket request concurrency bounded on Render.
     total=len(items)
     selected_items=items
     sem=asyncio.Semaphore(3)
