@@ -205,7 +205,7 @@ def test_dashboard_ignores_stale_status_after_loading_secondary_cards():
     ending=html.index("async function toggleRobot(){",beginning)
     refresh=html[beginning:ending]
     assert refresh.count("if(sequence!==dashboardStatusSequence)return null;")>=2
-    assert refresh.index("await Promise.allSettled(")<refresh.rindex(
+    assert refresh.index("void Promise.allSettled(")<refresh.rindex(
         "if(sequence!==dashboardStatusSequence)return null;")
     assert "const status=await fetchStrategyStatus();" in refresh
 

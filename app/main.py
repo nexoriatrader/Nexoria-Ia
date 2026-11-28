@@ -81,6 +81,30 @@ status_snapshot_cache: dict[tuple[int,int,str],dict] = {}
 status_snapshot_refresh_tasks: dict[tuple[int,int,str],asyncio.Task] = {}
 STATUS_SNAPSHOT_REFRESH_AFTER_SECONDS=2.0
 STATUS_SNAPSHOT_STALE_AFTER_SECONDS=15.0
+DASHBOARD_SLOW_STAGE_MS=500.0
+
+async def dashboard_to_thread(stage:str,func,*args,**kwargs):
+    """Run blocking dashboard work away from the event loop and time its stages."""
+    loop=asyncio.get_running_loop()
+    submitted_at=time.perf_counter()
+
+    def invoke():
+        started_at=time.perf_counter()
+        queue_ms=(started_at-submitted_at)*1000
+        outcome='ok'
+        try:
+            return func(*args,**kwargs)
+        except BaseException as exc:
+            outcome=type(exc).__name__
+            raise
+        finally:
+            work_ms=(time.perf_counter()-started_at)*1000
+            total_ms=queue_ms+work_ms
+            if total_ms>=DASHBOARD_SLOW_STAGE_MS:
+                log.warning('slow dashboard stage=%s queue_ms=%.1f work_ms=%.1f total_ms=%.1f outcome=%s',
+                            stage,queue_ms,work_ms,total_ms,outcome)
+
+    return await loop.run_in_executor(None,invoke)
 
 def record_automation_scan(uid:int, event:str, symbol:str|None, total:int, reason:str|None=None):
     """In-memory diagnostics of real market checks, not synthetic activity."""
@@ -1674,11 +1698,14 @@ async def available_accounts(request:Request,nexora_sid:str|None=Cookie(default=
 @app.get('/api/real/orders')
 async def real_orders_route(request:Request,nexora_sid:str|None=Cookie(default=None)):
     """Own-account REAL contracts. Never mix with the DEMO trade ledger."""
-    user=active_user(request,nexora_sid)
+    user=await dashboard_to_thread('real_orders.auth',active_user,request,nexora_sid)
+    return await dashboard_to_thread('real_orders.query',_read_real_orders_payload,user.id)
+
+def _read_real_orders_payload(user_id:int):
     from .real_ledger import public_real_order
     with db.SessionLocal() as sess:
         orders=sess.scalars(select(db.RealOrder).where(
-            db.RealOrder.user_id==user.id).order_by(
+            db.RealOrder.user_id==user_id).order_by(
             db.RealOrder.id.desc()).limit(100)).all()
         return {'items':[public_real_order(o) for o in orders],
                 'account_mode':'real','source':'DERIV_REAL_ORDERS'}
@@ -1723,7 +1750,7 @@ async def real_balance_route(request:Request,nexora_sid:str|None=Cookie(default=
 @app.get('/api/real/results/today')
 async def real_results_today(request:Request,nexora_sid:str|None=Cookie(default=None)):
     """Official REAL closed-contract P/L; read-only and never conflated with DEMO."""
-    user,token=active_session(request,nexora_sid)
+    user,token=await dashboard_to_thread('real_today.auth',active_session,request,nexora_sid)
     start,end,local_start=daily_pnl_window()
     unavailable={'available':False,'pnl':None,'currency':None,'account_id':None,
                  'date':local_start.date().isoformat(),'timezone':'America/Sao_Paulo',
@@ -2292,19 +2319,17 @@ async def manual_signals_confirm(request:Request,payload:ManualSignalConfirmRequ
         session.commit()
     return result
 
-@app.get('/api/manual-signals/status')
-async def manual_signals_status(request:Request,nexora_sid:str|None=Cookie(default=None)):
-    user=active_user(request,nexora_sid)
+def _read_manual_signals_status(user_id:int):
     with db.SessionLocal() as session:
-        db.ensure_panel_profiles(session,user.id)
-        profile=session.get(db.AutomationPanelProfile,(user.id,'manual'))
-        run=session.get(db.ManualSignalRun,user.id)
+        db.ensure_panel_profiles(session,user_id)
+        profile=session.get(db.AutomationPanelProfile,(user_id,'manual'))
+        run=session.get(db.ManualSignalRun,user_id)
         if not profile:return {'configured':False,'running':False,'signals':[],'pending_count':0}
         rows=manual_lifecycle.queue_session_signals(session,run)
         has_history=bool(run and session.scalar(select(db.ManualSignal.id).where(
-            db.ManualSignal.user_id==user.id,
+            db.ManualSignal.user_id==user_id,
             db.ManualSignal.session_number==run.session_number).limit(1)))
-        return {'configured':True,'operation_mode':'manual','running':bool(run and run.status=='RUNNING' and (user.id in autopilot_enabled or user.id in real_runtime.running)),
+        return {'configured':True,'operation_mode':'manual','running':bool(run and run.status=='RUNNING' and (user_id in autopilot_enabled or user_id in real_runtime.running)),
             'persisted_status':run.status if run else 'IDLE','session_number':run.session_number if run else 0,
             'account_mode':run.account_mode if run else profile.account_mode,'pause_reason':run.pause_reason if run else None,
             'cancel_pending':bool(run and run.status=='CANCELLING'),
@@ -2315,6 +2340,11 @@ async def manual_signals_status(request:Request,nexora_sid:str|None=Cookie(defau
                 'timezone_name':r.timezone_name,'local_date':r.local_date,'local_time':r.local_time,'symbol':r.symbol,
                 'direction':r.direction,'duration_minutes':r.duration_minutes,'scheduled_at':r.scheduled_at.isoformat(),
                 'status':r.status,'reason':r.reason,'ledger_mode':r.ledger_mode,'ledger_order_id':r.ledger_order_id} for r in rows]}
+
+@app.get('/api/manual-signals/status')
+async def manual_signals_status(request:Request,nexora_sid:str|None=Cookie(default=None)):
+    user=await dashboard_to_thread('manual_status.auth',active_user,request,nexora_sid)
+    return await dashboard_to_thread('manual_status.query',_read_manual_signals_status,user.id)
 
 
 @app.post('/api/manual-signals/cancel')
@@ -2601,13 +2631,8 @@ def autopilot_start_blocker(user,orders,*,profile=None,panel_mode='strategies',a
     return None
 
 
-@app.get('/api/autopilot/readiness')
-async def autopilot_readiness(request:Request,panel_mode:str,
-                              nexora_sid:str|None=Cookie(default=None)):
+def _read_autopilot_readiness(user,panel_mode:str):
     """Authenticated dry-run of start guards, without activating or purchasing."""
-    user=active_user(request,nexora_sid)
-    if panel_mode not in ('manual','strategies'):
-        raise HTTPException(422,'Painel inválido')
     with db.SessionLocal() as sess:
         orders=sess.scalars(select(db.DemoOrder).where(db.DemoOrder.user_id==user.id)).all()
         manual_profile,strategy_profile=db.ensure_panel_profiles(sess,user.id)
@@ -2621,16 +2646,27 @@ async def autopilot_readiness(request:Request,panel_mode:str,
     return {'ready':reason is None,'reason':reason,'access':access,
             'execution':'DERIV_DEMO_ONLY','real_orders_enabled':False}
 
+@app.get('/api/autopilot/readiness')
+async def autopilot_readiness(request:Request,panel_mode:str,
+                              nexora_sid:str|None=Cookie(default=None)):
+    user=await dashboard_to_thread('readiness.auth',active_user,request,nexora_sid)
+    if panel_mode not in ('manual','strategies'):
+        raise HTTPException(422,'Painel inválido')
+    return await dashboard_to_thread('readiness.query',_read_autopilot_readiness,
+                                     user,panel_mode)
+
+def _read_my_access_status(user_id:int):
+    with db.SessionLocal() as sess:
+        status=access_status(sess,user_id)
+        referral=referral_report(sess,user_id)
+        sess.commit()
+        return {**status,**referral,'user_id':'NXR-'+str(user_id).zfill(6),
+                'referral_base_url':nexora_referral_origin()}
 
 @app.get('/api/access/status')
 async def my_access_status(request:Request,nexora_sid:str|None=Cookie(default=None)):
-    user=active_user(request,nexora_sid)
-    with db.SessionLocal() as sess:
-        status=access_status(sess,user.id)
-        referral=referral_report(sess,user.id)
-        sess.commit()
-        return {**status,**referral,'user_id':'NXR-'+str(user.id).zfill(6),
-                'referral_base_url':nexora_referral_origin()}
+    user=await dashboard_to_thread('access_status.auth',active_user,request,nexora_sid)
+    return await dashboard_to_thread('access_status.query',_read_my_access_status,user.id)
 
 
 class BillingCheckoutRequest(BaseModel):
@@ -3376,7 +3412,8 @@ def _read_status_persisted_state(user_id:int,panel_mode:str):
 
 
 async def _build_status_snapshot(user,panel_mode:str):
-    state=await asyncio.to_thread(_read_status_persisted_state,user.id,panel_mode)
+    state=await dashboard_to_thread('status.snapshot_db',_read_status_persisted_state,
+                                    user.id,panel_mode)
     real_running=user.id in real_runtime.running
     demo_run_intent=bool(
         state['demo_run_exists'] and state['resume_consent_exists']
@@ -3548,7 +3585,7 @@ async def status(request:Request,panel_mode:str,fresh:bool=False,
                  nexora_sid:str|None=Cookie(default=None)):
     # Authentication stays authoritative, but synchronous SQLAlchemy work is
     # moved off the event loop so it cannot stall the robot's background tasks.
-    user=await asyncio.to_thread(active_user,request,nexora_sid)
+    user=await dashboard_to_thread('status.auth',active_user,request,nexora_sid)
     if panel_mode not in ('manual','strategies'):
         raise HTTPException(422,'Painel inválido')
     return await _get_status_snapshot(user,panel_mode,fresh=fresh)
@@ -3557,13 +3594,17 @@ async def status(request:Request,panel_mode:str,fresh:bool=False,
 async def autopilot_v2_scanner_status(request:Request,
                                      nexora_sid:str|None=Cookie(default=None)):
     """Read-only diagnostics distinguishing data failures from absent signals."""
-    user=active_user(request,nexora_sid)
+    user=await dashboard_to_thread('scanner_status.auth',active_user,request,nexora_sid)
+    return await dashboard_to_thread('scanner_status.query',
+                                     _read_autopilot_v2_scanner_status,user.id)
+
+def _read_autopilot_v2_scanner_status(user_id:int):
     with db.SessionLocal() as sess:
-        batch=sess.get(db.PilotValidationBatch,user.id)
+        batch=sess.get(db.PilotValidationBatch,user_id)
     version=('NEXORA_2.2' if batch and batch.max_orders>=200 else
              'NEXORA_2.1' if batch and batch.max_orders>=100 else 'NEXORA_2.0')
     return {'version':version,'v2_enabled':v2_enabled(),
-            'v2_session_active':bool(batch),'running':user.id in autopilot_enabled,
+            'v2_session_active':bool(batch),'running':user_id in autopilot_enabled,
             'scan':last_scan_report(),'real_orders_enabled':False}
 
 
@@ -4361,30 +4402,31 @@ def today_demo_pnl(session,user_id,now=None):
             'next_reset_at':tomorrow.isoformat()}
 
 
-@app.get('/api/demo/results/today')
-async def demo_results_today(request:Request,nexora_sid:str|None=Cookie(default=None)):
-    user=active_user(request,nexora_sid)
+def _read_demo_results_today(user_id:int):
     with db.SessionLocal() as sess:
-        result=today_demo_pnl(sess,user.id)
+        result=today_demo_pnl(sess,user_id)
         # This endpoint is deliberately the actual account-wide official daily
         # DEMO P/L, not the isolated V2 evaluation statistic.
         return {**result,'scope':'ALL_DEMO_TODAY'}
 
+@app.get('/api/demo/results/today')
+async def demo_results_today(request:Request,nexora_sid:str|None=Cookie(default=None)):
+    user=await dashboard_to_thread('demo_today.auth',active_user,request,nexora_sid)
+    return await dashboard_to_thread('demo_today.query',_read_demo_results_today,user.id)
 
-@app.get('/api/autopilot/v2/evaluation')
-async def v2_evaluation(request:Request,nexora_sid:str|None=Cookie(default=None)):
+
+def _read_v2_evaluation(user_id:int):
     """Official broker-settled V2-only results; previous ledger is not deleted."""
-    user=active_user(request,nexora_sid)
     with db.SessionLocal() as sess:
-        batch=sess.get(db.PilotValidationBatch,user.id)
+        batch=sess.get(db.PilotValidationBatch,user_id)
         if not batch:
             return {'active':False,'submitted':0,'settled':0,'wins':0,'losses':0,
                     'pending':0,'net_pnl':'0.00','target':50,'target_is_limit':False,
                     'execution':'DERIV_DEMO_ONLY'}
         orders=sess.scalars(select(db.DemoOrder).where(
-            db.DemoOrder.user_id==user.id,db.DemoOrder.id>batch.after_order_id)).all()
+            db.DemoOrder.user_id==user_id,db.DemoOrder.id>batch.after_order_id)).all()
         attributed_ids=set(sess.scalars(select(db.AutoPilotAttribution.order_id).where(
-            db.AutoPilotAttribution.user_id==user.id,
+            db.AutoPilotAttribution.user_id==user_id,
             db.AutoPilotAttribution.order_id>batch.after_order_id)).all())
         v2orders=[o for o in orders if o.id in attributed_ids and o.state!='CANCELLED']
         settled=[o for o in v2orders if o.state=='SETTLED' and o.pnl is not None]
@@ -4397,6 +4439,12 @@ async def v2_evaluation(request:Request,nexora_sid:str|None=Cookie(default=None)
                 'batch':('NEXORA_2.2' if batch.max_orders>=200 else 'NEXORA_2.1' if batch.max_orders>=100 else 'NEXORA_2.0'),
                 'started_at':batch.created_at.isoformat(),
                 'note':'Estatística DEMO apenas desta avaliação. Contratos anteriores preservados; meta sem limite automático.'}
+
+@app.get('/api/autopilot/v2/evaluation')
+async def v2_evaluation(request:Request,nexora_sid:str|None=Cookie(default=None)):
+    """Official broker-settled V2-only results; previous ledger is not deleted."""
+    user=await dashboard_to_thread('v2_evaluation.auth',active_user,request,nexora_sid)
+    return await dashboard_to_thread('v2_evaluation.query',_read_v2_evaluation,user.id)
 
 
 def order_result_details(order,progression=None,was_automatic=False):
@@ -4439,15 +4487,13 @@ def order_result_details(order,progression=None,was_automatic=False):
     return basic
 
 
-@app.get('/api/demo/orders')
-async def demo_orders_route(request:Request,nexora_sid:str|None=Cookie(default=None)):
-    user=active_user(request,nexora_sid)
+def _read_demo_orders_payload(user_id:int):
     # A rolling 72-hour presentation window. Old ledger records remain in
     # Postgres for reconciliation, progression, auditability and risk checks.
     cutoff=datetime.now(timezone.utc)-timedelta(days=3)
     with db.SessionLocal() as s:
-        batch=s.get(db.PilotValidationBatch,user.id)
-        stmt=select(db.DemoOrder).where(db.DemoOrder.user_id==user.id,
+        batch=s.get(db.PilotValidationBatch,user_id)
+        stmt=select(db.DemoOrder).where(db.DemoOrder.user_id==user_id,
                                        db.DemoOrder.created_at>=cutoff,
                                        db.DemoOrder.state!='CANCELLED')
         if batch:
@@ -4465,6 +4511,11 @@ async def demo_orders_route(request:Request,nexora_sid:str|None=Cookie(default=N
                 'execution':'DERIV_DEMO_ONLY','timezone':'America/Sao_Paulo',
                 'retention_days':3,'history_cutoff':cutoff.isoformat(),
                 'batch':('NEXORA_2.1' if batch.max_orders>=100 else 'NEXORA_2.0') if batch else 'PREVIOUS'}
+
+@app.get('/api/demo/orders')
+async def demo_orders_route(request:Request,nexora_sid:str|None=Cookie(default=None)):
+    user=await dashboard_to_thread('demo_orders.auth',active_user,request,nexora_sid)
+    return await dashboard_to_thread('demo_orders.query',_read_demo_orders_payload,user.id)
 
 async def _recover_account_orders(user, token, mode, account_id):
     """Refresh one authenticated Deriv account without sending any trade request."""
